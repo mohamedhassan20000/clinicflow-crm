@@ -2,6 +2,18 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "@/types/database";
 
+const PROTECTED_PREFIXES = [
+  "/dashboard",
+  "/patients",
+  "/appointments",
+  "/settings",
+];
+
+const AUTH_PAGES = ["/login", "/change-password"];
+
+// Routes only admins may access
+const ADMIN_ONLY_PREFIXES = ["/settings"];
+
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
@@ -26,33 +38,62 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  // Refresh the session. Full RBAC gating comes online in Phase 1.
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
-  const isAuthPage =
-    pathname.startsWith("/login") || pathname.startsWith("/change-password");
 
-  // Phase 0: soft guard. Unauthenticated users hitting protected routes go to /login.
-  // Phase 1 will layer on role checks and must_change_password enforcement.
-  const isProtectedRoute =
-    pathname.startsWith("/dashboard") ||
-    pathname.startsWith("/patients") ||
-    pathname.startsWith("/appointments") ||
-    pathname.startsWith("/settings");
+  const isAuthPage = AUTH_PAGES.some((p) => pathname.startsWith(p));
+  const isProtected = PROTECTED_PREFIXES.some((p) => pathname.startsWith(p));
 
-  if (!user && isProtectedRoute) {
+  // ── Unauthenticated → /login ─────────────────────────────────────────────
+  if (!user && isProtected) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
   }
 
-  if (user && isAuthPage) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
-    return NextResponse.redirect(url);
+  if (user) {
+    // Fetch profile for role + must_change_password (cached by browser/Supabase)
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role, must_change_password, is_active")
+      .eq("id", user.id)
+      .single();
+
+    // Deactivated account → sign out and redirect
+    if (profile && !profile.is_active) {
+      await supabase.auth.signOut();
+      const url = request.nextUrl.clone();
+      url.pathname = "/login";
+      return NextResponse.redirect(url);
+    }
+
+    // must_change_password gate — force to /change-password for any protected route
+    if (profile?.must_change_password && isProtected) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/change-password";
+      return NextResponse.redirect(url);
+    }
+
+    // Authenticated user on login page → /dashboard
+    if (isAuthPage && !profile?.must_change_password) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/dashboard";
+      return NextResponse.redirect(url);
+    }
+
+    // Role-based route guard: admin-only routes
+    if (
+      profile &&
+      profile.role !== "admin" &&
+      ADMIN_ONLY_PREFIXES.some((p) => pathname.startsWith(p))
+    ) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/dashboard";
+      return NextResponse.redirect(url);
+    }
   }
 
   return supabaseResponse;

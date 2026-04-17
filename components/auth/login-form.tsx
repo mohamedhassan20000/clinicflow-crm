@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useActionState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -17,6 +17,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { signIn } from "@/actions/auth";
 
 const loginSchema = z.object({
   email: z.string().min(1, "Email is required").email("Enter a valid email"),
@@ -27,20 +28,25 @@ type LoginValues = z.infer<typeof loginSchema>;
 
 export function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
+  const [actionState, formAction, isPending] = useActionState(signIn, null);
 
   const form = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: { email: "", password: "" },
   });
 
-  const isSubmitting = form.formState.isSubmitting;
+  const isSubmitting = isPending || form.formState.isSubmitting;
 
-  async function onSubmit(_values: LoginValues) {
-    // Auth wiring lands in Phase 1.
-    await new Promise((r) => setTimeout(r, 600));
-    toast.info("Authentication is wired up in Phase 1.", {
-      description: "The form validation and UX are ready.",
-    });
+  // Surface server-side error as a toast
+  if (actionState?.error) {
+    toast.error(actionState.error);
+  }
+
+  async function onSubmit(values: LoginValues) {
+    const fd = new FormData();
+    fd.set("email", values.email);
+    fd.set("password", values.password);
+    formAction(fd);
   }
 
   return (

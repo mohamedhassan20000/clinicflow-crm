@@ -13,22 +13,26 @@ export type AuthedUser = {
   mustChangePassword: boolean;
 };
 
-/**
- * Phase 1 will replace this stub with a real query against `profiles`.
- * Keeps the contract stable so callers can be written against it today.
- */
 export async function getAuthedUser(): Promise<AuthedUser | null> {
   const supabase = await createClient();
-  const { data } = await supabase.auth.getUser();
-  if (!data.user) return null;
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role, full_name, clinic_id, must_change_password")
+    .eq("id", user.id)
+    .single();
+
+  if (!profile) return null;
 
   return {
-    id: data.user.id,
-    email: data.user.email ?? "",
-    role: "admin",
-    fullName: data.user.email ?? "",
-    clinicId: "00000000-0000-0000-0000-000000000000",
-    mustChangePassword: false,
+    id: user.id,
+    email: user.email ?? "",
+    role: profile.role as UserRole,
+    fullName: profile.full_name,
+    clinicId: profile.clinic_id,
+    mustChangePassword: profile.must_change_password,
   };
 }
 

@@ -9,7 +9,6 @@
 ## Project Overview
 
 A staff-only web-based CRM system for small-to-medium private clinics in Turkey.
-Built as a graduation project at Üsküdar University, 2025–2026.
 
 ---
 

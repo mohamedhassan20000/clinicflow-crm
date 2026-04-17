@@ -1,7 +1,6 @@
 # ClinicFlow
 
-Staff-only CRM for small and medium private clinics in Turkey.
-Graduation project — Üsküdar University, Software Engineering, 2025–2026.
+Staff-only CRM built for modern private clinics.
 
 🔗 **Live demo:** https://clinic-crm-brown.vercel.app
 

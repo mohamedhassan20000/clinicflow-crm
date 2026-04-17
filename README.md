@@ -1,36 +1,108 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ClinicFlow
 
-## Getting Started
+Staff-only CRM for small and medium private clinics in Turkey.
+Graduation project — Üsküdar University, Software Engineering, 2025–2026.
 
-First, run the development server:
+🔗 **Live demo:** https://clinic-crm-brown.vercel.app
+
+---
+
+## Stack
+
+- **Next.js 16** (App Router) · **React 19** · **TypeScript** (strict)
+- **Supabase** — Postgres + Auth + RLS + Storage
+- **Tailwind 4** + **shadcn/ui** (Radix, Nova preset)
+- **React Hook Form** + **Zod**
+- **TanStack Table v8** · **nuqs** for URL state
+- **Sentry** for error tracking
+- **Vitest** (unit) + **Playwright** (E2E)
+- **Vercel** for hosting
+
+Palette: Optimistic Teal. Fonts: Inter (body) + Plus Jakarta Sans (headings). Timezone: `Europe/Istanbul`.
+
+---
+
+## Getting started
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
+cp .env.example .env.local   # then fill in Supabase + Sentry keys
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000 — you'll be redirected to `/login`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Required env vars
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Variable | Where to find it |
+|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase → Settings → API |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase → Settings → API (publishable / anon) |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Settings → API (server-only, Phase 1+) |
+| `NEXT_PUBLIC_SENTRY_DSN` | Sentry → Project Settings → Client Keys (optional) |
 
-## Learn More
+---
 
-To learn more about Next.js, take a look at the following resources:
+## Scripts
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| Script | Purpose |
+|---|---|
+| `pnpm dev` | Dev server on :3000 |
+| `pnpm build` | Production build |
+| `pnpm start` | Run the production build |
+| `pnpm lint` | ESLint |
+| `pnpm typecheck` | `tsc --noEmit` |
+| `pnpm test` | Vitest (unit) |
+| `pnpm test:e2e` | Playwright (E2E smoke) |
+| `pnpm db:types` | Regenerate `types/database.ts` from Supabase |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+---
 
-## Deploy on Vercel
+## Roles
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+| Role | Access |
+|---|---|
+| `admin` | Full access — patients, appointments, medical notes, settings, staff management |
+| `receptionist` | Patient records (no medical notes), appointment scheduling |
+| `manager` | Read-only — full dashboard with KPIs, no data entry |
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Demo credentials (seeded in Phase 1):
+
+```
+admin@clinic.com · Admin@1234
+```
+
+---
+
+## Project structure
+
+```
+app/               Next.js App Router routes
+  (auth)/          Login + change-password (unauthenticated)
+  (protected)/     Dashboard + modules (Phase 1+)
+components/        React components (ui/ = shadcn generated)
+actions/           Server Actions (mutations) — all domains
+lib/
+  supabase/        Browser, server, admin, proxy clients
+  datetime.ts      Europe/Istanbul helpers
+  rbac.ts          Role-guard helpers
+tests/
+  unit/            Vitest
+  e2e/             Playwright
+supabase/migrations/  SQL migrations (applied via Supabase MCP)
+proxy.ts           Auth/RBAC proxy (Next.js 16 rename of middleware.ts)
+```
+
+---
+
+## Phase status
+
+- [x] **Phase 0** — Foundation (scaffold, theme, login shell, Supabase clients, Sentry, CI, deploy)
+- [ ] Phase 1 — Auth + Schema + RLS
+- [ ] Phase 2 — Patient Management
+- [ ] Phase 3 — Appointment Scheduling
+- [ ] Phase 4 — Role-Scoped Dashboards
+- [ ] Phase 5 — Settings & Access Management
+- [ ] Phase 6 — Polish & QA
+
+See `_docs/` for the full PRD and build plan.

@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signOut } from "@/actions/auth";
+import { ThemeToggle } from "@/components/layout/theme-toggle";
 
 interface NavEntry {
   href: string;
@@ -21,6 +22,7 @@ interface NavEntry {
 interface SidebarProps {
   role: string;
   fullName: string;
+  theme: "light" | "dark";
 }
 
 function buildNav(role: string): NavEntry[] {
@@ -67,7 +69,7 @@ function NavLink({ href, label, icon: Icon }: NavEntry) {
   );
 }
 
-export function Sidebar({ role, fullName }: SidebarProps) {
+export function Sidebar({ role, fullName, theme }: SidebarProps) {
   const nav = buildNav(role);
 
   return (
@@ -93,10 +95,11 @@ export function Sidebar({ role, fullName }: SidebarProps) {
           <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
             {fullName.charAt(0).toUpperCase()}
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="truncate text-xs font-medium">{fullName}</p>
             <p className="text-[10px] capitalize text-muted-foreground">{role}</p>
           </div>
+          <ThemeToggle currentTheme={theme} />
         </div>
         <form action={signOut}>
           <button

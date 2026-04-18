@@ -44,7 +44,13 @@ export function WeekCalendar({
 
   const prevWeek = addDays(weekStart, -7);
   const nextWeek = addDays(weekStart, 7);
-  const fmt = (d: Date) => d.toISOString().split("T")[0];
+  // Local YYYY-MM-DD so we don't shift into the previous day via UTC conversion
+  const fmt = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
 
   return (
     <div className="space-y-4">

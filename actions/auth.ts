@@ -26,12 +26,13 @@ const changePasswordSchema = z
   });
 
 export type AuthActionResult = {
+  ok?: boolean;
+  redirectTo?: string;
   error?: string;
   fieldErrors?: Record<string, string[]>;
 };
 
 export async function signIn(
-  _prev: AuthActionResult | null,
   formData: FormData,
 ): Promise<AuthActionResult> {
   const raw = {
@@ -55,11 +56,12 @@ export async function signIn(
   const user = await getAuthedUser();
   if (!user) return { error: "Profile not found. Contact your administrator." };
 
-  if (user.mustChangePassword) {
-    redirect("/change-password");
-  }
-
-  redirect("/dashboard");
+  // Client will navigate after awaiting — ensures fresh session cookies
+  // are fully committed before middleware runs on the next request.
+  return {
+    ok: true,
+    redirectTo: user.mustChangePassword ? "/change-password" : "/dashboard",
+  };
 }
 
 export async function signOut(): Promise<void> {

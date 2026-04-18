@@ -54,6 +54,14 @@ export default function AuthLayout({
               backgroundSize: "40px 40px",
             }}
           />
+          {/* film grain overlay */}
+          <div
+            className="absolute inset-0 opacity-[0.05] mix-blend-overlay"
+            style={{
+              backgroundImage:
+                "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.6 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>\")",
+            }}
+          />
         </div>
 
         {/* content */}
@@ -74,11 +82,25 @@ export default function AuthLayout({
 
           {/* hero copy */}
           <div className="space-y-6">
-            <div className="space-y-3">
-              <p className="text-sm font-medium uppercase tracking-[0.15em] text-cyan-300/90">
-                Clinic management, reimagined
-              </p>
-              <h1 className="text-4xl xl:text-5xl font-semibold leading-[1.1] text-white">
+            <div className="space-y-4">
+              {/* live status pill */}
+              <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-medium tracking-wide text-white/90 backdrop-blur-sm">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="absolute inset-0 rounded-full bg-emerald-300 opacity-75 pulse-dot" />
+                  <span className="relative h-1.5 w-1.5 rounded-full bg-emerald-300" />
+                </span>
+                Online — RLS active
+              </span>
+
+              <h1 className="relative text-4xl xl:text-5xl font-semibold leading-[0.98] tracking-tight text-white">
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute -inset-8 -z-10 rounded-[40%] opacity-50 blur-2xl"
+                  style={{
+                    background:
+                      "radial-gradient(ellipse at center, oklch(0.85 0.15 200 / 0.25) 0%, transparent 65%)",
+                  }}
+                />
                 Run your clinic{" "}
                 <span
                   className="block font-display italic font-normal text-cyan-200"
@@ -96,8 +118,11 @@ export default function AuthLayout({
             {/* feature list */}
             <ul className="space-y-3">
               {features.map(({ icon: Icon, title, desc }) => (
-                <li key={title} className="flex items-start gap-3">
-                  <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/10 ring-1 ring-white/15">
+                <li
+                  key={title}
+                  className="group flex items-start gap-3 transition-transform duration-150 ease-out hover:-translate-y-0.5"
+                >
+                  <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-white/15 to-white/5 ring-1 ring-white/20 shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] transition-colors group-hover:ring-cyan-300/40">
                     <Icon className="h-3.5 w-3.5 text-cyan-300" />
                   </span>
                   <div>
@@ -117,11 +142,11 @@ export default function AuthLayout({
       </aside>
 
       {/* ── Right form panel ── */}
-      <main className="relative flex flex-1 flex-col items-center justify-center overflow-hidden bg-background px-6 py-12">
+      <main className="auth-right-panel relative flex flex-1 flex-col items-center justify-center overflow-hidden px-6 py-12">
         {/* subtle background texture for right panel */}
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-0 opacity-[0.025]"
+          className="pointer-events-none absolute inset-0 opacity-[0.015]"
           style={{
             backgroundImage:
               "radial-gradient(circle at 1px 1px, oklch(0.6 0.14 208) 1px, transparent 0)",
@@ -136,12 +161,12 @@ export default function AuthLayout({
           aria-label="ClinicFlow home"
         >
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow">
-            <Stethoscope className="h-4.5 w-4.5" />
+            <Stethoscope className="h-[18px] w-[18px]" />
           </span>
           <span className="text-lg font-semibold tracking-tight">ClinicFlow</span>
         </Link>
 
-        <div className="relative z-10 w-full max-w-[400px]">
+        <div className="auth-card relative z-10 w-full max-w-[400px] rounded-2xl border border-border/50 bg-card/70 p-8 shadow-[0_8px_32px_-8px_oklch(0.6_0.14_208_/_0.15)] backdrop-blur-xl">
           {children}
         </div>
 

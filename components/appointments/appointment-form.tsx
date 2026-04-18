@@ -192,10 +192,11 @@ export function AppointmentForm({
               <FormItem>
                 <FormLabel>Department</FormLabel>
                 <Select
-                  value={field.value ?? ""}
+                  value={field.value ?? "__any__"}
                   onValueChange={(v) => {
-                    field.onChange(v || null);
-                    setSelectedDept(v || null);
+                    const next = v === "__any__" ? null : v;
+                    field.onChange(next);
+                    setSelectedDept(next);
                     form.setValue("doctor_id", "");
                   }}
                   disabled={isPending}
@@ -206,7 +207,7 @@ export function AppointmentForm({
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="">Any department</SelectItem>
+                    <SelectItem value="__any__">Any department</SelectItem>
                     {departments.map((d) => (
                       <SelectItem key={d.id} value={d.id}>
                         {d.name}
@@ -238,7 +239,7 @@ export function AppointmentForm({
                   </FormControl>
                   <SelectContent>
                     {filteredDoctors.length === 0 ? (
-                      <SelectItem value="" disabled>
+                      <SelectItem value="__empty__" disabled>
                         No doctors in this department
                       </SelectItem>
                     ) : (
@@ -364,8 +365,8 @@ export function AppointmentForm({
               <FormItem>
                 <FormLabel>Insurance</FormLabel>
                 <Select
-                  value={field.value ?? ""}
-                  onValueChange={(v) => field.onChange(v || null)}
+                  value={field.value ?? "__none__"}
+                  onValueChange={(v) => field.onChange(v === "__none__" ? null : v)}
                   disabled={isPending}
                 >
                   <FormControl>
@@ -374,7 +375,7 @@ export function AppointmentForm({
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="">None / Unknown</SelectItem>
+                    <SelectItem value="__none__">None / Unknown</SelectItem>
                     {insuranceProviders.map((ip) => (
                       <SelectItem key={ip.id} value={ip.id}>
                         {ip.name}

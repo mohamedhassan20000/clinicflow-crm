@@ -150,6 +150,38 @@ export async function toggleStaffActive(
   return { success: true };
 }
 
+export async function deleteStaff(staffId: string): Promise<ActionResult> {
+  const user = await requireRole("admin");
+
+  if (staffId === user.id) {
+    return { error: "You cannot delete your own account." };
+  }
+
+  const supabase = await createClient();
+
+  // Verify same clinic (RLS also enforces)
+  const { data: target } = await supabase
+    .from("profiles")
+    .select("id, clinic_id")
+    .eq("id", staffId)
+    .single();
+
+  if (!target || target.clinic_id !== user.clinicId) {
+    return { error: "Staff member not found." };
+  }
+
+  // Delete auth user → cascades to profile via FK on auth.users
+  const adminClient = createAdminClient();
+  const { error } = await adminClient.auth.admin.deleteUser(staffId);
+  if (error) return { error: error.message };
+
+  // Best-effort profile cleanup if FK cascade didn't fire
+  await supabase.from("profiles").delete().eq("id", staffId);
+
+  revalidatePath("/settings/staff");
+  return { success: true };
+}
+
 export async function resetStaffPassword(staffId: string): Promise<ActionResult> {
   await requireRole("admin");
 
@@ -364,6 +396,40 @@ export async function updateClinic(
     .eq("id", user.clinicId);
 
   if (error) return { error: error.message };
+
+  revalidatePath("/settings/clinic");
+  return { success: true };
+}
+
+export async function createClinic(
+  _prev: ActionResult | null,
+  fd: FormData,
+): Promise<ActionResult> {
+  await requireRole("admin");
+
+  const parsed = clinicSchema.safeParse({
+    name: fd.get("name"),
+    phone: fd.get("phone") || null,
+    address: fd.get("address") || null,
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Validation error" };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("clinics").insert({
+    name: parsed.data.name,
+    phone: parsed.data.phone ?? null,
+    address: parsed.data.address ?? null,
+    reminder_lead_hours: 24,
+    is_active: true,
+  });
+
+  if (error) {
+    if (error.code === "23505") return { error: "A clinic with this name already exists." };
+    return { error: error.message };
+  }
 
   revalidatePath("/settings/clinic");
   return { success: true };

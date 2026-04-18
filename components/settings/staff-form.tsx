@@ -136,6 +136,7 @@ export function CreateStaffForm({
                   </FormControl>
                   <SelectContent>
                     <SelectItem value="admin">Admin</SelectItem>
+                    <SelectItem value="doctor">Doctor</SelectItem>
                     <SelectItem value="receptionist">Receptionist</SelectItem>
                     <SelectItem value="manager">Manager</SelectItem>
                   </SelectContent>
@@ -151,8 +152,8 @@ export function CreateStaffForm({
               <FormItem>
                 <FormLabel>Department (optional)</FormLabel>
                 <Select
-                  value={field.value ?? ""}
-                  onValueChange={(v) => field.onChange(v || null)}
+                  value={field.value ?? "__none__"}
+                  onValueChange={(v) => field.onChange(v === "__none__" ? null : v)}
                   disabled={isPending}
                 >
                   <FormControl>
@@ -161,7 +162,7 @@ export function CreateStaffForm({
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="">None</SelectItem>
+                    <SelectItem value="__none__">None</SelectItem>
                     {departments.map((d) => (
                       <SelectItem key={d.id} value={d.id}>
                         {d.name}
@@ -288,6 +289,7 @@ export function EditStaffForm({
                   </FormControl>
                   <SelectContent>
                     <SelectItem value="admin">Admin</SelectItem>
+                    <SelectItem value="doctor">Doctor</SelectItem>
                     <SelectItem value="receptionist">Receptionist</SelectItem>
                     <SelectItem value="manager">Manager</SelectItem>
                   </SelectContent>
@@ -303,8 +305,8 @@ export function EditStaffForm({
               <FormItem>
                 <FormLabel>Department</FormLabel>
                 <Select
-                  value={field.value ?? ""}
-                  onValueChange={(v) => field.onChange(v || null)}
+                  value={field.value ?? "__none__"}
+                  onValueChange={(v) => field.onChange(v === "__none__" ? null : v)}
                   disabled={isPending}
                 >
                   <FormControl>
@@ -313,7 +315,7 @@ export function EditStaffForm({
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="">None</SelectItem>
+                    <SelectItem value="__none__">None</SelectItem>
                     {departments.map((d) => (
                       <SelectItem key={d.id} value={d.id}>
                         {d.name}

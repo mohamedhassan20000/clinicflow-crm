@@ -7,16 +7,23 @@ export const metadata: Metadata = {
 
 export default function LoginPage() {
   return (
-    <div className="space-y-6">
-      <div className="space-y-1.5">
-        <h2 className="text-2xl font-semibold tracking-tight text-foreground">
-          Welcome back
+    <div className="space-y-7">
+      <div className="space-y-2 auth-stagger" style={{ animationDelay: "60ms" }}>
+        <h2 className="text-[2rem] leading-[1.05] tracking-tight text-foreground">
+          <span
+            className="italic font-normal"
+            style={{ fontFamily: "var(--font-instrument)" }}
+          >
+            Welcome back.
+          </span>
         </h2>
         <p className="text-sm text-muted-foreground">
-          Sign in to your staff account to continue.
+          Sign in to continue to ClinicFlow.
         </p>
       </div>
-      <LoginForm />
+      <div className="auth-stagger" style={{ animationDelay: "140ms" }}>
+        <LoginForm />
+      </div>
     </div>
   );
 }

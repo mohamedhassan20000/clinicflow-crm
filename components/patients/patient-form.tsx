@@ -101,8 +101,8 @@ export function PatientForm({ action, defaultValues }: PatientFormProps) {
               <FormItem>
                 <FormLabel>Blood type</FormLabel>
                 <Select
-                  value={field.value ?? ""}
-                  onValueChange={(v) => field.onChange(v || null)}
+                  value={field.value ?? "__none__"}
+                  onValueChange={(v) => field.onChange(v === "__none__" ? null : v)}
                   disabled={isPending}
                 >
                   <FormControl>
@@ -111,7 +111,7 @@ export function PatientForm({ action, defaultValues }: PatientFormProps) {
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="">Unknown</SelectItem>
+                    <SelectItem value="__none__">Unknown</SelectItem>
                     {BLOOD_TYPES.map((bt) => (
                       <SelectItem key={bt} value={bt}>
                         {bt}

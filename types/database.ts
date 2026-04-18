@@ -597,7 +597,7 @@ export type Database = {
         | "cancelled"
         | "no_show"
       blood_type: "A+" | "A-" | "B+" | "B-" | "AB+" | "AB-" | "O+" | "O-"
-      user_role: "admin" | "receptionist" | "manager"
+      user_role: "admin" | "receptionist" | "manager" | "doctor"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -733,7 +733,7 @@ export const Constants = {
         "no_show",
       ],
       blood_type: ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"],
-      user_role: ["admin", "receptionist", "manager"],
+      user_role: ["admin", "receptionist", "manager", "doctor"],
     },
   },
 } as const

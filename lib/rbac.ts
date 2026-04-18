@@ -2,7 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 
-export type UserRole = "admin" | "receptionist" | "manager";
+export type UserRole = "admin" | "receptionist" | "manager" | "doctor";
 
 export type AuthedUser = {
   id: string;

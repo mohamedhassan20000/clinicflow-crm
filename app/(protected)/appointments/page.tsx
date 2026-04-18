@@ -18,11 +18,19 @@ function getMonday(date: Date): Date {
   return d;
 }
 
+// Parse "YYYY-MM-DD" as local-midnight (not UTC) so week navigation
+// is stable regardless of server timezone.
+function parseLocalDate(iso: string): Date {
+  const [y, m, d] = iso.split("-").map(Number);
+  if (!y || !m || !d) return new Date();
+  return new Date(y, m - 1, d);
+}
+
 export default async function AppointmentsPage({ searchParams }: PageProps) {
   const user = await requireUser();
   const { week } = await searchParams;
 
-  const weekStart = getMonday(week ? new Date(week) : new Date());
+  const weekStart = getMonday(week ? parseLocalDate(week) : new Date());
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekEnd.getDate() + 7);
 

@@ -30,7 +30,7 @@ export default async function NewAppointmentPage({ searchParams }: PageProps) {
         .select("id, full_name, department_id")
         .eq("clinic_id", user.clinicId)
         .eq("is_active", true)
-        .eq("role", "admin") // In this clinic, admins are doctors — adjust for real use
+        .in("role", ["doctor", "admin"]) // doctors + admins can be booked
         .order("full_name"),
       supabase
         .from("departments")

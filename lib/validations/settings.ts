@@ -5,7 +5,7 @@ import { z } from "zod";
 export const createStaffSchema = z.object({
   full_name: z.string().min(2, "Name must be at least 2 characters").max(100),
   email: z.string().email("Invalid email address"),
-  role: z.enum(["admin", "receptionist", "manager"], {
+  role: z.enum(["admin", "doctor", "receptionist", "manager"], {
     error: "Select a role",
   }),
   department_id: z.string().uuid().optional().nullable(),
@@ -16,7 +16,7 @@ export type CreateStaffValues = z.infer<typeof createStaffSchema>;
 
 export const updateStaffSchema = z.object({
   full_name: z.string().min(2).max(100),
-  role: z.enum(["admin", "receptionist", "manager"]),
+  role: z.enum(["admin", "doctor", "receptionist", "manager"]),
   department_id: z.string().uuid().optional().nullable(),
   phone: z.string().optional().nullable(),
   is_active: z.boolean(),

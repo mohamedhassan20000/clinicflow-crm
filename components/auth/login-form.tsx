@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useActionState } from "react";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -27,26 +28,59 @@ const loginSchema = z.object({
 type LoginValues = z.infer<typeof loginSchema>;
 
 export function LoginForm() {
+  const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
-  const [actionState, formAction, isPending] = useActionState(signIn, null);
+  const [isSigningIn, setIsSigningIn] = useState(false);
 
   const form = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: { email: "", password: "" },
   });
 
-  const isSubmitting = isPending || form.formState.isSubmitting;
-
-  // Surface server-side error as a toast
-  if (actionState?.error) {
-    toast.error(actionState.error);
-  }
+  const isSubmitting = isSigningIn || form.formState.isSubmitting;
 
   async function onSubmit(values: LoginValues) {
-    const fd = new FormData();
-    fd.set("email", values.email);
-    fd.set("password", values.password);
-    formAction(fd);
+    setIsSigningIn(true);
+    try {
+      const fd = new FormData();
+      fd.set("email", values.email);
+      fd.set("password", values.password);
+
+      const result = await signIn(fd);
+
+      if (result.error) {
+        toast.error(result.error);
+        setIsSigningIn(false);
+        return;
+      }
+
+      if (result.fieldErrors) {
+        Object.entries(result.fieldErrors).forEach(([name, messages]) => {
+          if (messages?.[0]) {
+            form.setError(name as keyof LoginValues, {
+              type: "server",
+              message: messages[0],
+            });
+          }
+        });
+        setIsSigningIn(false);
+        return;
+      }
+
+      if (result.ok && result.redirectTo) {
+        // Force fresh RSC payload so middleware sees the new session cookie
+        // and the protected layout renders immediately — no manual reload.
+        router.replace(result.redirectTo);
+        router.refresh();
+        return;
+      }
+
+      setIsSigningIn(false);
+    } catch (err) {
+      console.error("Sign-in failed:", err);
+      toast.error("Something went wrong. Please try again.");
+      setIsSigningIn(false);
+    }
   }
 
   return (
@@ -66,7 +100,7 @@ export function LoginForm() {
                   autoComplete="email"
                   placeholder="name@clinic.com"
                   disabled={isSubmitting}
-                  className="h-10 transition-shadow focus-visible:shadow-[0_0_0_3px_oklch(0.6_0.14_208_/_0.15)]"
+                  className="h-11 rounded-lg transition-all duration-200 focus-visible:ring-4 focus-visible:ring-primary/15 focus-visible:border-primary/60"
                 />
               </FormControl>
               <FormMessage />
@@ -98,7 +132,7 @@ export function LoginForm() {
                     autoComplete="current-password"
                     placeholder="••••••••"
                     disabled={isSubmitting}
-                    className="h-10 pr-10 transition-shadow focus-visible:shadow-[0_0_0_3px_oklch(0.6_0.14_208_/_0.15)]"
+                    className="h-11 rounded-lg pr-10 transition-all duration-200 focus-visible:ring-4 focus-visible:ring-primary/15 focus-visible:border-primary/60"
                   />
                   <button
                     type="button"
@@ -123,7 +157,7 @@ export function LoginForm() {
         {/* Submit */}
         <Button
           type="submit"
-          className="mt-2 h-10 w-full gap-2 transition-all duration-200 active:scale-[0.98]"
+          className="mt-2 h-11 w-full gap-2 rounded-lg bg-gradient-to-r from-primary to-[oklch(0.62_0.14_195)] text-primary-foreground shadow-lg shadow-primary/25 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-primary/40 active:scale-[0.98] active:translate-y-0"
           disabled={isSubmitting}
         >
           {isSubmitting ? (

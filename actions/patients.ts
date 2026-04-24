@@ -193,3 +193,80 @@ export async function addMedicalNote(
   revalidatePath(`/patients/${parsed.data.patient_id}`);
   return {};
 }
+
+const PAYMENT_METHODS = [
+  "cash",
+  "credit_card",
+  "paypal",
+  "bank_transfer",
+  "insurance",
+] as const;
+type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+
+export async function settleOutstanding(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  const user = await requireRole(["admin", "receptionist"]);
+
+  const patientId = String(formData.get("patient_id") ?? "");
+  const appointmentId = String(formData.get("appointment_id") ?? "") || null;
+  const amountRaw = Number(formData.get("amount") ?? 0);
+  const method = String(formData.get("payment_method") ?? "") as PaymentMethod;
+  const note = String(formData.get("note") ?? "").trim() || null;
+
+  if (!patientId) return { error: "Missing patient." };
+  if (!Number.isFinite(amountRaw) || amountRaw <= 0) {
+    return { error: "Amount must be greater than zero." };
+  }
+  if (!PAYMENT_METHODS.includes(method)) {
+    return { error: "Select a valid payment method." };
+  }
+
+  const supabase = await createClient();
+
+  // Insert settlement row
+  const { error: insertError } = await supabase
+    .from("outstanding_settlements")
+    .insert({
+      patient_id: patientId,
+      appointment_id: appointmentId,
+      clinic_id: user.clinicId,
+      amount: Number(amountRaw.toFixed(2)),
+      payment_method: method,
+      note,
+      created_by: user.id,
+    });
+
+  if (insertError) {
+    return { error: insertError.message || "Failed to save settlement." };
+  }
+
+  // Deduct from appointments' outstanding_amount (oldest-first) until amount is exhausted.
+  // This way the aggregate "Outstanding" number on the patient profile trends down as
+  // settlements are recorded.
+  let remaining = Number(amountRaw.toFixed(2));
+  const { data: debts } = await supabase
+    .from("appointments")
+    .select("id, outstanding_amount")
+    .eq("patient_id", patientId)
+    .eq("clinic_id", user.clinicId)
+    .gt("outstanding_amount", 0)
+    .order("scheduled_at", { ascending: true });
+
+  for (const d of debts ?? []) {
+    if (remaining <= 0) break;
+    const owed = Number(d.outstanding_amount ?? 0);
+    const applied = Math.min(owed, remaining);
+    const next = Number((owed - applied).toFixed(2));
+    await supabase
+      .from("appointments")
+      .update({ outstanding_amount: next })
+      .eq("id", d.id)
+      .eq("clinic_id", user.clinicId);
+    remaining = Number((remaining - applied).toFixed(2));
+  }
+
+  revalidatePath(`/patients/${patientId}`);
+  return {};
+}

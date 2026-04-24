@@ -79,6 +79,7 @@ export interface BillingInput {
   outstanding_amount: number;
   secondary_payment_method: PaymentMethod | null;
   secondary_amount: number;
+  deposit_amount: number;
   payment_note: string | null;
 }
 
@@ -135,13 +136,15 @@ export async function updateAppointmentStatus(
         billing.paid_amount < 0 ||
         billing.insurance_amount < 0 ||
         billing.outstanding_amount < 0 ||
-        billing.secondary_amount < 0
+        billing.secondary_amount < 0 ||
+        billing.deposit_amount < 0
       ) {
         return { error: "Amounts cannot be negative." };
       }
       update.payment_method = billing.payment_method;
       update.secondary_payment_method = billing.secondary_payment_method;
       update.secondary_amount = billing.secondary_amount;
+      update.deposit_amount = billing.deposit_amount;
       update.total_amount = billing.total_amount;
       update.paid_amount = billing.paid_amount;
       update.insurance_amount = billing.insurance_amount;

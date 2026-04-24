@@ -59,3 +59,15 @@ export const clinicSchema = z.object({
 });
 
 export type ClinicValues = z.infer<typeof clinicSchema>;
+
+// ── Service ──────────────────────────────────────────────────────────────────
+
+export const serviceSchema = z.object({
+  department_id: z.string().uuid("Select a department"),
+  name: z.string().min(2, "Name must be at least 2 characters").max(100),
+  price: z
+    .number({ message: "Enter a valid price" })
+    .min(0, "Price cannot be negative"),
+});
+
+export type ServiceValues = z.infer<typeof serviceSchema>;

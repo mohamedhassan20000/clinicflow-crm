@@ -10,6 +10,7 @@ import {
   departmentSchema,
   insuranceSchema,
   clinicSchema,
+  serviceSchema,
 } from "@/lib/validations/settings";
 
 export interface ActionResult {
@@ -436,4 +437,104 @@ export async function uploadClinicLogo(fd: FormData): Promise<ActionResult & { u
 
   revalidatePath("/settings/clinic");
   return { success: true, url: logoUrl };
+}
+
+// ── Services ─────────────────────────────────────────────────────────────────
+
+export async function createService(
+  _prev: ActionResult | null,
+  fd: FormData,
+): Promise<ActionResult> {
+  const user = await requireRole("admin");
+
+  const parsed = serviceSchema.safeParse({
+    department_id: fd.get("department_id"),
+    name: fd.get("name"),
+    price: Number(fd.get("price")),
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Validation error" };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("services").insert({
+    clinic_id: user.clinicId,
+    department_id: parsed.data.department_id,
+    name: parsed.data.name,
+    price: Number(parsed.data.price.toFixed(2)),
+    is_active: true,
+  });
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/settings/services");
+  return { success: true };
+}
+
+export async function updateService(
+  serviceId: string,
+  _prev: ActionResult | null,
+  fd: FormData,
+): Promise<ActionResult> {
+  const user = await requireRole("admin");
+
+  const parsed = serviceSchema.safeParse({
+    department_id: fd.get("department_id"),
+    name: fd.get("name"),
+    price: Number(fd.get("price")),
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Validation error" };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("services")
+    .update({
+      department_id: parsed.data.department_id,
+      name: parsed.data.name,
+      price: Number(parsed.data.price.toFixed(2)),
+    })
+    .eq("id", serviceId)
+    .eq("clinic_id", user.clinicId);
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/settings/services");
+  return { success: true };
+}
+
+export async function deleteService(serviceId: string): Promise<ActionResult> {
+  const user = await requireRole("admin");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("services")
+    .delete()
+    .eq("id", serviceId)
+    .eq("clinic_id", user.clinicId);
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/settings/services");
+  return { success: true };
+}
+
+export async function toggleServiceActive(
+  serviceId: string,
+  isActive: boolean,
+): Promise<ActionResult> {
+  const user = await requireRole("admin");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("services")
+    .update({ is_active: isActive })
+    .eq("id", serviceId)
+    .eq("clinic_id", user.clinicId);
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/settings/services");
+  return { success: true };
 }

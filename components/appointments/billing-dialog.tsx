@@ -40,6 +40,7 @@ export interface BillingPayload {
   outstanding_amount: number;
   secondary_payment_method: PaymentMethod | null;
   secondary_amount: number;
+  deposit_amount: number;
   payment_note: string | null;
 }
 
@@ -83,6 +84,7 @@ export function BillingDialog({
   const [total, setTotal] = useState<string>(defaultTotal ? String(defaultTotal) : "");
   const [paid, setPaid] = useState<string>("");
   const [insurance, setInsurance] = useState<string>("");
+  const [deposit, setDeposit] = useState<string>("");
   const [method, setMethod] = useState<PaymentMethod>("cash");
   const [showSplit, setShowSplit] = useState(false);
   const [secondaryMethod, setSecondaryMethod] =
@@ -93,11 +95,12 @@ export function BillingDialog({
   const totalN = Number(total) || 0;
   const paidN = Number(paid) || 0;
   const insuranceN = Number(insurance) || 0;
+  const depositN = Math.max(0, Number(deposit) || 0);
 
   const secondaryRaw = showSplit ? Number(secondaryAmount) || 0 : 0;
   const secondaryN = Number.isFinite(secondaryRaw) ? Math.max(0, secondaryRaw) : 0;
 
-  const collected = paidN + insuranceN + secondaryN;
+  const collected = paidN + insuranceN + secondaryN + depositN;
   const remaining = useMemo(
     () => Math.max(0, totalN - collected),
     [totalN, collected],
@@ -115,6 +118,7 @@ export function BillingDialog({
     setTotal(defaultTotal ? String(defaultTotal) : "");
     setPaid("");
     setInsurance("");
+    setDeposit("");
     setMethod("cash");
     setShowSplit(false);
     setSecondaryMethod("credit_card");
@@ -132,6 +136,7 @@ export function BillingDialog({
       outstanding_amount: Number(remaining.toFixed(2)),
       secondary_payment_method: showSplit && secondaryN > 0 ? secondaryMethod : null,
       secondary_amount: showSplit ? Number(secondaryN.toFixed(2)) : 0,
+      deposit_amount: Number(depositN.toFixed(2)),
       payment_note: note.trim() || null,
     };
     onConfirm(payload);
@@ -209,6 +214,25 @@ export function BillingDialog({
               />
             </div>
             <div className="space-y-1.5">
+              <Label htmlFor="bill-deposit" className="text-xs">
+                Deposit already paid (₺)
+              </Label>
+              <Input
+                id="bill-deposit"
+                type="number"
+                inputMode="decimal"
+                min={0}
+                step="0.01"
+                placeholder="0.00"
+                value={deposit}
+                disabled={isPending}
+                onChange={(e) => setDeposit(e.target.value)}
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Deducted from the total.
+              </p>
+            </div>
+            <div className="space-y-1.5 col-span-2">
               <Label htmlFor="bill-paid" className="text-xs">
                 Patient paid now (₺)
               </Label>

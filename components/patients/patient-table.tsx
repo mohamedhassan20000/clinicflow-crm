@@ -17,6 +17,7 @@ import type { Tables } from "@/types/database";
 
 type Patient = Tables<"patients"> & {
   departments?: { id: string; name: string; color: string } | null;
+  assigned_doctor?: { id: string; full_name: string } | null;
 };
 
 interface PatientTableProps {
@@ -28,6 +29,15 @@ interface PatientTableProps {
 }
 
 const columns: ColumnDef<Patient>[] = [
+  {
+    id: "file_number",
+    header: "File #",
+    cell: ({ row }) => (
+      <span className="font-mono text-xs text-muted-foreground">
+        {row.original.file_number ?? "—"}
+      </span>
+    ),
+  },
   {
     accessorKey: "full_name",
     header: "Patient",
@@ -52,6 +62,15 @@ const columns: ColumnDef<Patient>[] = [
     },
   },
   {
+    id: "national_id",
+    header: "National ID",
+    cell: ({ row }) => (
+      <span className="font-mono text-xs text-muted-foreground">
+        {row.original.national_id ?? "—"}
+      </span>
+    ),
+  },
+  {
     id: "department",
     header: "Department",
     cell: ({ row }) => {
@@ -73,30 +92,24 @@ const columns: ColumnDef<Patient>[] = [
     },
   },
   {
+    id: "doctor",
+    header: "Doctor",
+    cell: ({ row }) => {
+      const doc = row.original.assigned_doctor;
+      if (!doc) return <span className="text-muted-foreground/40">—</span>;
+      return (
+        <span className="text-xs text-muted-foreground">
+          Dr. {doc.full_name}
+        </span>
+      );
+    },
+  },
+  {
     accessorKey: "phone",
     header: "Phone",
     cell: ({ getValue }) => (
       <span className="text-muted-foreground">{getValue<string>()}</span>
     ),
-  },
-  {
-    accessorKey: "email",
-    header: "Email",
-    cell: ({ getValue }) => (
-      <span className="text-muted-foreground">{getValue<string>()}</span>
-    ),
-  },
-  {
-    accessorKey: "date_of_birth",
-    header: "Date of Birth",
-    cell: ({ getValue }) => {
-      const dob = getValue<string>();
-      return (
-        <span className="text-muted-foreground">
-          {new Date(dob).toLocaleDateString("tr-TR")}
-        </span>
-      );
-    },
   },
   {
     accessorKey: "blood_type",
@@ -145,11 +158,11 @@ export function PatientTable({
   return (
     <div className="space-y-4">
       {/* Toolbar */}
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex items-center justify-between gap-3 print:hidden">
         <div className="relative max-w-xs flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search by name or phone…"
+            placeholder="Search by name, phone, file #, national ID…"
             value={search}
             onChange={(e) =>
               startTransition(() => void setSearch(e.target.value || null))
@@ -220,7 +233,7 @@ export function PatientTable({
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between text-sm text-muted-foreground">
+        <div className="flex items-center justify-between text-sm text-muted-foreground print:hidden">
           <span>
             {total} patient{total !== 1 ? "s" : ""}
           </span>

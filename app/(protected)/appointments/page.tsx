@@ -2,13 +2,22 @@ import type { Metadata } from "next";
 import { requireUser } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
 import { WeekCalendar } from "@/components/appointments/week-calendar";
+import { DayCalendar } from "@/components/appointments/day-calendar";
+import { MonthCalendar } from "@/components/appointments/month-calendar";
 import { AppointmentsFilterBar } from "@/components/appointments/filter-bar";
+import {
+  ViewSwitcher,
+  type CalendarView,
+} from "@/components/appointments/view-switcher";
 
 export const metadata: Metadata = { title: "Appointments" };
 
 interface PageProps {
   searchParams: Promise<{
+    view?: string;
     week?: string;
+    date?: string;
+    month?: string;
     doctor?: string;
     dept?: string;
     file?: string;
@@ -27,25 +36,76 @@ function getMonday(date: Date): Date {
   return d;
 }
 
-// Parse "YYYY-MM-DD" as local-midnight (not UTC) so week navigation
-// is stable regardless of server timezone.
 function parseLocalDate(iso: string): Date {
   const [y, m, d] = iso.split("-").map(Number);
   if (!y || !m || !d) return new Date();
   return new Date(y, m - 1, d);
 }
 
+function parseLocalMonth(iso: string): Date {
+  const [y, m] = iso.split("-").map(Number);
+  if (!y || !m) return new Date();
+  return new Date(y, m - 1, 1);
+}
+
 export default async function AppointmentsPage({ searchParams }: PageProps) {
   const user = await requireUser();
-  const { week, doctor, dept, file, nat, phone, name } = await searchParams;
+  const {
+    view: viewParam,
+    week,
+    date,
+    month,
+    doctor,
+    dept,
+    file,
+    nat,
+    phone,
+    name,
+  } = await searchParams;
 
-  const weekStart = getMonday(week ? parseLocalDate(week) : new Date());
-  const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekEnd.getDate() + 7);
+  const view: CalendarView =
+    viewParam === "day" || viewParam === "month" ? viewParam : "week";
+
+  // Compute range [rangeStart, rangeEnd) based on view
+  let rangeStart: Date;
+  let rangeEnd: Date;
+  let dayAnchor: Date = new Date();
+  let weekStart: Date = new Date();
+  let monthStart: Date = new Date();
+
+  if (view === "day") {
+    dayAnchor = date ? parseLocalDate(date) : new Date();
+    dayAnchor.setHours(0, 0, 0, 0);
+    rangeStart = new Date(dayAnchor);
+    rangeEnd = new Date(dayAnchor);
+    rangeEnd.setDate(rangeEnd.getDate() + 1);
+  } else if (view === "month") {
+    monthStart = month ? parseLocalMonth(month) : new Date();
+    monthStart = new Date(
+      monthStart.getFullYear(),
+      monthStart.getMonth(),
+      1,
+      0,
+      0,
+      0,
+      0,
+    );
+    // Include the 6-week grid so trailing/leading cells render their events too
+    const firstDay = monthStart.getDay();
+    const mondayOffset = firstDay === 0 ? -6 : 1 - firstDay;
+    rangeStart = new Date(monthStart);
+    rangeStart.setDate(rangeStart.getDate() + mondayOffset);
+    rangeEnd = new Date(rangeStart);
+    rangeEnd.setDate(rangeEnd.getDate() + 42);
+  } else {
+    weekStart = getMonday(week ? parseLocalDate(week) : new Date());
+    rangeStart = weekStart;
+    rangeEnd = new Date(weekStart);
+    rangeEnd.setDate(rangeEnd.getDate() + 7);
+  }
 
   const supabase = await createClient();
 
-  // Load doctor + department lists for the filter bar (always shown)
   const [{ data: doctors }, { data: departments }] = await Promise.all([
     supabase
       .from("profiles")
@@ -62,13 +122,8 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
       .order("name"),
   ]);
 
-  // If any patient-level filter (file/nat/phone/name) is active, resolve
-  // matching patient IDs first and filter the appointment query by them.
-  // This keeps the query logic simple and honors RLS naturally.
   let patientIds: string[] | null = null;
-  const patientFilters = { file, nat, phone, name };
-  const hasPatientFilter =
-    !!file || !!nat || !!phone || !!name;
+  const hasPatientFilter = !!file || !!nat || !!phone || !!name;
 
   if (hasPatientFilter) {
     let pq = supabase
@@ -76,20 +131,10 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
       .select("id")
       .eq("clinic_id", user.clinicId)
       .eq("is_deleted", false);
-
-    if (patientFilters.file) {
-      pq = pq.ilike("file_number", `%${patientFilters.file}%`);
-    }
-    if (patientFilters.nat) {
-      pq = pq.ilike("national_id", `%${patientFilters.nat}%`);
-    }
-    if (patientFilters.phone) {
-      pq = pq.ilike("phone", `%${patientFilters.phone}%`);
-    }
-    if (patientFilters.name) {
-      pq = pq.ilike("full_name", `%${patientFilters.name}%`);
-    }
-
+    if (file) pq = pq.ilike("file_number", `%${file}%`);
+    if (nat) pq = pq.ilike("national_id", `%${nat}%`);
+    if (phone) pq = pq.ilike("phone", `%${phone}%`);
+    if (name) pq = pq.ilike("full_name", `%${name}%`);
     const { data: pats } = await pq.limit(500);
     patientIds = (pats ?? []).map((p) => p.id);
     if (patientIds.length === 0) patientIds = ["__none__"];
@@ -101,8 +146,8 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
       "*, patients(full_name, file_number), profiles!doctor_id(full_name), departments(name, color)",
     )
     .eq("clinic_id", user.clinicId)
-    .gte("scheduled_at", weekStart.toISOString())
-    .lt("scheduled_at", weekEnd.toISOString())
+    .gte("scheduled_at", rangeStart.toISOString())
+    .lt("scheduled_at", rangeEnd.toISOString())
     .order("scheduled_at");
 
   if (doctor) query = query.eq("doctor_id", doctor);
@@ -110,8 +155,11 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
   if (patientIds) query = query.in("patient_id", patientIds);
 
   const { data: appointments } = await query;
+  const appts = (appointments ?? []) as Parameters<
+    typeof WeekCalendar
+  >[0]["appointments"];
 
-  const total = appointments?.length ?? 0;
+  const total = appts.length;
   const activeFilterCount =
     Number(!!doctor) +
     Number(!!dept) +
@@ -120,14 +168,24 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
     Number(!!phone) +
     Number(!!name);
 
+  const rangeLabel =
+    view === "day"
+      ? "this day"
+      : view === "month"
+        ? "this month"
+        : "this week";
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Appointments</h1>
-        <p className="text-sm text-muted-foreground">
-          {total} appointment{total !== 1 ? "s" : ""} this week
-          {activeFilterCount > 0 && " matching filters"}.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Appointments</h1>
+          <p className="text-sm text-muted-foreground">
+            {total} appointment{total !== 1 ? "s" : ""} {rangeLabel}
+            {activeFilterCount > 0 && " matching filters"}.
+          </p>
+        </div>
+        <ViewSwitcher current={view} />
       </div>
 
       <AppointmentsFilterBar
@@ -135,11 +193,25 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
         departments={departments ?? []}
       />
 
-      <WeekCalendar
-        appointments={(appointments ?? []) as Parameters<typeof WeekCalendar>[0]["appointments"]}
-        weekStart={weekStart}
-        canEdit={user.role !== "manager"}
-      />
+      {view === "day" ? (
+        <DayCalendar
+          appointments={appts}
+          date={dayAnchor}
+          canEdit={user.role !== "manager"}
+        />
+      ) : view === "month" ? (
+        <MonthCalendar
+          appointments={appts}
+          monthStart={monthStart}
+          canEdit={user.role !== "manager"}
+        />
+      ) : (
+        <WeekCalendar
+          appointments={appts}
+          weekStart={weekStart}
+          canEdit={user.role !== "manager"}
+        />
+      )}
     </div>
   );
 }

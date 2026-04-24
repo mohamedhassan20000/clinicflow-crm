@@ -66,7 +66,7 @@ interface BillingDialogProps {
 }
 
 function fmtTRY(n: number) {
-  return new Intl.NumberFormat("tr-TR", {
+  return new Intl.NumberFormat("en-GB", {
     style: "currency",
     currency: "TRY",
     maximumFractionDigits: 2,

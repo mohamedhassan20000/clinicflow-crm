@@ -34,7 +34,7 @@ interface AdminDashboardProps {
 }
 
 function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString("tr-TR", {
+  return new Date(iso).toLocaleTimeString("en-GB", {
     timeZone: "Europe/Istanbul",
     hour: "2-digit",
     minute: "2-digit",
@@ -43,7 +43,7 @@ function formatTime(iso: string) {
 }
 
 function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("tr-TR", {
+  return new Date(iso).toLocaleDateString("en-GB", {
     timeZone: "Europe/Istanbul",
     month: "short",
     day: "numeric",

@@ -63,7 +63,7 @@ const PRESETS: { value: string; label: string }[] = [
 ];
 
 function fmtTRY(n: number) {
-  return new Intl.NumberFormat("tr-TR", {
+  return new Intl.NumberFormat("en-GB", {
     style: "currency",
     currency: "TRY",
     maximumFractionDigits: 2,
@@ -71,7 +71,7 @@ function fmtTRY(n: number) {
 }
 
 function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString("tr-TR", {
+  return new Date(iso).toLocaleDateString("en-GB", {
     timeZone: "Europe/Istanbul",
     day: "2-digit",
     month: "short",
@@ -80,7 +80,7 @@ function fmtDate(iso: string) {
 }
 
 function fmtDateTime(iso: string) {
-  return new Date(iso).toLocaleString("tr-TR", {
+  return new Date(iso).toLocaleString("en-GB", {
     timeZone: "Europe/Istanbul",
     day: "2-digit",
     month: "short",

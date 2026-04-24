@@ -47,7 +47,7 @@ const columns: ColumnDef<Patient>[] = [
         <div className="flex items-center gap-2">
           <span
             aria-hidden
-            className="h-2 w-2 shrink-0 rounded-full ring-2 ring-background"
+            className="h-2 w-2 shrink-0 rounded-full ring-2 ring-background print:hidden"
             style={{ backgroundColor: dept?.color ?? "var(--muted-foreground)" }}
             title={dept?.name ?? "Unassigned"}
           />
@@ -126,6 +126,7 @@ const columns: ColumnDef<Patient>[] = [
   },
   {
     id: "actions",
+    meta: { printHidden: true },
     cell: ({ row }) => (
       <Link href={`/patients/${row.original.id}`}>
         <Button variant="ghost" size="sm" className="h-7 px-2 text-xs">
@@ -135,6 +136,8 @@ const columns: ColumnDef<Patient>[] = [
     ),
   },
 ];
+
+type ColumnMeta = { printHidden?: boolean };
 
 export function PatientTable({
   data,
@@ -186,17 +189,20 @@ export function PatientTable({
           <thead className="border-b border-border/50 bg-muted/30">
             {table.getHeaderGroups().map((hg) => (
               <tr key={hg.id}>
-                {hg.headers.map((header) => (
+                {hg.headers.map((header) => {
+                  const meta = header.column.columnDef.meta as ColumnMeta | undefined;
+                  return (
                   <th
                     key={header.id}
-                    className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground"
+                    className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground ${meta?.printHidden ? "print:hidden" : ""}`}
                   >
                     {flexRender(
                       header.column.columnDef.header,
                       header.getContext(),
                     )}
                   </th>
-                ))}
+                  );
+                })}
               </tr>
             ))}
           </thead>
@@ -216,14 +222,17 @@ export function PatientTable({
                   key={row.id}
                   className="border-b border-border/30 last:border-0 hover:bg-muted/20 transition-colors"
                 >
-                  {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} className="px-4 py-3">
+                  {row.getVisibleCells().map((cell) => {
+                    const meta = cell.column.columnDef.meta as ColumnMeta | undefined;
+                    return (
+                    <td key={cell.id} className={`px-4 py-3 ${meta?.printHidden ? "print:hidden" : ""}`}>
                       {flexRender(
                         cell.column.columnDef.cell,
                         cell.getContext(),
                       )}
                     </td>
-                  ))}
+                    );
+                  })}
                 </tr>
               ))
             )}

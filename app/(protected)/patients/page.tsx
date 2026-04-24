@@ -91,10 +91,15 @@ export default async function PatientsPage({ searchParams }: PageProps) {
         <h1 className="text-xl font-semibold">Patient roster</h1>
         <p className="text-xs text-muted-foreground">
           {count ?? 0} patient{count !== 1 ? "s" : ""}
-          {activeDept && ` · Department: ${activeDept.name}`}
-          {activeDoctor && ` · Doctor: Dr. ${activeDoctor.full_name}`}
           {" · "}
-          Printed {new Date().toLocaleDateString("tr-TR")}
+          {activeDept
+            ? `Department: ${activeDept.name}`
+            : activeDoctor
+              ? `Doctor: Dr. ${activeDoctor.full_name}`
+              : "All patients"}
+          {activeDept && activeDoctor && ` · Doctor: Dr. ${activeDoctor.full_name}`}
+          {" · "}
+          Printed {new Date().toLocaleDateString("en-GB")}
         </p>
       </div>
 

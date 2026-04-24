@@ -101,7 +101,7 @@ export function PatientForm({
               <FormItem>
                 <FormLabel>Full name</FormLabel>
                 <FormControl>
-                  <Input {...field} placeholder="e.g. Ahmet Yılmaz" disabled={isPending} />
+                  <Input {...field} placeholder="e.g. John Smith" disabled={isPending} />
                 </FormControl>
                 <FormMessage />
               </FormItem>

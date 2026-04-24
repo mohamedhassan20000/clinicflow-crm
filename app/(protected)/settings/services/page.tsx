@@ -7,7 +7,7 @@ import { ServiceRowActions } from "@/components/settings/service-row-actions";
 export const metadata: Metadata = { title: "Services" };
 
 function fmtTRY(n: number) {
-  return new Intl.NumberFormat("tr-TR", {
+  return new Intl.NumberFormat("en-GB", {
     style: "currency",
     currency: "TRY",
     maximumFractionDigits: 2,

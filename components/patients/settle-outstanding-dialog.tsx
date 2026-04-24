@@ -45,7 +45,7 @@ const METHODS: {
 ];
 
 function fmtTRY(n: number) {
-  return new Intl.NumberFormat("tr-TR", {
+  return new Intl.NumberFormat("en-GB", {
     style: "currency",
     currency: "TRY",
     maximumFractionDigits: 2,
@@ -75,13 +75,17 @@ export function SettleOutstandingDialog({
 
   useEffect(() => {
     if (!state) return;
-    if (state.error) toast.error(state.error);
-    else {
+    if (state.error) {
+      toast.error(state.error);
+    } else {
       toast.success("Outstanding balance settled.");
-      setOpen(false);
-      setAmount("");
-      setMethod("cash");
-      setNote("");
+      // Defer state resets so we don't trigger cascading renders within the effect.
+      queueMicrotask(() => {
+        setOpen(false);
+        setAmount("");
+        setMethod("cash");
+        setNote("");
+      });
     }
   }, [state]);
 

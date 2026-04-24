@@ -26,8 +26,8 @@ export async function GET() {
 
   for (const a of appointments ?? []) {
     const dt = new Date(a.scheduled_at);
-    const date = dt.toLocaleDateString("tr-TR", { timeZone: "Europe/Istanbul" });
-    const time = dt.toLocaleTimeString("tr-TR", {
+    const date = dt.toLocaleDateString("en-GB", { timeZone: "Europe/Istanbul" });
+    const time = dt.toLocaleTimeString("en-GB", {
       timeZone: "Europe/Istanbul",
       hour: "2-digit",
       minute: "2-digit",

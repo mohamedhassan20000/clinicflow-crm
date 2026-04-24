@@ -110,7 +110,7 @@ export default async function PatientDetailPage({ params }: PageProps) {
           </div>
           <p className="text-sm text-muted-foreground">
             {age} years old ·{" "}
-            {new Date(patient.date_of_birth).toLocaleDateString("tr-TR")}
+            {new Date(patient.date_of_birth).toLocaleDateString("en-GB")}
             {patient.blood_type && ` · ${patient.blood_type}`}
           </p>
         </div>
@@ -188,7 +188,7 @@ export default async function PatientDetailPage({ params }: PageProps) {
               <div>
                 <dt className="text-xs text-muted-foreground">Registered</dt>
                 <dd className="font-medium">
-                  {new Date(patient.created_at).toLocaleDateString("tr-TR")}
+                  {new Date(patient.created_at).toLocaleDateString("en-GB")}
                 </dd>
               </div>
             </dl>
@@ -309,7 +309,7 @@ export default async function PatientDetailPage({ params }: PageProps) {
 }
 
 function fmtTRY(n: number) {
-  return new Intl.NumberFormat("tr-TR", {
+  return new Intl.NumberFormat("en-GB", {
     style: "currency",
     currency: "TRY",
     maximumFractionDigits: 2,

@@ -127,6 +127,7 @@ export function AppointmentsFilterBar({ doctors, departments }: Props) {
         <TextFilter
           placeholder="CF-0001"
           current={params.get("file")}
+          uppercase
           onApply={(v) => apply("file", v)}
         />
       </FilterChip>
@@ -226,10 +227,12 @@ function FilterChip({
 function TextFilter({
   placeholder,
   current,
+  uppercase,
   onApply,
 }: {
   placeholder: string;
   current: string | null;
+  uppercase?: boolean;
   onApply: (v: string | null) => void;
 }) {
   const [val, setVal] = useState(current ?? "");
@@ -243,9 +246,11 @@ function TextFilter({
     >
       <Input
         value={val}
-        onChange={(e) => setVal(e.target.value)}
+        onChange={(e) =>
+          setVal(uppercase ? e.target.value.toUpperCase() : e.target.value)
+        }
         placeholder={placeholder}
-        className="h-8 text-sm"
+        className={cn("h-8 text-sm", uppercase && "uppercase")}
         autoFocus
       />
       <div className="flex justify-end gap-2">

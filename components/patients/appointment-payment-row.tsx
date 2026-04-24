@@ -52,7 +52,7 @@ export interface AppointmentPaymentRowData {
 }
 
 function fmtTRY(n: number) {
-  return new Intl.NumberFormat("tr-TR", {
+  return new Intl.NumberFormat("en-GB", {
     style: "currency",
     currency: "TRY",
     maximumFractionDigits: 2,
@@ -90,7 +90,7 @@ export function AppointmentPaymentRow({ a }: { a: AppointmentPaymentRowData }) {
       >
         <div className="min-w-0 space-y-0.5">
           <div className="text-sm font-medium">
-            {dt.toLocaleDateString("tr-TR", {
+            {dt.toLocaleDateString("en-GB", {
               day: "2-digit",
               month: "short",
               year: "numeric",
@@ -228,7 +228,7 @@ export function AppointmentPaymentRow({ a }: { a: AppointmentPaymentRowData }) {
           {a.paid_at && (
             <p className="text-[11px] text-muted-foreground">
               Paid on{" "}
-              {new Date(a.paid_at).toLocaleString("tr-TR", {
+              {new Date(a.paid_at).toLocaleString("en-GB", {
                 dateStyle: "medium",
                 timeStyle: "short",
               })}

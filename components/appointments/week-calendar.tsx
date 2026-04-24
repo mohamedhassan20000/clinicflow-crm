@@ -152,7 +152,7 @@ function AppointmentCard({
   appt: Appointment;
   canEdit: boolean;
 }) {
-  const time = new Date(appt.scheduled_at).toLocaleTimeString("tr-TR", {
+  const time = new Date(appt.scheduled_at).toLocaleTimeString("en-GB", {
     hour: "2-digit",
     minute: "2-digit",
     timeZone: "Europe/Istanbul",

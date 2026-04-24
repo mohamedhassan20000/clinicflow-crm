@@ -30,7 +30,7 @@ interface ReceptionistDashboardProps {
 }
 
 function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString("tr-TR", {
+  return new Date(iso).toLocaleTimeString("en-GB", {
     timeZone: "Europe/Istanbul",
     hour: "2-digit",
     minute: "2-digit",

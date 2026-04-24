@@ -31,7 +31,7 @@ export function MedicalNotesList({ notes }: MedicalNotesListProps) {
               {note.profiles?.full_name ?? "Unknown doctor"}
             </span>
             <time dateTime={note.created_at}>
-              {new Date(note.created_at).toLocaleString("tr-TR", {
+              {new Date(note.created_at).toLocaleString("en-GB", {
                 dateStyle: "medium",
                 timeStyle: "short",
               })}

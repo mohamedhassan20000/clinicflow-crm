@@ -19,6 +19,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ServiceForm } from "@/components/settings/service-form";
@@ -43,15 +44,16 @@ export function ServiceRowActions({ service, departments }: Props) {
   return (
     <div className="flex items-center justify-end gap-1">
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 gap-1 px-2 text-xs"
-          onClick={() => setEditOpen(true)}
-        >
-          <Pencil className="h-3.5 w-3.5" />
-          Edit
-        </Button>
+        <DialogTrigger asChild>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 gap-1 px-2 text-xs"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+            Edit
+          </Button>
+        </DialogTrigger>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Edit service</DialogTitle>

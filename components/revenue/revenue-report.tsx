@@ -42,6 +42,23 @@ export interface RevenueRow {
   insurance_providers: { name: string } | null;
 }
 
+export interface SettlementRow {
+  id: string;
+  settled_at: string;
+  amount: number;
+  payment_method: PaymentMethod;
+  note: string | null;
+  patient: { full_name: string } | null;
+  appointment: {
+    id: string;
+    scheduled_at: string;
+    total_amount: number | null;
+    outstanding_amount: number | null;
+    profiles: { full_name: string } | null;
+    departments: { name: string; color: string } | null;
+  } | null;
+}
+
 const METHOD_META: Record<
   PaymentMethod,
   { label: string; icon: ComponentType<{ className?: string }> }
@@ -97,6 +114,7 @@ function presetLabel(preset: string) {
 
 interface Props {
   rows: RevenueRow[];
+  settlements?: SettlementRow[];
   range: { start: string; end: string };
   preset: string;
   fromInput: string;
@@ -108,6 +126,7 @@ interface Props {
 
 export function RevenueReport({
   rows,
+  settlements = [],
   range,
   preset,
   fromInput,
@@ -132,11 +151,13 @@ export function RevenueReport({
   const primaryTotal = rows.reduce((s, r) => s + (r.paid_amount ?? 0), 0);
   const secondaryTotal = rows.reduce((s, r) => s + (r.secondary_amount ?? 0), 0);
   const insuranceTotal = rows.reduce((s, r) => s + (r.insurance_amount ?? 0), 0);
+  const settlementsTotal = settlements.reduce((s, r) => s + (r.amount ?? 0), 0);
   const outstandingTotal = rows.reduce(
     (s, r) => s + (r.outstanding_amount ?? 0),
     0,
   );
-  const grossTotal = primaryTotal + secondaryTotal + insuranceTotal;
+  const grossTotal =
+    primaryTotal + secondaryTotal + insuranceTotal + settlementsTotal;
 
   // Method breakdown
   const methodMap = new Map<PaymentMethod, number>();
@@ -150,6 +171,13 @@ export function RevenueReport({
       methodMap.set(
         r.secondary_payment_method,
         (methodMap.get(r.secondary_payment_method) ?? 0) + r.secondary_amount,
+      );
+  }
+  for (const s of settlements) {
+    if (s.payment_method && s.amount)
+      methodMap.set(
+        s.payment_method,
+        (methodMap.get(s.payment_method) ?? 0) + s.amount,
       );
   }
   const methodBreakdown = Array.from(methodMap.entries())
@@ -261,7 +289,15 @@ export function RevenueReport({
           </div>
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Receipt className="h-4 w-4" />
-            {rows.length} transaction{rows.length !== 1 ? "s" : ""}
+            {rows.length + settlements.length} transaction
+            {rows.length + settlements.length !== 1 ? "s" : ""}
+            {settlements.length > 0 && (
+              <span className="text-xs">
+                ({rows.length} session{rows.length !== 1 ? "s" : ""} ·{" "}
+                {settlements.length} settlement
+                {settlements.length !== 1 ? "s" : ""})
+              </span>
+            )}
           </div>
         </div>
 
@@ -377,11 +413,64 @@ export function RevenueReport({
           </table>
         </div>
 
+        {/* Settlement transactions — separate table for outstanding balance payments */}
+        {settlements.length > 0 && (
+          <div className="border-t border-border/50">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-3 bg-amber-500/5">
+              <div>
+                <p className="text-[10px] font-medium uppercase tracking-widest text-amber-700 dark:text-amber-400">
+                  Settlement payments
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Payments recorded against previously outstanding balances
+                </p>
+              </div>
+              <div className="text-sm">
+                <span className="text-muted-foreground">Total settled: </span>
+                <span className="font-semibold tabular-nums text-amber-700 dark:text-amber-400">
+                  {fmtTRY(settlementsTotal)}
+                </span>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/40 text-[10px] uppercase tracking-wider text-muted-foreground">
+                  <tr>
+                    <th className="px-4 py-2.5 text-left font-medium">
+                      Settled at
+                    </th>
+                    <th className="px-4 py-2.5 text-left font-medium">
+                      Patient
+                    </th>
+                    <th className="px-4 py-2.5 text-left font-medium">
+                      Session details
+                    </th>
+                    <th className="px-4 py-2.5 text-left font-medium">
+                      Method
+                    </th>
+                    <th className="px-4 py-2.5 text-right font-medium">
+                      Amount paid
+                    </th>
+                    <th className="px-4 py-2.5 text-right font-medium">
+                      Remaining balance
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/40">
+                  {settlements.map((s) => (
+                    <SettlementTxnRow key={s.id} row={s} />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
         {/* Print footer */}
         <div className="hidden print:block px-6 py-4 text-[10px] text-muted-foreground border-t border-border">
-          This statement reflects completed appointments with a recorded
-          payment within the specified period. Outstanding balances remain
-          due and are not included in gross collected.
+          This statement reflects completed appointments and settlement
+          payments recorded within the specified period. Outstanding
+          balances remain due and are not included in gross collected.
         </div>
       </div>
     </div>
@@ -409,6 +498,92 @@ function SummaryCell({
       </div>
       <p className="mt-1 text-lg font-semibold tabular-nums">{fmtTRY(amount)}</p>
     </div>
+  );
+}
+
+function SettlementTxnRow({ row }: { row: SettlementRow }) {
+  const meta = METHOD_META[row.payment_method];
+  const MethodIcon = meta?.icon;
+  const appt = row.appointment;
+  const deptColor = appt?.departments?.color ?? "#64748b";
+  const remaining = appt?.outstanding_amount ?? 0;
+
+  return (
+    <tr className="hover:bg-muted/30 transition-colors">
+      <td className="px-4 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
+        {fmtDateTime(row.settled_at)}
+      </td>
+      <td className="px-4 py-2.5 font-medium">
+        {row.patient?.full_name ?? "Unknown"}
+      </td>
+      <td className="px-4 py-2.5">
+        {appt ? (
+          <div className="space-y-0.5">
+            <div className="text-xs">
+              Session{" "}
+              <span className="text-muted-foreground">
+                {fmtDate(appt.scheduled_at)}
+              </span>
+              {appt.total_amount != null && (
+                <span className="ml-2 text-muted-foreground">
+                  · total{" "}
+                  <span className="tabular-nums font-medium text-foreground">
+                    {fmtTRY(appt.total_amount)}
+                  </span>
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1.5">
+              {appt.profiles?.full_name && (
+                <span className="text-[11px] text-muted-foreground">
+                  Dr. {appt.profiles.full_name}
+                </span>
+              )}
+              {appt.departments?.name && (
+                <span
+                  className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
+                  style={{
+                    backgroundColor: `color-mix(in oklab, ${deptColor} 15%, transparent)`,
+                    color: deptColor,
+                  }}
+                >
+                  {appt.departments.name}
+                </span>
+              )}
+            </div>
+          </div>
+        ) : (
+          <span className="text-xs text-muted-foreground">
+            Patient-level balance
+          </span>
+        )}
+        {row.note && (
+          <p className="mt-1 text-[11px] italic text-muted-foreground">
+            &ldquo;{row.note}&rdquo;
+          </p>
+        )}
+      </td>
+      <td className="px-4 py-2.5">
+        <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/30 bg-amber-500/5 px-2 py-0.5 text-xs">
+          {MethodIcon && <MethodIcon className="h-3 w-3" />}
+          {meta?.label ?? row.payment_method}
+        </span>
+      </td>
+      <td className="px-4 py-2.5 text-right tabular-nums font-semibold text-emerald-600 dark:text-emerald-400">
+        {fmtTRY(row.amount)}
+      </td>
+      <td className="px-4 py-2.5 text-right tabular-nums">
+        {remaining > 0 ? (
+          <span className="text-amber-600 dark:text-amber-400 font-medium">
+            {fmtTRY(remaining)}
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
+            Settled
+          </span>
+        )}
+      </td>
+    </tr>
   );
 }
 

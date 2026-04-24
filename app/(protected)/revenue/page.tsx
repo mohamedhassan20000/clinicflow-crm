@@ -91,16 +91,27 @@ export default async function RevenuePage({ searchParams }: PageProps) {
 
   const supabase = await createClient();
 
-  const { data: rows } = await supabase
-    .from("appointments")
-    .select(
-      "id, scheduled_at, paid_at, total_amount, paid_amount, insurance_amount, secondary_amount, outstanding_amount, payment_method, secondary_payment_method, payment_note, patients(full_name), profiles!doctor_id(full_name), departments(name, color), insurance_providers(name)",
-    )
-    .eq("clinic_id", user.clinicId)
-    .eq("status", "completed")
-    .gte("paid_at", range.start.toISOString())
-    .lte("paid_at", range.end.toISOString())
-    .order("paid_at", { ascending: false });
+  const [{ data: rows }, { data: settlements }] = await Promise.all([
+    supabase
+      .from("appointments")
+      .select(
+        "id, scheduled_at, paid_at, total_amount, paid_amount, insurance_amount, secondary_amount, outstanding_amount, payment_method, secondary_payment_method, payment_note, patients(full_name), profiles!doctor_id(full_name), departments(name, color), insurance_providers(name)",
+      )
+      .eq("clinic_id", user.clinicId)
+      .eq("status", "completed")
+      .gte("paid_at", range.start.toISOString())
+      .lte("paid_at", range.end.toISOString())
+      .order("paid_at", { ascending: false }),
+    supabase
+      .from("outstanding_settlements")
+      .select(
+        "id, settled_at, amount, payment_method, note, patient:patients(full_name), appointment:appointments(id, scheduled_at, total_amount, outstanding_amount, profiles!doctor_id(full_name), departments(name, color))",
+      )
+      .eq("clinic_id", user.clinicId)
+      .gte("settled_at", range.start.toISOString())
+      .lte("settled_at", range.end.toISOString())
+      .order("settled_at", { ascending: false }),
+  ]);
 
   const { data: clinic } = await supabase
     .from("clinics")
@@ -133,6 +144,8 @@ export default async function RevenuePage({ searchParams }: PageProps) {
       <RevenueReport
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         rows={(rows ?? []) as any}
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        settlements={(settlements ?? []) as any}
         range={{
           start: range.start.toISOString(),
           end: range.end.toISOString(),

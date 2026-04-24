@@ -46,11 +46,11 @@ export function DayCalendar({ appointments, date, canEdit }: Props) {
       {/* Nav */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Link href={`/appointments?view=day&date=${fmt(prev)}`}>
-            <Button variant="outline" size="sm" className="h-8 w-8 p-0">
+          <Button asChild variant="outline" size="sm" className="h-8 w-8 p-0">
+            <Link href={`/appointments?view=day&date=${fmt(prev)}`} aria-label="Previous day">
               <ChevronLeft className="h-4 w-4" />
-            </Button>
-          </Link>
+            </Link>
+          </Button>
           <span className="text-sm font-medium">
             {date.toLocaleDateString("en-GB", {
               weekday: "long",
@@ -59,20 +59,20 @@ export function DayCalendar({ appointments, date, canEdit }: Props) {
               year: "numeric",
             })}
           </span>
-          <Link href={`/appointments?view=day&date=${fmt(next)}`}>
-            <Button variant="outline" size="sm" className="h-8 w-8 p-0">
+          <Button asChild variant="outline" size="sm" className="h-8 w-8 p-0">
+            <Link href={`/appointments?view=day&date=${fmt(next)}`} aria-label="Next day">
               <ChevronRight className="h-4 w-4" />
-            </Button>
-          </Link>
+            </Link>
+          </Button>
         </div>
 
         {canEdit && (
-          <Link href="/appointments/new">
-            <Button size="sm" className="gap-1.5">
+          <Button asChild size="sm" className="gap-1.5">
+            <Link href="/appointments/new">
               <CalendarPlus className="h-4 w-4" />
               New appointment
-            </Button>
-          </Link>
+            </Link>
+          </Button>
         )}
       </div>
 

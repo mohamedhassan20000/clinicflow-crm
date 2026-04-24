@@ -58,11 +58,11 @@ export function WeekCalendar({
       {/* Nav */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Link href={`/appointments?week=${fmt(prevWeek)}`}>
-            <Button variant="outline" size="sm" className="h-8 w-8 p-0">
+          <Button asChild variant="outline" size="sm" className="h-8 w-8 p-0">
+            <Link href={`/appointments?week=${fmt(prevWeek)}`} aria-label="Previous week">
               <ChevronLeft className="h-4 w-4" />
-            </Button>
-          </Link>
+            </Link>
+          </Button>
           <span className="text-sm font-medium">
             {weekStart.toLocaleDateString("en-GB", {
               day: "numeric",
@@ -75,20 +75,20 @@ export function WeekCalendar({
               year: "numeric",
             })}
           </span>
-          <Link href={`/appointments?week=${fmt(nextWeek)}`}>
-            <Button variant="outline" size="sm" className="h-8 w-8 p-0">
+          <Button asChild variant="outline" size="sm" className="h-8 w-8 p-0">
+            <Link href={`/appointments?week=${fmt(nextWeek)}`} aria-label="Next week">
               <ChevronRight className="h-4 w-4" />
-            </Button>
-          </Link>
+            </Link>
+          </Button>
         </div>
 
         {canEdit && (
-          <Link href="/appointments/new">
-            <Button size="sm" className="gap-1.5">
+          <Button asChild size="sm" className="gap-1.5">
+            <Link href="/appointments/new">
               <CalendarPlus className="h-4 w-4" />
               New appointment
-            </Button>
-          </Link>
+            </Link>
+          </Button>
         )}
       </div>
 

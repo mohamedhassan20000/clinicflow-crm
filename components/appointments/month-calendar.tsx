@@ -78,31 +78,31 @@ export function MonthCalendar({ appointments, monthStart, canEdit }: Props) {
       {/* Nav */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Link href={`/appointments?view=month&month=${fmtMonth(prevMonth)}`}>
-            <Button variant="outline" size="sm" className="h-8 w-8 p-0">
+          <Button asChild variant="outline" size="sm" className="h-8 w-8 p-0">
+            <Link href={`/appointments?view=month&month=${fmtMonth(prevMonth)}`} aria-label="Previous month">
               <ChevronLeft className="h-4 w-4" />
-            </Button>
-          </Link>
+            </Link>
+          </Button>
           <span className="text-sm font-medium">
             {monthStart.toLocaleDateString("en-GB", {
               month: "long",
               year: "numeric",
             })}
           </span>
-          <Link href={`/appointments?view=month&month=${fmtMonth(nextMonth)}`}>
-            <Button variant="outline" size="sm" className="h-8 w-8 p-0">
+          <Button asChild variant="outline" size="sm" className="h-8 w-8 p-0">
+            <Link href={`/appointments?view=month&month=${fmtMonth(nextMonth)}`} aria-label="Next month">
               <ChevronRight className="h-4 w-4" />
-            </Button>
-          </Link>
+            </Link>
+          </Button>
         </div>
 
         {canEdit && (
-          <Link href="/appointments/new">
-            <Button size="sm" className="gap-1.5">
+          <Button asChild size="sm" className="gap-1.5">
+            <Link href="/appointments/new">
               <CalendarPlus className="h-4 w-4" />
               New appointment
-            </Button>
-          </Link>
+            </Link>
+          </Button>
         )}
       </div>
 

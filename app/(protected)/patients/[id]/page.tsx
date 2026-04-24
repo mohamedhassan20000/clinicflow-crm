@@ -117,12 +117,12 @@ export default async function PatientDetailPage({ params }: PageProps) {
 
         {canEdit && (
           <div className="flex items-center gap-2">
-            <Link href={`/patients/${id}/edit`}>
-              <Button variant="outline" size="sm" className="gap-1.5">
+            <Button asChild variant="outline" size="sm" className="gap-1.5">
+              <Link href={`/patients/${id}/edit`}>
                 <Pencil className="h-3.5 w-3.5" />
                 Edit
-              </Button>
-            </Link>
+              </Link>
+            </Button>
             {isAdmin && !patient.is_deleted && (
               <DeletePatientButton patientId={id} />
             )}

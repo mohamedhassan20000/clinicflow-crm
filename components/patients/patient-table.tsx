@@ -128,11 +128,9 @@ const columns: ColumnDef<Patient>[] = [
     id: "actions",
     meta: { printHidden: true },
     cell: ({ row }) => (
-      <Link href={`/patients/${row.original.id}`}>
-        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs">
-          View
-        </Button>
-      </Link>
+      <Button asChild variant="ghost" size="sm" className="h-7 px-2 text-xs">
+        <Link href={`/patients/${row.original.id}`}>View</Link>
+      </Button>
     ),
   },
 ];
@@ -174,12 +172,12 @@ export function PatientTable({
           />
         </div>
         {canCreate && (
-          <Link href="/patients/new">
-            <Button size="sm" className="h-9 gap-1.5">
+          <Button asChild size="sm" className="h-9 gap-1.5">
+            <Link href="/patients/new">
               <UserPlus className="h-4 w-4" />
               New patient
-            </Button>
-          </Link>
+            </Link>
+          </Button>
         )}
       </div>
 
@@ -247,29 +245,37 @@ export function PatientTable({
             {total} patient{total !== 1 ? "s" : ""}
           </span>
           <div className="flex items-center gap-2">
-            <Link
-              href={`?q=${search}&page=${page - 1}`}
-              aria-disabled={page <= 1}
-              className={page <= 1 ? "pointer-events-none opacity-40" : ""}
+            <Button
+              asChild
+              variant="outline"
+              size="sm"
+              className={`h-8 w-8 p-0 ${page <= 1 ? "pointer-events-none opacity-40" : ""}`}
             >
-              <Button variant="outline" size="sm" className="h-8 w-8 p-0">
+              <Link
+                href={`?q=${search}&page=${page - 1}`}
+                aria-disabled={page <= 1}
+                aria-label="Previous page"
+              >
                 <ChevronLeft className="h-4 w-4" />
-              </Button>
-            </Link>
+              </Link>
+            </Button>
             <span>
               {page} / {totalPages}
             </span>
-            <Link
-              href={`?q=${search}&page=${page + 1}`}
-              aria-disabled={page >= totalPages}
-              className={
-                page >= totalPages ? "pointer-events-none opacity-40" : ""
-              }
+            <Button
+              asChild
+              variant="outline"
+              size="sm"
+              className={`h-8 w-8 p-0 ${page >= totalPages ? "pointer-events-none opacity-40" : ""}`}
             >
-              <Button variant="outline" size="sm" className="h-8 w-8 p-0">
+              <Link
+                href={`?q=${search}&page=${page + 1}`}
+                aria-disabled={page >= totalPages}
+                aria-label="Next page"
+              >
                 <ChevronRight className="h-4 w-4" />
-              </Button>
-            </Link>
+              </Link>
+            </Button>
           </div>
         </div>
       )}

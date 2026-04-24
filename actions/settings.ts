@@ -109,7 +109,7 @@ export async function updateStaff(
   }
 
   const supabase = await createClient();
-  const { error } = await supabase
+  const { error, count } = await supabase
     .from("profiles")
     .update({
       full_name: parsed.data.full_name,
@@ -117,11 +117,12 @@ export async function updateStaff(
       department_id: parsed.data.department_id ?? null,
       phone: parsed.data.phone ?? null,
       is_active: parsed.data.is_active,
-    })
+    }, { count: "exact" })
     .eq("id", staffId)
     .eq("clinic_id", user.clinicId);
 
   if (error) return { error: error.message };
+  if (!count) return { error: "Could not update this staff member. You may lack permission." };
 
   revalidatePath("/settings/staff");
   return { success: true };
@@ -396,40 +397,6 @@ export async function updateClinic(
     .eq("id", user.clinicId);
 
   if (error) return { error: error.message };
-
-  revalidatePath("/settings/clinic");
-  return { success: true };
-}
-
-export async function createClinic(
-  _prev: ActionResult | null,
-  fd: FormData,
-): Promise<ActionResult> {
-  await requireRole("admin");
-
-  const parsed = clinicSchema.safeParse({
-    name: fd.get("name"),
-    phone: fd.get("phone") || null,
-    address: fd.get("address") || null,
-  });
-
-  if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Validation error" };
-  }
-
-  const supabase = await createClient();
-  const { error } = await supabase.from("clinics").insert({
-    name: parsed.data.name,
-    phone: parsed.data.phone ?? null,
-    address: parsed.data.address ?? null,
-    reminder_lead_hours: 24,
-    is_active: true,
-  });
-
-  if (error) {
-    if (error.code === "23505") return { error: "A clinic with this name already exists." };
-    return { error: error.message };
-  }
 
   revalidatePath("/settings/clinic");
   return { success: true };

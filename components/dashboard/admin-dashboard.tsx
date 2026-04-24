@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { StatusBadge } from "@/components/appointments/status-badge";
+import { RevenueWidget, type RevenueWidgetProps } from "@/components/dashboard/revenue-widget";
 import type { Tables } from "@/types/database";
 
 type Appointment = Tables<"appointments"> & {
@@ -29,6 +30,7 @@ interface AdminDashboardProps {
   pendingCount: number;
   todayAppointments: Appointment[];
   upcomingAppointments: Appointment[];
+  revenue: RevenueWidgetProps;
 }
 
 function formatTime(iso: string) {
@@ -58,6 +60,7 @@ export function AdminDashboard({
   pendingCount,
   todayAppointments,
   upcomingAppointments,
+  revenue,
 }: AdminDashboardProps) {
   const monthTrend =
     lastMonthCount === 0
@@ -136,6 +139,15 @@ export function AdminDashboard({
         </div>
       )}
 
+      {/* Revenue widget — click to open full transactions report */}
+      <Link
+        href="/revenue"
+        className="block rounded-xl transition hover:ring-2 hover:ring-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+        aria-label="Open revenue transactions report"
+      >
+        <RevenueWidget {...revenue} />
+      </Link>
+
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Today's schedule */}
         <div className="rounded-xl border border-border/50 bg-card">
@@ -197,15 +209,15 @@ export function AdminDashboard({
         <div className="rounded-xl border border-border/50 bg-card">
           <div className="flex items-center justify-between border-b border-border/50 px-5 py-4">
             <div className="flex items-center gap-2">
-              <Clock className="h-4 w-4 text-primary" />
-              <h2 className="font-semibold text-sm">Coming up (next 7 days)</h2>
+              <AlertCircle className="h-4 w-4 text-amber-500" />
+              <h2 className="font-semibold text-sm">Needs confirmation (next 7 days)</h2>
             </div>
           </div>
           <div className="divide-y divide-border/50">
             {upcomingAppointments.length === 0 ? (
               <div className="flex flex-col items-center gap-1 py-10 text-center">
-                <CalendarDays className="h-6 w-6 text-muted-foreground/40" />
-                <p className="text-sm text-muted-foreground">Nothing scheduled</p>
+                <CheckCircle2 className="h-6 w-6 text-muted-foreground/40" />
+                <p className="text-sm text-muted-foreground">No pending confirmations</p>
               </div>
             ) : (
               upcomingAppointments.slice(0, 6).map((appt) => (

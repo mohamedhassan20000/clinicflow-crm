@@ -8,6 +8,7 @@ import {
   CalendarDays,
   Settings,
   LogOut,
+  Wallet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signOut } from "@/actions/auth";
@@ -34,6 +35,9 @@ function buildNav(role: string): NavEntry[] {
       { href: "/patients", label: "Patients", icon: Users },
       { href: "/appointments", label: "Appointments", icon: CalendarDays },
     );
+  }
+  if (role === "admin" || role === "manager") {
+    items.push({ href: "/revenue", label: "Revenue", icon: Wallet });
   }
   if (role === "admin") {
     items.push({ href: "/settings", label: "Settings", icon: Settings });

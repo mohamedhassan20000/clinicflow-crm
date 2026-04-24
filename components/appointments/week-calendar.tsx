@@ -10,6 +10,7 @@ import type { Tables } from "@/types/database";
 type Appointment = Tables<"appointments"> & {
   patients: { full_name: string } | null;
   profiles: { full_name: string } | null;
+  departments: { name: string; color: string } | null;
 };
 
 interface WeekCalendarProps {
@@ -157,19 +158,48 @@ function AppointmentCard({
     timeZone: "Europe/Istanbul",
   });
 
+  const deptColor = appt.departments?.color ?? "#64748b";
+  const deptName = appt.departments?.name ?? "General";
+
   return (
-    <div className="group rounded-lg border border-border/50 bg-card p-2 text-xs space-y-1 hover:border-primary/30 hover:bg-primary/5 transition-colors">
+    <div
+      className="group relative rounded-lg border p-2 pl-2.5 text-xs space-y-1 transition-colors hover:brightness-[1.02]"
+      style={{
+        borderColor: `color-mix(in oklab, ${deptColor} 35%, transparent)`,
+        backgroundColor: `color-mix(in oklab, ${deptColor} 8%, var(--card))`,
+      }}
+    >
+      <span
+        aria-hidden
+        className="absolute inset-y-0 left-0 w-1 rounded-l-lg"
+        style={{ backgroundColor: deptColor }}
+      />
       <div className="font-medium text-foreground leading-tight truncate">
         {appt.patients?.full_name ?? "Unknown"}
       </div>
-      <div className="text-muted-foreground">{time}</div>
+      <div className="flex items-center justify-between text-muted-foreground">
+        <span>{time}</span>
+        <span
+          className="rounded-sm px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider"
+          style={{
+            backgroundColor: `color-mix(in oklab, ${deptColor} 18%, transparent)`,
+            color: deptColor,
+          }}
+        >
+          {deptName}
+        </span>
+      </div>
       <div className="text-muted-foreground/70 truncate">
         {appt.profiles?.full_name ?? "—"}
       </div>
       <StatusBadge status={appt.status} />
       {canEdit && (
         <div className="pt-0.5">
-          <AppointmentActions appointmentId={appt.id} currentStatus={appt.status} />
+          <AppointmentActions
+            appointmentId={appt.id}
+            currentStatus={appt.status}
+            hasInsurance={Boolean(appt.insurance_provider_id)}
+          />
         </div>
       )}
     </div>

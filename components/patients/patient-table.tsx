@@ -15,7 +15,9 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import type { Tables } from "@/types/database";
 
-type Patient = Tables<"patients">;
+type Patient = Tables<"patients"> & {
+  departments?: { id: string; name: string; color: string } | null;
+};
 
 interface PatientTableProps {
   data: Patient[];
@@ -29,14 +31,46 @@ const columns: ColumnDef<Patient>[] = [
   {
     accessorKey: "full_name",
     header: "Patient",
-    cell: ({ row }) => (
-      <Link
-        href={`/patients/${row.original.id}`}
-        className="font-medium text-foreground hover:text-primary transition-colors"
-      >
-        {row.original.full_name}
-      </Link>
-    ),
+    cell: ({ row }) => {
+      const dept = row.original.departments;
+      return (
+        <div className="flex items-center gap-2">
+          <span
+            aria-hidden
+            className="h-2 w-2 shrink-0 rounded-full ring-2 ring-background"
+            style={{ backgroundColor: dept?.color ?? "var(--muted-foreground)" }}
+            title={dept?.name ?? "Unassigned"}
+          />
+          <Link
+            href={`/patients/${row.original.id}`}
+            className="font-medium text-foreground hover:text-primary transition-colors"
+          >
+            {row.original.full_name}
+          </Link>
+        </div>
+      );
+    },
+  },
+  {
+    id: "department",
+    header: "Department",
+    cell: ({ row }) => {
+      const dept = row.original.departments;
+      if (!dept) return <span className="text-muted-foreground/40">—</span>;
+      return (
+        <Badge
+          variant="outline"
+          className="gap-1.5 font-normal"
+          style={{
+            borderColor: `color-mix(in oklab, ${dept.color} 45%, transparent)`,
+            backgroundColor: `color-mix(in oklab, ${dept.color} 10%, transparent)`,
+            color: dept.color,
+          }}
+        >
+          {dept.name}
+        </Badge>
+      );
+    },
   },
   {
     accessorKey: "phone",

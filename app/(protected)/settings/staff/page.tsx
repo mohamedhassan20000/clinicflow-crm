@@ -1,18 +1,8 @@
 import type { Metadata } from "next";
-import { UserPlus } from "lucide-react";
 import { requireRole } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { CreateStaffForm } from "@/components/settings/staff-form";
 import { StaffTable } from "@/components/settings/staff-table";
-import { createStaff } from "@/actions/settings";
+import { AddStaffDialog } from "@/components/settings/add-staff-dialog";
 
 export const metadata: Metadata = { title: "Staff" };
 
@@ -43,23 +33,7 @@ export default async function StaffSettingsPage() {
             {staff?.length ?? 0} member{(staff?.length ?? 0) !== 1 ? "s" : ""}
           </p>
         </div>
-        <Dialog>
-          <DialogTrigger asChild>
-            <Button size="sm" className="gap-2">
-              <UserPlus className="h-4 w-4" />
-              Add staff
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-lg">
-            <DialogHeader>
-              <DialogTitle>Add staff member</DialogTitle>
-            </DialogHeader>
-            <CreateStaffForm
-              action={createStaff}
-              departments={departments ?? []}
-            />
-          </DialogContent>
-        </Dialog>
+        <AddStaffDialog departments={departments ?? []} />
       </div>
 
       <StaffTable

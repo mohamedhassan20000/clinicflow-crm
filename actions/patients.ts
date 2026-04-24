@@ -16,10 +16,13 @@ export async function createPatient(
 
   const raw = {
     full_name: formData.get("full_name"),
+    national_id: formData.get("national_id"),
     date_of_birth: formData.get("date_of_birth"),
     phone: formData.get("phone"),
     email: formData.get("email"),
     blood_type: formData.get("blood_type") || null,
+    department_id: formData.get("department_id") || null,
+    assigned_doctor_id: formData.get("assigned_doctor_id") || null,
   };
 
   const parsed = patientSchema.safeParse(raw);
@@ -28,25 +31,58 @@ export async function createPatient(
   }
 
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("patients")
-    .insert({
-      ...parsed.data,
-      clinic_id: user.clinicId,
-      created_by: user.id,
-    })
-    .select("id")
-    .single();
 
-  if (error) {
-    if (error.code === "23505") {
-      return { error: "A patient with this email already exists." };
+  // Generate next file number for this clinic: CF-NNNN (zero-padded, sequential).
+  const fileNumber = await generateFileNumber(user.clinicId);
+
+  // Try insert; on file_number collision (rare race), retry up to 3 times.
+  let lastError: { code?: string; message?: string } | null = null;
+  let insertedId: string | null = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const candidate =
+      attempt === 0 ? fileNumber : await generateFileNumber(user.clinicId);
+    const { data, error } = await supabase
+      .from("patients")
+      .insert({
+        ...parsed.data,
+        file_number: candidate,
+        clinic_id: user.clinicId,
+        created_by: user.id,
+      })
+      .select("id")
+      .single();
+    if (!error) {
+      insertedId = data.id;
+      break;
     }
-    return { error: "Failed to create patient. Please try again." };
+    lastError = error;
+    if (error.code !== "23505") break;
+    if (!error.message?.includes("patients_clinic_file_number_unique")) break;
+  }
+
+  if (!insertedId) {
+    return { error: lastError?.message || "Failed to create patient. Please try again." };
   }
 
   revalidatePath("/patients");
-  redirect(`/patients/${data.id}`);
+  redirect(`/patients/${insertedId}`);
+}
+
+async function generateFileNumber(clinicId: string): Promise<string> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("patients")
+    .select("file_number")
+    .eq("clinic_id", clinicId)
+    .like("file_number", "CF-%")
+    .order("file_number", { ascending: false })
+    .limit(1);
+  const last = data?.[0]?.file_number;
+  const n =
+    last && /^CF-\d+$/.test(last)
+      ? parseInt(last.slice(3), 10) + 1
+      : (data ? data.length : 0) + 1;
+  return `CF-${String(n).padStart(4, "0")}`;
 }
 
 export async function updatePatient(
@@ -58,10 +94,13 @@ export async function updatePatient(
 
   const raw = {
     full_name: formData.get("full_name"),
+    national_id: formData.get("national_id"),
     date_of_birth: formData.get("date_of_birth"),
     phone: formData.get("phone"),
     email: formData.get("email"),
     blood_type: formData.get("blood_type") || null,
+    department_id: formData.get("department_id") || null,
+    assigned_doctor_id: formData.get("assigned_doctor_id") || null,
   };
 
   const parsed = patientSchema.safeParse(raw);

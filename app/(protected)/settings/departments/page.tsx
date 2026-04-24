@@ -1,23 +1,13 @@
 import type { Metadata } from "next";
-import { Plus } from "lucide-react";
 import { requireRole } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { DepartmentForm } from "@/components/settings/department-form";
-import {
-  createDepartment,
   updateDepartment,
   toggleDepartmentActive,
 } from "@/actions/settings";
 import { DepartmentActions } from "@/components/settings/department-actions";
+import { AddDepartmentDialog } from "@/components/settings/add-department-dialog";
 
 export const metadata: Metadata = { title: "Departments" };
 
@@ -40,20 +30,7 @@ export default async function DepartmentsSettingsPage() {
             {departments?.length ?? 0} department{(departments?.length ?? 0) !== 1 ? "s" : ""}
           </p>
         </div>
-        <Dialog>
-          <DialogTrigger asChild>
-            <Button size="sm" className="gap-2">
-              <Plus className="h-4 w-4" />
-              Add department
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-lg">
-            <DialogHeader>
-              <DialogTitle>Add department</DialogTitle>
-            </DialogHeader>
-            <DepartmentForm action={createDepartment} submitLabel="Create department" />
-          </DialogContent>
-        </Dialog>
+        <AddDepartmentDialog />
       </div>
 
       <div className="rounded-xl border border-border/50 overflow-hidden">

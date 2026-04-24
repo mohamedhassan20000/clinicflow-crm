@@ -7,8 +7,6 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
@@ -20,15 +18,28 @@ export type Database = {
           created_at: string
           created_by: string
           department_id: string | null
+          deposit_amount: number
           doctor_id: string
           duration_minutes: number
           id: string
+          insurance_amount: number | null
           insurance_provider_id: string | null
           notes: string | null
+          outstanding_amount: number | null
+          paid_amount: number | null
+          paid_at: string | null
           patient_id: string
+          payment_method: Database["public"]["Enums"]["payment_method"] | null
+          payment_note: string | null
           reminder_sent_at: string | null
           scheduled_at: string
+          secondary_amount: number
+          secondary_payment_method:
+            | Database["public"]["Enums"]["payment_method"]
+            | null
+          service_id: string | null
           status: Database["public"]["Enums"]["appointment_status"]
+          total_amount: number | null
           updated_at: string
           updated_by: string | null
         }
@@ -37,15 +48,28 @@ export type Database = {
           created_at?: string
           created_by: string
           department_id?: string | null
+          deposit_amount?: number
           doctor_id: string
           duration_minutes?: number
           id?: string
+          insurance_amount?: number | null
           insurance_provider_id?: string | null
           notes?: string | null
+          outstanding_amount?: number | null
+          paid_amount?: number | null
+          paid_at?: string | null
           patient_id: string
+          payment_method?: Database["public"]["Enums"]["payment_method"] | null
+          payment_note?: string | null
           reminder_sent_at?: string | null
           scheduled_at: string
+          secondary_amount?: number
+          secondary_payment_method?:
+            | Database["public"]["Enums"]["payment_method"]
+            | null
+          service_id?: string | null
           status?: Database["public"]["Enums"]["appointment_status"]
+          total_amount?: number | null
           updated_at?: string
           updated_by?: string | null
         }
@@ -54,15 +78,28 @@ export type Database = {
           created_at?: string
           created_by?: string
           department_id?: string | null
+          deposit_amount?: number
           doctor_id?: string
           duration_minutes?: number
           id?: string
+          insurance_amount?: number | null
           insurance_provider_id?: string | null
           notes?: string | null
+          outstanding_amount?: number | null
+          paid_amount?: number | null
+          paid_at?: string | null
           patient_id?: string
+          payment_method?: Database["public"]["Enums"]["payment_method"] | null
+          payment_note?: string | null
           reminder_sent_at?: string | null
           scheduled_at?: string
+          secondary_amount?: number
+          secondary_payment_method?:
+            | Database["public"]["Enums"]["payment_method"]
+            | null
+          service_id?: string | null
           status?: Database["public"]["Enums"]["appointment_status"]
+          total_amount?: number | null
           updated_at?: string
           updated_by?: string | null
         }
@@ -107,6 +144,13 @@ export type Database = {
             columns: ["patient_id"]
             isOneToOne: false
             referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointments_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services"
             referencedColumns: ["id"]
           },
           {
@@ -380,50 +424,137 @@ export type Database = {
           },
         ]
       }
+      outstanding_settlements: {
+        Row: {
+          amount: number
+          appointment_id: string | null
+          clinic_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          note: string | null
+          patient_id: string
+          payment_method: string
+          settled_at: string
+        }
+        Insert: {
+          amount: number
+          appointment_id?: string | null
+          clinic_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          note?: string | null
+          patient_id: string
+          payment_method: string
+          settled_at?: string
+        }
+        Update: {
+          amount?: number
+          appointment_id?: string | null
+          clinic_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          note?: string | null
+          patient_id?: string
+          payment_method?: string
+          settled_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "outstanding_settlements_appointment_id_fkey"
+            columns: ["appointment_id"]
+            isOneToOne: false
+            referencedRelation: "appointments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "outstanding_settlements_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "outstanding_settlements_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "outstanding_settlements_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       patients: {
         Row: {
+          assigned_doctor_id: string | null
           blood_type: Database["public"]["Enums"]["blood_type"] | null
           clinic_id: string
           created_at: string
           created_by: string
           date_of_birth: string
+          department_id: string | null
           email: string
+          file_number: string
           full_name: string
           id: string
           is_deleted: boolean
+          national_id: string
           phone: string
           updated_at: string
           updated_by: string | null
         }
         Insert: {
+          assigned_doctor_id?: string | null
           blood_type?: Database["public"]["Enums"]["blood_type"] | null
           clinic_id: string
           created_at?: string
           created_by: string
           date_of_birth: string
+          department_id?: string | null
           email: string
+          file_number: string
           full_name: string
           id?: string
           is_deleted?: boolean
+          national_id: string
           phone: string
           updated_at?: string
           updated_by?: string | null
         }
         Update: {
+          assigned_doctor_id?: string | null
           blood_type?: Database["public"]["Enums"]["blood_type"] | null
           clinic_id?: string
           created_at?: string
           created_by?: string
           date_of_birth?: string
+          department_id?: string | null
           email?: string
+          file_number?: string
           full_name?: string
           id?: string
           is_deleted?: boolean
+          national_id?: string
           phone?: string
           updated_at?: string
           updated_by?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "patients_assigned_doctor_id_fkey"
+            columns: ["assigned_doctor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "patients_clinic_id_fkey"
             columns: ["clinic_id"]
@@ -436,6 +567,13 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patients_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
             referencedColumns: ["id"]
           },
           {
@@ -500,6 +638,54 @@ export type Database = {
           },
           {
             foreignKeyName: "profiles_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      services: {
+        Row: {
+          clinic_id: string
+          created_at: string
+          department_id: string
+          id: string
+          is_active: boolean
+          name: string
+          price: number
+          updated_at: string
+        }
+        Insert: {
+          clinic_id: string
+          created_at?: string
+          department_id: string
+          id?: string
+          is_active?: boolean
+          name: string
+          price: number
+          updated_at?: string
+        }
+        Update: {
+          clinic_id?: string
+          created_at?: string
+          department_id?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          price?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "services_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "services_department_id_fkey"
             columns: ["department_id"]
             isOneToOne: false
             referencedRelation: "departments"
@@ -597,6 +783,12 @@ export type Database = {
         | "cancelled"
         | "no_show"
       blood_type: "A+" | "A-" | "B+" | "B-" | "AB+" | "AB-" | "O+" | "O-"
+      payment_method:
+        | "cash"
+        | "credit_card"
+        | "paypal"
+        | "bank_transfer"
+        | "insurance"
       user_role: "admin" | "receptionist" | "manager" | "doctor"
     }
     CompositeTypes: {
@@ -733,6 +925,13 @@ export const Constants = {
         "no_show",
       ],
       blood_type: ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"],
+      payment_method: [
+        "cash",
+        "credit_card",
+        "paypal",
+        "bank_transfer",
+        "insurance",
+      ],
       user_role: ["admin", "receptionist", "manager", "doctor"],
     },
   },

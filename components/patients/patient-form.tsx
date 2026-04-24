@@ -27,26 +27,54 @@ import type { Tables } from "@/types/database";
 
 const BLOOD_TYPES = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"] as const;
 
+interface Department {
+  id: string;
+  name: string;
+  color: string;
+}
+
+interface Doctor {
+  id: string;
+  full_name: string;
+  department_id: string | null;
+}
+
 interface PatientFormProps {
   action: (prev: ActionResult | null, fd: FormData) => Promise<ActionResult>;
   defaultValues?: Partial<PatientFormValues>;
   patient?: Tables<"patients">;
+  departments?: Department[];
+  doctors?: Doctor[];
 }
 
-export function PatientForm({ action, defaultValues }: PatientFormProps) {
+export function PatientForm({
+  action,
+  defaultValues,
+  departments = [],
+  doctors = [],
+  patient,
+}: PatientFormProps) {
   const [state, formAction, isPending] = useActionState(action, null);
 
   const form = useForm<PatientFormValues>({
     resolver: zodResolver(patientSchema),
     defaultValues: {
       full_name: "",
+      national_id: "",
       date_of_birth: "",
       phone: "",
       email: "",
       blood_type: null,
+      department_id: null,
+      assigned_doctor_id: null,
       ...defaultValues,
     },
   });
+
+  const selectedDept = form.watch("department_id");
+  const filteredDoctors = selectedDept
+    ? doctors.filter((d) => d.department_id === selectedDept)
+    : doctors;
 
   function onSubmit(values: PatientFormValues) {
     const fd = new FormData();
@@ -70,7 +98,7 @@ export function PatientForm({ action, defaultValues }: PatientFormProps) {
             control={form.control}
             name="full_name"
             render={({ field }) => (
-              <FormItem className="sm:col-span-2">
+              <FormItem>
                 <FormLabel>Full name</FormLabel>
                 <FormControl>
                   <Input {...field} placeholder="e.g. Ahmet Yılmaz" disabled={isPending} />
@@ -79,6 +107,33 @@ export function PatientForm({ action, defaultValues }: PatientFormProps) {
               </FormItem>
             )}
           />
+
+          <FormField
+            control={form.control}
+            name="national_id"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>National ID</FormLabel>
+                <FormControl>
+                  <Input
+                    {...field}
+                    placeholder="11 digits"
+                    disabled={isPending}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          {patient?.file_number && (
+            <FormItem>
+              <FormLabel>File number</FormLabel>
+              <FormControl>
+                <Input value={patient.file_number} readOnly disabled className="font-mono" />
+              </FormControl>
+            </FormItem>
+          )}
 
           <FormField
             control={form.control}
@@ -101,20 +156,85 @@ export function PatientForm({ action, defaultValues }: PatientFormProps) {
               <FormItem>
                 <FormLabel>Blood type</FormLabel>
                 <Select
+                  value={field.value ?? undefined}
+                  onValueChange={(v) => field.onChange(v)}
+                  disabled={isPending}
+                >
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select blood type" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {BLOOD_TYPES.map((bt) => (
+                      <SelectItem key={bt} value={bt}>
+                        {bt}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="department_id"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Department</FormLabel>
+                <Select
                   value={field.value ?? "__none__"}
                   onValueChange={(v) => field.onChange(v === "__none__" ? null : v)}
                   disabled={isPending}
                 >
                   <FormControl>
                     <SelectTrigger>
-                      <SelectValue placeholder="Unknown" />
+                      <SelectValue placeholder="Assign department" />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="__none__">Unknown</SelectItem>
-                    {BLOOD_TYPES.map((bt) => (
-                      <SelectItem key={bt} value={bt}>
-                        {bt}
+                    <SelectItem value="__none__">Unassigned</SelectItem>
+                    {departments.map((d) => (
+                      <SelectItem key={d.id} value={d.id}>
+                        <span className="inline-flex items-center gap-2">
+                          <span
+                            className="h-2.5 w-2.5 rounded-full"
+                            style={{ backgroundColor: d.color }}
+                          />
+                          {d.name}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="assigned_doctor_id"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Treating doctor</FormLabel>
+                <Select
+                  value={field.value ?? "__none__"}
+                  onValueChange={(v) => field.onChange(v === "__none__" ? null : v)}
+                  disabled={isPending}
+                >
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Assign doctor" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="__none__">Unassigned</SelectItem>
+                    {filteredDoctors.map((d) => (
+                      <SelectItem key={d.id} value={d.id}>
+                        Dr. {d.full_name}
                       </SelectItem>
                     ))}
                   </SelectContent>

@@ -2,13 +2,30 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { requireRole } from "@/lib/rbac";
+import { createClient } from "@/lib/supabase/server";
 import { PatientForm } from "@/components/patients/patient-form";
 import { createPatient } from "@/actions/patients";
 
 export const metadata: Metadata = { title: "New Patient" };
 
 export default async function NewPatientPage() {
-  await requireRole(["admin", "receptionist"]);
+  const user = await requireRole(["admin", "receptionist"]);
+  const supabase = await createClient();
+  const [{ data: departments }, { data: doctors }] = await Promise.all([
+    supabase
+      .from("departments")
+      .select("id, name, color")
+      .eq("clinic_id", user.clinicId)
+      .eq("is_active", true)
+      .order("name"),
+    supabase
+      .from("profiles")
+      .select("id, full_name, department_id")
+      .eq("clinic_id", user.clinicId)
+      .eq("role", "doctor")
+      .eq("is_active", true)
+      .order("full_name"),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -30,7 +47,11 @@ export default async function NewPatientPage() {
       </div>
 
       <div className="max-w-2xl rounded-xl border border-border/50 bg-card p-6">
-        <PatientForm action={createPatient} />
+        <PatientForm
+          action={createPatient}
+          departments={departments ?? []}
+          doctors={doctors ?? []}
+        />
       </div>
     </div>
   );

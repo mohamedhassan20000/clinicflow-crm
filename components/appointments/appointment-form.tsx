@@ -57,13 +57,22 @@ interface AppointmentFormProps {
   defaultPatientId?: string;
 }
 
-// Generate 30-min slots 08:00-18:00
-const TIME_SLOTS = Array.from({ length: 21 }, (_, i) => {
-  const totalMinutes = 8 * 60 + i * 30;
+// Generate 15-min slots 08:00 → 18:00 (24-hour format)
+const TIME_SLOTS = Array.from({ length: 41 }, (_, i) => {
+  const totalMinutes = 8 * 60 + i * 15;
   const h = String(Math.floor(totalMinutes / 60)).padStart(2, "0");
   const m = String(totalMinutes % 60).padStart(2, "0");
   return `${h}:${m}`;
 });
+
+// All clinic times are authored in Europe/Istanbul (UTC+3, no DST).
+// Tag the local date/time with the +03:00 offset so Postgres timestamptz
+// stores the exact wall-clock moment the receptionist picked, regardless
+// of server or browser timezone.
+const CLINIC_TZ_OFFSET = "+03:00";
+function buildClinicIso(date: string, time: string): string {
+  return `${date}T${time}:00${CLINIC_TZ_OFFSET}`;
+}
 
 export function AppointmentForm({
   action,
@@ -82,7 +91,7 @@ export function AppointmentForm({
     defaultValues: {
       patient_id: defaultPatientId ?? "",
       doctor_id: "",
-      department_id: null,
+      department_id: departments[0]?.id ?? null,
       scheduled_at: "",
       duration_minutes: 30,
       insurance_provider_id: null,
@@ -90,8 +99,9 @@ export function AppointmentForm({
     },
   });
 
-  const filteredDoctors = selectedDept
-    ? doctors.filter((d) => d.department_id === selectedDept)
+  const activeDept = selectedDept ?? form.getValues("department_id") ?? null;
+  const filteredDoctors = activeDept
+    ? doctors.filter((d) => d.department_id === activeDept)
     : doctors;
 
   function onSubmit(values: AppointmentFormValues) {
@@ -192,22 +202,20 @@ export function AppointmentForm({
               <FormItem>
                 <FormLabel>Department</FormLabel>
                 <Select
-                  value={field.value ?? "__any__"}
+                  value={field.value ?? undefined}
                   onValueChange={(v) => {
-                    const next = v === "__any__" ? null : v;
-                    field.onChange(next);
-                    setSelectedDept(next);
+                    field.onChange(v);
+                    setSelectedDept(v);
                     form.setValue("doctor_id", "");
                   }}
                   disabled={isPending}
                 >
                   <FormControl>
                     <SelectTrigger>
-                      <SelectValue placeholder="Any department" />
+                      <SelectValue placeholder="Select department" />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="__any__">Any department</SelectItem>
                     {departments.map((d) => (
                       <SelectItem key={d.id} value={d.id}>
                         {d.name}
@@ -277,7 +285,7 @@ export function AppointmentForm({
                       onChange={(e) => {
                         const t = timeVal || "09:00";
                         field.onChange(
-                          e.target.value ? `${e.target.value}T${t}:00` : "",
+                          e.target.value ? buildClinicIso(e.target.value, t) : "",
                         );
                       }}
                     />
@@ -304,7 +312,7 @@ export function AppointmentForm({
                     value={timeVal}
                     onValueChange={(t) => {
                       const d = dateVal || new Date().toISOString().split("T")[0];
-                      field.onChange(`${d}T${t}:00`);
+                      field.onChange(buildClinicIso(d, t));
                     }}
                     disabled={isPending}
                   >

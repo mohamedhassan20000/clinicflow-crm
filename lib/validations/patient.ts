@@ -7,6 +7,11 @@ export const patientSchema = z.object({
     .string()
     .min(2, "Name must be at least 2 characters")
     .max(100, "Name too long"),
+  national_id: z
+    .string()
+    .min(5, "National ID is required")
+    .max(32, "National ID too long")
+    .regex(/^[A-Za-z0-9]+$/, "National ID must be letters or digits only"),
   date_of_birth: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date format")
@@ -25,6 +30,8 @@ export const patientSchema = z.object({
     .enum(["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"])
     .optional()
     .nullable(),
+  department_id: z.string().uuid().optional().nullable(),
+  assigned_doctor_id: z.string().uuid().optional().nullable(),
 });
 
 export type PatientFormValues = z.infer<typeof patientSchema>;

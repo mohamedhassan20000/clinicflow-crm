@@ -1,20 +1,10 @@
 import type { Metadata } from "next";
-import { Plus } from "lucide-react";
 import { requireRole } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { InsuranceForm } from "@/components/settings/insurance-form";
 import { InsuranceActions } from "@/components/settings/insurance-actions";
+import { AddInsuranceDialog } from "@/components/settings/add-insurance-dialog";
 import {
-  createInsurance,
   updateInsurance,
   toggleInsuranceActive,
 } from "@/actions/settings";
@@ -40,20 +30,7 @@ export default async function InsuranceSettingsPage() {
             {providers?.length ?? 0} provider{(providers?.length ?? 0) !== 1 ? "s" : ""}
           </p>
         </div>
-        <Dialog>
-          <DialogTrigger asChild>
-            <Button size="sm" className="gap-2">
-              <Plus className="h-4 w-4" />
-              Add provider
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>Add insurance provider</DialogTitle>
-            </DialogHeader>
-            <InsuranceForm action={createInsurance} />
-          </DialogContent>
-        </Dialog>
+        <AddInsuranceDialog />
       </div>
 
       <div className="rounded-xl border border-border/50 overflow-hidden">

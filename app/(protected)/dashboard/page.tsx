@@ -107,6 +107,13 @@ export default async function DashboardPage() {
     const next7End = new Date();
     next7End.setDate(next7End.getDate() + 8);
 
+    // 6 months of history (offset -1 … -6) for the revenue widget
+    const priorMonthRanges = Array.from({ length: 6 }, (_, i) =>
+      monthBounds(-(i + 1)),
+    );
+    const earliestPriorStart =
+      priorMonthRanges[priorMonthRanges.length - 1].start;
+
     const [
       { count: todayCount },
       { count: weekCount },
@@ -116,6 +123,8 @@ export default async function DashboardPage() {
       { count: pendingCount },
       { data: todayAppts },
       { data: upcomingAppts },
+      { data: revenueRows },
+      { data: outstandingRows },
     ] = await Promise.all([
       supabase
         .from("appointments")
@@ -164,10 +173,61 @@ export default async function DashboardPage() {
         .eq("clinic_id", clinicId)
         .gte("scheduled_at", next7Start.toISOString())
         .lt("scheduled_at", next7End.toISOString())
-        .not("status", "eq", "cancelled")
+        .eq("status", "pending")
         .order("scheduled_at")
         .limit(8),
+      // Completed revenue across the last 6 months + current month for the widget
+      supabase
+        .from("appointments")
+        .select("paid_at, paid_amount, insurance_amount, secondary_amount")
+        .eq("clinic_id", clinicId)
+        .eq("status", "completed")
+        .gte("paid_at", earliestPriorStart),
+      // Outstanding balances (pay-later rows)
+      supabase
+        .from("appointments")
+        .select("outstanding_amount")
+        .eq("clinic_id", clinicId)
+        .gt("outstanding_amount", 0),
     ]);
+
+    // ── Revenue aggregation ──────────────────────────────────────────────
+    type RevenueRow = {
+      paid_at: string | null;
+      paid_amount: number | null;
+      insurance_amount: number | null;
+      secondary_amount: number | null;
+    };
+    const rows = (revenueRows ?? []) as RevenueRow[];
+    const sumInRange = (start: string, end: string) =>
+      rows.reduce((acc, r) => {
+        if (!r.paid_at) return acc;
+        if (r.paid_at < start || r.paid_at > end) return acc;
+        return (
+          acc +
+          (r.paid_amount ?? 0) +
+          (r.insurance_amount ?? 0) +
+          (r.secondary_amount ?? 0)
+        );
+      }, 0);
+
+    const revenueToday = sumInRange(today.start, today.end);
+    const revenueWeek = sumInRange(week.start, week.end);
+    const revenueThisMonth = sumInRange(thisMonth.start, thisMonth.end);
+    const revenueLastMonth = sumInRange(lastMonth.start, lastMonth.end);
+
+    const priorMonths = priorMonthRanges.map(({ start, end }) => ({
+      label: new Date(start).toLocaleDateString("en-US", {
+        timeZone: "Europe/Istanbul",
+        month: "short",
+      }),
+      amount: sumInRange(start, end),
+    }));
+
+    const outstandingTotal = (outstandingRows ?? []).reduce(
+      (acc, r) => acc + (r.outstanding_amount ?? 0),
+      0,
+    );
 
     return (
       <AdminDashboard
@@ -180,6 +240,14 @@ export default async function DashboardPage() {
         pendingCount={pendingCount ?? 0}
         todayAppointments={(todayAppts ?? []) as Parameters<typeof AdminDashboard>[0]["todayAppointments"]}
         upcomingAppointments={(upcomingAppts ?? []) as Parameters<typeof AdminDashboard>[0]["upcomingAppointments"]}
+        revenue={{
+          today: revenueToday,
+          week: revenueWeek,
+          month: revenueThisMonth,
+          lastMonth: revenueLastMonth,
+          priorMonths,
+          outstanding: outstandingTotal,
+        }}
       />
     );
   }

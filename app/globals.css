@@ -221,3 +221,62 @@
     animation: none !important;
   }
 }
+
+/* ─── Print rules — used by /revenue statement ─── */
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 10mm;
+  }
+  html, body {
+    background: #fff !important;
+    color: #000 !important;
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    overflow: visible !important;
+  }
+  /* Hide app chrome — any element marked hidden-in-print */
+  header, nav, aside,
+  [data-print="hide"],
+  .print\:hidden {
+    display: none !important;
+  }
+  /* Kill ancestor width / overflow clipping so print captures the full
+     content rather than the on-screen viewport. */
+  body *,
+  main,
+  [class*="overflow"] {
+    overflow: visible !important;
+  }
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: none !important;
+    width: 100% !important;
+    display: block !important;
+  }
+  /* App shell uses flex — flatten it for print so nothing clips. */
+  body > div,
+  body > div > div {
+    display: block !important;
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0 !important;
+  }
+  /* Table: fill the printable page, tight padding, no horizontal scroll. */
+  table {
+    width: 100% !important;
+    table-layout: auto;
+    font-size: 10px !important;
+    page-break-inside: auto;
+  }
+  table th,
+  table td {
+    padding: 4px 6px !important;
+    word-break: break-word;
+  }
+  tr    { page-break-inside: avoid; page-break-after: auto; }
+  thead { display: table-header-group; }
+  tfoot { display: table-footer-group; }
+}

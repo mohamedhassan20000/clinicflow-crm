@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2, UserPlus, Save } from "lucide-react";
@@ -47,6 +48,7 @@ export function CreateStaffForm({
   onSuccess,
 }: CreateStaffFormProps) {
   const [state, formAction, isPending] = useActionState(action, null);
+  const router = useRouter();
 
   const form = useForm<CreateStaffValues>({
     resolver: zodResolver(createStaffSchema),
@@ -63,13 +65,20 @@ export function CreateStaffForm({
     if (state?.success) {
       toast.success("Staff member created. They will be prompted to set their password on first login.");
       form.reset();
+      router.refresh();
       onSuccess?.();
     }
-  }, [state, form, onSuccess]);
+  }, [state, form, router, onSuccess]);
 
   function onSubmit(values: CreateStaffValues) {
+    // Auto-prefix "Dr. " when role is doctor (unless already present)
+    const fullName =
+      values.role === "doctor" && !/^dr\.?\s/i.test(values.full_name.trim())
+        ? `Dr. ${values.full_name.trim()}`
+        : values.full_name.trim();
+
     const fd = new FormData();
-    fd.set("full_name", values.full_name);
+    fd.set("full_name", fullName);
     fd.set("email", values.email);
     fd.set("role", values.role);
     if (values.department_id) fd.set("department_id", values.department_id);
@@ -225,6 +234,7 @@ export function EditStaffForm({
   onSuccess,
 }: EditStaffFormProps) {
   const [state, formAction, isPending] = useActionState(action, null);
+  const router = useRouter();
 
   const form = useForm<UpdateStaffValues>({
     resolver: zodResolver(updateStaffSchema),
@@ -234,13 +244,19 @@ export function EditStaffForm({
   useEffect(() => {
     if (state?.success) {
       toast.success("Staff member updated.");
+      router.refresh();
       onSuccess?.();
     }
-  }, [state, onSuccess]);
+  }, [state, router, onSuccess]);
 
   function onSubmit(values: UpdateStaffValues) {
+    const fullName =
+      values.role === "doctor" && !/^dr\.?\s/i.test(values.full_name.trim())
+        ? `Dr. ${values.full_name.trim()}`
+        : values.full_name.trim();
+
     const fd = new FormData();
-    fd.set("full_name", values.full_name);
+    fd.set("full_name", fullName);
     fd.set("role", values.role);
     if (values.department_id) fd.set("department_id", values.department_id);
     if (values.phone) fd.set("phone", values.phone);

@@ -38,7 +38,7 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
 
   const { data: appointments } = await supabase
     .from("appointments")
-    .select("*, patients(full_name), profiles!doctor_id(full_name)")
+    .select("*, patients(full_name), profiles!doctor_id(full_name), departments(name, color)")
     .eq("clinic_id", user.clinicId)
     .gte("scheduled_at", weekStart.toISOString())
     .lt("scheduled_at", weekEnd.toISOString())

@@ -18,13 +18,29 @@ export default async function EditPatientPage({ params }: PageProps) {
   const user = await requireRole(["admin", "receptionist"]);
   const supabase = await createClient();
 
-  const { data: patient } = await supabase
-    .from("patients")
-    .select("*")
-    .eq("id", id)
-    .eq("clinic_id", user.clinicId)
-    .eq("is_deleted", false)
-    .single();
+  const [{ data: patient }, { data: departments }, { data: doctors }] =
+    await Promise.all([
+      supabase
+        .from("patients")
+        .select("*")
+        .eq("id", id)
+        .eq("clinic_id", user.clinicId)
+        .eq("is_deleted", false)
+        .single(),
+      supabase
+        .from("departments")
+        .select("id, name, color")
+        .eq("clinic_id", user.clinicId)
+        .eq("is_active", true)
+        .order("name"),
+      supabase
+        .from("profiles")
+        .select("id, full_name, department_id")
+        .eq("clinic_id", user.clinicId)
+        .eq("role", "doctor")
+        .eq("is_active", true)
+        .order("full_name"),
+    ]);
 
   if (!patient) notFound();
 
@@ -52,12 +68,18 @@ export default async function EditPatientPage({ params }: PageProps) {
       <div className="max-w-2xl rounded-xl border border-border/50 bg-card p-6">
         <PatientForm
           action={action}
+          departments={departments ?? []}
+          doctors={doctors ?? []}
+          patient={patient}
           defaultValues={{
             full_name: patient.full_name,
+            national_id: patient.national_id,
             date_of_birth: patient.date_of_birth,
             phone: patient.phone,
             email: patient.email,
             blood_type: patient.blood_type,
+            department_id: patient.department_id,
+            assigned_doctor_id: patient.assigned_doctor_id,
           }}
         />
       </div>

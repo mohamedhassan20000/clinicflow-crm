@@ -280,6 +280,10 @@ export async function settleOutstanding(
   const appointmentId = String(formData.get("appointment_id") ?? "") || null;
   const amountRaw = Number(formData.get("amount") ?? 0);
   const method = String(formData.get("payment_method") ?? "") as PaymentMethod;
+  const secondaryAmountRaw = Number(formData.get("secondary_amount") ?? 0);
+  const secondaryMethodRaw = String(
+    formData.get("secondary_payment_method") ?? "",
+  );
   const note = String(formData.get("note") ?? "").trim() || null;
 
   if (!patientId) return { error: "Missing patient." };
@@ -290,29 +294,75 @@ export async function settleOutstanding(
     return { error: "Select a valid payment method." };
   }
 
+  const hasSecondary =
+    Number.isFinite(secondaryAmountRaw) &&
+    secondaryAmountRaw > 0 &&
+    PAYMENT_METHODS.includes(secondaryMethodRaw as PaymentMethod);
+  const secondaryMethod = hasSecondary
+    ? (secondaryMethodRaw as PaymentMethod)
+    : null;
+  if (hasSecondary && secondaryMethod === method) {
+    return { error: "Split methods must differ from the primary method." };
+  }
+
   const supabase = await createClient();
 
-  // Insert settlement row
-  const { error: insertError } = await supabase
-    .from("outstanding_settlements")
-    .insert({
+  // If no specific appointment was requested, link this settlement to the
+  // oldest still-outstanding appointment so the revenue settlements table can
+  // surface the department + doctor it was paid against.
+  let linkedAppointmentId = appointmentId;
+  if (!linkedAppointmentId) {
+    const { data: oldestDebt } = await supabase
+      .from("appointments")
+      .select("id")
+      .eq("patient_id", patientId)
+      .eq("clinic_id", user.clinicId)
+      .gt("outstanding_amount", 0)
+      .order("scheduled_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    linkedAppointmentId = oldestDebt?.id ?? null;
+  }
+
+  // Insert one settlement row per method so the revenue settlements table
+  // reflects each tender separately.
+  const settlementRows = [
+    {
       patient_id: patientId,
-      appointment_id: appointmentId,
+      appointment_id: linkedAppointmentId,
       clinic_id: user.clinicId,
       amount: Number(amountRaw.toFixed(2)),
       payment_method: method,
       note,
       created_by: user.id,
-    });
+    },
+    ...(hasSecondary
+      ? [
+          {
+            patient_id: patientId,
+            appointment_id: linkedAppointmentId,
+            clinic_id: user.clinicId,
+            amount: Number(secondaryAmountRaw.toFixed(2)),
+            payment_method: secondaryMethod as PaymentMethod,
+            note,
+            created_by: user.id,
+          },
+        ]
+      : []),
+  ];
+
+  const { error: insertError } = await supabase
+    .from("outstanding_settlements")
+    .insert(settlementRows);
 
   if (insertError) {
     return { error: insertError.message || "Failed to save settlement." };
   }
 
   // Deduct from appointments' outstanding_amount (oldest-first) until amount is exhausted.
-  // This way the aggregate "Outstanding" number on the patient profile trends down as
-  // settlements are recorded.
-  let remaining = Number(amountRaw.toFixed(2));
+  let remaining = Number(
+    (amountRaw + (hasSecondary ? secondaryAmountRaw : 0)).toFixed(2),
+  );
   const { data: debts } = await supabase
     .from("appointments")
     .select("id, outstanding_amount")

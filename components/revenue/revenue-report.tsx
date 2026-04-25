@@ -524,7 +524,7 @@ export function RevenueReport({
                   </th>
                   <th className="px-4 py-2.5 text-left font-medium">Patient</th>
                   <th className="px-4 py-2.5 text-left font-medium">
-                    Session details
+                    Department &amp; Doctor
                   </th>
                   <th className="px-4 py-2.5 text-left font-medium">Method</th>
                   <th className="px-4 py-2.5 text-right font-medium">
@@ -613,28 +613,9 @@ function SettlementTxnRow({ row }: { row: SettlementRow }) {
       </td>
       <td className="px-4 py-2.5">
         {appt ? (
-          <div className="space-y-0.5">
-            <div className="text-xs">
-              Session{" "}
-              <span className="text-muted-foreground">
-                {fmtDate(appt.scheduled_at)}
-              </span>
-              {appt.total_amount != null && (
-                <span className="ml-2 text-muted-foreground">
-                  · total{" "}
-                  <span className="tabular-nums font-medium text-foreground">
-                    {fmtTRY(appt.total_amount)}
-                  </span>
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-1.5">
-              {appt.profiles?.full_name && (
-                <span className="text-[11px] text-muted-foreground">
-                  Dr. {appt.profiles.full_name}
-                </span>
-              )}
-              {appt.departments?.name && (
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center gap-1.5">
+              {appt.departments?.name ? (
                 <span
                   className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
                   style={{
@@ -643,6 +624,26 @@ function SettlementTxnRow({ row }: { row: SettlementRow }) {
                   }}
                 >
                   {appt.departments.name}
+                </span>
+              ) : (
+                <span className="text-[11px] text-muted-foreground">
+                  No department
+                </span>
+              )}
+              {appt.profiles?.full_name && (
+                <span className="text-xs font-medium">
+                  Dr. {appt.profiles.full_name}
+                </span>
+              )}
+            </div>
+            <div className="text-[11px] text-muted-foreground">
+              Session {fmtDate(appt.scheduled_at)}
+              {appt.total_amount != null && (
+                <span className="ml-2">
+                  · total{" "}
+                  <span className="tabular-nums font-medium text-foreground">
+                    {fmtTRY(appt.total_amount)}
+                  </span>
                 </span>
               )}
             </div>

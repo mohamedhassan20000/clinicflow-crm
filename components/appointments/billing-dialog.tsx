@@ -148,16 +148,18 @@ export function BillingDialog({
     [lines],
   );
 
-  const paidN = deferAll ? 0 : Math.max(0, Number(paid) || 0);
-  const insuranceN = deferAll ? 0 : Math.max(0, Number(insurance) || 0);
+  const paidN = Math.max(0, Number(paid) || 0);
+  const insuranceN = Math.max(0, Number(insurance) || 0);
 
   // Cap deposit at min(balance, total - other payments) to keep math sane
   const depositRaw = Math.max(0, Number(deposit) || 0);
-  const depositN = deferAll
-    ? 0
-    : Math.min(depositRaw, accountBalance, Math.max(0, totalN));
+  const depositN = Math.min(
+    depositRaw,
+    accountBalance,
+    Math.max(0, totalN),
+  );
 
-  const secondaryRaw = showSplit && !deferAll ? Number(secondaryAmount) || 0 : 0;
+  const secondaryRaw = showSplit ? Number(secondaryAmount) || 0 : 0;
   const secondaryN = Number.isFinite(secondaryRaw)
     ? Math.max(0, secondaryRaw)
     : 0;
@@ -506,7 +508,7 @@ export function BillingDialog({
             <span className="flex items-center gap-2">
               <Clock3 className="h-4 w-4" />
               <span className="font-medium">
-                Pay later — settle from patient file
+                Pay later — collect part now, remainder on patient file
               </span>
             </span>
             <span
@@ -524,13 +526,14 @@ export function BillingDialog({
 
           {deferAll && totalN > 0 && (
             <p className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-400">
-              {fmtTRY(totalN)} will be saved as outstanding on the patient&apos;s
-              file. Mark as settled later from their account.
+              Enter any partial payment collected now below — the unpaid
+              difference will become outstanding and can be settled from the
+              patient&apos;s file.
             </p>
           )}
 
           {/* Account balance */}
-          {!deferAll && accountBalance > 0 && (
+          {accountBalance > 0 && (
             <section className="space-y-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3">
               <div className="flex items-center justify-between gap-2">
                 <Label
@@ -586,7 +589,7 @@ export function BillingDialog({
           )}
 
           {/* Patient paid now */}
-          <div className={cn("space-y-1.5", deferAll && "hidden")}>
+          <div className={cn("space-y-1.5")}>
             <Label htmlFor="bill-paid" className="text-xs">
               Patient paid now (₺)
             </Label>
@@ -604,7 +607,7 @@ export function BillingDialog({
           </div>
 
           {/* Primary method */}
-          <div className={cn("space-y-1.5", deferAll && "hidden")}>
+          <div className={cn("space-y-1.5")}>
             <Label className="text-xs">Primary payment method</Label>
             <div className="grid grid-cols-5 gap-1.5">
               {METHODS.map(({ value, label, icon: Icon }) => {
@@ -631,7 +634,7 @@ export function BillingDialog({
           </div>
 
           {/* Insurance */}
-          {!deferAll && hasInsurance && (
+          {hasInsurance && (
             <div className="space-y-1.5 rounded-lg border border-sky-500/30 bg-sky-500/5 p-3">
               <Label htmlFor="bill-insurance" className="text-xs">
                 {insuranceProviderName
@@ -682,7 +685,7 @@ export function BillingDialog({
             </button>
           </div>
 
-          {showSplit && !deferAll && (
+          {showSplit && (
             <>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
@@ -750,10 +753,10 @@ export function BillingDialog({
             </>
           )}
 
-          {!deferAll && remaining > 0 && totalN > 0 && (
+          {remaining > 0 && totalN > 0 && (
             <p className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-400">
               {fmtTRY(remaining)} will be saved as outstanding on the
-              patient&apos;s file.
+              patient&apos;s file (settle later).
             </p>
           )}
 
@@ -789,7 +792,9 @@ export function BillingDialog({
             className="gap-2"
           >
             {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-            {deferAll ? "Complete & defer payment" : "Complete & charge"}
+            {remaining > 0 && totalN > 0
+              ? "Complete with outstanding"
+              : "Complete & charge"}
           </Button>
         </DialogFooter>
       </DialogContent>

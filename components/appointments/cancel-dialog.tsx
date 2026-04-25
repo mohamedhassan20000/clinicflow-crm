@@ -46,10 +46,11 @@ export function CancelAppointmentDialog({
   const [other, setOther] = useState("");
 
   useEffect(() => {
-    if (!open) {
+    if (open) return;
+    queueMicrotask(() => {
       setSelected(null);
       setOther("");
-    }
+    });
   }, [open]);
 
   const finalReason =

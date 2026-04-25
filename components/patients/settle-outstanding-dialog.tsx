@@ -6,8 +6,10 @@ import {
   CreditCard,
   Landmark,
   Loader2,
+  Plus,
   ShieldCheck,
   Wallet,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -67,6 +69,10 @@ export function SettleOutstandingDialog({
   const [amount, setAmount] = useState<string>("");
   const [method, setMethod] = useState<PaymentMethod>("cash");
   const [note, setNote] = useState("");
+  const [showSplit, setShowSplit] = useState(false);
+  const [secondaryMethod, setSecondaryMethod] =
+    useState<PaymentMethod>("credit_card");
+  const [secondaryAmount, setSecondaryAmount] = useState<string>("");
 
   const [state, formAction, isPending] = useActionState(
     settleOutstanding,
@@ -85,12 +91,20 @@ export function SettleOutstandingDialog({
         setAmount("");
         setMethod("cash");
         setNote("");
+        setShowSplit(false);
+        setSecondaryAmount("");
+        setSecondaryMethod("credit_card");
       });
     }
   }, [state]);
 
   const amountN = Number(amount) || 0;
-  const invalid = amountN <= 0 || amountN > outstanding + 0.001;
+  const secondaryN = showSplit ? Math.max(0, Number(secondaryAmount) || 0) : 0;
+  const totalN = Number((amountN + secondaryN).toFixed(2));
+  const invalid =
+    totalN <= 0 ||
+    totalN > outstanding + 0.001 ||
+    (showSplit && (secondaryN <= 0 || secondaryMethod === method));
 
   return (
     <>
@@ -130,6 +144,20 @@ export function SettleOutstandingDialog({
           <form action={formAction} className="space-y-4 py-1">
             <input type="hidden" name="patient_id" value={patientId} />
             <input type="hidden" name="payment_method" value={method} />
+            {showSplit && secondaryN > 0 && (
+              <>
+                <input
+                  type="hidden"
+                  name="secondary_payment_method"
+                  value={secondaryMethod}
+                />
+                <input
+                  type="hidden"
+                  name="secondary_amount"
+                  value={secondaryN.toFixed(2)}
+                />
+              </>
+            )}
 
             <div className="space-y-1.5">
               <Label htmlFor="settle-amount" className="text-xs">
@@ -151,6 +179,11 @@ export function SettleOutstandingDialog({
               />
               <p className="text-[11px] text-muted-foreground">
                 Max {fmtTRY(outstanding)}
+                {showSplit && totalN > outstanding + 0.001 && (
+                  <span className="ml-2 text-destructive">
+                    Combined total exceeds outstanding.
+                  </span>
+                )}
               </p>
             </div>
 
@@ -181,6 +214,97 @@ export function SettleOutstandingDialog({
                 })}
               </div>
             </div>
+
+            {/* Split toggle */}
+            <div>
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => {
+                  setShowSplit((v) => !v);
+                  if (showSplit) setSecondaryAmount("");
+                }}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition",
+                  showSplit
+                    ? "border-primary/40 bg-primary/5 text-primary hover:bg-primary/10"
+                    : "border-dashed border-border/70 text-muted-foreground hover:border-primary/50 hover:text-foreground",
+                )}
+              >
+                {showSplit ? (
+                  <>
+                    <X className="h-3.5 w-3.5" />
+                    Remove split payment
+                  </>
+                ) : (
+                  <>
+                    <Plus className="h-3.5 w-3.5" />
+                    Add split payment
+                  </>
+                )}
+              </button>
+            </div>
+
+            {showSplit && (
+              <>
+                <div className="space-y-1.5">
+                  <Label htmlFor="settle-secondary" className="text-xs">
+                    Second amount (₺)
+                  </Label>
+                  <Input
+                    id="settle-secondary"
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    step="0.01"
+                    placeholder="0.00"
+                    value={secondaryAmount}
+                    disabled={isPending}
+                    onChange={(e) => setSecondaryAmount(e.target.value)}
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Total against outstanding:{" "}
+                    <span className="tabular-nums font-medium text-foreground">
+                      {fmtTRY(totalN)}
+                    </span>{" "}
+                    / {fmtTRY(outstanding)}
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Second payment method</Label>
+                  <div className="grid grid-cols-5 gap-1.5">
+                    {METHODS.map(({ value, label, icon: Icon }) => {
+                      const active = secondaryMethod === value;
+                      const disabled = value === method;
+                      return (
+                        <button
+                          key={value}
+                          type="button"
+                          disabled={isPending || disabled}
+                          onClick={() => setSecondaryMethod(value)}
+                          className={cn(
+                            "flex flex-col items-center gap-1 rounded-lg border px-1 py-2 text-[10px] font-medium transition-all",
+                            active
+                              ? "border-primary bg-primary/10 text-foreground ring-2 ring-primary/20"
+                              : "border-border/60 bg-card text-muted-foreground hover:border-primary/50 hover:bg-primary/5",
+                            disabled && "opacity-40 cursor-not-allowed",
+                          )}
+                        >
+                          <Icon
+                            className={cn(
+                              "h-4 w-4",
+                              active ? "text-primary" : "",
+                            )}
+                          />
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
 
             <div className="space-y-1.5">
               <Label htmlFor="settle-note" className="text-xs">

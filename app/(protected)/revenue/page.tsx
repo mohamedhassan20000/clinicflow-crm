@@ -98,7 +98,7 @@ export default async function RevenuePage({ searchParams }: PageProps) {
     supabase
       .from("appointments")
       .select(
-        "id, scheduled_at, paid_at, total_amount, paid_amount, insurance_amount, secondary_amount, outstanding_amount, payment_method, secondary_payment_method, payment_note, patients(full_name), profiles!doctor_id(full_name), departments(name, color), insurance_providers(name)",
+        "id, scheduled_at, paid_at, total_amount, paid_amount, insurance_amount, secondary_amount, deposit_amount, outstanding_amount, payment_method, secondary_payment_method, payment_note, patients(full_name), profiles!doctor_id(full_name), departments(name, color), insurance_providers(name)",
       )
       .eq("clinic_id", user.clinicId)
       .eq("status", "completed")

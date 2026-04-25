@@ -7,6 +7,7 @@ import {
   Landmark,
   ShieldCheck,
   Wallet,
+  Wallet2,
   Receipt,
   TrendingUp,
   Building2,
@@ -32,6 +33,7 @@ export interface RevenueRow {
   paid_amount: number | null;
   insurance_amount: number | null;
   secondary_amount: number | null;
+  deposit_amount: number | null;
   outstanding_amount: number | null;
   payment_method: PaymentMethod | null;
   secondary_payment_method: PaymentMethod | null;
@@ -151,13 +153,18 @@ export function RevenueReport({
   const primaryTotal = rows.reduce((s, r) => s + (r.paid_amount ?? 0), 0);
   const secondaryTotal = rows.reduce((s, r) => s + (r.secondary_amount ?? 0), 0);
   const insuranceTotal = rows.reduce((s, r) => s + (r.insurance_amount ?? 0), 0);
+  const depositTotal = rows.reduce((s, r) => s + (r.deposit_amount ?? 0), 0);
   const settlementsTotal = settlements.reduce((s, r) => s + (r.amount ?? 0), 0);
   const outstandingTotal = rows.reduce(
     (s, r) => s + (r.outstanding_amount ?? 0),
     0,
   );
   const grossTotal =
-    primaryTotal + secondaryTotal + insuranceTotal + settlementsTotal;
+    primaryTotal +
+    secondaryTotal +
+    insuranceTotal +
+    depositTotal +
+    settlementsTotal;
 
   // Method breakdown
   const methodMap = new Map<PaymentMethod, number>();
@@ -305,11 +312,11 @@ export function RevenueReport({
         </div>
 
         {/* Totals strip */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-px bg-border/40 border-b border-border/50">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-px bg-border/40 border-b border-border/50">
           <SummaryCell
             icon={TrendingUp}
             label="Total revenue"
-            sublabel="Sessions + settlements"
+            sublabel="Sessions + deposit + settlements"
             amount={grossTotal}
             accent="text-primary"
           />
@@ -330,6 +337,13 @@ export function RevenueReport({
             label="Insurance"
             amount={insuranceTotal}
             accent="text-sky-600 dark:text-sky-400"
+          />
+          <SummaryCell
+            icon={Wallet2}
+            label="From deposit"
+            sublabel="Account credit applied"
+            amount={depositTotal}
+            accent="text-violet-600 dark:text-violet-400"
           />
           <SummaryCell
             icon={Receipt}
@@ -361,6 +375,13 @@ export function RevenueReport({
                   </span>
                 );
               })}
+              {depositTotal > 0 && (
+                <span className="inline-flex items-center gap-1.5 rounded-md border border-violet-500/40 bg-violet-500/10 px-2.5 py-1 text-xs text-violet-700 dark:text-violet-400">
+                  <Wallet2 className="h-3 w-3" />
+                  From deposit{" "}
+                  <span className="tabular-nums">{fmtTRY(depositTotal)}</span>
+                </span>
+              )}
               {outstandingTotal > 0 && (
                 <span className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-xs text-amber-700 dark:text-amber-400">
                   <Building2 className="h-3 w-3" />
@@ -383,13 +404,14 @@ export function RevenueReport({
                 <th className="px-4 py-2.5 text-left font-medium">Primary</th>
                 <th className="px-4 py-2.5 text-left font-medium">Secondary</th>
                 <th className="px-4 py-2.5 text-right font-medium">Insurance</th>
+                <th className="px-4 py-2.5 text-right font-medium">From deposit</th>
                 <th className="px-4 py-2.5 text-right font-medium">Outstanding</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/40">
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                  <td colSpan={9} className="px-4 py-10 text-center text-sm text-muted-foreground">
                     No transactions in this period.
                   </td>
                 </tr>
@@ -414,6 +436,9 @@ export function RevenueReport({
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums">
                     {fmtTRY(insuranceTotal)}
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums text-violet-600 dark:text-violet-400">
+                    {fmtTRY(depositTotal)}
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums text-amber-600 dark:text-amber-400">
                     {fmtTRY(outstandingTotal)}
@@ -718,6 +743,11 @@ function TxnRow({ row }: { row: RevenueRow }) {
       <td className="px-4 py-2.5 text-right tabular-nums text-sky-600 dark:text-sky-400">
         {(row.insurance_amount ?? 0) > 0
           ? fmtTRY(row.insurance_amount ?? 0)
+          : "—"}
+      </td>
+      <td className="px-4 py-2.5 text-right tabular-nums text-violet-600 dark:text-violet-400">
+        {(row.deposit_amount ?? 0) > 0
+          ? fmtTRY(row.deposit_amount ?? 0)
           : "—"}
       </td>
       <td className="px-4 py-2.5 text-right tabular-nums">

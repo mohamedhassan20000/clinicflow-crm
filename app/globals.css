@@ -314,4 +314,9 @@
   body.print-settlements-only [data-print-hide-when-settlements] {
     display: none !important;
   }
+  /* Default Print Statement mode hides the settlements card so the main
+     statement prints on its own. */
+  body:not(.print-settlements-only) [data-print-section="settlements"] {
+    display: none !important;
+  }
 }

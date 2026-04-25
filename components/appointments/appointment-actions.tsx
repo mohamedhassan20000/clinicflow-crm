@@ -14,6 +14,7 @@ import {
   BillingDialog,
   type BillingPayload,
 } from "@/components/appointments/billing-dialog";
+import { CancelAppointmentDialog } from "@/components/appointments/cancel-dialog";
 
 type Status = Database["public"]["Enums"]["appointment_status"];
 
@@ -30,6 +31,8 @@ export function AppointmentActions({
 }) {
   const [, startTransition] = useTransition();
   const [billingOpen, setBillingOpen] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
   const [optimisticStatus, setOptimisticStatus] = useState<Status | null>(null);
   const [ctx, setCtx] = useState<BillingContext | null>(null);
   const [loadingCtx, setLoadingCtx] = useState(false);
@@ -88,6 +91,26 @@ export function AppointmentActions({
         setOptimisticStatus(null);
       } else {
         toast.success(`Appointment ${newStatus}.`);
+      }
+    });
+  }
+
+  function runCancel(reason: string) {
+    setIsCancelling(true);
+    startTransition(async () => {
+      const result = await updateAppointmentStatus(
+        appointmentId,
+        "cancelled",
+        null,
+        reason,
+      );
+      setIsCancelling(false);
+      if (result.error) {
+        toast.error(result.error);
+      } else {
+        toast.success("Appointment cancelled.");
+        setCancelOpen(false);
+        setOptimisticStatus("cancelled");
       }
     });
   }
@@ -161,7 +184,7 @@ export function AppointmentActions({
             size="sm"
             variant="outline"
             className="h-6 px-2 text-[10px] font-semibold"
-            onClick={() => runStatus("cancelled")}
+            onClick={() => setCancelOpen(true)}
           >
             Cancel
           </Button>
@@ -184,6 +207,15 @@ export function AppointmentActions({
         patientName={ctx?.patientName}
         departmentName={ctx?.departmentName ?? null}
         departmentColor={ctx?.departmentColor ?? null}
+      />
+
+      <CancelAppointmentDialog
+        open={cancelOpen}
+        onOpenChange={(o) => {
+          if (!isCancelling) setCancelOpen(o);
+        }}
+        onConfirm={runCancel}
+        isPending={isCancelling}
       />
     </>
   );

@@ -82,6 +82,7 @@ export async function updateAppointmentStatus(
   id: string,
   newStatus: string,
   billingPayload?: BillingInput | null,
+  cancellationReason?: string | null,
 ): Promise<ActionResult> {
   const user = await requireRole(["admin", "receptionist"]);
 
@@ -105,6 +106,19 @@ export async function updateAppointmentStatus(
     status: newStatus as TablesUpdate<"appointments">["status"],
     updated_by: user.id,
   };
+
+  if (newStatus === "cancelled") {
+    const reason = (cancellationReason ?? "").trim();
+    if (!reason) {
+      return { error: "Please provide a reason for cancelling this appointment." };
+    }
+    if (reason.length > 500) {
+      return { error: "Cancellation reason must be 500 characters or less." };
+    }
+    update.cancellation_reason = reason;
+    update.cancelled_at = new Date().toISOString();
+    update.cancelled_by = user.id;
+  }
 
   if (newStatus === "completed") {
     if (!billingPayload) {
@@ -199,8 +213,11 @@ export async function updateAppointmentStatus(
   return {};
 }
 
-export async function cancelAppointment(id: string): Promise<ActionResult> {
-  return updateAppointmentStatus(id, "cancelled");
+export async function cancelAppointment(
+  id: string,
+  reason: string,
+): Promise<ActionResult> {
+  return updateAppointmentStatus(id, "cancelled", null, reason);
 }
 
 export interface BillingContext {

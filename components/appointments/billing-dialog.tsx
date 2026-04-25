@@ -12,6 +12,7 @@ import {
   X,
   Trash2,
   Wallet2,
+  Clock3,
 } from "lucide-react";
 import {
   Dialog,
@@ -137,6 +138,7 @@ export function BillingDialog({
     useState<PaymentMethod>("credit_card");
   const [secondaryAmount, setSecondaryAmount] = useState<string>("");
   const [note, setNote] = useState("");
+  const [deferAll, setDeferAll] = useState(false);
 
   const totalN = useMemo(
     () =>
@@ -146,18 +148,16 @@ export function BillingDialog({
     [lines],
   );
 
-  const paidN = Math.max(0, Number(paid) || 0);
-  const insuranceN = Math.max(0, Number(insurance) || 0);
+  const paidN = deferAll ? 0 : Math.max(0, Number(paid) || 0);
+  const insuranceN = deferAll ? 0 : Math.max(0, Number(insurance) || 0);
 
   // Cap deposit at min(balance, total - other payments) to keep math sane
   const depositRaw = Math.max(0, Number(deposit) || 0);
-  const depositN = Math.min(
-    depositRaw,
-    accountBalance,
-    Math.max(0, totalN),
-  );
+  const depositN = deferAll
+    ? 0
+    : Math.min(depositRaw, accountBalance, Math.max(0, totalN));
 
-  const secondaryRaw = showSplit ? Number(secondaryAmount) || 0 : 0;
+  const secondaryRaw = showSplit && !deferAll ? Number(secondaryAmount) || 0 : 0;
   const secondaryN = Number.isFinite(secondaryRaw)
     ? Math.max(0, secondaryRaw)
     : 0;
@@ -183,6 +183,7 @@ export function BillingDialog({
     setSecondaryMethod("credit_card");
     setSecondaryAmount("");
     setNote("");
+    setDeferAll(false);
   }
 
   // Reset when dialog re-opens (so we don't keep stale state across appointments)
@@ -490,8 +491,46 @@ export function BillingDialog({
             </div>
           </section>
 
+          {/* Pay-later toggle */}
+          <button
+            type="button"
+            disabled={isPending}
+            onClick={() => setDeferAll((v) => !v)}
+            className={cn(
+              "flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2.5 text-left text-xs transition",
+              deferAll
+                ? "border-amber-500/50 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                : "border-dashed border-border/70 text-muted-foreground hover:border-amber-500/40 hover:text-foreground",
+            )}
+          >
+            <span className="flex items-center gap-2">
+              <Clock3 className="h-4 w-4" />
+              <span className="font-medium">
+                Pay later — settle from patient file
+              </span>
+            </span>
+            <span
+              aria-hidden
+              className={cn(
+                "inline-flex h-4 w-7 items-center rounded-full border transition",
+                deferAll
+                  ? "border-amber-500 bg-amber-500/30 justify-end"
+                  : "border-border bg-muted justify-start",
+              )}
+            >
+              <span className="m-0.5 h-3 w-3 rounded-full bg-card shadow-sm" />
+            </span>
+          </button>
+
+          {deferAll && totalN > 0 && (
+            <p className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-400">
+              {fmtTRY(totalN)} will be saved as outstanding on the patient&apos;s
+              file. Mark as settled later from their account.
+            </p>
+          )}
+
           {/* Account balance */}
-          {accountBalance > 0 && (
+          {!deferAll && accountBalance > 0 && (
             <section className="space-y-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3">
               <div className="flex items-center justify-between gap-2">
                 <Label
@@ -547,7 +586,7 @@ export function BillingDialog({
           )}
 
           {/* Patient paid now */}
-          <div className="space-y-1.5">
+          <div className={cn("space-y-1.5", deferAll && "hidden")}>
             <Label htmlFor="bill-paid" className="text-xs">
               Patient paid now (₺)
             </Label>
@@ -565,7 +604,7 @@ export function BillingDialog({
           </div>
 
           {/* Primary method */}
-          <div className="space-y-1.5">
+          <div className={cn("space-y-1.5", deferAll && "hidden")}>
             <Label className="text-xs">Primary payment method</Label>
             <div className="grid grid-cols-5 gap-1.5">
               {METHODS.map(({ value, label, icon: Icon }) => {
@@ -592,7 +631,7 @@ export function BillingDialog({
           </div>
 
           {/* Insurance */}
-          {hasInsurance && (
+          {!deferAll && hasInsurance && (
             <div className="space-y-1.5 rounded-lg border border-sky-500/30 bg-sky-500/5 p-3">
               <Label htmlFor="bill-insurance" className="text-xs">
                 {insuranceProviderName
@@ -614,7 +653,7 @@ export function BillingDialog({
           )}
 
           {/* Split toggle */}
-          <div>
+          <div className={cn(deferAll && "hidden")}>
             <button
               type="button"
               disabled={isPending}
@@ -643,7 +682,7 @@ export function BillingDialog({
             </button>
           </div>
 
-          {showSplit && (
+          {showSplit && !deferAll && (
             <>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
@@ -711,7 +750,7 @@ export function BillingDialog({
             </>
           )}
 
-          {remaining > 0 && totalN > 0 && (
+          {!deferAll && remaining > 0 && totalN > 0 && (
             <p className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-400">
               {fmtTRY(remaining)} will be saved as outstanding on the
               patient&apos;s file.
@@ -750,7 +789,7 @@ export function BillingDialog({
             className="gap-2"
           >
             {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-            Complete &amp; charge
+            {deferAll ? "Complete & defer payment" : "Complete & charge"}
           </Button>
         </DialogFooter>
       </DialogContent>

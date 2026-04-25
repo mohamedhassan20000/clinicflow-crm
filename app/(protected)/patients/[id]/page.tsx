@@ -44,7 +44,7 @@ export default async function PatientDetailPage({ params }: PageProps) {
   const { data: appointments } = await supabase
     .from("appointments")
     .select(
-      "id, scheduled_at, status, payment_method, paid_at, total_amount, paid_amount, insurance_amount, secondary_amount, deposit_amount, outstanding_amount, secondary_payment_method, payment_note, profiles!doctor_id(full_name), departments(name, color), insurance_providers(name), appointment_services(id, name, price, quantity)",
+      "id, scheduled_at, status, payment_method, paid_at, total_amount, paid_amount, insurance_amount, secondary_amount, deposit_amount, outstanding_amount, secondary_payment_method, payment_note, cancellation_reason, cancelled_at, profiles!doctor_id(full_name), departments(name, color), insurance_providers(name), appointment_services(id, name, price, quantity)",
     )
     .eq("patient_id", id)
     .eq("clinic_id", user.clinicId)

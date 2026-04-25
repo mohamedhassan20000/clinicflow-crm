@@ -9,6 +9,7 @@ import {
   Landmark,
   ShieldCheck,
   Wallet,
+  XCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -46,6 +47,8 @@ export interface AppointmentPaymentRowData {
   payment_method: string | null;
   secondary_payment_method: string | null;
   payment_note: string | null;
+  cancellation_reason?: string | null;
+  cancelled_at?: string | null;
   profiles: { full_name: string } | null;
   departments: { name: string; color: string } | null;
   insurance_providers: { name: string } | null;
@@ -69,6 +72,7 @@ export function AppointmentPaymentRow({ a }: { a: AppointmentPaymentRowData }) {
   const [open, setOpen] = useState(false);
   const dt = new Date(a.scheduled_at);
   const isCompleted = a.status === "completed";
+  const isCancelled = a.status === "cancelled";
   const primary = a.payment_method ? PAYMENT_META[a.payment_method] : null;
   const secondary = a.secondary_payment_method
     ? PAYMENT_META[a.secondary_payment_method]
@@ -157,6 +161,27 @@ export function AppointmentPaymentRow({ a }: { a: AppointmentPaymentRowData }) {
           )}
         </div>
       </button>
+
+      {isCancelled && a.cancellation_reason && (
+        <div className="flex items-start gap-2 border-t border-destructive/20 bg-destructive/5 px-5 py-2.5 text-xs text-destructive">
+          <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <div className="space-y-0.5">
+            <p>
+              <span className="font-semibold">Cancellation reason:</span>{" "}
+              <span className="text-foreground/80">{a.cancellation_reason}</span>
+            </p>
+            {a.cancelled_at && (
+              <p className="text-[10px] text-muted-foreground">
+                Cancelled on{" "}
+                {new Date(a.cancelled_at).toLocaleString("en-GB", {
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                })}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
       {isCompleted && open && (
         <div className="space-y-3 border-t border-border/30 bg-muted/20 px-5 py-4">

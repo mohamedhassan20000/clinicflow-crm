@@ -295,6 +295,17 @@ export function FollowupsView({
           onChange={(e) => update({ date: e.target.value || null })}
           className="h-8 w-[160px] text-xs"
         />
+        {dateInput && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 gap-1 px-2 text-xs text-muted-foreground"
+            onClick={() => update({ date: null })}
+          >
+            <X className="h-3.5 w-3.5" />
+            Clear date
+          </Button>
+        )}
         <span className="text-xs text-muted-foreground">{periodLabel}</span>
       </div>
 

@@ -1,0 +1,152 @@
+import type { Metadata } from "next";
+import { redirect } from "next/navigation";
+import { requireUser } from "@/lib/rbac";
+import { createClient } from "@/lib/supabase/server";
+import { FollowupsView } from "@/components/followups/followups-view";
+
+export const metadata: Metadata = { title: "Follow-ups" };
+
+type Scope = "day" | "week" | "month";
+
+interface PageProps {
+  searchParams: Promise<{
+    scope?: string;
+    date?: string;
+    q?: string;
+    dept?: string;
+  }>;
+}
+
+function toIstanbul(date: Date): Date {
+  return new Date(date.toLocaleString("en-US", { timeZone: "Europe/Istanbul" }));
+}
+function startOfDay(d: Date) {
+  const n = new Date(d);
+  n.setHours(0, 0, 0, 0);
+  return n;
+}
+function endOfDay(d: Date) {
+  const n = new Date(d);
+  n.setHours(23, 59, 59, 999);
+  return n;
+}
+
+function resolveRange(scope: Scope, dateStr?: string) {
+  const base = dateStr ? new Date(dateStr) : toIstanbul(new Date());
+  if (scope === "day") return { start: startOfDay(base), end: endOfDay(base) };
+  if (scope === "week") {
+    const day = base.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    const mon = new Date(base);
+    mon.setDate(mon.getDate() + diff);
+    const sun = new Date(mon);
+    sun.setDate(sun.getDate() + 6);
+    return { start: startOfDay(mon), end: endOfDay(sun) };
+  }
+  // month
+  const first = new Date(base.getFullYear(), base.getMonth(), 1);
+  const last = new Date(base.getFullYear(), base.getMonth() + 1, 0);
+  return { start: startOfDay(first), end: endOfDay(last) };
+}
+
+export default async function FollowupsPage({ searchParams }: PageProps) {
+  const user = await requireUser();
+  if (user.role === "manager") redirect("/dashboard");
+
+  const sp = await searchParams;
+  const scope = ((sp.scope as Scope) ?? "day") as Scope;
+  const dateStr = sp.date ?? "";
+  const range = resolveRange(scope, dateStr);
+  const q = sp.q?.trim() ?? "";
+  const filterDept = sp.dept?.trim() || null;
+
+  const supabase = await createClient();
+
+  // Patient search → resolve to IDs first so we can scope downstream queries.
+  let patientIdFilter: string[] | null = null;
+  if (q) {
+    const { data: matches } = await supabase
+      .from("patients")
+      .select("id")
+      .eq("clinic_id", user.clinicId)
+      .or(
+        `full_name.ilike.%${q}%,phone.ilike.%${q}%,file_number.ilike.%${q}%,national_id.ilike.%${q}%`,
+      )
+      .limit(500);
+    patientIdFilter = (matches ?? []).map((m) => m.id);
+    if (patientIdFilter.length === 0) patientIdFilter = ["__none__"];
+  }
+
+  // Completed appointments inside the window — we'll filter out any that
+  // already have a follow_ups row in JS (PostgREST can't filter the parent
+  // by emptiness of an embedded relation).
+  let pendingQ = supabase
+    .from("appointments")
+    .select(
+      "id, scheduled_at, paid_at, patient_id, department_id, doctor_id, total_amount, payment_note, patients(id, full_name, phone, file_number, national_id, department_id), profiles!doctor_id(full_name), departments(id, name, color), follow_ups(id)",
+    )
+    .eq("clinic_id", user.clinicId)
+    .eq("status", "completed")
+    .gte("scheduled_at", range.start.toISOString())
+    .lte("scheduled_at", range.end.toISOString())
+    .order("scheduled_at", { ascending: false })
+    .limit(500);
+
+  if (filterDept) pendingQ = pendingQ.eq("department_id", filterDept);
+  if (patientIdFilter) pendingQ = pendingQ.in("patient_id", patientIdFilter);
+
+  // Done: follow_ups inside the window, with their appointment + patient context.
+  let doneQ = supabase
+    .from("follow_ups")
+    .select(
+      "id, recorded_at, outcome, notes, patient_id, appointment_id, patients(id, full_name, phone, file_number, national_id, department_id), recorded_by:profiles!recorded_by(full_name), appointment:appointments!appointment_id(id, scheduled_at, department_id, doctor_id, profiles!doctor_id(full_name), departments(id, name, color))",
+    )
+    .eq("clinic_id", user.clinicId)
+    .gte("recorded_at", range.start.toISOString())
+    .lte("recorded_at", range.end.toISOString())
+    .order("recorded_at", { ascending: false })
+    .limit(500);
+
+  if (patientIdFilter) doneQ = doneQ.in("patient_id", patientIdFilter);
+
+  const [{ data: pendingRaw }, { data: done }, { data: departments }] =
+    await Promise.all([
+      pendingQ,
+      doneQ,
+      supabase
+        .from("departments")
+        .select("id, name, color")
+        .eq("clinic_id", user.clinicId)
+        .eq("is_active", true)
+        .order("name"),
+    ]);
+
+  // Drop appointments that already have a follow-up.
+  const pending = (pendingRaw ?? []).filter(
+    (a) => !a.follow_ups || a.follow_ups.length === 0,
+  );
+
+  // Department filter for done rows must also apply to the joined appointment.
+  const doneFiltered = (done ?? []).filter((d) => {
+    if (filterDept && d.appointment?.department_id !== filterDept) return false;
+    return true;
+  });
+
+  return (
+    <FollowupsView
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      pending={(pending ?? []) as any}
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      done={doneFiltered as any}
+      departments={departments ?? []}
+      scope={scope}
+      dateInput={dateStr || ""}
+      activeDept={filterDept}
+      activeQuery={q}
+      range={{
+        start: range.start.toISOString(),
+        end: range.end.toISOString(),
+      }}
+    />
+  );
+}

@@ -403,6 +403,71 @@ export type Database = {
           },
         ]
       }
+      follow_ups: {
+        Row: {
+          appointment_id: string | null
+          clinic_id: string
+          created_at: string
+          id: string
+          notes: string | null
+          outcome: Database["public"]["Enums"]["follow_up_outcome"]
+          patient_id: string
+          recorded_at: string
+          recorded_by: string | null
+        }
+        Insert: {
+          appointment_id?: string | null
+          clinic_id: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          outcome: Database["public"]["Enums"]["follow_up_outcome"]
+          patient_id: string
+          recorded_at?: string
+          recorded_by?: string | null
+        }
+        Update: {
+          appointment_id?: string | null
+          clinic_id?: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          outcome?: Database["public"]["Enums"]["follow_up_outcome"]
+          patient_id?: string
+          recorded_at?: string
+          recorded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "follow_ups_appointment_id_fkey"
+            columns: ["appointment_id"]
+            isOneToOne: false
+            referencedRelation: "appointments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "follow_ups_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "follow_ups_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "follow_ups_recorded_by_fkey"
+            columns: ["recorded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       insurance_providers: {
         Row: {
           clinic_id: string
@@ -904,6 +969,7 @@ export type Database = {
         | "cancelled"
         | "no_show"
       blood_type: "A+" | "A-" | "B+" | "B-" | "AB+" | "AB-" | "O+" | "O-"
+      follow_up_outcome: "all_fine" | "has_problem" | "no_response"
       payment_method:
         | "cash"
         | "credit_card"
@@ -1046,6 +1112,7 @@ export const Constants = {
         "no_show",
       ],
       blood_type: ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"],
+      follow_up_outcome: ["all_fine", "has_problem", "no_response"],
       payment_method: [
         "cash",
         "credit_card",

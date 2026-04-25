@@ -9,6 +9,7 @@ import {
   Settings,
   LogOut,
   Wallet,
+  PhoneCall,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signOut } from "@/actions/auth";
@@ -34,6 +35,7 @@ function buildNav(role: string): NavEntry[] {
     items.push(
       { href: "/patients", label: "Patients", icon: Users },
       { href: "/appointments", label: "Appointments", icon: CalendarDays },
+      { href: "/followups", label: "Follow-ups", icon: PhoneCall },
     );
   }
   if (role === "admin" || role === "manager") {

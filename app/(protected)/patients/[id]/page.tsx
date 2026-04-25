@@ -51,6 +51,37 @@ export default async function PatientDetailPage({ params }: PageProps) {
     .order("scheduled_at", { ascending: false })
     .limit(30);
 
+  // Settlements made against this patient's outstanding balance, grouped by appointment.
+  const { data: settlements } = await supabase
+    .from("outstanding_settlements")
+    .select("id, appointment_id, settled_at, amount, payment_method, note")
+    .eq("patient_id", id)
+    .eq("clinic_id", user.clinicId)
+    .order("settled_at", { ascending: true });
+
+  const settlementsByAppt = new Map<
+    string,
+    {
+      id: string;
+      settled_at: string;
+      amount: number;
+      payment_method: string;
+      note: string | null;
+    }[]
+  >();
+  for (const s of settlements ?? []) {
+    if (!s.appointment_id) continue;
+    const list = settlementsByAppt.get(s.appointment_id) ?? [];
+    list.push({
+      id: s.id,
+      settled_at: s.settled_at,
+      amount: Number(s.amount ?? 0),
+      payment_method: s.payment_method,
+      note: s.note,
+    });
+    settlementsByAppt.set(s.appointment_id, list);
+  }
+
   // Patient account balance = sum(deposits) − sum(appointments.deposit_amount)
   const [{ data: deposits }, { data: spentRows }] = await Promise.all([
     supabase
@@ -304,6 +335,7 @@ export default async function PatientDetailPage({ params }: PageProps) {
                       key={a.id}
                       // eslint-disable-next-line @typescript-eslint/no-explicit-any
                       a={a as any}
+                      settlements={settlementsByAppt.get(a.id) ?? []}
                     />
                   ))}
                 </div>

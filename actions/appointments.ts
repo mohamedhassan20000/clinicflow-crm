@@ -290,11 +290,18 @@ export async function getBillingContext(
     }));
   }
 
+  // "No Insurance (Self-Pay)" is a directory entry used at booking to flag
+  // self-paying patients — treat it as no insurance for billing purposes so
+  // the invoice doesn't show a "Covered by …" section.
+  const providerName = appt.insurance_providers?.name ?? null;
+  const isSelfPay =
+    !!providerName && /no\s*insurance|self[\s-]?pay/i.test(providerName);
+
   return {
     data: {
       patientName: appt.patients?.full_name ?? "",
-      hasInsurance: Boolean(appt.insurance_provider_id),
-      insuranceProviderName: appt.insurance_providers?.name ?? null,
+      hasInsurance: Boolean(appt.insurance_provider_id) && !isSelfPay,
+      insuranceProviderName: isSelfPay ? null : providerName,
       accountBalance: balance,
       departmentId: appt.department_id,
       departmentName: appt.departments?.name ?? null,

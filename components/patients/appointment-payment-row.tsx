@@ -68,7 +68,21 @@ function fmtTRY(n: number) {
   }).format(Number.isFinite(n) ? n : 0);
 }
 
-export function AppointmentPaymentRow({ a }: { a: AppointmentPaymentRowData }) {
+export interface SettlementEntry {
+  id: string;
+  settled_at: string;
+  amount: number;
+  payment_method: string;
+  note: string | null;
+}
+
+export function AppointmentPaymentRow({
+  a,
+  settlements = [],
+}: {
+  a: AppointmentPaymentRowData;
+  settlements?: SettlementEntry[];
+}) {
   const [open, setOpen] = useState(false);
   const dt = new Date(a.scheduled_at);
   const isCompleted = a.status === "completed";
@@ -279,6 +293,44 @@ export function AppointmentPaymentRow({ a }: { a: AppointmentPaymentRowData }) {
               </Pill>
             )}
           </div>
+
+          {settlements.length > 0 && (
+            <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5">
+              <div className="border-b border-emerald-500/20 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
+                Outstanding settled later
+              </div>
+              <ul className="divide-y divide-emerald-500/15 text-xs">
+                {settlements.map((s) => {
+                  const meta = PAYMENT_META[s.payment_method];
+                  const Icon = meta?.icon;
+                  return (
+                    <li
+                      key={s.id}
+                      className="flex flex-wrap items-center justify-between gap-2 px-3 py-2"
+                    >
+                      <div className="flex items-center gap-2">
+                        {Icon && (
+                          <Icon className="h-3.5 w-3.5 text-emerald-700 dark:text-emerald-400" />
+                        )}
+                        <span className="font-medium">
+                          {meta?.label ?? s.payment_method}
+                        </span>
+                        <span className="text-muted-foreground">
+                          {new Date(s.settled_at).toLocaleString("en-GB", {
+                            dateStyle: "medium",
+                            timeStyle: "short",
+                          })}
+                        </span>
+                      </div>
+                      <span className="tabular-nums font-semibold text-emerald-700 dark:text-emerald-400">
+                        {fmtTRY(s.amount)}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
 
           {a.payment_note && (
             <p className="text-xs italic text-muted-foreground">

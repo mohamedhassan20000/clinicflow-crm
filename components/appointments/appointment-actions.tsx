@@ -40,14 +40,15 @@ export function AppointmentActions({
 
   // Lazy-load services + balance the moment the dialog opens.
   useEffect(() => {
-    if (!billingOpen || ctx || loadingCtx) return;
-    let cancelled = false;
+    if (!billingOpen) return;
+    if (ctx) return;
+    let active = true;
     queueMicrotask(() => {
-      if (cancelled) return;
+      if (!active) return;
       setLoadingCtx(true);
       getBillingContext(appointmentId)
         .then((res) => {
-          if (cancelled) return;
+          if (!active) return;
           if (res.error) {
             toast.error(res.error);
             setBillingOpen(false);
@@ -55,14 +56,25 @@ export function AppointmentActions({
             setCtx(res.data);
           }
         })
+        .catch((err) => {
+          if (!active) return;
+          toast.error(
+            err instanceof Error
+              ? err.message
+              : "Failed to load invoice details.",
+          );
+          setBillingOpen(false);
+        })
         .finally(() => {
-          if (!cancelled) setLoadingCtx(false);
+          if (active) setLoadingCtx(false);
         });
     });
     return () => {
-      cancelled = true;
+      active = false;
     };
-  }, [billingOpen, appointmentId, ctx, loadingCtx]);
+    // Intentionally do NOT depend on loadingCtx — its state change inside this
+    // effect would cancel the in-flight fetch and leave the dialog stuck.
+  }, [billingOpen, appointmentId, ctx]);
 
   if (isTerminal) return null;
 

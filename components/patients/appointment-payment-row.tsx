@@ -49,6 +49,12 @@ export interface AppointmentPaymentRowData {
   profiles: { full_name: string } | null;
   departments: { name: string; color: string } | null;
   insurance_providers: { name: string } | null;
+  appointment_services?: {
+    id: string;
+    name: string;
+    price: number;
+    quantity: number;
+  }[] | null;
 }
 
 function fmtTRY(n: number) {
@@ -154,6 +160,35 @@ export function AppointmentPaymentRow({ a }: { a: AppointmentPaymentRowData }) {
 
       {isCompleted && open && (
         <div className="space-y-3 border-t border-border/30 bg-muted/20 px-5 py-4">
+          {/* Invoice line items */}
+          {a.appointment_services && a.appointment_services.length > 0 && (
+            <div className="rounded-lg border border-border/50 bg-card overflow-hidden">
+              <div className="px-3 py-2 border-b border-border/40 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Invoice
+              </div>
+              <ul className="divide-y divide-border/30 text-sm">
+                {a.appointment_services.map((li) => (
+                  <li
+                    key={li.id}
+                    className="flex items-center justify-between gap-3 px-3 py-1.5"
+                  >
+                    <span className="truncate">
+                      {li.name}
+                      {li.quantity > 1 && (
+                        <span className="ml-1 text-xs text-muted-foreground">
+                          × {li.quantity}
+                        </span>
+                      )}
+                    </span>
+                    <span className="tabular-nums text-xs font-medium">
+                      {fmtTRY(Number(li.price) * Number(li.quantity))}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {/* Summary strip */}
           <div className="grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-border/50 bg-border/40">
             <SummaryCell label="Total" amount={a.total_amount ?? 0} />

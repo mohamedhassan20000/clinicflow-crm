@@ -4,9 +4,15 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole, requireUser } from "@/lib/rbac";
-import { appointmentSchema } from "@/lib/validations/appointment";
-import { STATUS_TRANSITIONS } from "@/lib/validations/appointment";
+import {
+  appointmentSchema,
+  billingSchema,
+  STATUS_TRANSITIONS,
+  type BillingValues,
+  type LineItemValues,
+} from "@/lib/validations/appointment";
 import type { TablesUpdate } from "@/types/database";
+import { getPatientAccountBalance } from "@/actions/patients";
 
 export type ActionResult = { error?: string; fieldErrors?: Record<string, string[]> };
 
@@ -62,37 +68,25 @@ export async function createAppointment(
   redirect("/appointments");
 }
 
-const PAYMENT_METHODS = [
-  "cash",
-  "credit_card",
-  "paypal",
-  "bank_transfer",
-  "insurance",
-] as const;
-type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+export type BillingInput = BillingValues;
 
-export interface BillingInput {
-  total_amount: number;
-  paid_amount: number;
-  payment_method: PaymentMethod;
-  insurance_amount: number;
-  outstanding_amount: number;
-  secondary_payment_method: PaymentMethod | null;
-  secondary_amount: number;
-  deposit_amount: number;
-  payment_note: string | null;
+function lineItemTotal(items: LineItemValues[]): number {
+  return Number(
+    items
+      .reduce((s, li) => s + Number(li.price) * Number(li.quantity), 0)
+      .toFixed(2),
+  );
 }
 
 export async function updateAppointmentStatus(
   id: string,
   newStatus: string,
-  paymentMethodOrBilling?: string | BillingInput | null,
+  billingPayload?: BillingInput | null,
 ): Promise<ActionResult> {
   const user = await requireRole(["admin", "receptionist"]);
 
   const supabase = await createClient();
 
-  // Verify the transition is valid
   const { data: appt } = await supabase
     .from("appointments")
     .select("status, patient_id")
@@ -107,57 +101,88 @@ export async function updateAppointmentStatus(
     return { error: `Cannot transition from ${appt.status} to ${newStatus}.` };
   }
 
-  // Completing an appointment requires a payment method
   const update: TablesUpdate<"appointments"> = {
     status: newStatus as TablesUpdate<"appointments">["status"],
     updated_by: user.id,
   };
 
   if (newStatus === "completed") {
-    const billing =
-      typeof paymentMethodOrBilling === "object" && paymentMethodOrBilling
-        ? paymentMethodOrBilling
-        : null;
+    if (!billingPayload) {
+      return { error: "Billing details are required to complete this appointment." };
+    }
 
-    if (billing) {
-      if (!PAYMENT_METHODS.includes(billing.payment_method)) {
-        return { error: "Invalid primary payment method." };
+    const parsed = billingSchema.safeParse(billingPayload);
+    if (!parsed.success) {
+      const flat = parsed.error.flatten().fieldErrors;
+      const first = Object.values(flat).flat()[0];
+      return { error: first ?? "Invalid billing details.", fieldErrors: flat };
+    }
+    const billing = parsed.data;
+
+    const total = lineItemTotal(billing.line_items);
+    if (total <= 0) {
+      return { error: "Invoice total must be greater than zero." };
+    }
+
+    // Validate deposit_amount against patient's available balance
+    if (billing.deposit_amount > 0) {
+      const balance = await getPatientAccountBalance(
+        appt.patient_id,
+        user.clinicId,
+      );
+      if (billing.deposit_amount > balance + 0.001) {
+        return {
+          error: `Deposit applied (${billing.deposit_amount.toFixed(
+            2,
+          )}) exceeds patient's account balance (${balance.toFixed(2)}).`,
+        };
       }
-      if (
-        billing.secondary_payment_method &&
-        !PAYMENT_METHODS.includes(billing.secondary_payment_method)
-      ) {
-        return { error: "Invalid secondary payment method." };
+      if (billing.deposit_amount > total + 0.001) {
+        return { error: "Deposit applied cannot exceed invoice total." };
       }
-      if (billing.total_amount <= 0) {
-        return { error: "Total amount must be greater than zero." };
-      }
-      if (
-        billing.paid_amount < 0 ||
-        billing.insurance_amount < 0 ||
-        billing.outstanding_amount < 0 ||
-        billing.secondary_amount < 0 ||
-        billing.deposit_amount < 0
-      ) {
-        return { error: "Amounts cannot be negative." };
-      }
-      update.payment_method = billing.payment_method;
-      update.secondary_payment_method = billing.secondary_payment_method;
-      update.secondary_amount = billing.secondary_amount;
-      update.deposit_amount = billing.deposit_amount;
-      update.total_amount = billing.total_amount;
-      update.paid_amount = billing.paid_amount;
-      update.insurance_amount = billing.insurance_amount;
-      update.outstanding_amount = billing.outstanding_amount;
-      update.payment_note = billing.payment_note;
-      update.paid_at = new Date().toISOString();
-    } else {
-      const pm = paymentMethodOrBilling as string | null | undefined;
-      if (!pm || !PAYMENT_METHODS.includes(pm as PaymentMethod)) {
-        return { error: "Select a valid payment method to complete this appointment." };
-      }
-      update.payment_method = pm as PaymentMethod;
-      update.paid_at = new Date().toISOString();
+    }
+
+    const collected =
+      billing.paid_amount +
+      billing.insurance_amount +
+      billing.secondary_amount +
+      billing.deposit_amount;
+    if (collected > total + 0.001) {
+      return { error: "Collected amount exceeds invoice total." };
+    }
+    const outstanding = Number(Math.max(0, total - collected).toFixed(2));
+
+    update.payment_method = billing.payment_method;
+    update.secondary_payment_method = billing.secondary_payment_method ?? null;
+    update.secondary_amount = Number(billing.secondary_amount.toFixed(2));
+    update.deposit_amount = Number(billing.deposit_amount.toFixed(2));
+    update.total_amount = total;
+    update.paid_amount = Number(billing.paid_amount.toFixed(2));
+    update.insurance_amount = Number(billing.insurance_amount.toFixed(2));
+    update.outstanding_amount = outstanding;
+    update.payment_note = billing.payment_note ?? null;
+    update.paid_at = new Date().toISOString();
+
+    // Replace any existing line items, then insert fresh ones
+    await supabase
+      .from("appointment_services")
+      .delete()
+      .eq("appointment_id", id)
+      .eq("clinic_id", user.clinicId);
+
+    const rows = billing.line_items.map((li) => ({
+      appointment_id: id,
+      clinic_id: user.clinicId,
+      service_id: li.service_id ?? null,
+      name: li.name,
+      price: Number(Number(li.price).toFixed(2)),
+      quantity: Number(li.quantity),
+    }));
+    const { error: linesError } = await supabase
+      .from("appointment_services")
+      .insert(rows);
+    if (linesError) {
+      return { error: "Failed to save invoice line items." };
     }
   }
 
@@ -176,4 +201,80 @@ export async function updateAppointmentStatus(
 
 export async function cancelAppointment(id: string): Promise<ActionResult> {
   return updateAppointmentStatus(id, "cancelled");
+}
+
+export interface BillingContext {
+  patientName: string;
+  hasInsurance: boolean;
+  accountBalance: number;
+  services: { id: string; name: string; price: number; department_id: string }[];
+}
+
+/**
+ * Loads the data the BillingDialog needs to render: department services,
+ * patient account balance, and a couple of display fields. Single round-trip
+ * from the client when the dialog opens.
+ */
+export async function getBillingContext(
+  appointmentId: string,
+): Promise<{ data?: BillingContext; error?: string }> {
+  const user = await requireRole(["admin", "receptionist"]);
+  const supabase = await createClient();
+
+  const { data: appt, error: apptError } = await supabase
+    .from("appointments")
+    .select(
+      "id, patient_id, department_id, insurance_provider_id, patients(full_name)",
+    )
+    .eq("id", appointmentId)
+    .eq("clinic_id", user.clinicId)
+    .single();
+
+  if (apptError || !appt) return { error: "Appointment not found." };
+
+  const balance = await getPatientAccountBalance(
+    appt.patient_id,
+    user.clinicId,
+  );
+
+  let services: BillingContext["services"] = [];
+  if (appt.department_id) {
+    const { data: svc } = await supabase
+      .from("services")
+      .select("id, name, price, department_id")
+      .eq("clinic_id", user.clinicId)
+      .eq("department_id", appt.department_id)
+      .order("name", { ascending: true });
+    services = (svc ?? []).map((s) => ({
+      id: s.id,
+      name: s.name,
+      price: Number(s.price),
+      department_id: s.department_id,
+    }));
+  }
+
+  // Fallback: if department has no services configured, surface all clinic services
+  // so reception can still bill from the price list.
+  if (services.length === 0) {
+    const { data: svc } = await supabase
+      .from("services")
+      .select("id, name, price, department_id")
+      .eq("clinic_id", user.clinicId)
+      .order("name", { ascending: true });
+    services = (svc ?? []).map((s) => ({
+      id: s.id,
+      name: s.name,
+      price: Number(s.price),
+      department_id: s.department_id ?? "",
+    }));
+  }
+
+  return {
+    data: {
+      patientName: appt.patients?.full_name ?? "",
+      hasInsurance: Boolean(appt.insurance_provider_id),
+      accountBalance: balance,
+      services,
+    },
+  };
 }

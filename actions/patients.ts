@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole, requireUser } from "@/lib/rbac";
 import { patientSchema, medicalNoteSchema } from "@/lib/validations/patient";
+import { depositSchema } from "@/lib/validations/appointment";
 
 export type ActionResult = { error?: string; fieldErrors?: Record<string, string[]> };
 
@@ -202,6 +203,72 @@ const PAYMENT_METHODS = [
   "insurance",
 ] as const;
 type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+
+/**
+ * Returns a patient's account balance — the un-spent portion of their deposits.
+ * balance = sum(patient_deposits.amount) − sum(appointments.deposit_amount across all statuses)
+ */
+export async function getPatientAccountBalance(
+  patientId: string,
+  clinicId: string,
+): Promise<number> {
+  const supabase = await createClient();
+  const [{ data: deposits }, { data: appts }] = await Promise.all([
+    supabase
+      .from("patient_deposits")
+      .select("amount")
+      .eq("patient_id", patientId)
+      .eq("clinic_id", clinicId),
+    supabase
+      .from("appointments")
+      .select("deposit_amount")
+      .eq("patient_id", patientId)
+      .eq("clinic_id", clinicId),
+  ]);
+  const totalDeposited = (deposits ?? []).reduce(
+    (s, r) => s + Number(r.amount ?? 0),
+    0,
+  );
+  const totalSpent = (appts ?? []).reduce(
+    (s, r) => s + Number(r.deposit_amount ?? 0),
+    0,
+  );
+  return Math.max(0, Number((totalDeposited - totalSpent).toFixed(2)));
+}
+
+export async function addPatientDeposit(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  const user = await requireRole(["admin", "receptionist"]);
+
+  const raw = {
+    patient_id: String(formData.get("patient_id") ?? ""),
+    amount: Number(formData.get("amount") ?? 0),
+    payment_method: String(formData.get("payment_method") ?? ""),
+    note: (formData.get("note") as string | null)?.toString().trim() || null,
+  };
+
+  const parsed = depositSchema.safeParse(raw);
+  if (!parsed.success) {
+    return { fieldErrors: parsed.error.flatten().fieldErrors };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("patient_deposits").insert({
+    patient_id: parsed.data.patient_id,
+    clinic_id: user.clinicId,
+    amount: Number(parsed.data.amount.toFixed(2)),
+    payment_method: parsed.data.payment_method,
+    note: parsed.data.note ?? null,
+    created_by: user.id,
+  });
+
+  if (error) return { error: error.message || "Failed to add deposit." };
+
+  revalidatePath(`/patients/${parsed.data.patient_id}`);
+  return {};
+}
 
 export async function settleOutstanding(
   _prev: ActionResult | null,

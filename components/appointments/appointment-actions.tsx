@@ -1,11 +1,15 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { updateAppointmentStatus } from "@/actions/appointments";
+import {
+  getBillingContext,
+  updateAppointmentStatus,
+  type BillingContext,
+} from "@/actions/appointments";
 import { STATUS_TRANSITIONS } from "@/lib/validations/appointment";
 import type { Database } from "@/types/database";
 import {
@@ -40,17 +44,44 @@ const STATUS_CLASSES: Record<string, string> = {
 export function AppointmentActions({
   appointmentId,
   currentStatus,
-  hasInsurance = false,
 }: {
   appointmentId: string;
   currentStatus: Status;
+  /** @deprecated kept for back-compat — context is loaded from the server now */
   hasInsurance?: boolean;
 }) {
   const [isPending, startTransition] = useTransition();
   const [billingOpen, setBillingOpen] = useState(false);
   const [optimisticStatus, setOptimisticStatus] = useState<Status | null>(null);
+  const [ctx, setCtx] = useState<BillingContext | null>(null);
+  const [loadingCtx, setLoadingCtx] = useState(false);
   const effectiveStatus = optimisticStatus ?? currentStatus;
   const allowed = STATUS_TRANSITIONS[effectiveStatus] ?? [];
+
+  useEffect(() => {
+    if (!billingOpen || ctx || loadingCtx) return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setLoadingCtx(true);
+      getBillingContext(appointmentId)
+        .then((res) => {
+          if (cancelled) return;
+          if (res.error) {
+            toast.error(res.error);
+            setBillingOpen(false);
+          } else if (res.data) {
+            setCtx(res.data);
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setLoadingCtx(false);
+        });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [billingOpen, appointmentId, ctx, loadingCtx]);
 
   if (allowed.length === 0) return null;
 
@@ -79,6 +110,7 @@ export function AppointmentActions({
       } else {
         toast.success("Appointment completed & charged.");
         setBillingOpen(false);
+        setCtx(null);
       }
     });
   }
@@ -115,10 +147,16 @@ export function AppointmentActions({
 
       <BillingDialog
         open={billingOpen}
-        onOpenChange={setBillingOpen}
+        onOpenChange={(o) => {
+          setBillingOpen(o);
+          if (!o) setCtx(null);
+        }}
         onConfirm={runComplete}
-        isPending={isPending}
-        hasInsurance={hasInsurance}
+        isPending={isPending || loadingCtx}
+        hasInsurance={ctx?.hasInsurance ?? false}
+        services={ctx?.services ?? []}
+        accountBalance={ctx?.accountBalance ?? 0}
+        patientName={ctx?.patientName}
       />
     </>
   );

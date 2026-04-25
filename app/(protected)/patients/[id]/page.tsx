@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { DeletePatientButton } from "@/components/patients/delete-patient-button";
 import { AppointmentPaymentRow } from "@/components/patients/appointment-payment-row";
 import { SettleOutstandingDialog } from "@/components/patients/settle-outstanding-dialog";
+import { AddDepositDialog } from "@/components/patients/add-deposit-dialog";
 
 export const metadata: Metadata = { title: "Patient" };
 
@@ -43,12 +44,38 @@ export default async function PatientDetailPage({ params }: PageProps) {
   const { data: appointments } = await supabase
     .from("appointments")
     .select(
-      "id, scheduled_at, status, payment_method, paid_at, total_amount, paid_amount, insurance_amount, secondary_amount, deposit_amount, outstanding_amount, secondary_payment_method, payment_note, profiles!doctor_id(full_name), departments(name, color), insurance_providers(name)",
+      "id, scheduled_at, status, payment_method, paid_at, total_amount, paid_amount, insurance_amount, secondary_amount, deposit_amount, outstanding_amount, secondary_payment_method, payment_note, profiles!doctor_id(full_name), departments(name, color), insurance_providers(name), appointment_services(id, name, price, quantity)",
     )
     .eq("patient_id", id)
     .eq("clinic_id", user.clinicId)
     .order("scheduled_at", { ascending: false })
     .limit(30);
+
+  // Patient account balance = sum(deposits) − sum(appointments.deposit_amount)
+  const [{ data: deposits }, { data: spentRows }] = await Promise.all([
+    supabase
+      .from("patient_deposits")
+      .select("amount")
+      .eq("patient_id", id)
+      .eq("clinic_id", user.clinicId),
+    supabase
+      .from("appointments")
+      .select("deposit_amount")
+      .eq("patient_id", id)
+      .eq("clinic_id", user.clinicId),
+  ]);
+  const totalDeposited = (deposits ?? []).reduce(
+    (s, r) => s + Number(r.amount ?? 0),
+    0,
+  );
+  const totalSpent = (spentRows ?? []).reduce(
+    (s, r) => s + Number(r.deposit_amount ?? 0),
+    0,
+  );
+  const accountBalance = Math.max(
+    0,
+    Number((totalDeposited - totalSpent).toFixed(2)),
+  );
 
   // Aggregate billing across completed appointments
   const completed = (appointments ?? []).filter((a) => a.status === "completed");
@@ -204,15 +231,23 @@ export default async function PatientDetailPage({ params }: PageProps) {
                 <Receipt className="h-4 w-4" />
                 Billing
               </h2>
-              {canEdit && billingTotals.outstanding > 0 && (
-                <SettleOutstandingDialog
-                  patientId={id}
-                  outstanding={billingTotals.outstanding}
-                  patientName={patient.full_name}
-                />
+              {canEdit && (
+                <div className="flex items-center gap-2">
+                  <AddDepositDialog
+                    patientId={id}
+                    patientName={patient.full_name}
+                  />
+                  {billingTotals.outstanding > 0 && (
+                    <SettleOutstandingDialog
+                      patientId={id}
+                      outstanding={billingTotals.outstanding}
+                      patientName={patient.full_name}
+                    />
+                  )}
+                </div>
               )}
             </div>
-            <div className="grid grid-cols-3 gap-px rounded-xl border border-border/50 bg-border/40 overflow-hidden">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-px rounded-xl border border-border/50 bg-border/40 overflow-hidden">
               <BillingCell label="Billed" amount={billingTotals.billed} />
               <BillingCell
                 label="Collected"
@@ -225,6 +260,15 @@ export default async function PatientDetailPage({ params }: PageProps) {
                 accent={
                   billingTotals.outstanding > 0
                     ? "text-amber-600 dark:text-amber-400"
+                    : "text-muted-foreground"
+                }
+              />
+              <BillingCell
+                label="Account balance"
+                amount={accountBalance}
+                accent={
+                  accountBalance > 0
+                    ? "text-emerald-600 dark:text-emerald-400"
                     : "text-muted-foreground"
                 }
               />

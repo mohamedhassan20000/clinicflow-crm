@@ -3,12 +3,25 @@
 import { Printer, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-function withPrintMode(className: string | null, fn: () => void) {
-  if (className) document.body.classList.add(className);
-  // Defer to next frame so the class is applied before the print dialog opens.
+function printWithMode(modeClass: string | null) {
+  const cleanup = () => {
+    if (modeClass) document.body.classList.remove(modeClass);
+    window.removeEventListener("afterprint", cleanup);
+  };
+
+  if (modeClass) {
+    document.body.classList.add(modeClass);
+    window.addEventListener("afterprint", cleanup);
+  }
+
+  // Two RAFs ensure the new className is committed to layout before the
+  // (synchronous) print dialog opens — Safari/Firefox can otherwise race.
   requestAnimationFrame(() => {
-    fn();
-    if (className) document.body.classList.remove(className);
+    requestAnimationFrame(() => {
+      window.print();
+      // Fallback in case afterprint never fires (some browsers).
+      if (modeClass) setTimeout(cleanup, 1000);
+    });
   });
 }
 
@@ -19,7 +32,7 @@ export function PrintButton() {
       variant="outline"
       size="sm"
       className="gap-1.5"
-      onClick={() => withPrintMode(null, () => window.print())}
+      onClick={() => printWithMode(null)}
     >
       <Printer className="h-3.5 w-3.5" />
       Print statement
@@ -39,9 +52,7 @@ export function PrintSettlementsButton({ disabled }: { disabled?: boolean }) {
       size="sm"
       disabled={disabled}
       className="gap-1.5"
-      onClick={() =>
-        withPrintMode("print-settlements-only", () => window.print())
-      }
+      onClick={() => printWithMode("print-settlements-only")}
     >
       <FileText className="h-3.5 w-3.5" />
       Print settlements

@@ -305,10 +305,11 @@ export function RevenueReport({
         </div>
 
         {/* Totals strip */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-border/40 border-b border-border/50">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-px bg-border/40 border-b border-border/50">
           <SummaryCell
             icon={TrendingUp}
-            label="Gross collected"
+            label="Total revenue"
+            sublabel="Sessions + settlements"
             amount={grossTotal}
             accent="text-primary"
           />
@@ -329,6 +330,13 @@ export function RevenueReport({
             label="Insurance"
             amount={insuranceTotal}
             accent="text-sky-600 dark:text-sky-400"
+          />
+          <SummaryCell
+            icon={Receipt}
+            label="Settlements"
+            sublabel="Outstanding paid"
+            amount={settlementsTotal}
+            accent="text-amber-600 dark:text-amber-400"
           />
         </div>
 
@@ -537,11 +545,13 @@ export function RevenueReport({
 function SummaryCell({
   icon: Icon,
   label,
+  sublabel,
   amount,
   accent,
 }: {
   icon: ComponentType<{ className?: string }>;
   label: string;
+  sublabel?: string;
   amount: number;
   accent: string;
 }) {
@@ -554,6 +564,9 @@ function SummaryCell({
         </p>
       </div>
       <p className="mt-1 text-lg font-semibold tabular-nums">{fmtTRY(amount)}</p>
+      {sublabel && (
+        <p className="text-[10px] text-muted-foreground/80">{sublabel}</p>
+      )}
     </div>
   );
 }

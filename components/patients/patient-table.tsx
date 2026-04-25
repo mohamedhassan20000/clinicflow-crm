@@ -1,18 +1,20 @@
 "use client";
 
-import {
-  useReactTable,
-  getCoreRowModel,
-  flexRender,
-  type ColumnDef,
-} from "@tanstack/react-table";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useQueryState } from "nuqs";
-import { useTransition } from "react";
-import { Search, UserPlus, ChevronLeft, ChevronRight } from "lucide-react";
+import { useMemo, useTransition } from "react";
+import {
+  Search,
+  UserPlus,
+  ChevronLeft,
+  ChevronRight,
+  Users,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import type { Tables } from "@/types/database";
 
 type Patient = Tables<"patients"> & {
@@ -28,114 +30,8 @@ interface PatientTableProps {
   canCreate: boolean;
 }
 
-const columns: ColumnDef<Patient>[] = [
-  {
-    id: "file_number",
-    header: "File #",
-    cell: ({ row }) => (
-      <span className="font-mono text-xs text-muted-foreground">
-        {row.original.file_number ?? "—"}
-      </span>
-    ),
-  },
-  {
-    accessorKey: "full_name",
-    header: "Patient",
-    cell: ({ row }) => {
-      const dept = row.original.departments;
-      return (
-        <div className="flex items-center gap-2">
-          <span
-            aria-hidden
-            className="h-2 w-2 shrink-0 rounded-full ring-2 ring-background print:hidden"
-            style={{ backgroundColor: dept?.color ?? "var(--muted-foreground)" }}
-            title={dept?.name ?? "Unassigned"}
-          />
-          <Link
-            href={`/patients/${row.original.id}`}
-            className="font-medium text-foreground hover:text-primary transition-colors"
-          >
-            {row.original.full_name}
-          </Link>
-        </div>
-      );
-    },
-  },
-  {
-    id: "national_id",
-    header: "National ID",
-    cell: ({ row }) => (
-      <span className="font-mono text-xs text-muted-foreground">
-        {row.original.national_id ?? "—"}
-      </span>
-    ),
-  },
-  {
-    id: "department",
-    header: "Department",
-    cell: ({ row }) => {
-      const dept = row.original.departments;
-      if (!dept) return <span className="text-muted-foreground/40">—</span>;
-      return (
-        <Badge
-          variant="outline"
-          className="gap-1.5 font-normal"
-          style={{
-            borderColor: `color-mix(in oklab, ${dept.color} 45%, transparent)`,
-            backgroundColor: `color-mix(in oklab, ${dept.color} 10%, transparent)`,
-            color: dept.color,
-          }}
-        >
-          {dept.name}
-        </Badge>
-      );
-    },
-  },
-  {
-    id: "doctor",
-    header: "Doctor",
-    cell: ({ row }) => {
-      const doc = row.original.assigned_doctor;
-      if (!doc) return <span className="text-muted-foreground/40">—</span>;
-      return (
-        <span className="text-xs text-muted-foreground">
-          Dr. {doc.full_name}
-        </span>
-      );
-    },
-  },
-  {
-    accessorKey: "phone",
-    header: "Phone",
-    cell: ({ getValue }) => (
-      <span className="text-muted-foreground">{getValue<string>()}</span>
-    ),
-  },
-  {
-    accessorKey: "blood_type",
-    header: "Blood",
-    cell: ({ getValue }) => {
-      const bt = getValue<string | null>();
-      if (!bt) return <span className="text-muted-foreground/40">—</span>;
-      return (
-        <Badge variant="secondary" className="font-mono text-xs">
-          {bt}
-        </Badge>
-      );
-    },
-  },
-  {
-    id: "actions",
-    meta: { printHidden: true },
-    cell: ({ row }) => (
-      <Button asChild variant="ghost" size="sm" className="h-7 px-2 text-xs">
-        <Link href={`/patients/${row.original.id}`}>View</Link>
-      </Button>
-    ),
-  },
-];
-
-type ColumnMeta = { printHidden?: boolean };
+const UNASSIGNED_COLOR = "#94a3b8"; // slate-400
+const UNASSIGNED_KEY = "__unassigned__";
 
 export function PatientTable({
   data,
@@ -147,14 +43,39 @@ export function PatientTable({
   const [search, setSearch] = useQueryState("q", { defaultValue: "" });
   const [, startTransition] = useTransition();
   const totalPages = Math.ceil(total / pageSize);
+  const isSearching = (search ?? "").trim().length > 0;
 
-  const table = useReactTable({
-    data,
-    columns,
-    getCoreRowModel: getCoreRowModel(),
-    manualPagination: true,
-    rowCount: total,
-  });
+  // Group patients by department for the default browse view.
+  const groups = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        deptId: string;
+        name: string;
+        color: string;
+        patients: Patient[];
+      }
+    >();
+    for (const p of data) {
+      const dept = p.departments;
+      const key = dept?.id ?? UNASSIGNED_KEY;
+      if (!map.has(key)) {
+        map.set(key, {
+          deptId: key,
+          name: dept?.name ?? "Unassigned",
+          color: dept?.color ?? UNASSIGNED_COLOR,
+          patients: [],
+        });
+      }
+      map.get(key)!.patients.push(p);
+    }
+    // Sort: real departments alphabetically, unassigned last.
+    return Array.from(map.values()).sort((a, b) => {
+      if (a.deptId === UNASSIGNED_KEY) return 1;
+      if (b.deptId === UNASSIGNED_KEY) return -1;
+      return a.name.localeCompare(b.name);
+    });
+  }, [data]);
 
   return (
     <div className="space-y-4">
@@ -181,62 +102,34 @@ export function PatientTable({
         )}
       </div>
 
-      {/* Table */}
-      <div className="overflow-hidden rounded-xl border border-border/50 bg-card">
-        <table className="w-full text-sm">
-          <thead className="border-b border-border/50 bg-muted/30">
-            {table.getHeaderGroups().map((hg) => (
-              <tr key={hg.id}>
-                {hg.headers.map((header) => {
-                  const meta = header.column.columnDef.meta as ColumnMeta | undefined;
-                  return (
-                  <th
-                    key={header.id}
-                    className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground ${meta?.printHidden ? "print:hidden" : ""}`}
-                  >
-                    {flexRender(
-                      header.column.columnDef.header,
-                      header.getContext(),
-                    )}
-                  </th>
-                  );
-                })}
-              </tr>
-            ))}
-          </thead>
-          <tbody>
-            {table.getRowModel().rows.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={columns.length}
-                  className="px-4 py-12 text-center text-sm text-muted-foreground"
-                >
-                  {search ? "No patients match your search." : "No patients yet."}
-                </td>
-              </tr>
-            ) : (
-              table.getRowModel().rows.map((row) => (
-                <tr
-                  key={row.id}
-                  className="border-b border-border/30 last:border-0 hover:bg-muted/20 transition-colors"
-                >
-                  {row.getVisibleCells().map((cell) => {
-                    const meta = cell.column.columnDef.meta as ColumnMeta | undefined;
-                    return (
-                    <td key={cell.id} className={`px-4 py-3 ${meta?.printHidden ? "print:hidden" : ""}`}>
-                      {flexRender(
-                        cell.column.columnDef.cell,
-                        cell.getContext(),
-                      )}
-                    </td>
-                    );
-                  })}
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+      {data.length === 0 ? (
+        <div className="rounded-xl border border-border/50 bg-card px-4 py-12 text-center text-sm text-muted-foreground">
+          {isSearching
+            ? "No patients match your search."
+            : "No patients yet."}
+        </div>
+      ) : isSearching ? (
+        // Search active → flat result list, hide grouped departments.
+        <PatientGroupTable
+          name={`Search results for "${search}"`}
+          color={UNASSIGNED_COLOR}
+          patients={data}
+          showDepartmentBadge
+          isSearch
+        />
+      ) : (
+        // Default view → one table per department.
+        <div className="space-y-5">
+          {groups.map((g) => (
+            <PatientGroupTable
+              key={g.deptId}
+              name={g.name}
+              color={g.color}
+              patients={g.patients}
+            />
+          ))}
+        </div>
+      )}
 
       {/* Pagination */}
       {totalPages > 1 && (
@@ -280,5 +173,206 @@ export function PatientTable({
         </div>
       )}
     </div>
+  );
+}
+
+function PatientGroupTable({
+  name,
+  color,
+  patients,
+  showDepartmentBadge = false,
+  isSearch = false,
+}: {
+  name: string;
+  color: string;
+  patients: Patient[];
+  showDepartmentBadge?: boolean;
+  isSearch?: boolean;
+}) {
+  return (
+    <section
+      className="overflow-hidden rounded-xl border bg-card shadow-sm"
+      style={{ borderColor: `color-mix(in oklab, ${color} 35%, transparent)` }}
+    >
+      <header
+        className="flex items-center justify-between gap-3 border-b px-4 py-3"
+        style={{
+          backgroundColor: `color-mix(in oklab, ${color} 10%, transparent)`,
+          borderColor: `color-mix(in oklab, ${color} 25%, transparent)`,
+        }}
+      >
+        <div className="flex items-center gap-3">
+          <span
+            aria-hidden
+            className="inline-block h-3 w-3 rounded-full"
+            style={{ backgroundColor: color }}
+          />
+          <h3
+            className="text-sm font-semibold tracking-tight"
+            style={{ color }}
+          >
+            {name}
+          </h3>
+        </div>
+        <span
+          className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium"
+          style={{
+            backgroundColor: `color-mix(in oklab, ${color} 18%, transparent)`,
+            color,
+          }}
+        >
+          <Users className="h-3 w-3" />
+          {patients.length} patient{patients.length !== 1 ? "s" : ""}
+        </span>
+      </header>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="border-b border-border/50 bg-muted/30">
+            <tr>
+              <th className="px-4 py-2.5 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                File #
+              </th>
+              <th className="px-4 py-2.5 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                Patient
+              </th>
+              <th className="px-4 py-2.5 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                National ID
+              </th>
+              {showDepartmentBadge && (
+                <th className="px-4 py-2.5 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                  Department
+                </th>
+              )}
+              <th className="px-4 py-2.5 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                Doctor
+              </th>
+              <th className="px-4 py-2.5 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                Phone
+              </th>
+              <th className="px-4 py-2.5 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                Blood
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {patients.map((p) => (
+              <PatientRow
+                key={p.id}
+                patient={p}
+                accentColor={color}
+                showDepartmentBadge={showDepartmentBadge}
+                highlight={isSearch}
+              />
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function PatientRow({
+  patient,
+  accentColor,
+  showDepartmentBadge,
+  highlight,
+}: {
+  patient: Patient;
+  accentColor: string;
+  showDepartmentBadge: boolean;
+  highlight: boolean;
+}) {
+  const router = useRouter();
+  const href = `/patients/${patient.id}`;
+  const dept = patient.departments;
+  const doc = patient.assigned_doctor;
+  const blood = patient.blood_type;
+
+  function go(e: React.MouseEvent<HTMLTableRowElement>) {
+    // Allow cmd/ctrl-click and middle-click to behave naturally.
+    if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.button === 1) return;
+    router.push(href);
+  }
+
+  return (
+    <tr
+      role="link"
+      tabIndex={0}
+      onClick={go}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          router.push(href);
+        }
+      }}
+      className={cn(
+        "cursor-pointer border-b border-border/30 transition-colors last:border-0",
+        "hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+        highlight && "bg-amber-50/40 dark:bg-amber-500/5",
+      )}
+    >
+      <td className="px-4 py-3">
+        <span className="font-mono text-xs text-muted-foreground">
+          {patient.file_number ?? "—"}
+        </span>
+      </td>
+      <td className="px-4 py-3">
+        <div className="flex items-center gap-2">
+          <span
+            aria-hidden
+            className="h-2 w-2 shrink-0 rounded-full ring-2 ring-background"
+            style={{ backgroundColor: accentColor }}
+          />
+          <span className="font-medium text-foreground">
+            {patient.full_name}
+          </span>
+        </div>
+      </td>
+      <td className="px-4 py-3">
+        <span className="font-mono text-xs text-muted-foreground">
+          {patient.national_id ?? "—"}
+        </span>
+      </td>
+      {showDepartmentBadge && (
+        <td className="px-4 py-3">
+          {dept ? (
+            <Badge
+              variant="outline"
+              className="gap-1.5 font-normal"
+              style={{
+                borderColor: `color-mix(in oklab, ${dept.color} 45%, transparent)`,
+                backgroundColor: `color-mix(in oklab, ${dept.color} 10%, transparent)`,
+                color: dept.color,
+              }}
+            >
+              {dept.name}
+            </Badge>
+          ) : (
+            <span className="text-muted-foreground/40">—</span>
+          )}
+        </td>
+      )}
+      <td className="px-4 py-3">
+        {doc ? (
+          <span className="text-xs text-muted-foreground">
+            Dr. {doc.full_name}
+          </span>
+        ) : (
+          <span className="text-muted-foreground/40">—</span>
+        )}
+      </td>
+      <td className="px-4 py-3">
+        <span className="text-muted-foreground">{patient.phone ?? "—"}</span>
+      </td>
+      <td className="px-4 py-3">
+        {blood ? (
+          <Badge variant="secondary" className="font-mono text-xs">
+            {blood}
+          </Badge>
+        ) : (
+          <span className="text-muted-foreground/40">—</span>
+        )}
+      </td>
+    </tr>
   );
 }

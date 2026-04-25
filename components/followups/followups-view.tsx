@@ -553,10 +553,22 @@ export function FollowupsView({
                         className="hover:bg-muted/20 transition-colors"
                       >
                         <td className="px-4 py-3">
-                          <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
-                            <CheckCircle2 className="h-3 w-3" />
-                            Completed
-                          </span>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
+                              <CheckCircle2 className="h-3 w-3" />
+                              Completed
+                            </span>
+                            <span
+                              className={cn(
+                                "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-medium",
+                                d.notes
+                                  ? "border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-400"
+                                  : "border-border/60 bg-muted/40 text-muted-foreground",
+                              )}
+                            >
+                              {d.notes ? "Note taken" : "No note"}
+                            </span>
+                          </div>
                         </td>
                         <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
                           {fmtDateTime(d.recorded_at)}

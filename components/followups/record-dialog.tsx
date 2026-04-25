@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AlertCircle, CheckCircle2, Loader2, PhoneOff } from "lucide-react";
 import {
@@ -58,6 +58,16 @@ export function RecordFollowupDialog({ row, open, onOpenChange }: Props) {
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [notes, setNotes] = useState("");
   const [state, formAction, isPending] = useActionState(recordFollowup, null);
+  // Track which `state` object we've already shown a toast for. Without this,
+  // any parent re-render (e.g. the live search updating the URL) recreates
+  // `onOpenChange` and re-fires the success effect, spamming the toast.
+  const handledStateRef = useRef<typeof state>(null);
+  // Stable ref for the parent close callback so the success effect doesn't
+  // depend on its identity.
+  const onOpenChangeRef = useRef(onOpenChange);
+  useEffect(() => {
+    onOpenChangeRef.current = onOpenChange;
+  }, [onOpenChange]);
 
   useEffect(() => {
     if (open) return;
@@ -69,13 +79,15 @@ export function RecordFollowupDialog({ row, open, onOpenChange }: Props) {
 
   useEffect(() => {
     if (!state) return;
+    if (handledStateRef.current === state) return;
+    handledStateRef.current = state;
     if (state.error) {
       toast.error(state.error);
     } else {
       toast.success("Follow-up recorded.");
-      queueMicrotask(() => onOpenChange(false));
+      queueMicrotask(() => onOpenChangeRef.current(false));
     }
-  }, [state, onOpenChange]);
+  }, [state]);
 
   if (!row) return null;
 

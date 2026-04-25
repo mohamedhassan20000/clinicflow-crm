@@ -206,7 +206,11 @@ export async function cancelAppointment(id: string): Promise<ActionResult> {
 export interface BillingContext {
   patientName: string;
   hasInsurance: boolean;
+  insuranceProviderName: string | null;
   accountBalance: number;
+  departmentId: string | null;
+  departmentName: string | null;
+  departmentColor: string | null;
   services: { id: string; name: string; price: number; department_id: string }[];
 }
 
@@ -224,7 +228,7 @@ export async function getBillingContext(
   const { data: appt, error: apptError } = await supabase
     .from("appointments")
     .select(
-      "id, patient_id, department_id, insurance_provider_id, patients(full_name)",
+      "id, patient_id, department_id, insurance_provider_id, patients(full_name), departments(name, color), insurance_providers(name)",
     )
     .eq("id", appointmentId)
     .eq("clinic_id", user.clinicId)
@@ -273,7 +277,11 @@ export async function getBillingContext(
     data: {
       patientName: appt.patients?.full_name ?? "",
       hasInsurance: Boolean(appt.insurance_provider_id),
+      insuranceProviderName: appt.insurance_providers?.name ?? null,
       accountBalance: balance,
+      departmentId: appt.department_id,
+      departmentName: appt.departments?.name ?? null,
+      departmentColor: appt.departments?.color ?? null,
       services,
     },
   };

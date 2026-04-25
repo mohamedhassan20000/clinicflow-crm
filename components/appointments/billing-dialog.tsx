@@ -89,6 +89,11 @@ interface BillingDialogProps {
   /** Patient's available account balance (un-spent deposits) */
   accountBalance: number;
   patientName?: string;
+  /** True while the billing context is being fetched from the server */
+  loadingContext?: boolean;
+  insuranceProviderName?: string | null;
+  departmentName?: string | null;
+  departmentColor?: string | null;
 }
 
 function fmtTRY(n: number) {
@@ -116,6 +121,10 @@ export function BillingDialog({
   services,
   accountBalance,
   patientName,
+  loadingContext,
+  insuranceProviderName,
+  departmentName,
+  departmentColor,
 }: BillingDialogProps) {
   const [lines, setLines] = useState<DraftLine[]>([]);
   const [pickerValue, setPickerValue] = useState<string>("");
@@ -266,9 +275,41 @@ export function BillingDialog({
             Add the services performed, then record how the patient paid.
             {patientName ? ` Patient: ${patientName}.` : ""}
           </DialogDescription>
+          {(departmentName || patientName) && (
+            <div className="flex flex-wrap items-center gap-2 pt-2">
+              {departmentName && (
+                <span
+                  className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-muted/50 px-2.5 py-1 text-[11px] font-medium"
+                  title="Department"
+                >
+                  <span
+                    className="h-2 w-2 rounded-full"
+                    style={{ backgroundColor: departmentColor ?? "#0891B2" }}
+                    aria-hidden
+                  />
+                  {departmentName}
+                </span>
+              )}
+              {insuranceProviderName && (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-500/30 bg-sky-500/10 px-2.5 py-1 text-[11px] font-medium text-sky-700 dark:text-sky-300">
+                  <ShieldCheck className="h-3 w-3" />
+                  {insuranceProviderName}
+                </span>
+              )}
+            </div>
+          )}
         </DialogHeader>
 
-        <div className="space-y-5 py-1">
+        {loadingContext && (
+          <div className="flex items-center justify-center gap-2 py-12 text-xs text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading invoice details…
+          </div>
+        )}
+
+        <div
+          className={cn("space-y-5 py-1", loadingContext && "hidden")}
+        >
           {/* Summary strip */}
           <div className="grid grid-cols-3 gap-2 rounded-lg border border-border/60 bg-muted/30 p-3 text-center">
             <div>
@@ -554,7 +595,9 @@ export function BillingDialog({
           {hasInsurance && (
             <div className="space-y-1.5 rounded-lg border border-sky-500/30 bg-sky-500/5 p-3">
               <Label htmlFor="bill-insurance" className="text-xs">
-                Covered by insurance (₺)
+                {insuranceProviderName
+                  ? `Covered by ${insuranceProviderName} (₺)`
+                  : "Covered by insurance (₺)"}
               </Label>
               <Input
                 id="bill-insurance"

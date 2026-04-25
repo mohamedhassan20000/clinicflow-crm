@@ -70,7 +70,9 @@ export const depositSchema = z.object({
 export type DepositValues = z.infer<typeof depositSchema>;
 
 export const STATUS_TRANSITIONS: Record<string, string[]> = {
-  pending: ["confirmed", "cancelled"],
+  // Allow direct pending → completed so reception can charge a walk-in or a
+  // same-day booking without first clicking Confirm.
+  pending: ["confirmed", "completed", "cancelled"],
   confirmed: ["completed", "cancelled", "no_show"],
   completed: [],
   cancelled: [],

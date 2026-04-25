@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -10,7 +9,6 @@ import {
   updateAppointmentStatus,
   type BillingContext,
 } from "@/actions/appointments";
-import { STATUS_TRANSITIONS } from "@/lib/validations/appointment";
 import type { Database } from "@/types/database";
 import {
   BillingDialog,
@@ -19,27 +17,7 @@ import {
 
 type Status = Database["public"]["Enums"]["appointment_status"];
 
-const STATUS_LABELS: Record<string, string> = {
-  confirmed: "Confirm",
-  completed: "Complete",
-  cancelled: "Cancel",
-  no_show: "No-show",
-};
-
-const STATUS_VARIANTS: Record<
-  string,
-  "default" | "outline" | "destructive" | "secondary"
-> = {
-  confirmed: "default",
-  completed: "default",
-  cancelled: "outline",
-  no_show: "outline",
-};
-
-const STATUS_CLASSES: Record<string, string> = {
-  completed:
-    "bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600 shadow-sm",
-};
+const TERMINAL: Status[] = ["completed", "cancelled", "no_show"];
 
 export function AppointmentActions({
   appointmentId,
@@ -47,17 +25,20 @@ export function AppointmentActions({
 }: {
   appointmentId: string;
   currentStatus: Status;
-  /** @deprecated kept for back-compat — context is loaded from the server now */
+  /** @deprecated kept for back-compat */
   hasInsurance?: boolean;
 }) {
-  const [isPending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
   const [billingOpen, setBillingOpen] = useState(false);
   const [optimisticStatus, setOptimisticStatus] = useState<Status | null>(null);
   const [ctx, setCtx] = useState<BillingContext | null>(null);
   const [loadingCtx, setLoadingCtx] = useState(false);
-  const effectiveStatus = optimisticStatus ?? currentStatus;
-  const allowed = STATUS_TRANSITIONS[effectiveStatus] ?? [];
+  const [isCompleting, setIsCompleting] = useState(false);
 
+  const effectiveStatus = optimisticStatus ?? currentStatus;
+  const isTerminal = TERMINAL.includes(effectiveStatus);
+
+  // Lazy-load services + balance the moment the dialog opens.
   useEffect(() => {
     if (!billingOpen || ctx || loadingCtx) return;
     let cancelled = false;
@@ -83,10 +64,11 @@ export function AppointmentActions({
     };
   }, [billingOpen, appointmentId, ctx, loadingCtx]);
 
-  if (allowed.length === 0) return null;
+  if (isTerminal) return null;
 
-  function runStatus(newStatus: string) {
-    setOptimisticStatus(newStatus as Status);
+  function runStatus(newStatus: Status) {
+    // Optimistic UI flip — button disappears immediately, no spinner.
+    setOptimisticStatus(newStatus);
     startTransition(async () => {
       const result = await updateAppointmentStatus(appointmentId, newStatus);
       if (result.error) {
@@ -99,14 +81,18 @@ export function AppointmentActions({
   }
 
   function runComplete(payload: BillingPayload) {
+    setIsCompleting(true);
+    setOptimisticStatus("completed");
     startTransition(async () => {
       const result = await updateAppointmentStatus(
         appointmentId,
         "completed",
         payload,
       );
+      setIsCompleting(false);
       if (result.error) {
         toast.error(result.error);
+        setOptimisticStatus(null);
       } else {
         toast.success("Appointment completed & charged.");
         setBillingOpen(false);
@@ -115,33 +101,58 @@ export function AppointmentActions({
     });
   }
 
-  function handleClick(newStatus: string) {
-    if (newStatus === "completed") {
-      setBillingOpen(true);
-      return;
-    }
-    runStatus(newStatus);
-  }
+  const showConfirm = effectiveStatus === "pending";
+  // Complete is always offered for non-terminal appointments — past, today,
+  // future. Server allows pending → completed and confirmed → completed.
+  const showComplete = !isTerminal;
+  const showCancel = effectiveStatus !== "cancelled";
+  const showNoShow = effectiveStatus === "confirmed";
 
   return (
     <>
       <div className="flex flex-wrap items-center gap-1">
-        {allowed.map((s) => (
+        {showConfirm && (
           <Button
-            key={s}
             size="sm"
-            variant={STATUS_VARIANTS[s] ?? "outline"}
+            variant="default"
+            className="h-6 px-2 text-[10px] font-semibold"
+            onClick={() => runStatus("confirmed")}
+          >
+            Confirm
+          </Button>
+        )}
+        {showComplete && (
+          <Button
+            size="sm"
+            variant="default"
             className={cn(
               "h-6 px-2 text-[10px] font-semibold",
-              STATUS_CLASSES[s],
+              "bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600 shadow-sm",
             )}
-            onClick={() => handleClick(s)}
+            onClick={() => setBillingOpen(true)}
           >
-            {STATUS_LABELS[s] ?? s}
+            Complete
           </Button>
-        ))}
-        {isPending && !billingOpen && (
-          <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+        )}
+        {showNoShow && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-6 px-2 text-[10px] font-semibold"
+            onClick={() => runStatus("no_show")}
+          >
+            No-show
+          </Button>
+        )}
+        {showCancel && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-6 px-2 text-[10px] font-semibold"
+            onClick={() => runStatus("cancelled")}
+          >
+            Cancel
+          </Button>
         )}
       </div>
 
@@ -152,11 +163,15 @@ export function AppointmentActions({
           if (!o) setCtx(null);
         }}
         onConfirm={runComplete}
-        isPending={isPending || loadingCtx}
+        isPending={isCompleting || loadingCtx}
+        loadingContext={loadingCtx && !ctx}
         hasInsurance={ctx?.hasInsurance ?? false}
+        insuranceProviderName={ctx?.insuranceProviderName ?? null}
         services={ctx?.services ?? []}
         accountBalance={ctx?.accountBalance ?? 0}
         patientName={ctx?.patientName}
+        departmentName={ctx?.departmentName ?? null}
+        departmentColor={ctx?.departmentColor ?? null}
       />
     </>
   );

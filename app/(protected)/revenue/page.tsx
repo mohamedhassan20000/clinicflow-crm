@@ -5,7 +5,10 @@ import { ChevronLeft } from "lucide-react";
 import { requireUser } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
 import { RevenueReport } from "@/components/revenue/revenue-report";
-import { PrintButton } from "@/components/revenue/print-button";
+import {
+  PrintButton,
+  PrintSettlementsButton,
+} from "@/components/revenue/print-button";
 
 export const metadata: Metadata = { title: "Revenue transactions" };
 
@@ -138,7 +141,12 @@ export default async function RevenuePage({ searchParams }: PageProps) {
             Revenue &amp; Transactions
           </h1>
         </div>
-        <PrintButton />
+        <div className="flex items-center gap-2">
+          <PrintSettlementsButton
+            disabled={(settlements ?? []).length === 0}
+          />
+          <PrintButton />
+        </div>
       </div>
 
       <RevenueReport

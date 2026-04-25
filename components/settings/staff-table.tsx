@@ -46,9 +46,10 @@ import {
 import type { Tables } from "@/types/database";
 
 type StaffMember = Tables<"profiles"> & {
-  departments: { name: string } | null;
+  departments: { name: string; color?: string | null } | null;
 };
 type Department = Pick<Tables<"departments">, "id" | "name">;
+export type { StaffMember };
 
 const ROLE_LABELS: Record<string, string> = {
   admin: "Admin",

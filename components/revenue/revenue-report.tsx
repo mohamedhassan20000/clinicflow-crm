@@ -253,7 +253,10 @@ export function RevenueReport({
       </div>
 
       {/* Statement — printable */}
-      <div className="rounded-xl border border-border/50 bg-card print:border-none print:bg-transparent">
+      <div
+        data-print-hide-when-settlements
+        className="rounded-xl border border-border/50 bg-card print:border-none print:bg-transparent"
+      >
         {/* Letterhead — visible in print */}
         <div className="hidden print:block border-b border-border px-6 py-5">
           <div className="flex items-start justify-between gap-4">
@@ -413,66 +416,120 @@ export function RevenueReport({
           </table>
         </div>
 
-        {/* Settlement transactions — separate table for outstanding balance payments */}
-        {settlements.length > 0 && (
-          <div className="border-t border-border/50">
-            <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-3 bg-amber-500/5">
+        {/* Print footer */}
+        <div className="hidden print:block px-6 py-4 text-[10px] text-muted-foreground border-t border-border">
+          This statement reflects completed appointments recorded within the
+          specified period. Outstanding balances remain due and are not
+          included in gross collected.
+        </div>
+      </div>
+
+      {/* Settlement payments — separate card below the main statement */}
+      {settlements.length > 0 && (
+        <div
+          data-print-section="settlements"
+          className="rounded-xl border border-amber-500/30 bg-card print:border-none print:bg-transparent"
+        >
+          {/* Letterhead — visible only when printing */}
+          <div className="hidden print:block border-b border-border px-6 py-5">
+            <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-[10px] font-medium uppercase tracking-widest text-amber-700 dark:text-amber-400">
+                <p className="text-xs uppercase tracking-widest text-muted-foreground">
                   Settlement payments
                 </p>
-                <p className="text-xs text-muted-foreground">
-                  Payments recorded against previously outstanding balances
+                <h1 className="mt-1 text-xl font-semibold tracking-tight">
+                  {clinicName}
+                </h1>
+                {clinicAddress && (
+                  <p className="text-xs text-muted-foreground">
+                    {clinicAddress}
+                  </p>
+                )}
+                {clinicPhone && (
+                  <p className="text-xs text-muted-foreground">{clinicPhone}</p>
+                )}
+              </div>
+              <div className="text-right text-xs text-muted-foreground">
+                <p>Generated {fmtDateTime(new Date().toISOString())}</p>
+                <p className="mt-0.5">
+                  {presetLabel(preset)} · {fmtDate(range.start)} →{" "}
+                  {fmtDate(range.end)}
                 </p>
               </div>
-              <div className="text-sm">
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-3 bg-amber-500/5 border-b border-border/50">
+            <div>
+              <p className="text-[10px] font-medium uppercase tracking-widest text-amber-700 dark:text-amber-400">
+                Settlement payments
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Payments recorded against previously outstanding balances
+              </p>
+            </div>
+            <div className="flex items-center gap-4 text-sm">
+              <span className="text-muted-foreground">
+                {settlements.length} payment
+                {settlements.length !== 1 ? "s" : ""}
+              </span>
+              <span>
                 <span className="text-muted-foreground">Total settled: </span>
                 <span className="font-semibold tabular-nums text-amber-700 dark:text-amber-400">
                   {fmtTRY(settlementsTotal)}
                 </span>
-              </div>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/40 text-[10px] uppercase tracking-wider text-muted-foreground">
-                  <tr>
-                    <th className="px-4 py-2.5 text-left font-medium">
-                      Settled at
-                    </th>
-                    <th className="px-4 py-2.5 text-left font-medium">
-                      Patient
-                    </th>
-                    <th className="px-4 py-2.5 text-left font-medium">
-                      Session details
-                    </th>
-                    <th className="px-4 py-2.5 text-left font-medium">
-                      Method
-                    </th>
-                    <th className="px-4 py-2.5 text-right font-medium">
-                      Amount paid
-                    </th>
-                    <th className="px-4 py-2.5 text-right font-medium">
-                      Remaining balance
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/40">
-                  {settlements.map((s) => (
-                    <SettlementTxnRow key={s.id} row={s} />
-                  ))}
-                </tbody>
-              </table>
+              </span>
             </div>
           </div>
-        )}
 
-        {/* Print footer */}
-        <div className="hidden print:block px-6 py-4 text-[10px] text-muted-foreground border-t border-border">
-          This statement reflects completed appointments and settlement
-          payments recorded within the specified period. Outstanding
-          balances remain due and are not included in gross collected.
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/40 text-[10px] uppercase tracking-wider text-muted-foreground">
+                <tr>
+                  <th className="px-4 py-2.5 text-left font-medium">
+                    Settled at
+                  </th>
+                  <th className="px-4 py-2.5 text-left font-medium">Patient</th>
+                  <th className="px-4 py-2.5 text-left font-medium">
+                    Session details
+                  </th>
+                  <th className="px-4 py-2.5 text-left font-medium">Method</th>
+                  <th className="px-4 py-2.5 text-right font-medium">
+                    Amount paid
+                  </th>
+                  <th className="px-4 py-2.5 text-right font-medium">
+                    Remaining balance
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/40">
+                {settlements.map((s) => (
+                  <SettlementTxnRow key={s.id} row={s} />
+                ))}
+              </tbody>
+              <tfoot className="bg-muted/30 font-semibold">
+                <tr>
+                  <td
+                    className="px-4 py-3 text-xs uppercase tracking-wider text-muted-foreground"
+                    colSpan={4}
+                  >
+                    Total settled
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums text-emerald-600 dark:text-emerald-400">
+                    {fmtTRY(settlementsTotal)}
+                  </td>
+                  <td className="px-4 py-3" />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <div className="hidden print:block px-6 py-4 text-[10px] text-muted-foreground border-t border-border">
+            Settlement payments are amounts collected against outstanding
+            balances from prior sessions.
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

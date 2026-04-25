@@ -279,4 +279,11 @@
   tr    { page-break-inside: avoid; page-break-after: auto; }
   thead { display: table-header-group; }
   tfoot { display: table-footer-group; }
+
+  /* "Print settlements only" mode — hides the main report and shows just
+     the settlements section. Toggled by adding `print-settlements-only`
+     to <body> immediately before window.print(). */
+  body.print-settlements-only [data-print-hide-when-settlements] {
+    display: none !important;
+  }
 }

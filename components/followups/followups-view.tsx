@@ -29,7 +29,14 @@ import {
 import { cn } from "@/lib/utils";
 import { RecordFollowupDialog } from "@/components/followups/record-dialog";
 
-type Scope = "day" | "week" | "month";
+type Scope = "day" | "yesterday" | "week" | "month";
+
+const SCOPE_OPTIONS: { value: Scope; label: string }[] = [
+  { value: "day", label: "Today" },
+  { value: "yesterday", label: "Yesterday" },
+  { value: "week", label: "Last week" },
+  { value: "month", label: "Last month" },
+];
 
 const UNASSIGNED_COLOR = "#94a3b8";
 const UNASSIGNED_KEY = "__unassigned__";
@@ -208,7 +215,7 @@ export function FollowupsView({
   }, [pending]);
 
   const periodLabel =
-    scope === "day"
+    scope === "day" || scope === "yesterday"
       ? fmtDate(range.start)
       : scope === "week"
         ? `${fmtDate(range.start)} → ${fmtDate(range.end)}`
@@ -248,7 +255,8 @@ export function FollowupsView({
       <div className="hidden print:block print:mb-4">
         <h1 className="text-xl font-semibold">Patient follow-ups</h1>
         <p className="text-xs text-muted-foreground">
-          {scope[0].toUpperCase() + scope.slice(1)} · {periodLabel}
+          {SCOPE_OPTIONS.find((o) => o.value === scope)?.label ?? scope} ·{" "}
+          {periodLabel}
           {activeDept && ` · Department: ${
             departments.find((d) => d.id === activeDept)?.name ?? "—"
           }`}
@@ -260,14 +268,14 @@ export function FollowupsView({
 
       {/* Period toggle — independent from the search/filter row below */}
       <div className="flex flex-wrap items-center gap-3 print:hidden">
-        <div className="inline-flex items-center gap-0.5 rounded-lg border border-border/60 bg-muted/40 p-0.5">
-          {(["day", "week", "month"] as const).map((s) => {
-            const active = scope === s;
+        <div className="inline-flex flex-wrap items-center gap-0.5 rounded-lg border border-border/60 bg-muted/40 p-0.5">
+          {SCOPE_OPTIONS.map(({ value, label }) => {
+            const active = scope === value;
             return (
               <button
-                key={s}
+                key={value}
                 type="button"
-                onClick={() => update({ scope: s })}
+                onClick={() => update({ scope: value })}
                 className={cn(
                   "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition",
                   active
@@ -276,7 +284,7 @@ export function FollowupsView({
                 )}
               >
                 <CalendarDays className="h-3.5 w-3.5" />
-                {s[0].toUpperCase() + s.slice(1)}
+                {label}
               </button>
             );
           })}

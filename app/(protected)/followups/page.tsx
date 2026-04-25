@@ -6,7 +6,7 @@ import { FollowupsView } from "@/components/followups/followups-view";
 
 export const metadata: Metadata = { title: "Follow-ups" };
 
-type Scope = "day" | "week" | "month";
+type Scope = "day" | "yesterday" | "week" | "month";
 
 interface PageProps {
   searchParams: Promise<{
@@ -34,18 +34,26 @@ function endOfDay(d: Date) {
 function resolveRange(scope: Scope, dateStr?: string) {
   const base = dateStr ? new Date(dateStr) : toIstanbul(new Date());
   if (scope === "day") return { start: startOfDay(base), end: endOfDay(base) };
-  if (scope === "week") {
-    const day = base.getDay();
-    const diff = day === 0 ? -6 : 1 - day;
-    const mon = new Date(base);
-    mon.setDate(mon.getDate() + diff);
-    const sun = new Date(mon);
-    sun.setDate(sun.getDate() + 6);
-    return { start: startOfDay(mon), end: endOfDay(sun) };
+  if (scope === "yesterday") {
+    const y = new Date(base);
+    y.setDate(y.getDate() - 1);
+    return { start: startOfDay(y), end: endOfDay(y) };
   }
-  // month
-  const first = new Date(base.getFullYear(), base.getMonth(), 1);
-  const last = new Date(base.getFullYear(), base.getMonth() + 1, 0);
+  if (scope === "week") {
+    // Last week: Mon..Sun of the calendar week immediately before this one.
+    const day = base.getDay();
+    const diffToThisMon = day === 0 ? -6 : 1 - day;
+    const thisMon = new Date(base);
+    thisMon.setDate(thisMon.getDate() + diffToThisMon);
+    const lastMon = new Date(thisMon);
+    lastMon.setDate(lastMon.getDate() - 7);
+    const lastSun = new Date(lastMon);
+    lastSun.setDate(lastSun.getDate() + 6);
+    return { start: startOfDay(lastMon), end: endOfDay(lastSun) };
+  }
+  // Last calendar month (the month before the base date's month).
+  const first = new Date(base.getFullYear(), base.getMonth() - 1, 1);
+  const last = new Date(base.getFullYear(), base.getMonth(), 0);
   return { start: startOfDay(first), end: endOfDay(last) };
 }
 

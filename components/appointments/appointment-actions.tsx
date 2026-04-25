@@ -79,6 +79,19 @@ export function AppointmentActions({
     // effect would cancel the in-flight fetch and leave the dialog stuck.
   }, [billingOpen, appointmentId, ctx]);
 
+  // When the billing dialog closes (whether via Cancel button, Esc, or
+  // outside-click), force-clear the lazy-load + in-flight flags so the next
+  // open starts from a clean slate. Without this, an aborted fetch can leave
+  // `loadingCtx=true` and the dialog reopens stuck on the loading spinner.
+  useEffect(() => {
+    if (billingOpen) return;
+    queueMicrotask(() => {
+      setCtx(null);
+      setLoadingCtx(false);
+      setIsCompleting(false);
+    });
+  }, [billingOpen]);
+
   if (isTerminal) return null;
 
   function runStatus(newStatus: Status) {
@@ -136,11 +149,11 @@ export function AppointmentActions({
     });
   }
 
+  // Pending appointments can only be Confirmed first — Complete / Cancel /
+  // No-show only appear once the appointment has been confirmed.
   const showConfirm = effectiveStatus === "pending";
-  // Complete is always offered for non-terminal appointments — past, today,
-  // future. Server allows pending → completed and confirmed → completed.
-  const showComplete = !isTerminal;
-  const showCancel = effectiveStatus !== "cancelled";
+  const showComplete = effectiveStatus === "confirmed";
+  const showCancel = effectiveStatus === "confirmed";
   const showNoShow = effectiveStatus === "confirmed";
 
   return (

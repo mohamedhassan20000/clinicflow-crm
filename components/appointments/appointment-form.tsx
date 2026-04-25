@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Check, ChevronsUpDown, Loader2, CalendarPlus } from "lucide-react";
@@ -43,7 +43,10 @@ import {
 import type { ActionResult } from "@/actions/appointments";
 import type { Tables } from "@/types/database";
 
-type Patient = Pick<Tables<"patients">, "id" | "full_name" | "phone">;
+type Patient = Pick<
+  Tables<"patients">,
+  "id" | "full_name" | "phone" | "department_id"
+>;
 type Doctor = Pick<Tables<"profiles">, "id" | "full_name" | "department_id">;
 type Department = Pick<Tables<"departments">, "id" | "name">;
 type InsuranceProvider = Pick<Tables<"insurance_providers">, "id" | "name">;
@@ -98,6 +101,20 @@ export function AppointmentForm({
       notes: null,
     },
   });
+
+  // When the page is opened with ?patient_id=… (e.g. "Book for this patient"
+  // from the patient file), preselect the patient's home department.
+  useEffect(() => {
+    if (!defaultPatientId) return;
+    const p = patients.find((x) => x.id === defaultPatientId);
+    if (!p?.department_id) return;
+    queueMicrotask(() => {
+      form.setValue("department_id", p.department_id);
+      setSelectedDept(p.department_id);
+    });
+    // Run once on mount; patients list is stable for the lifetime of the page.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const activeDept = selectedDept ?? form.getValues("department_id") ?? null;
   const filteredDoctors = activeDept
@@ -165,6 +182,18 @@ export function AppointmentForm({
                             onSelect={() => {
                               field.onChange(p.id);
                               setPatientOpen(false);
+                              // Auto-fill the appointment department from the
+                              // patient's home department, and reset the doctor
+                              // pick because the doctor list is dept-filtered.
+                              if (p.department_id) {
+                                form.setValue("department_id", p.department_id, {
+                                  shouldDirty: true,
+                                });
+                                setSelectedDept(p.department_id);
+                                form.setValue("doctor_id", "", {
+                                  shouldDirty: true,
+                                });
+                              }
                             }}
                           >
                             <Check

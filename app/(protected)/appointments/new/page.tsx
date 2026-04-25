@@ -21,7 +21,7 @@ export default async function NewAppointmentPage({ searchParams }: PageProps) {
     await Promise.all([
       supabase
         .from("patients")
-        .select("id, full_name, phone")
+        .select("id, full_name, phone, department_id")
         .eq("clinic_id", user.clinicId)
         .eq("is_deleted", false)
         .order("full_name"),

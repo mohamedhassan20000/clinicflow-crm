@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   ChevronLeft,
   CalendarDays,
@@ -147,6 +147,30 @@ export function FollowupsView({
   const [, startTransition] = useTransition();
   const [q, setQ] = useState(activeQuery);
   const [activeRow, setActiveRow] = useState<PendingRow | null>(null);
+  const initialQRef = useRef(activeQuery);
+
+  // Debounce live search input → push the URL change after 300ms of no typing.
+  useEffect(() => {
+    const trimmed = q.trim();
+    if (trimmed === activeQuery) return;
+    const handle = setTimeout(() => {
+      const p = new URLSearchParams(params?.toString() ?? "");
+      if (trimmed) p.set("q", trimmed);
+      else p.delete("q");
+      startTransition(() => router.push(`/followups?${p.toString()}`));
+    }, 300);
+    return () => clearTimeout(handle);
+    // intentionally exclude params/router/startTransition — only care about q + activeQuery
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q, activeQuery]);
+
+  // When the URL clears the query elsewhere (e.g. Clear filters), re-sync the input.
+  useEffect(() => {
+    if (activeQuery !== initialQRef.current) {
+      queueMicrotask(() => setQ(activeQuery));
+      initialQRef.current = activeQuery;
+    }
+  }, [activeQuery]);
 
   function update(next: Record<string, string | null>) {
     const p = new URLSearchParams(params?.toString() ?? "");
@@ -234,29 +258,44 @@ export function FollowupsView({
         </p>
       </div>
 
-      {/* Filter bar */}
-      <div className="flex flex-wrap items-center gap-2 print:hidden">
-        <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-          <Filter className="h-3.5 w-3.5" />
-          View
-        </span>
-        <Select value={scope} onValueChange={(v) => update({ scope: v })}>
-          <SelectTrigger className="h-8 w-[110px] gap-1.5 text-xs">
-            <CalendarDays className="h-3.5 w-3.5" />
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="day">Day</SelectItem>
-            <SelectItem value="week">Week</SelectItem>
-            <SelectItem value="month">Month</SelectItem>
-          </SelectContent>
-        </Select>
+      {/* Period toggle — independent from the search/filter row below */}
+      <div className="flex flex-wrap items-center gap-3 print:hidden">
+        <div className="inline-flex items-center gap-0.5 rounded-lg border border-border/60 bg-muted/40 p-0.5">
+          {(["day", "week", "month"] as const).map((s) => {
+            const active = scope === s;
+            return (
+              <button
+                key={s}
+                type="button"
+                onClick={() => update({ scope: s })}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition",
+                  active
+                    ? "bg-card text-foreground shadow-sm ring-1 ring-border/60"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <CalendarDays className="h-3.5 w-3.5" />
+                {s[0].toUpperCase() + s.slice(1)}
+              </button>
+            );
+          })}
+        </div>
         <Input
           type="date"
           value={dateInput}
           onChange={(e) => update({ date: e.target.value || null })}
           className="h-8 w-[160px] text-xs"
         />
+        <span className="text-xs text-muted-foreground">{periodLabel}</span>
+      </div>
+
+      {/* Search + filter row — independent of the period toggle */}
+      <div className="flex flex-wrap items-center gap-2 print:hidden">
+        <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+          <Filter className="h-3.5 w-3.5" />
+          Filter
+        </span>
         <Select
           value={activeDept ?? ""}
           onValueChange={(v) => update({ dept: v || null })}
@@ -286,24 +325,15 @@ export function FollowupsView({
             ))}
           </SelectContent>
         </Select>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            update({ q: q.trim() || null });
-          }}
-          className="relative"
-        >
+        <div className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            onBlur={() => {
-              if (q.trim() !== activeQuery) update({ q: q.trim() || null });
-            }}
             placeholder="Name, phone, file # or national ID…"
             className="h-8 w-[260px] pl-7 text-xs"
           />
-        </form>
+        </div>
         {(activeDept || activeQuery) && (
           <Button
             variant="ghost"
@@ -315,9 +345,6 @@ export function FollowupsView({
             Clear
           </Button>
         )}
-        <span className="ml-auto text-xs text-muted-foreground">
-          {periodLabel}
-        </span>
       </div>
 
       {/* Summary strip */}
@@ -497,6 +524,9 @@ export function FollowupsView({
                 <thead className="border-b border-border/40 bg-muted/30 text-[10px] uppercase tracking-wider text-muted-foreground">
                   <tr>
                     <th className="px-4 py-2.5 text-left font-medium">
+                      Status
+                    </th>
+                    <th className="px-4 py-2.5 text-left font-medium">
                       Recorded
                     </th>
                     <th className="px-4 py-2.5 text-left font-medium">
@@ -522,6 +552,12 @@ export function FollowupsView({
                         key={d.id}
                         className="hover:bg-muted/20 transition-colors"
                       >
+                        <td className="px-4 py-3">
+                          <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
+                            <CheckCircle2 className="h-3 w-3" />
+                            Completed
+                          </span>
+                        </td>
                         <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
                           {fmtDateTime(d.recorded_at)}
                         </td>
@@ -571,7 +607,14 @@ export function FollowupsView({
                               &ldquo;{d.notes}&rdquo;
                             </span>
                           ) : (
-                            <span className="text-muted-foreground/60">—</span>
+                            <span className="italic text-muted-foreground/70">
+                              No additional notes
+                            </span>
+                          )}
+                          {d.recorded_by?.full_name && (
+                            <p className="mt-0.5 text-[10px] text-muted-foreground">
+                              by {d.recorded_by.full_name}
+                            </p>
                           )}
                         </td>
                       </tr>

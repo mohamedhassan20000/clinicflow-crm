@@ -45,7 +45,12 @@ import type { Tables } from "@/types/database";
 
 type Patient = Pick<
   Tables<"patients">,
-  "id" | "full_name" | "phone" | "department_id"
+  | "id"
+  | "full_name"
+  | "phone"
+  | "department_id"
+  | "national_id"
+  | "file_number"
 >;
 type Doctor = Pick<Tables<"profiles">, "id" | "full_name" | "department_id">;
 type Department = Pick<Tables<"departments">, "id" | "name">;
@@ -171,14 +176,14 @@ export function AppointmentForm({
                 </PopoverTrigger>
                 <PopoverContent className="w-[400px] p-0" align="start">
                   <Command>
-                    <CommandInput placeholder="Name or phone…" />
+                    <CommandInput placeholder="Name, phone, file # or national ID…" />
                     <CommandList>
                       <CommandEmpty>No patients found.</CommandEmpty>
                       <CommandGroup>
                         {patients.map((p) => (
                           <CommandItem
                             key={p.id}
-                            value={`${p.full_name} ${p.phone}`}
+                            value={`${p.full_name} ${p.phone} ${p.file_number ?? ""} ${p.national_id ?? ""}`}
                             onSelect={() => {
                               field.onChange(p.id);
                               setPatientOpen(false);
@@ -204,10 +209,20 @@ export function AppointmentForm({
                                   : "opacity-0",
                               )}
                             />
-                            <div>
+                            <div className="min-w-0">
                               <p className="font-medium">{p.full_name}</p>
                               <p className="text-xs text-muted-foreground">
                                 {p.phone}
+                                {p.file_number && (
+                                  <span className="ml-2 font-mono">
+                                    #{p.file_number}
+                                  </span>
+                                )}
+                                {p.national_id && (
+                                  <span className="ml-2 font-mono">
+                                    {p.national_id}
+                                  </span>
+                                )}
                               </p>
                             </div>
                           </CommandItem>

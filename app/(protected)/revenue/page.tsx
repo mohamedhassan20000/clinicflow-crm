@@ -5,6 +5,7 @@ import { ChevronLeft } from "lucide-react";
 import { requireUser } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
 import { RevenueReport } from "@/components/revenue/revenue-report";
+import { RevenueFilters } from "@/components/revenue/revenue-filters";
 import {
   PrintButton,
   PrintSettlementsButton,
@@ -81,6 +82,9 @@ interface PageProps {
     preset?: string;
     from?: string;
     to?: string;
+    dept?: string;
+    doctor?: string;
+    q?: string;
   }>;
 }
 
@@ -91,29 +95,84 @@ export default async function RevenuePage({ searchParams }: PageProps) {
   const sp = await searchParams;
   const preset = (sp.preset as PresetKey) ?? "this_month";
   const range = resolveRange(preset, sp.from, sp.to);
+  const filterDept = sp.dept?.trim() || null;
+  const filterDoctor = sp.doctor?.trim() || null;
+  const filterPatientQ = sp.q?.trim() || "";
 
   const supabase = await createClient();
 
-  const [{ data: rows }, { data: settlements }] = await Promise.all([
-    supabase
-      .from("appointments")
-      .select(
-        "id, scheduled_at, paid_at, total_amount, paid_amount, insurance_amount, secondary_amount, deposit_amount, outstanding_amount, payment_method, secondary_payment_method, payment_note, patients(full_name), profiles!doctor_id(full_name), departments(name, color), insurance_providers(name)",
-      )
+  // Resolve patient search → list of matching patient IDs (so we can scope
+  // appointments + settlements with a single .in() filter).
+  let patientIdFilter: string[] | null = null;
+  if (filterPatientQ) {
+    const { data: matches } = await supabase
+      .from("patients")
+      .select("id")
       .eq("clinic_id", user.clinicId)
-      .eq("status", "completed")
-      .gte("paid_at", range.start.toISOString())
-      .lte("paid_at", range.end.toISOString())
-      .order("paid_at", { ascending: false }),
-    supabase
-      .from("outstanding_settlements")
-      .select(
-        "id, settled_at, amount, payment_method, note, patient:patients(full_name), appointment:appointments(id, scheduled_at, total_amount, outstanding_amount, profiles!doctor_id(full_name), departments(name, color))",
+      .or(
+        `full_name.ilike.%${filterPatientQ}%,file_number.ilike.%${filterPatientQ}%,national_id.ilike.%${filterPatientQ}%`,
       )
+      .limit(500);
+    patientIdFilter = (matches ?? []).map((m) => m.id);
+    // No matching patients → force empty result instead of an unfiltered query.
+    if (patientIdFilter.length === 0) patientIdFilter = ["__none__"];
+  }
+
+  let rowsQuery = supabase
+    .from("appointments")
+    .select(
+      "id, scheduled_at, paid_at, total_amount, paid_amount, insurance_amount, secondary_amount, deposit_amount, outstanding_amount, payment_method, secondary_payment_method, payment_note, patients(full_name), profiles!doctor_id(full_name), departments(name, color), insurance_providers(name)",
+    )
+    .eq("clinic_id", user.clinicId)
+    .eq("status", "completed")
+    .gte("paid_at", range.start.toISOString())
+    .lte("paid_at", range.end.toISOString())
+    .order("paid_at", { ascending: false });
+
+  if (filterDept) rowsQuery = rowsQuery.eq("department_id", filterDept);
+  if (filterDoctor) rowsQuery = rowsQuery.eq("doctor_id", filterDoctor);
+  if (patientIdFilter) rowsQuery = rowsQuery.in("patient_id", patientIdFilter);
+
+  let settlementsQuery = supabase
+    .from("outstanding_settlements")
+    .select(
+      "id, appointment_id, settled_at, amount, payment_method, note, patient:patients(full_name), appointment:appointments(id, scheduled_at, department_id, total_amount, outstanding_amount, doctor_id, profiles!doctor_id(full_name), departments(name, color))",
+    )
+    .eq("clinic_id", user.clinicId)
+    .gte("settled_at", range.start.toISOString())
+    .lte("settled_at", range.end.toISOString())
+    .order("settled_at", { ascending: false });
+
+  if (patientIdFilter)
+    settlementsQuery = settlementsQuery.in("patient_id", patientIdFilter);
+
+  const [{ data: rows }, { data: settlementsRaw }] = await Promise.all([
+    rowsQuery,
+    settlementsQuery,
+  ]);
+
+  // Department / doctor filters must apply to the JOINED appointment, so do it
+  // in JS (PostgREST doesn't expose nested column filters on the foreign row).
+  const settlements = (settlementsRaw ?? []).filter((s) => {
+    if (filterDept && s.appointment?.department_id !== filterDept) return false;
+    if (filterDoctor && s.appointment?.doctor_id !== filterDoctor) return false;
+    return true;
+  });
+
+  const [{ data: departments }, { data: doctors }] = await Promise.all([
+    supabase
+      .from("departments")
+      .select("id, name, color")
       .eq("clinic_id", user.clinicId)
-      .gte("settled_at", range.start.toISOString())
-      .lte("settled_at", range.end.toISOString())
-      .order("settled_at", { ascending: false }),
+      .eq("is_active", true)
+      .order("name"),
+    supabase
+      .from("profiles")
+      .select("id, full_name")
+      .eq("clinic_id", user.clinicId)
+      .eq("role", "doctor")
+      .eq("is_active", true)
+      .order("full_name"),
   ]);
 
   const { data: clinic } = await supabase
@@ -147,6 +206,16 @@ export default async function RevenuePage({ searchParams }: PageProps) {
           />
           <PrintButton />
         </div>
+      </div>
+
+      <div className="print:hidden">
+        <RevenueFilters
+          departments={departments ?? []}
+          doctors={doctors ?? []}
+          activeDept={filterDept}
+          activeDoctor={filterDoctor}
+          activePatientQuery={filterPatientQ}
+        />
       </div>
 
       <RevenueReport

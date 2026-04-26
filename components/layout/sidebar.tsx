@@ -98,13 +98,21 @@ export function Sidebar({ role, fullName, theme }: SidebarProps) {
       {/* Footer */}
       <div className="border-t border-border/50 p-3">
         <div className="flex items-center gap-2 mb-2 px-1">
-          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
-            {fullName.charAt(0).toUpperCase()}
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-medium">{fullName}</p>
-            <p className="text-[10px] capitalize text-muted-foreground">{role}</p>
-          </div>
+          <Link
+            href="/profile"
+            className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-1 transition-colors hover:bg-accent/5"
+            title="My profile"
+          >
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+              {fullName.charAt(0).toUpperCase()}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-medium">{fullName}</p>
+              <p className="text-[10px] capitalize text-muted-foreground">
+                {role}
+              </p>
+            </div>
+          </Link>
           <ThemeToggle currentTheme={theme} />
         </div>
         <form action={signOut}>

@@ -973,9 +973,14 @@ function DayPicker({
             key={d.toISOString()}
             type="button"
             onClick={() => onPickDay(fmtIsoDay(d))}
-            className="flex aspect-square items-center justify-center rounded-md border border-border/50 bg-card text-sm font-medium tabular-nums transition hover:border-primary/40 hover:bg-primary/5"
+            className="flex aspect-square flex-col items-center justify-center gap-0.5 rounded-md border border-border/50 bg-card text-sm font-medium tabular-nums transition hover:border-primary/40 hover:bg-primary/5"
           >
-            {d.getDate()}
+            <span className="text-base font-semibold leading-none">
+              {d.getDate()}
+            </span>
+            <span className="text-[10px] font-normal uppercase tracking-wider text-muted-foreground">
+              {d.toLocaleDateString("en-GB", { month: "short" })}
+            </span>
           </button>
         ))}
       </div>

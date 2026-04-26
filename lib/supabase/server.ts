@@ -9,10 +9,6 @@ export async function createClient() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
-      // Use the implicit flow for email-link auth so password-reset and
-      // magic-link emails don't depend on a PKCE verifier cookie that can be
-      // lost between deployment URLs (each Vercel preview is a new subdomain).
-      auth: { flowType: "implicit" },
       cookies: {
         getAll() {
           return cookieStore.getAll();

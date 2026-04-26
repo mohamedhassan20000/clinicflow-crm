@@ -7,11 +7,13 @@ import { createClient } from "@/lib/supabase/client";
 
 function safeNext(value: string | null): string {
   if (!value) return "/dashboard";
-  // Only allow same-site relative paths.
   if (!value.startsWith("/") || value.startsWith("//")) return "/dashboard";
   return value;
 }
 
+// This runner only handles the implicit/hash-fragment variant
+// (`#access_token=…&refresh_token=…`). PKCE `?code=` and token-hash
+// `?token_hash=` are handled server-side in app/auth/confirm/page.tsx.
 export function ConfirmRunner() {
   const router = useRouter();
   const params = useSearchParams();
@@ -24,60 +26,29 @@ export function ConfirmRunner() {
 
     async function go() {
       try {
-        // Variant 1 — PKCE code exchange.
-        const code = params.get("code");
-        if (code) {
-          const { error: e } = await supabase.auth.exchangeCodeForSession(code);
-          if (e) throw e;
-          if (!active) return;
-          router.replace(next);
-          return;
-        }
-
-        // Variant 2 — token_hash + type (email-template flow).
-        const tokenHash = params.get("token_hash");
-        const type = params.get("type");
-        if (tokenHash && type) {
-          const { error: e } = await supabase.auth.verifyOtp({
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            type: type as any,
-            token_hash: tokenHash,
-          });
-          if (e) throw e;
-          if (!active) return;
-          router.replace(next);
-          return;
-        }
-
-        // Variant 3 — implicit flow with tokens in the URL fragment.
         const hash = window.location.hash.startsWith("#")
           ? window.location.hash.slice(1)
           : "";
         const hashParams = new URLSearchParams(hash);
         const accessToken = hashParams.get("access_token");
         const refreshToken = hashParams.get("refresh_token");
-        if (accessToken && refreshToken) {
-          const { error: e } = await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken,
-          });
-          if (e) throw e;
-          if (!active) return;
-          router.replace(next);
-          return;
+
+        if (!accessToken || !refreshToken) {
+          throw new Error("Confirmation link is missing or invalid.");
         }
 
-        // Nothing usable in the URL.
-        throw new Error("Confirmation link is missing or invalid.");
+        const { error: e } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+        if (e) throw e;
+        if (!active) return;
+        router.replace(next);
       } catch (e) {
         if (!active) return;
         setError(
-          e instanceof Error
-            ? e.message
-            : "Reset link expired or invalid.",
+          e instanceof Error ? e.message : "Reset link expired or invalid.",
         );
-        // Bounce back to forgot-password after a short pause so the user can
-        // see the message.
         setTimeout(() => {
           if (active) router.replace("/forgot-password?expired=1");
         }, 1800);
@@ -85,11 +56,9 @@ export function ConfirmRunner() {
     }
 
     go();
-
     return () => {
       active = false;
     };
-    // Only run once on mount — params is captured at that point.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

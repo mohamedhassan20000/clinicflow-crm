@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthedUser } from "@/lib/rbac";
@@ -104,4 +105,90 @@ export async function changePassword(
 
   revalidatePath("/dashboard");
   redirect("/dashboard");
+}
+
+const forgotSchema = z.object({
+  email: z.string().email("Enter a valid email address."),
+});
+
+const resetSchema = z
+  .object({
+    password: z
+      .string()
+      .min(8, "Password must be at least 8 characters")
+      .regex(/[A-Z]/, "Must contain an uppercase letter")
+      .regex(/[0-9]/, "Must contain a number"),
+    confirmPassword: z.string(),
+  })
+  .refine((d) => d.password === d.confirmPassword, {
+    message: "Passwords do not match",
+    path: ["confirmPassword"],
+  });
+
+async function siteOrigin(): Promise<string> {
+  // Honour an explicit env when set (production); otherwise fall back to the
+  // request headers so this works on previews + localhost.
+  const envUrl = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "");
+  if (envUrl) return envUrl;
+  const h = await headers();
+  const proto = h.get("x-forwarded-proto") ?? "https";
+  const host = h.get("x-forwarded-host") ?? h.get("host");
+  if (!host) throw new Error("Cannot resolve site origin.");
+  return `${proto}://${host}`;
+}
+
+export async function requestPasswordReset(
+  _prev: AuthActionResult | null,
+  formData: FormData,
+): Promise<AuthActionResult> {
+  const parsed = forgotSchema.safeParse({ email: formData.get("email") });
+  if (!parsed.success) {
+    return { fieldErrors: parsed.error.flatten().fieldErrors };
+  }
+
+  const supabase = await createClient();
+  const origin = await siteOrigin();
+  const redirectTo = `${origin}/auth/confirm?next=/reset-password`;
+
+  // Always return ok regardless of whether the email exists, to prevent
+  // account enumeration. Supabase silently no-ops for unknown addresses.
+  await supabase.auth.resetPasswordForEmail(parsed.data.email, { redirectTo });
+
+  return { ok: true };
+}
+
+export async function setNewPassword(
+  _prev: AuthActionResult | null,
+  formData: FormData,
+): Promise<AuthActionResult> {
+  const raw = {
+    password: formData.get("password"),
+    confirmPassword: formData.get("confirmPassword"),
+  };
+  const parsed = resetSchema.safeParse(raw);
+  if (!parsed.success) {
+    return { fieldErrors: parsed.error.flatten().fieldErrors };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return {
+      error:
+        "Reset link expired or invalid. Request a new password reset email.",
+    };
+  }
+
+  const { error } = await supabase.auth.updateUser({
+    password: parsed.data.password,
+  });
+  if (error) {
+    return { error: "Failed to update password. Please try again." };
+  }
+
+  // Sign out so the user is forced to log back in with the new password.
+  await supabase.auth.signOut();
+  redirect("/login?reset=1");
 }

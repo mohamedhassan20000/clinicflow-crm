@@ -117,7 +117,7 @@ export function LoginForm() {
               <div className="flex items-center justify-between">
                 <FormLabel>Password</FormLabel>
                 <a
-                  href="#"
+                  href="/forgot-password"
                   className="text-xs font-medium text-primary transition-colors hover:text-primary/80 focus-visible:outline-none focus-visible:underline"
                   tabIndex={0}
                 >

@@ -15,7 +15,7 @@ import {
   Building2,
 } from "lucide-react";
 import type { ComponentType } from "react";
-import { useMemo, useTransition } from "react";
+import { useTransition } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -158,10 +158,6 @@ export function RevenueReport({
   const pageRaw = Number(searchParams?.get("page") ?? "1");
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const page = Math.min(Math.max(1, Number.isFinite(pageRaw) ? pageRaw : 1), totalPages);
-  const visibleRows = useMemo(
-    () => rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
-    [rows, page],
-  );
   function gotoPage(p: number) {
     const next = Math.min(Math.max(1, p), totalPages);
     const params = new URLSearchParams(searchParams?.toString() ?? "");
@@ -437,7 +433,14 @@ export function RevenueReport({
                   </td>
                 </tr>
               ) : (
-                visibleRows.map((r) => <TxnRow key={r.id} row={r} />)
+                // Render every row so print captures the full table; rows
+                // outside the current page are hidden on screen but become
+                // visible again under @media print.
+                rows.map((r, i) => {
+                  const onPage =
+                    i >= (page - 1) * PAGE_SIZE && i < page * PAGE_SIZE;
+                  return <TxnRow key={r.id} row={r} hidden={!onPage} />;
+                })
               )}
             </tbody>
             {rows.length > 0 && (
@@ -748,7 +751,7 @@ function SettlementTxnRow({ row }: { row: SettlementRow }) {
   );
 }
 
-function TxnRow({ row }: { row: RevenueRow }) {
+function TxnRow({ row, hidden }: { row: RevenueRow; hidden?: boolean }) {
   const primary = row.payment_method ? METHOD_META[row.payment_method] : null;
   const secondary = row.secondary_payment_method
     ? METHOD_META[row.secondary_payment_method]
@@ -756,7 +759,12 @@ function TxnRow({ row }: { row: RevenueRow }) {
   const deptColor = row.departments?.color ?? "#64748b";
 
   return (
-    <tr className="hover:bg-muted/30 transition-colors">
+    <tr
+      className={cn(
+        "hover:bg-muted/30 transition-colors",
+        hidden && "hidden print:table-row",
+      )}
+    >
       <td className="px-4 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
         {row.paid_at ? fmtDateTime(row.paid_at) : "—"}
       </td>

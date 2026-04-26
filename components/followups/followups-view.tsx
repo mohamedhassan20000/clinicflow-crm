@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   ChevronLeft,
+  ChevronRight,
   CalendarDays,
   CheckCircle2,
   Filter,
@@ -160,6 +161,27 @@ export function FollowupsView({
   const [activeRow, setActiveRow] = useState<PendingRow | null>(null);
   const initialQRef = useRef(activeQuery);
 
+  // Per-table pagination: each Awaiting group + the Completed table keeps its
+  // own page index in local state. Reset to 1 whenever filters change.
+  const PAGE_SIZE = 10;
+  const [pendingPages, setPendingPages] = useState<Record<string, number>>({});
+  const [donePage, setDonePage] = useState(1);
+  const filtersKey = `${scope}|${dateInput}|${activeDept ?? ""}|${activeOutcome ?? ""}|${activeQuery}`;
+  useEffect(() => {
+    queueMicrotask(() => {
+      setPendingPages({});
+      setDonePage(1);
+    });
+  }, [filtersKey]);
+  function pendingPageFor(key: string) {
+    return pendingPages[key] ?? 1;
+  }
+  function setPendingPage(key: string, n: number) {
+    setPendingPages((prev) => ({ ...prev, [key]: Math.max(1, n) }));
+  }
+  const doneTotalPages = Math.max(1, Math.ceil(done.length / PAGE_SIZE));
+  const safeDonePage = Math.min(donePage, doneTotalPages);
+
   // Debounce live search input → push the URL change after 300ms of no typing.
   useEffect(() => {
     const trimmed = q.trim();
@@ -312,6 +334,16 @@ export function FollowupsView({
         )}
         <span className="text-xs text-muted-foreground">{periodLabel}</span>
       </div>
+
+      {/* Day picker — visible when scope is "week" (strip) or "month"
+          (calendar grid). Clicking a day drills into that day's follow-ups. */}
+      {(scope === "week" || scope === "month") && (
+        <DayPicker
+          scope={scope}
+          range={range}
+          onPickDay={(d) => update({ scope: "day", date: d })}
+        />
+      )}
 
       {/* Search + filter row — independent of the period toggle */}
       <div className="flex flex-wrap items-center gap-2 print:hidden">
@@ -467,10 +499,18 @@ export function FollowupsView({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border/30">
-                        {g.rows.map((a) => (
+                        {g.rows.map((a, i) => {
+                          const groupKey = g.dept?.id ?? UNASSIGNED_KEY;
+                          const gp = pendingPageFor(groupKey);
+                          const onPage =
+                            i >= (gp - 1) * PAGE_SIZE && i < gp * PAGE_SIZE;
+                          return (
                           <tr
                             key={a.id}
-                            className="hover:bg-muted/20 transition-colors"
+                            className={cn(
+                              "hover:bg-muted/20 transition-colors",
+                              !onPage && "hidden print:table-row",
+                            )}
                           >
                             <td className="px-4 py-3 text-xs whitespace-nowrap">
                               {fmtDate(a.scheduled_at)}
@@ -514,10 +554,68 @@ export function FollowupsView({
                               </Button>
                             </td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
+                  {(() => {
+                    const groupKey = g.dept?.id ?? UNASSIGNED_KEY;
+                    const totalPages = Math.max(
+                      1,
+                      Math.ceil(g.rows.length / PAGE_SIZE),
+                    );
+                    if (totalPages <= 1) return null;
+                    const gp = Math.min(pendingPageFor(groupKey), totalPages);
+                    const start = (gp - 1) * PAGE_SIZE + 1;
+                    const end = Math.min(gp * PAGE_SIZE, g.rows.length);
+                    return (
+                      <div className="flex items-center justify-between border-t border-border/40 bg-card px-4 py-2.5 text-xs text-muted-foreground print:hidden">
+                        <span>
+                          Showing{" "}
+                          <span className="font-medium text-foreground tabular-nums">
+                            {start}–{end}
+                          </span>{" "}
+                          of{" "}
+                          <span className="font-medium text-foreground tabular-nums">
+                            {g.rows.length}
+                          </span>
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 w-7 p-0"
+                            disabled={gp <= 1}
+                            onClick={() => setPendingPage(groupKey, gp - 1)}
+                            aria-label="Previous page"
+                          >
+                            <ChevronLeft className="h-3.5 w-3.5" />
+                          </Button>
+                          <span className="tabular-nums">
+                            Page{" "}
+                            <span className="font-medium text-foreground">
+                              {gp}
+                            </span>{" "}
+                            of{" "}
+                            <span className="font-medium text-foreground">
+                              {totalPages}
+                            </span>
+                          </span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 w-7 p-0"
+                            disabled={gp >= totalPages}
+                            onClick={() => setPendingPage(groupKey, gp + 1)}
+                            aria-label="Next page"
+                          >
+                            <ChevronRight className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </section>
               );
             })}
@@ -615,7 +713,10 @@ export function FollowupsView({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/30">
-                  {done.map((d) => {
+                  {done.map((d, i) => {
+                    const onPage =
+                      i >= (safeDonePage - 1) * PAGE_SIZE &&
+                      i < safeDonePage * PAGE_SIZE;
                     const meta = OUTCOME_META[d.outcome];
                     const Icon = meta.icon;
                     const deptColor =
@@ -623,7 +724,10 @@ export function FollowupsView({
                     return (
                       <tr
                         key={d.id}
-                        className="hover:bg-muted/20 transition-colors"
+                        className={cn(
+                          "hover:bg-muted/20 transition-colors",
+                          !onPage && "hidden print:table-row",
+                        )}
                       >
                         <td className="px-4 py-3">
                           <div className="flex flex-wrap items-center gap-1.5">
@@ -709,6 +813,53 @@ export function FollowupsView({
               </table>
             </div>
           )}
+          {doneTotalPages > 1 && (
+            <div className="flex items-center justify-between border-t border-border/40 bg-card px-4 py-2.5 text-xs text-muted-foreground print:hidden">
+              <span>
+                Showing{" "}
+                <span className="font-medium text-foreground tabular-nums">
+                  {(safeDonePage - 1) * PAGE_SIZE + 1}–
+                  {Math.min(safeDonePage * PAGE_SIZE, done.length)}
+                </span>{" "}
+                of{" "}
+                <span className="font-medium text-foreground tabular-nums">
+                  {done.length}
+                </span>
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                  disabled={safeDonePage <= 1}
+                  onClick={() => setDonePage(safeDonePage - 1)}
+                  aria-label="Previous page"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </Button>
+                <span className="tabular-nums">
+                  Page{" "}
+                  <span className="font-medium text-foreground">
+                    {safeDonePage}
+                  </span>{" "}
+                  of{" "}
+                  <span className="font-medium text-foreground">
+                    {doneTotalPages}
+                  </span>
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                  disabled={safeDonePage >= doneTotalPages}
+                  onClick={() => setDonePage(safeDonePage + 1)}
+                  aria-label="Next page"
+                >
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       </section>
 
@@ -740,6 +891,94 @@ function SummaryCell({
       <p className={cn("mt-1 text-lg font-semibold tabular-nums", accent)}>
         {value}
       </p>
+    </div>
+  );
+}
+
+function fmtIsoDay(d: Date): string {
+  // Returns YYYY-MM-DD in the local browser TZ. The page resolves date strings
+  // with the same convention so this stays consistent.
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function DayPicker({
+  scope,
+  range,
+  onPickDay,
+}: {
+  scope: Scope;
+  range: { start: string; end: string };
+  onPickDay: (isoDay: string) => void;
+}) {
+  const start = new Date(range.start);
+  const end = new Date(range.end);
+  const days: Date[] = [];
+  const cursor = new Date(start);
+  cursor.setHours(0, 0, 0, 0);
+  while (cursor <= end) {
+    days.push(new Date(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  if (scope === "week") {
+    return (
+      <div className="grid grid-cols-7 gap-1.5 print:hidden">
+        {days.map((d) => (
+          <button
+            key={d.toISOString()}
+            type="button"
+            onClick={() => onPickDay(fmtIsoDay(d))}
+            className="flex flex-col items-center gap-0.5 rounded-lg border border-border/60 bg-card px-2 py-2.5 text-xs transition hover:border-primary/40 hover:bg-primary/5"
+          >
+            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+              {d.toLocaleDateString("en-GB", { weekday: "short" })}
+            </span>
+            <span className="text-base font-semibold tabular-nums">
+              {d.getDate()}
+            </span>
+            <span className="text-[10px] text-muted-foreground">
+              {d.toLocaleDateString("en-GB", { month: "short" })}
+            </span>
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  // scope === "month" → render a calendar grid with weekday headers.
+  // Pad the first row with empty cells so the 1st falls under its weekday.
+  // We use Mon-first layout to match the rest of the app.
+  const first = days[0];
+  if (!first) return null;
+  const firstDow = first.getDay(); // 0 = Sun, 1 = Mon, ..., 6 = Sat
+  const monFirstOffset = (firstDow + 6) % 7; // 0 if Mon, 6 if Sun
+  const weekdayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+  return (
+    <div className="space-y-1.5 print:hidden">
+      <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+        {weekdayLabels.map((w) => (
+          <div key={w}>{w}</div>
+        ))}
+      </div>
+      <div className="grid grid-cols-7 gap-1">
+        {Array.from({ length: monFirstOffset }, (_, i) => (
+          <div key={`pad-${i}`} aria-hidden />
+        ))}
+        {days.map((d) => (
+          <button
+            key={d.toISOString()}
+            type="button"
+            onClick={() => onPickDay(fmtIsoDay(d))}
+            className="flex aspect-square items-center justify-center rounded-md border border-border/50 bg-card text-sm font-medium tabular-nums transition hover:border-primary/40 hover:bg-primary/5"
+          >
+            {d.getDate()}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

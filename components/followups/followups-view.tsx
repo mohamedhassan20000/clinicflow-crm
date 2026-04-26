@@ -243,13 +243,7 @@ export function FollowupsView({
   const periodLabel =
     scope === "day" || scope === "yesterday"
       ? fmtDate(range.start)
-      : scope === "week"
-        ? `${fmtDate(range.start)} → ${fmtDate(range.end)}`
-        : new Date(range.start).toLocaleDateString("en-GB", {
-            timeZone: "Europe/Istanbul",
-            month: "long",
-            year: "numeric",
-          });
+      : `${fmtDate(range.start)} → ${fmtDate(range.end)}`;
 
   return (
     <div className="space-y-6">

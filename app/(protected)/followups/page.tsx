@@ -52,10 +52,13 @@ function resolveRange(scope: Scope, dateStr?: string) {
     lastSun.setDate(lastSun.getDate() + 6);
     return { start: startOfDay(lastMon), end: endOfDay(lastSun) };
   }
-  // Last calendar month (the month before the base date's month).
-  const first = new Date(base.getFullYear(), base.getMonth() - 1, 1);
-  const last = new Date(base.getFullYear(), base.getMonth(), 0);
-  return { start: startOfDay(first), end: endOfDay(last) };
+  // Rolling 30-day window: the 30 days *before* today (so today itself is
+  // excluded). End of yesterday → start of the 30th day prior.
+  const yesterday = new Date(base);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const start30 = new Date(yesterday);
+  start30.setDate(start30.getDate() - 29);
+  return { start: startOfDay(start30), end: endOfDay(yesterday) };
 }
 
 export default async function FollowupsPage({ searchParams }: PageProps) {

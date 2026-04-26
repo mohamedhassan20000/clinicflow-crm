@@ -165,12 +165,12 @@ export function FollowupsView({
   // own page index in local state. Reset to 1 whenever filters change.
   const PAGE_SIZE = 10;
   const [pendingPages, setPendingPages] = useState<Record<string, number>>({});
-  const [donePage, setDonePage] = useState(1);
+  const [donePages, setDonePages] = useState<Record<string, number>>({});
   const filtersKey = `${scope}|${dateInput}|${activeDept ?? ""}|${activeOutcome ?? ""}|${activeQuery}`;
   useEffect(() => {
     queueMicrotask(() => {
       setPendingPages({});
-      setDonePage(1);
+      setDonePages({});
     });
   }, [filtersKey]);
   function pendingPageFor(key: string) {
@@ -179,8 +179,12 @@ export function FollowupsView({
   function setPendingPage(key: string, n: number) {
     setPendingPages((prev) => ({ ...prev, [key]: Math.max(1, n) }));
   }
-  const doneTotalPages = Math.max(1, Math.ceil(done.length / PAGE_SIZE));
-  const safeDonePage = Math.min(donePage, doneTotalPages);
+  function donePageFor(key: string) {
+    return donePages[key] ?? 1;
+  }
+  function setDonePage(key: string, n: number) {
+    setDonePages((prev) => ({ ...prev, [key]: Math.max(1, n) }));
+  }
 
   // Debounce live search input → push the URL change after 300ms of no typing.
   useEffect(() => {
@@ -239,6 +243,23 @@ export function FollowupsView({
       return a.dept.name.localeCompare(b.dept.name);
     });
   }, [pending]);
+
+  // Group done (Completed follow-ups) by department too — pulls from the
+  // joined appointment row.
+  const doneGroups = useMemo(() => {
+    const map = new Map<string, { dept: Department | null; rows: DoneRow[] }>();
+    for (const d of done) {
+      const dept = d.appointment?.departments ?? null;
+      const key = dept?.id ?? UNASSIGNED_KEY;
+      if (!map.has(key)) map.set(key, { dept, rows: [] });
+      map.get(key)!.rows.push(d);
+    }
+    return Array.from(map.values()).sort((a, b) => {
+      if (!a.dept) return 1;
+      if (!b.dept) return -1;
+      return a.dept.name.localeCompare(b.dept.name);
+    });
+  }, [done]);
 
   const periodLabel =
     scope === "day" || scope === "yesterday"
@@ -678,183 +699,219 @@ export function FollowupsView({
           })}
         </div>
 
-        <div className="overflow-hidden rounded-xl border border-border/50 bg-card">
-          {done.length === 0 ? (
-            <div className="px-4 py-10 text-center text-sm text-muted-foreground">
-              No follow-ups recorded in this period yet.
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="border-b border-border/40 bg-muted/30 text-[10px] uppercase tracking-wider text-muted-foreground">
-                  <tr>
-                    <th className="px-4 py-2.5 text-left font-medium">
-                      Status
-                    </th>
-                    <th className="px-4 py-2.5 text-left font-medium">
-                      Recorded
-                    </th>
-                    <th className="px-4 py-2.5 text-left font-medium">
-                      Patient
-                    </th>
-                    <th className="px-4 py-2.5 text-left font-medium">
-                      Department &amp; Doctor
-                    </th>
-                    <th className="px-4 py-2.5 text-left font-medium">
-                      Outcome
-                    </th>
-                    <th className="px-4 py-2.5 text-left font-medium">Notes</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/30">
-                  {done.map((d, i) => {
-                    const onPage =
-                      i >= (safeDonePage - 1) * PAGE_SIZE &&
-                      i < safeDonePage * PAGE_SIZE;
-                    const meta = OUTCOME_META[d.outcome];
-                    const Icon = meta.icon;
-                    const deptColor =
-                      d.appointment?.departments?.color ?? UNASSIGNED_COLOR;
-                    return (
-                      <tr
-                        key={d.id}
-                        className={cn(
-                          "hover:bg-muted/20 transition-colors",
-                          !onPage && "hidden print:table-row",
-                        )}
+        {doneGroups.length === 0 ? (
+          <div className="rounded-xl border border-border/50 bg-card px-4 py-10 text-center text-sm text-muted-foreground">
+            No follow-ups recorded in this period yet.
+          </div>
+        ) : (
+          <div className="space-y-5">
+            {doneGroups.map((g) => {
+              const color = g.dept?.color ?? UNASSIGNED_COLOR;
+              const name = g.dept?.name ?? "Unassigned";
+              const groupKey = `done-${g.dept?.id ?? UNASSIGNED_KEY}`;
+              const totalPages = Math.max(
+                1,
+                Math.ceil(g.rows.length / PAGE_SIZE),
+              );
+              const gp = Math.min(donePageFor(groupKey), totalPages);
+              return (
+                <section
+                  key={groupKey}
+                  className="overflow-hidden rounded-xl border bg-card shadow-sm"
+                  style={{
+                    borderColor: `color-mix(in oklab, ${color} 35%, transparent)`,
+                  }}
+                >
+                  <header
+                    className="flex items-center justify-between gap-3 border-b px-4 py-3"
+                    style={{
+                      backgroundColor: `color-mix(in oklab, ${color} 10%, transparent)`,
+                      borderColor: `color-mix(in oklab, ${color} 25%, transparent)`,
+                    }}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span
+                        aria-hidden
+                        className="inline-block h-3 w-3 rounded-full"
+                        style={{ backgroundColor: color }}
+                      />
+                      <h3
+                        className="text-sm font-semibold tracking-tight"
+                        style={{ color }}
                       >
-                        <td className="px-4 py-3">
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
-                              <CheckCircle2 className="h-3 w-3" />
-                              Completed
-                            </span>
-                            <span
+                        {name}
+                      </h3>
+                    </div>
+                    <span className="text-[11px] font-medium" style={{ color }}>
+                      {g.rows.length} record{g.rows.length !== 1 ? "s" : ""}
+                    </span>
+                  </header>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="border-b border-border/40 bg-muted/30 text-[10px] uppercase tracking-wider text-muted-foreground">
+                        <tr>
+                          <th className="px-4 py-2.5 text-left font-medium">
+                            Status
+                          </th>
+                          <th className="px-4 py-2.5 text-left font-medium">
+                            Recorded
+                          </th>
+                          <th className="px-4 py-2.5 text-left font-medium">
+                            Patient
+                          </th>
+                          <th className="px-4 py-2.5 text-left font-medium">
+                            Doctor
+                          </th>
+                          <th className="px-4 py-2.5 text-left font-medium">
+                            Outcome
+                          </th>
+                          <th className="px-4 py-2.5 text-left font-medium">
+                            Notes
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/30">
+                        {g.rows.map((d, i) => {
+                          const onPage =
+                            i >= (gp - 1) * PAGE_SIZE && i < gp * PAGE_SIZE;
+                          const meta = OUTCOME_META[d.outcome];
+                          const Icon = meta.icon;
+                          return (
+                            <tr
+                              key={d.id}
                               className={cn(
-                                "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-medium",
-                                d.notes
-                                  ? "border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-400"
-                                  : "border-border/60 bg-muted/40 text-muted-foreground",
+                                "hover:bg-muted/20 transition-colors",
+                                !onPage && "hidden print:table-row",
                               )}
                             >
-                              {d.notes ? "Note taken" : "No note"}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
-                          {fmtDateTime(d.recorded_at)}
-                        </td>
-                        <td className="px-4 py-3 font-medium">
-                          <Link
-                            href={`/patients/${d.patient_id}`}
-                            className="hover:underline"
-                          >
-                            {d.patients?.full_name ?? "—"}
-                          </Link>
-                          <p className="font-mono text-[10px] text-muted-foreground">
-                            {d.patients?.file_number ?? "—"}
-                          </p>
-                        </td>
-                        <td className="px-4 py-3 text-xs">
-                          {d.appointment?.departments?.name && (
-                            <span
-                              className="mr-2 inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
-                              style={{
-                                backgroundColor: `color-mix(in oklab, ${deptColor} 14%, transparent)`,
-                                color: deptColor,
-                              }}
-                            >
-                              {d.appointment.departments.name}
-                            </span>
-                          )}
-                          {d.appointment?.profiles?.full_name && (
-                            <span className="text-muted-foreground">
-                              Dr. {d.appointment.profiles.full_name}
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span
-                            className={cn(
-                              "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium",
-                              meta.className,
-                            )}
-                          >
-                            <Icon className="h-3 w-3" />
-                            {meta.label}
+                              <td className="px-4 py-3">
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
+                                    <CheckCircle2 className="h-3 w-3" />
+                                    Completed
+                                  </span>
+                                  <span
+                                    className={cn(
+                                      "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-medium",
+                                      d.notes
+                                        ? "border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-400"
+                                        : "border-border/60 bg-muted/40 text-muted-foreground",
+                                    )}
+                                  >
+                                    {d.notes ? "Note taken" : "No note"}
+                                  </span>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
+                                {fmtDateTime(d.recorded_at)}
+                              </td>
+                              <td className="px-4 py-3 font-medium">
+                                <Link
+                                  href={`/patients/${d.patient_id}`}
+                                  className="hover:underline"
+                                >
+                                  {d.patients?.full_name ?? "—"}
+                                </Link>
+                                <p className="font-mono text-[10px] text-muted-foreground">
+                                  {d.patients?.file_number ?? "—"}
+                                </p>
+                              </td>
+                              <td className="px-4 py-3 text-xs">
+                                {d.appointment?.profiles?.full_name ? (
+                                  <span className="text-muted-foreground">
+                                    Dr. {d.appointment.profiles.full_name}
+                                  </span>
+                                ) : (
+                                  <span className="text-muted-foreground/40">
+                                    —
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3">
+                                <span
+                                  className={cn(
+                                    "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium",
+                                    meta.className,
+                                  )}
+                                >
+                                  <Icon className="h-3 w-3" />
+                                  {meta.label}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-xs">
+                                {d.notes ? (
+                                  <span className="text-foreground">
+                                    &ldquo;{d.notes}&rdquo;
+                                  </span>
+                                ) : (
+                                  <span className="italic text-muted-foreground/70">
+                                    No additional notes
+                                  </span>
+                                )}
+                                {d.recorded_by?.full_name && (
+                                  <p className="mt-0.5 text-[10px] text-muted-foreground">
+                                    by {d.recorded_by.full_name}
+                                  </p>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-between border-t border-border/40 bg-card px-4 py-2.5 text-xs text-muted-foreground print:hidden">
+                      <span>
+                        Showing{" "}
+                        <span className="font-medium text-foreground tabular-nums">
+                          {(gp - 1) * PAGE_SIZE + 1}–
+                          {Math.min(gp * PAGE_SIZE, g.rows.length)}
+                        </span>{" "}
+                        of{" "}
+                        <span className="font-medium text-foreground tabular-nums">
+                          {g.rows.length}
+                        </span>
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 w-7 p-0"
+                          disabled={gp <= 1}
+                          onClick={() => setDonePage(groupKey, gp - 1)}
+                          aria-label="Previous page"
+                        >
+                          <ChevronLeft className="h-3.5 w-3.5" />
+                        </Button>
+                        <span className="tabular-nums">
+                          Page{" "}
+                          <span className="font-medium text-foreground">
+                            {gp}
+                          </span>{" "}
+                          of{" "}
+                          <span className="font-medium text-foreground">
+                            {totalPages}
                           </span>
-                        </td>
-                        <td className="px-4 py-3 text-xs">
-                          {d.notes ? (
-                            <span className="text-foreground">
-                              &ldquo;{d.notes}&rdquo;
-                            </span>
-                          ) : (
-                            <span className="italic text-muted-foreground/70">
-                              No additional notes
-                            </span>
-                          )}
-                          {d.recorded_by?.full_name && (
-                            <p className="mt-0.5 text-[10px] text-muted-foreground">
-                              by {d.recorded_by.full_name}
-                            </p>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-          {doneTotalPages > 1 && (
-            <div className="flex items-center justify-between border-t border-border/40 bg-card px-4 py-2.5 text-xs text-muted-foreground print:hidden">
-              <span>
-                Showing{" "}
-                <span className="font-medium text-foreground tabular-nums">
-                  {(safeDonePage - 1) * PAGE_SIZE + 1}–
-                  {Math.min(safeDonePage * PAGE_SIZE, done.length)}
-                </span>{" "}
-                of{" "}
-                <span className="font-medium text-foreground tabular-nums">
-                  {done.length}
-                </span>
-              </span>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 w-7 p-0"
-                  disabled={safeDonePage <= 1}
-                  onClick={() => setDonePage(safeDonePage - 1)}
-                  aria-label="Previous page"
-                >
-                  <ChevronLeft className="h-3.5 w-3.5" />
-                </Button>
-                <span className="tabular-nums">
-                  Page{" "}
-                  <span className="font-medium text-foreground">
-                    {safeDonePage}
-                  </span>{" "}
-                  of{" "}
-                  <span className="font-medium text-foreground">
-                    {doneTotalPages}
-                  </span>
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 w-7 p-0"
-                  disabled={safeDonePage >= doneTotalPages}
-                  onClick={() => setDonePage(safeDonePage + 1)}
-                  aria-label="Next page"
-                >
-                  <ChevronRight className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 w-7 p-0"
+                          disabled={gp >= totalPages}
+                          onClick={() => setDonePage(groupKey, gp + 1)}
+                          aria-label="Next page"
+                        >
+                          <ChevronRight className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </section>
+              );
+            })}
+          </div>
+        )}
       </section>
 
       <RecordFollowupDialog

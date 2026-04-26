@@ -89,6 +89,8 @@ export interface DoneRow {
   } | null;
 }
 
+type OutcomeFilter = "all_fine" | "has_problem" | "no_response" | null;
+
 interface Props {
   pending: PendingRow[];
   done: DoneRow[];
@@ -96,6 +98,7 @@ interface Props {
   scope: Scope;
   dateInput: string;
   activeDept: string | null;
+  activeOutcome: OutcomeFilter;
   activeQuery: string;
   range: { start: string; end: string };
 }
@@ -146,6 +149,7 @@ export function FollowupsView({
   scope,
   dateInput,
   activeDept,
+  activeOutcome,
   activeQuery,
   range,
 }: Props) {
@@ -523,13 +527,63 @@ export function FollowupsView({
 
       {/* Completed follow-ups */}
       <section className="space-y-3">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
             Completed follow-ups
           </h2>
           <span className="text-xs text-muted-foreground">
             {done.length} record{done.length !== 1 ? "s" : ""}
           </span>
+        </div>
+
+        <div className="inline-flex flex-wrap items-center gap-0.5 rounded-lg border border-border/60 bg-muted/40 p-0.5 print:hidden">
+          {(
+            [
+              { value: null, label: "All", count: done.length },
+              {
+                value: "has_problem" as const,
+                label: "Reported a problem",
+                count: done.filter((d) => d.outcome === "has_problem").length,
+              },
+              {
+                value: "all_fine" as const,
+                label: "All fine",
+                count: done.filter((d) => d.outcome === "all_fine").length,
+              },
+              {
+                value: "no_response" as const,
+                label: "No response",
+                count: done.filter((d) => d.outcome === "no_response").length,
+              },
+            ] as const
+          ).map(({ value, label, count }) => {
+            const active = activeOutcome === value;
+            return (
+              <button
+                key={String(value)}
+                type="button"
+                onClick={() => update({ outcome: value })}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition",
+                  active
+                    ? "bg-card text-foreground shadow-sm ring-1 ring-border/60"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {label}
+                <span
+                  className={cn(
+                    "inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px]",
+                    active
+                      ? "bg-primary/15 text-primary"
+                      : "bg-muted text-muted-foreground",
+                  )}
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
         </div>
 
         <div className="overflow-hidden rounded-xl border border-border/50 bg-card">

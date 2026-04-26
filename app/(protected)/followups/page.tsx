@@ -14,6 +14,7 @@ interface PageProps {
     date?: string;
     q?: string;
     dept?: string;
+    outcome?: string;
   }>;
 }
 
@@ -67,6 +68,11 @@ export default async function FollowupsPage({ searchParams }: PageProps) {
   const range = resolveRange(scope, dateStr);
   const q = sp.q?.trim() ?? "";
   const filterDept = sp.dept?.trim() || null;
+  const filterOutcome = (() => {
+    const v = sp.outcome?.trim();
+    if (v === "all_fine" || v === "has_problem" || v === "no_response") return v;
+    return null;
+  })();
 
   const supabase = await createClient();
 
@@ -134,11 +140,28 @@ export default async function FollowupsPage({ searchParams }: PageProps) {
     (a) => !a.follow_ups || a.follow_ups.length === 0,
   );
 
-  // Department filter for done rows must also apply to the joined appointment.
-  const doneFiltered = (done ?? []).filter((d) => {
-    if (filterDept && d.appointment?.department_id !== filterDept) return false;
-    return true;
-  });
+  // Department + outcome filters apply on the JS side (the dept filter must
+  // walk the joined appointment).
+  const OUTCOME_RANK: Record<string, number> = {
+    has_problem: 0,
+    all_fine: 1,
+    no_response: 2,
+  };
+  const doneFiltered = (done ?? [])
+    .filter((d) => {
+      if (filterDept && d.appointment?.department_id !== filterDept) return false;
+      if (filterOutcome && d.outcome !== filterOutcome) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      // Surface "Reported a problem" first so reception can address them.
+      const da = OUTCOME_RANK[a.outcome] ?? 99;
+      const db = OUTCOME_RANK[b.outcome] ?? 99;
+      if (da !== db) return da - db;
+      return (
+        new Date(b.recorded_at).getTime() - new Date(a.recorded_at).getTime()
+      );
+    });
 
   return (
     <FollowupsView
@@ -150,6 +173,7 @@ export default async function FollowupsPage({ searchParams }: PageProps) {
       scope={scope}
       dateInput={dateStr || ""}
       activeDept={filterDept}
+      activeOutcome={filterOutcome}
       activeQuery={q}
       range={{
         start: range.start.toISOString(),

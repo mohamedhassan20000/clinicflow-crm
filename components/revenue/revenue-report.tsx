@@ -3,6 +3,8 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Banknote,
+  ChevronLeft,
+  ChevronRight,
   CreditCard,
   Landmark,
   ShieldCheck,
@@ -13,6 +15,7 @@ import {
   Building2,
 } from "lucide-react";
 import type { ComponentType } from "react";
+import { useMemo, useTransition } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -139,6 +142,7 @@ export function RevenueReport({
 }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [, startTransition] = useTransition();
 
   function updateParams(next: Record<string, string | null>) {
     const params = new URLSearchParams(searchParams?.toString() ?? "");
@@ -147,6 +151,23 @@ export function RevenueReport({
       else params.set(k, v);
     }
     router.push(`/revenue?${params.toString()}`);
+  }
+
+  // ── pagination ────────────────────────────────────────────────────────
+  const PAGE_SIZE = 10;
+  const pageRaw = Number(searchParams?.get("page") ?? "1");
+  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const page = Math.min(Math.max(1, Number.isFinite(pageRaw) ? pageRaw : 1), totalPages);
+  const visibleRows = useMemo(
+    () => rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [rows, page],
+  );
+  function gotoPage(p: number) {
+    const next = Math.min(Math.max(1, p), totalPages);
+    const params = new URLSearchParams(searchParams?.toString() ?? "");
+    if (next === 1) params.delete("page");
+    else params.set("page", String(next));
+    startTransition(() => router.push(`/revenue?${params.toString()}`));
   }
 
   // ── totals ────────────────────────────────────────────────────────────
@@ -416,7 +437,7 @@ export function RevenueReport({
                   </td>
                 </tr>
               ) : (
-                rows.map((r) => <TxnRow key={r.id} row={r} />)
+                visibleRows.map((r) => <TxnRow key={r.id} row={r} />)
               )}
             </tbody>
             {rows.length > 0 && (
@@ -448,6 +469,50 @@ export function RevenueReport({
             )}
           </table>
         </div>
+
+        {/* Pagination — appears when there are more than one page of rows */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between border-t border-border/50 bg-card px-4 py-3 text-xs text-muted-foreground print:hidden">
+            <span>
+              Showing{" "}
+              <span className="font-medium text-foreground tabular-nums">
+                {(page - 1) * PAGE_SIZE + 1}–
+                {Math.min(page * PAGE_SIZE, rows.length)}
+              </span>{" "}
+              of{" "}
+              <span className="font-medium text-foreground tabular-nums">
+                {rows.length}
+              </span>{" "}
+              transactions
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 w-8 p-0"
+                onClick={() => gotoPage(page - 1)}
+                disabled={page <= 1}
+                aria-label="Previous page"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <span className="tabular-nums">
+                Page <span className="font-medium text-foreground">{page}</span>{" "}
+                of <span className="font-medium text-foreground">{totalPages}</span>
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 w-8 p-0"
+                onClick={() => gotoPage(page + 1)}
+                disabled={page >= totalPages}
+                aria-label="Next page"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
 
         {/* Print footer */}
         <div className="hidden print:block px-6 py-4 text-[10px] text-muted-foreground border-t border-border">

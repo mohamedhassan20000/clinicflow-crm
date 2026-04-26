@@ -149,11 +149,12 @@ export function AppointmentActions({
     });
   }
 
-  // Pending appointments can only be Confirmed first — Complete / Cancel /
-  // No-show only appear once the appointment has been confirmed.
+  // Pending → Confirm + Cancel (so reception can cancel without confirming).
+  // Confirmed → Complete + Cancel + No-show.
   const showConfirm = effectiveStatus === "pending";
   const showComplete = effectiveStatus === "confirmed";
-  const showCancel = effectiveStatus === "confirmed";
+  const showCancel =
+    effectiveStatus === "confirmed" || effectiveStatus === "pending";
   const showNoShow = effectiveStatus === "confirmed";
 
   return (

@@ -38,6 +38,12 @@ function buildNav(role: string): NavEntry[] {
       { href: "/followups", label: "Follow-ups", icon: PhoneCall },
     );
   }
+  if (role === "doctor") {
+    items.push(
+      { href: "/patients", label: "Patients", icon: Users },
+      { href: "/followups", label: "Follow-ups", icon: PhoneCall },
+    );
+  }
   if (role === "admin" || role === "manager") {
     items.push({ href: "/revenue", label: "Revenue", icon: Wallet });
   }

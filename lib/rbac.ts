@@ -10,6 +10,7 @@ export type AuthedUser = {
   role: UserRole;
   fullName: string;
   clinicId: string;
+  departmentId: string | null;
   mustChangePassword: boolean;
 };
 
@@ -20,7 +21,7 @@ export async function getAuthedUser(): Promise<AuthedUser | null> {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role, full_name, clinic_id, must_change_password")
+    .select("role, full_name, clinic_id, department_id, must_change_password")
     .eq("id", user.id)
     .single();
 
@@ -32,6 +33,7 @@ export async function getAuthedUser(): Promise<AuthedUser | null> {
     role: profile.role as UserRole,
     fullName: profile.full_name,
     clinicId: profile.clinic_id,
+    departmentId: profile.department_id ?? null,
     mustChangePassword: profile.must_change_password,
   };
 }

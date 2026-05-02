@@ -167,7 +167,7 @@ export async function addMedicalNote(
   _prev: ActionResult | null,
   formData: FormData,
 ): Promise<ActionResult> {
-  const user = await requireRole("admin");
+  const user = await requireRole(["admin", "doctor"]);
 
   const raw = {
     patient_id: formData.get("patient_id"),

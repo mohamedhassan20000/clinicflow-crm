@@ -102,6 +102,7 @@ interface Props {
   activeOutcome: OutcomeFilter;
   activeQuery: string;
   range: { start: string; end: string };
+  readOnly?: boolean;
 }
 
 const OUTCOME_META = {
@@ -153,6 +154,7 @@ export function FollowupsView({
   activeOutcome,
   activeQuery,
   range,
+  readOnly = false,
 }: Props) {
   const router = useRouter();
   const params = useSearchParams();
@@ -559,14 +561,16 @@ export function FollowupsView({
                               </span>
                             </td>
                             <td className="px-4 py-3 text-right print:hidden">
-                              <Button
-                                size="sm"
-                                variant="default"
-                                className="h-7 px-2 text-[11px]"
-                                onClick={() => setActiveRow(a)}
-                              >
-                                Record follow-up
-                              </Button>
+                              {!readOnly && (
+                                <Button
+                                  size="sm"
+                                  variant="default"
+                                  className="h-7 px-2 text-[11px]"
+                                  onClick={() => setActiveRow(a)}
+                                >
+                                  Record follow-up
+                                </Button>
+                              )}
                             </td>
                           </tr>
                           );
@@ -914,13 +918,15 @@ export function FollowupsView({
         )}
       </section>
 
-      <RecordFollowupDialog
-        row={activeRow}
-        open={!!activeRow}
-        onOpenChange={(o) => {
-          if (!o) setActiveRow(null);
-        }}
-      />
+      {!readOnly && (
+        <RecordFollowupDialog
+          row={activeRow}
+          open={!!activeRow}
+          onOpenChange={(o) => {
+            if (!o) setActiveRow(null);
+          }}
+        />
+      )}
     </div>
   );
 }

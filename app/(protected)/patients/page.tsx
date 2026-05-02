@@ -19,6 +19,8 @@ interface PageProps {
 
 export default async function PatientsPage({ searchParams }: PageProps) {
   const user = await requireUser();
+  const isDoctor = user.role === "doctor";
+
   const { q = "", page: pageStr = "1", dept, doctor } = await searchParams;
   const page = Math.max(1, parseInt(pageStr, 10) || 1);
   const from = (page - 1) * PAGE_SIZE;
@@ -42,8 +44,14 @@ export default async function PatientsPage({ searchParams }: PageProps) {
       `full_name.ilike.%${term}%,phone.ilike.%${term}%,file_number.ilike.%${term}%,national_id.ilike.%${term}%`,
     );
   }
-  if (dept) query = query.eq("department_id", dept);
-  if (doctor) query = query.eq("assigned_doctor_id", doctor);
+
+  // Doctors are always scoped to their own department
+  if (isDoctor && user.departmentId) {
+    query = query.eq("department_id", user.departmentId);
+  } else {
+    if (dept) query = query.eq("department_id", dept);
+    if (doctor) query = query.eq("assigned_doctor_id", doctor);
+  }
 
   const [{ data: patients, count }, { data: departments }, { data: doctors }] =
     await Promise.all([
@@ -54,17 +62,21 @@ export default async function PatientsPage({ searchParams }: PageProps) {
         .eq("clinic_id", user.clinicId)
         .eq("is_active", true)
         .order("name"),
-      supabase
-        .from("profiles")
-        .select("id, full_name")
-        .eq("clinic_id", user.clinicId)
-        .eq("role", "doctor")
-        .eq("is_active", true)
-        .order("full_name"),
+      isDoctor
+        ? Promise.resolve({ data: [] })
+        : supabase
+            .from("profiles")
+            .select("id, full_name")
+            .eq("clinic_id", user.clinicId)
+            .eq("role", "doctor")
+            .eq("is_active", true)
+            .order("full_name"),
     ]);
 
-  const activeDept = departments?.find((d) => d.id === dept) ?? null;
-  const activeDoctor = doctors?.find((d) => d.id === doctor) ?? null;
+  const activeDept = departments?.find((d) =>
+    isDoctor ? d.id === user.departmentId : d.id === dept,
+  ) ?? null;
+  const activeDoctor = isDoctor ? null : (doctors?.find((d) => d.id === doctor) ?? null);
 
   return (
     <div className="space-y-6">
@@ -72,19 +84,22 @@ export default async function PatientsPage({ searchParams }: PageProps) {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Patients</h1>
           <p className="text-sm text-muted-foreground">
-            {count ?? 0} patient{count !== 1 ? "s" : ""} in your clinic
-            {activeDept && ` · Department: ${activeDept.name}`}
-            {activeDoctor && ` · Doctor: Dr. ${activeDoctor.full_name}`}.
+            {count ?? 0} patient{count !== 1 ? "s" : ""}
+            {isDoctor ? " in your department" : " in your clinic"}
+            {activeDept && ` · ${activeDept.name}`}
+            {activeDoctor && ` · Dr. ${activeDoctor.full_name}`}.
           </p>
         </div>
       </div>
 
-      <div className="print:hidden">
-        <PatientsFilterBar
-          doctors={doctors ?? []}
-          departments={departments ?? []}
-        />
-      </div>
+      {!isDoctor && (
+        <div className="print:hidden">
+          <PatientsFilterBar
+            doctors={doctors ?? []}
+            departments={departments ?? []}
+          />
+        </div>
+      )}
 
       {/* Print-only header */}
       <div className="hidden print:block print:mb-4">
@@ -108,7 +123,7 @@ export default async function PatientsPage({ searchParams }: PageProps) {
         total={count ?? 0}
         page={page}
         pageSize={PAGE_SIZE}
-        canCreate={user.role !== "manager"}
+        canCreate={!isDoctor && user.role !== "manager"}
       />
     </div>
   );

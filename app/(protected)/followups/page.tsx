@@ -61,12 +61,15 @@ export default async function FollowupsPage({ searchParams }: PageProps) {
   const user = await requireUser();
   if (user.role === "manager") redirect("/dashboard");
 
+  const isDoctor = user.role === "doctor";
+
   const sp = await searchParams;
   const scope = ((sp.scope as Scope) ?? "day") as Scope;
   const dateStr = sp.date ?? "";
   const range = resolveRange(scope, dateStr);
   const q = sp.q?.trim() ?? "";
-  const filterDept = sp.dept?.trim() || null;
+  // Doctors are always scoped to their own department
+  const filterDept = isDoctor ? (user.departmentId ?? null) : (sp.dept?.trim() || null);
   const filterOutcome = (() => {
     const v = sp.outcome?.trim();
     if (v === "all_fine" || v === "has_problem" || v === "no_response") return v;
@@ -178,6 +181,7 @@ export default async function FollowupsPage({ searchParams }: PageProps) {
         start: range.start.toISOString(),
         end: range.end.toISOString(),
       }}
+      readOnly={isDoctor}
     />
   );
 }

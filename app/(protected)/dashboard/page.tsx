@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { AdminDashboard } from "@/components/dashboard/admin-dashboard";
 import { ReceptionistDashboard } from "@/components/dashboard/receptionist-dashboard";
 import { ManagerDashboard } from "@/components/dashboard/manager-dashboard";
+import { DoctorDashboard } from "@/components/dashboard/doctor-dashboard";
+import { fetchDoctorDashboardStats } from "@/actions/doctor-dashboard";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -476,6 +478,29 @@ export default async function DashboardPage() {
         todayAppointments={(todayAppts ?? []) as Parameters<typeof ReceptionistDashboard>[0]["todayAppointments"]}
         pendingAppointments={(pendingAppts ?? []) as Parameters<typeof ReceptionistDashboard>[0]["pendingAppointments"]}
         nextTwoHoursAppointments={(next2hAppts ?? []) as Parameters<typeof ReceptionistDashboard>[0]["nextTwoHoursAppointments"]}
+      />
+    );
+  }
+
+  if (user.role === "doctor") {
+    const thisMonth = monthBounds(0);
+    const deptId = user.departmentId ?? "";
+
+    const [initial, { data: deptInfo }] = await Promise.all([
+      fetchDoctorDashboardStats(clinicId, user.id, deptId, thisMonth.start, thisMonth.end),
+      deptId
+        ? supabase.from("departments").select("name").eq("id", deptId).single()
+        : Promise.resolve({ data: null }),
+    ]);
+
+    return (
+      <DoctorDashboard
+        fullName={user.fullName}
+        clinicId={clinicId}
+        doctorId={user.id}
+        departmentId={deptId}
+        departmentName={deptInfo?.name ?? "My Department"}
+        initial={initial}
       />
     );
   }

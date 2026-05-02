@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AlertCircle, ChevronLeft, Pencil, Receipt } from "lucide-react";
+import { StatusBadge } from "@/components/appointments/status-badge";
 import { requireUser } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
 import { MedicalNotesList } from "@/components/patients/medical-notes-list";
@@ -41,7 +42,11 @@ export default async function PatientDetailPage({ params }: PageProps) {
     .eq("patient_id", id)
     .order("created_at", { ascending: false });
 
-  const { data: appointments } = await supabase
+  const isDoctor = user.role === "doctor";
+  const isAdmin = user.role === "admin";
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: appointments } = (await supabase
     .from("appointments")
     .select(
       "id, scheduled_at, status, payment_method, paid_at, total_amount, paid_amount, insurance_amount, secondary_amount, deposit_amount, outstanding_amount, secondary_payment_method, payment_note, cancellation_reason, cancelled_at, profiles!doctor_id(full_name), departments(name, color), insurance_providers(name), appointment_services(id, name, price, quantity)",
@@ -49,7 +54,27 @@ export default async function PatientDetailPage({ params }: PageProps) {
     .eq("patient_id", id)
     .eq("clinic_id", user.clinicId)
     .order("scheduled_at", { ascending: false })
-    .limit(30);
+    .limit(30)) as { data: {
+      id: string;
+      scheduled_at: string;
+      status: string;
+      payment_method?: string | null;
+      paid_at?: string | null;
+      total_amount?: number | null;
+      paid_amount?: number | null;
+      insurance_amount?: number | null;
+      secondary_amount?: number | null;
+      deposit_amount?: number | null;
+      outstanding_amount?: number | null;
+      secondary_payment_method?: string | null;
+      payment_note?: string | null;
+      cancellation_reason?: string | null;
+      cancelled_at?: string | null;
+      profiles?: { full_name: string } | null;
+      departments?: { name: string; color: string } | null;
+      insurance_providers?: { name: string } | null;
+      appointment_services?: { id: string; name: string; price: number; quantity: number }[];
+    }[] | null };
 
   // Follow-ups recorded for this patient (any of their sessions).
   const { data: followups } = await supabase
@@ -61,15 +86,8 @@ export default async function PatientDetailPage({ params }: PageProps) {
     .eq("clinic_id", user.clinicId)
     .order("recorded_at", { ascending: false });
 
-  // Settlements made against this patient's outstanding balance, grouped by appointment.
-  const { data: settlements } = await supabase
-    .from("outstanding_settlements")
-    .select("id, appointment_id, settled_at, amount, payment_method, note")
-    .eq("patient_id", id)
-    .eq("clinic_id", user.clinicId)
-    .order("settled_at", { ascending: true });
-
-  const settlementsByAppt = new Map<
+  // Financial data — only loaded for non-doctor roles
+  let settlementsByAppt = new Map<
     string,
     {
       id: string;
@@ -79,63 +97,70 @@ export default async function PatientDetailPage({ params }: PageProps) {
       note: string | null;
     }[]
   >();
-  for (const s of settlements ?? []) {
-    if (!s.appointment_id) continue;
-    const list = settlementsByAppt.get(s.appointment_id) ?? [];
-    list.push({
-      id: s.id,
-      settled_at: s.settled_at,
-      amount: Number(s.amount ?? 0),
-      payment_method: s.payment_method,
-      note: s.note,
-    });
-    settlementsByAppt.set(s.appointment_id, list);
+  let billingTotals = { billed: 0, collected: 0, outstanding: 0 };
+  let accountBalance = 0;
+
+  if (!isDoctor) {
+    const { data: settlements } = await supabase
+      .from("outstanding_settlements")
+      .select("id, appointment_id, settled_at, amount, payment_method, note")
+      .eq("patient_id", id)
+      .eq("clinic_id", user.clinicId)
+      .order("settled_at", { ascending: true });
+
+    for (const s of settlements ?? []) {
+      if (!s.appointment_id) continue;
+      const list = settlementsByAppt.get(s.appointment_id) ?? [];
+      list.push({
+        id: s.id,
+        settled_at: s.settled_at,
+        amount: Number(s.amount ?? 0),
+        payment_method: s.payment_method,
+        note: s.note,
+      });
+      settlementsByAppt.set(s.appointment_id, list);
+    }
+
+    const [{ data: deposits }, { data: spentRows }] = await Promise.all([
+      supabase
+        .from("patient_deposits")
+        .select("amount")
+        .eq("patient_id", id)
+        .eq("clinic_id", user.clinicId),
+      supabase
+        .from("appointments")
+        .select("deposit_amount")
+        .eq("patient_id", id)
+        .eq("clinic_id", user.clinicId),
+    ]);
+
+    const totalDeposited = (deposits ?? []).reduce(
+      (s, r) => s + Number(r.amount ?? 0),
+      0,
+    );
+    const totalSpent = (spentRows ?? []).reduce(
+      (s, r) => s + Number(r.deposit_amount ?? 0),
+      0,
+    );
+    accountBalance = Math.max(0, Number((totalDeposited - totalSpent).toFixed(2)));
+
+    const completed = (appointments ?? []).filter((a) => a.status === "completed");
+    billingTotals = completed.reduce(
+      (acc, a) => {
+        acc.billed += (a as { total_amount?: number }).total_amount ?? 0;
+        acc.collected +=
+          ((a as { paid_amount?: number }).paid_amount ?? 0) +
+          ((a as { insurance_amount?: number }).insurance_amount ?? 0) +
+          ((a as { secondary_amount?: number }).secondary_amount ?? 0) +
+          ((a as { deposit_amount?: number }).deposit_amount ?? 0);
+        acc.outstanding += (a as { outstanding_amount?: number }).outstanding_amount ?? 0;
+        return acc;
+      },
+      { billed: 0, collected: 0, outstanding: 0 },
+    );
   }
 
-  // Patient account balance = sum(deposits) − sum(appointments.deposit_amount)
-  const [{ data: deposits }, { data: spentRows }] = await Promise.all([
-    supabase
-      .from("patient_deposits")
-      .select("amount")
-      .eq("patient_id", id)
-      .eq("clinic_id", user.clinicId),
-    supabase
-      .from("appointments")
-      .select("deposit_amount")
-      .eq("patient_id", id)
-      .eq("clinic_id", user.clinicId),
-  ]);
-  const totalDeposited = (deposits ?? []).reduce(
-    (s, r) => s + Number(r.amount ?? 0),
-    0,
-  );
-  const totalSpent = (spentRows ?? []).reduce(
-    (s, r) => s + Number(r.deposit_amount ?? 0),
-    0,
-  );
-  const accountBalance = Math.max(
-    0,
-    Number((totalDeposited - totalSpent).toFixed(2)),
-  );
-
-  // Aggregate billing across completed appointments
-  const completed = (appointments ?? []).filter((a) => a.status === "completed");
-  const billingTotals = completed.reduce(
-    (acc, a) => {
-      acc.billed += a.total_amount ?? 0;
-      acc.collected +=
-        (a.paid_amount ?? 0) +
-        (a.insurance_amount ?? 0) +
-        (a.secondary_amount ?? 0) +
-        (a.deposit_amount ?? 0);
-      acc.outstanding += a.outstanding_amount ?? 0;
-      return acc;
-    },
-    { billed: 0, collected: 0, outstanding: 0 },
-  );
-
-  const isAdmin = user.role === "admin";
-  const canEdit = user.role !== "manager" && !patient.is_deleted;
+  const canEdit = !isDoctor && user.role !== "manager" && !patient.is_deleted;
   const age =
     new Date().getFullYear() - new Date(patient.date_of_birth).getFullYear();
 
@@ -265,8 +290,8 @@ export default async function PatientDetailPage({ params }: PageProps) {
 
         {/* Right column */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Billing summary strip */}
-          <div className="space-y-3">
+          {/* Billing summary strip — hidden for doctors */}
+          {!isDoctor && <div className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                 <Receipt className="h-4 w-4" />
@@ -324,9 +349,9 @@ export default async function PatientDetailPage({ params }: PageProps) {
                 .
               </div>
             )}
-          </div>
+          </div>}
 
-          {/* Appointments — click completed rows to see payment breakdown */}
+          {/* Appointments */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
@@ -340,14 +365,18 @@ export default async function PatientDetailPage({ params }: PageProps) {
             <div className="rounded-xl border border-border/50 bg-card overflow-hidden">
               {appointments && appointments.length > 0 ? (
                 <div>
-                  {appointments.map((a) => (
-                    <AppointmentPaymentRow
-                      key={a.id}
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      a={a as any}
-                      settlements={settlementsByAppt.get(a.id) ?? []}
-                    />
-                  ))}
+                  {appointments.map((a) =>
+                    isDoctor ? (
+                      <SimpleApptRow key={a.id} a={a as Parameters<typeof SimpleApptRow>[0]["a"]} />
+                    ) : (
+                      <AppointmentPaymentRow
+                        key={a.id}
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        a={a as any}
+                        settlements={settlementsByAppt.get(a.id) ?? []}
+                      />
+                    )
+                  )}
                 </div>
               ) : (
                 <div className="px-5 py-6 text-center text-sm text-muted-foreground">
@@ -355,7 +384,7 @@ export default async function PatientDetailPage({ params }: PageProps) {
                 </div>
               )}
             </div>
-            {completed.length > 0 && (
+            {!isDoctor && (appointments ?? []).some((a) => a.status === "completed") && (
               <p className="text-[11px] text-muted-foreground">
                 Tip: click a completed appointment to see its payment breakdown.
               </p>
@@ -448,19 +477,19 @@ export default async function PatientDetailPage({ params }: PageProps) {
             </span>
           </div>
 
-          {isAdmin && !patient.is_deleted && (
+          {(isAdmin || isDoctor) && !patient.is_deleted && (
             <div className="rounded-xl border border-border/50 bg-card p-4">
               <NoteComposer patientId={id} />
             </div>
           )}
 
-          {!isAdmin && (
+          {!isAdmin && !isDoctor && (
             <div className="rounded-lg border border-border/30 bg-muted/20 px-4 py-3 text-xs text-muted-foreground">
-              Medical notes are visible to admins only.
+              Medical notes are visible to admins and doctors only.
             </div>
           )}
 
-          {isAdmin && (
+          {(isAdmin || isDoctor) && (
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             <MedicalNotesList notes={(notes ?? []) as any} />
           )}
@@ -496,6 +525,51 @@ function fmtTRY(n: number) {
     currency: "TRY",
     maximumFractionDigits: 2,
   }).format(Number.isFinite(n) ? n : 0);
+}
+
+function SimpleApptRow({
+  a,
+}: {
+  a: {
+    id: string;
+    scheduled_at: string;
+    status: string;
+    cancellation_reason?: string | null;
+    profiles?: { full_name: string } | null;
+    departments?: { name: string; color: string } | null;
+    insurance_providers?: { name: string } | null;
+    appointment_services?: { id: string; name: string; price: number; quantity: number }[];
+  };
+}) {
+  const dept = a.departments;
+  return (
+    <div className="flex items-center gap-3 px-4 py-3 text-sm border-b border-border/30 last:border-0 hover:bg-muted/20 transition-colors">
+      <div className="min-w-0 flex-1 space-y-0.5">
+        <p className="font-medium tabular-nums text-xs">
+          {new Date(a.scheduled_at).toLocaleString("en-GB", {
+            timeZone: "Europe/Istanbul",
+            dateStyle: "medium",
+            timeStyle: "short",
+          })}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          Dr. {a.profiles?.full_name ?? "—"}
+          {dept?.name && (
+            <>
+              {" · "}
+              <span
+                style={{ color: dept.color }}
+                className="font-medium"
+              >
+                {dept.name}
+              </span>
+            </>
+          )}
+        </p>
+      </div>
+      <StatusBadge status={a.status as Parameters<typeof StatusBadge>[0]["status"]} />
+    </div>
+  );
 }
 
 function BillingCell({

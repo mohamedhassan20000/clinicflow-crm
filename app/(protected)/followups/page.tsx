@@ -41,16 +41,12 @@ function resolveRange(scope: Scope, dateStr?: string) {
     return { start: startOfDay(y), end: endOfDay(y) };
   }
   if (scope === "week") {
-    // Last week: Mon..Sun of the calendar week immediately before this one.
-    const day = base.getDay();
-    const diffToThisMon = day === 0 ? -6 : 1 - day;
-    const thisMon = new Date(base);
-    thisMon.setDate(thisMon.getDate() + diffToThisMon);
-    const lastMon = new Date(thisMon);
-    lastMon.setDate(lastMon.getDate() - 7);
-    const lastSun = new Date(lastMon);
-    lastSun.setDate(lastSun.getDate() + 6);
-    return { start: startOfDay(lastMon), end: endOfDay(lastSun) };
+    // Rolling 7-day window: the 7 days *before* today (today excluded).
+    const yesterday = new Date(base);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const start7 = new Date(yesterday);
+    start7.setDate(start7.getDate() - 6);
+    return { start: startOfDay(start7), end: endOfDay(yesterday) };
   }
   // Rolling 30-day window: the 30 days *before* today (so today itself is
   // excluded). End of yesterday → start of the 30th day prior.

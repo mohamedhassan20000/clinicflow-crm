@@ -72,6 +72,9 @@ export type Database = {
       appointments: {
         Row: {
           cancellation_reason: string | null
+          no_show_reason: string | null
+          no_showed_at: string | null
+          no_showed_by: string | null
           cancelled_at: string | null
           cancelled_by: string | null
           clinic_id: string
@@ -105,6 +108,9 @@ export type Database = {
         }
         Insert: {
           cancellation_reason?: string | null
+          no_show_reason?: string | null
+          no_showed_at?: string | null
+          no_showed_by?: string | null
           cancelled_at?: string | null
           cancelled_by?: string | null
           clinic_id: string
@@ -138,6 +144,9 @@ export type Database = {
         }
         Update: {
           cancellation_reason?: string | null
+          no_show_reason?: string | null
+          no_showed_at?: string | null
+          no_showed_by?: string | null
           cancelled_at?: string | null
           cancelled_by?: string | null
           clinic_id?: string

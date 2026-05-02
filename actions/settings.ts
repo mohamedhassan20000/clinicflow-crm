@@ -16,6 +16,7 @@ import {
 export interface ActionResult {
   error?: string;
   success?: boolean;
+  staffId?: string;
 }
 
 // ── Staff ────────────────────────────────────────────────────────────────────
@@ -82,7 +83,7 @@ export async function createStaff(
   }
 
   revalidatePath("/settings/staff");
-  return { success: true };
+  return { success: true, staffId: userId };
 }
 
 export async function updateStaff(

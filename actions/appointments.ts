@@ -41,6 +41,39 @@ export async function createAppointment(
   }
 
   const supabase = await createClient();
+
+  // 15-minute buffer check — fetch doctor's non-cancelled appts on that day
+  const startTime = new Date(parsed.data.scheduled_at);
+  const endTime = new Date(startTime.getTime() + parsed.data.duration_minutes * 60_000);
+  const dayStart = new Date(startTime);
+  dayStart.setHours(0, 0, 0, 0);
+  const dayEnd = new Date(startTime);
+  dayEnd.setHours(23, 59, 59, 999);
+
+  const { data: sameDay } = await supabase
+    .from("appointments")
+    .select("scheduled_at, duration_minutes")
+    .eq("doctor_id", parsed.data.doctor_id)
+    .eq("clinic_id", user.clinicId)
+    .not("status", "in", '("cancelled","no_show")')
+    .gte("scheduled_at", dayStart.toISOString())
+    .lte("scheduled_at", dayEnd.toISOString());
+
+  const BUFFER_MS = 15 * 60_000;
+  for (const appt of sameDay ?? []) {
+    const exStart = new Date(appt.scheduled_at);
+    const exEnd = new Date(exStart.getTime() + appt.duration_minutes * 60_000);
+    if (
+      startTime < new Date(exEnd.getTime() + BUFFER_MS) &&
+      endTime > new Date(exStart.getTime() - BUFFER_MS)
+    ) {
+      return {
+        error:
+          "The doctor needs at least 15 minutes between appointments. Please choose a different time slot.",
+      };
+    }
+  }
+
   const { error } = await supabase.from("appointments").insert({
     ...parsed.data,
     clinic_id: user.clinicId,
@@ -83,6 +116,7 @@ export async function updateAppointmentStatus(
   newStatus: string,
   billingPayload?: BillingInput | null,
   cancellationReason?: string | null,
+  noShowReason?: string | null,
 ): Promise<ActionResult> {
   const user = await requireRole(["admin", "receptionist"]);
 
@@ -118,6 +152,21 @@ export async function updateAppointmentStatus(
     update.cancellation_reason = reason;
     update.cancelled_at = new Date().toISOString();
     update.cancelled_by = user.id;
+  }
+
+  if (newStatus === "no_show") {
+    const reason = (noShowReason ?? "").trim();
+    if (!reason) {
+      return {
+        error: "Please provide a reason for marking this appointment as a no-show.",
+      };
+    }
+    if (reason.length > 500) {
+      return { error: "No-show reason must be 500 characters or less." };
+    }
+    update.no_show_reason = reason;
+    update.no_showed_at = new Date().toISOString();
+    update.no_showed_by = user.id;
   }
 
   if (newStatus === "completed") {

@@ -334,6 +334,7 @@ export default async function DashboardPage() {
     { count: cancelCount },
     { data: last30Appts },
     { data: insuranceAppts },
+    { data: allDoctorProfiles },
     { data: doctorAppts },
   ] = await Promise.all([
     supabase
@@ -387,12 +388,17 @@ export default async function DashboardPage() {
       .gte("scheduled_at", thisMonth.start)
       .lte("scheduled_at", thisMonth.end),
     supabase
+      .from("profiles")
+      .select("id, full_name")
+      .eq("clinic_id", clinicId)
+      .eq("role", "doctor")
+      .eq("is_active", true),
+    supabase
       .from("appointments")
-      .select("doctor_id, profiles!doctor_id(full_name)")
+      .select("doctor_id, status, paid_amount, insurance_amount, secondary_amount")
       .eq("clinic_id", clinicId)
       .gte("scheduled_at", thisMonth.start)
-      .lte("scheduled_at", thisMonth.end)
-      .not("status", "eq", "cancelled"),
+      .lte("scheduled_at", thisMonth.end),
   ]);
 
   // Build insurance breakdown
@@ -402,22 +408,43 @@ export default async function DashboardPage() {
     const name = raw?.name ?? "No insurance";
     insuranceMap.set(name, (insuranceMap.get(name) ?? 0) + 1);
   }
-  const insuranceSeries = Array.from(insuranceMap.entries())
+  const initialInsuranceSeries = Array.from(insuranceMap.entries())
     .map(([name, value]) => ({ name, value }))
     .sort((a, b) => b.value - a.value)
-    .slice(0, 6);
+    .slice(0, 8);
 
-  // Build top doctors
-  const doctorMap = new Map<string, number>();
-  for (const a of doctorAppts ?? []) {
-    const raw = a.profiles as { full_name: string } | null;
-    const name = raw?.full_name ?? "Unknown";
-    doctorMap.set(name, (doctorMap.get(name) ?? 0) + 1);
+  // Build doctor stats — all doctors, including those with 0 appointments
+  const doctorStatsMap = new Map<
+    string,
+    { name: string; total: number; confirmed: number; cancelled: number; other: number; revenue: number }
+  >();
+  for (const doc of allDoctorProfiles ?? []) {
+    doctorStatsMap.set(doc.id, {
+      name: doc.full_name,
+      total: 0,
+      confirmed: 0,
+      cancelled: 0,
+      other: 0,
+      revenue: 0,
+    });
   }
-  const topDoctors = Array.from(doctorMap.entries())
-    .map(([name, appointments]) => ({ name, appointments }))
-    .sort((a, b) => b.appointments - a.appointments)
-    .slice(0, 5);
+  for (const a of doctorAppts ?? []) {
+    const entry = doctorStatsMap.get(a.doctor_id);
+    if (!entry) continue;
+    entry.total++;
+    if (a.status === "confirmed") entry.confirmed++;
+    else if (a.status === "cancelled") entry.cancelled++;
+    else entry.other++;
+    if (a.status === "completed") {
+      entry.revenue +=
+        (a.paid_amount ?? 0) +
+        (a.insurance_amount ?? 0) +
+        (a.secondary_amount ?? 0);
+    }
+  }
+  const initialDoctors = Array.from(doctorStatsMap.values()).sort(
+    (a, b) => b.total - a.total,
+  );
 
   // Calculate rates
   const mc = monthCount ?? 0;
@@ -426,6 +453,7 @@ export default async function DashboardPage() {
 
   return (
     <ManagerDashboard
+      clinicId={clinicId}
       fullName={user.fullName}
       todayCount={todayCount ?? 0}
       weekCount={weekCount ?? 0}
@@ -433,9 +461,9 @@ export default async function DashboardPage() {
       noShowRate={noShowRate}
       cancelRate={cancelRate}
       totalPatients={totalPatients ?? 0}
-      dailySeries={buildDailySeries(last30Appts ?? [])}
-      insuranceSeries={insuranceSeries}
-      topDoctors={topDoctors}
+      initialDailySeries={buildDailySeries(last30Appts ?? [])}
+      initialInsuranceSeries={initialInsuranceSeries}
+      initialDoctors={initialDoctors}
     />
   );
 }

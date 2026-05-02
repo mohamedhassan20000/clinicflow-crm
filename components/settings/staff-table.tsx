@@ -10,6 +10,7 @@ import {
   UserX,
   Loader2,
   Trash2,
+  FolderOpen,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -37,6 +38,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { EditStaffForm } from "@/components/settings/staff-form";
+import { StaffProfileSheet } from "@/components/settings/staff-profile-sheet";
 import {
   updateStaff,
   resetStaffPassword,
@@ -74,6 +76,7 @@ interface StaffTableProps {
 export function StaffTable({ staff, departments, currentUserId }: StaffTableProps) {
   const [editTarget, setEditTarget] = useState<StaffMember | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<StaffMember | null>(null);
+  const [profileTarget, setProfileTarget] = useState<StaffMember | null>(null);
   const [isPending, startTransition] = useTransition();
 
   function handleDelete(id: string) {
@@ -130,7 +133,11 @@ export function StaffTable({ staff, departments, currentUserId }: StaffTableProp
               </tr>
             )}
             {staff.map((s) => (
-              <tr key={s.id} className="hover:bg-muted/20 transition-colors">
+              <tr
+                key={s.id}
+                className="hover:bg-muted/20 transition-colors cursor-pointer"
+                onClick={() => setProfileTarget(s)}
+              >
                 <td className="px-4 py-3">
                   <p className="font-medium">{s.full_name}</p>
                   {s.phone && (
@@ -153,7 +160,10 @@ export function StaffTable({ staff, departments, currentUserId }: StaffTableProp
                     {s.is_active ? "Active" : "Inactive"}
                   </Badge>
                 </td>
-                <td className="px-4 py-3 text-right">
+                <td
+                  className="px-4 py-3 text-right"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   {isPending ? (
                     <Loader2 className="ml-auto h-4 w-4 animate-spin text-muted-foreground" />
                   ) : (
@@ -165,6 +175,11 @@ export function StaffTable({ staff, departments, currentUserId }: StaffTableProp
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => setProfileTarget(s)}>
+                          <FolderOpen className="mr-2 h-4 w-4" />
+                          View profile &amp; files
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={() => setEditTarget(s)}>
                           <Pencil className="mr-2 h-4 w-4" />
                           Edit
@@ -210,6 +225,13 @@ export function StaffTable({ staff, departments, currentUserId }: StaffTableProp
           </tbody>
         </table>
       </div>
+
+      {/* Staff profile sheet */}
+      <StaffProfileSheet
+        staff={profileTarget}
+        open={!!profileTarget}
+        onOpenChange={(open) => !open && setProfileTarget(null)}
+      />
 
       {/* Edit dialog */}
       <Dialog open={!!editTarget} onOpenChange={(open) => !open && setEditTarget(null)}>

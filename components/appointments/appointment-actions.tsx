@@ -15,6 +15,7 @@ import {
   type BillingPayload,
 } from "@/components/appointments/billing-dialog";
 import { CancelAppointmentDialog } from "@/components/appointments/cancel-dialog";
+import { NoShowDialog } from "@/components/appointments/noshow-dialog";
 
 type Status = Database["public"]["Enums"]["appointment_status"];
 
@@ -33,6 +34,8 @@ export function AppointmentActions({
   const [billingOpen, setBillingOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [noShowOpen, setNoShowOpen] = useState(false);
+  const [isNoShow, setIsNoShow] = useState(false);
   const [optimisticStatus, setOptimisticStatus] = useState<Status | null>(null);
   const [ctx, setCtx] = useState<BillingContext | null>(null);
   const [loadingCtx, setLoadingCtx] = useState(false);
@@ -79,6 +82,19 @@ export function AppointmentActions({
     // effect would cancel the in-flight fetch and leave the dialog stuck.
   }, [billingOpen, appointmentId, ctx]);
 
+  // Prefetch billing context when the appointment is confirmed so the
+  // Complete dialog opens instantly instead of showing a loading spinner.
+  useEffect(() => {
+    if (effectiveStatus !== "confirmed") return;
+    if (ctx) return;
+    let active = true;
+    getBillingContext(appointmentId).then((res) => {
+      if (!active || res.error || !res.data) return;
+      setCtx(res.data);
+    });
+    return () => { active = false; };
+  }, [effectiveStatus, appointmentId, ctx]);
+
   // When the billing dialog closes (whether via Cancel button, Esc, or
   // outside-click), force-clear the lazy-load + in-flight flags so the next
   // open starts from a clean slate. Without this, an aborted fetch can leave
@@ -124,6 +140,28 @@ export function AppointmentActions({
         toast.success("Appointment cancelled.");
         setCancelOpen(false);
         setOptimisticStatus("cancelled");
+      }
+    });
+  }
+
+  function runNoShow(reason: string) {
+    setIsNoShow(true);
+    setOptimisticStatus("no_show");
+    startTransition(async () => {
+      const result = await updateAppointmentStatus(
+        appointmentId,
+        "no_show",
+        null,
+        null,
+        reason,
+      );
+      setIsNoShow(false);
+      if (result.error) {
+        toast.error(result.error);
+        setOptimisticStatus(null);
+      } else {
+        toast.success("Appointment marked as no-show.");
+        setNoShowOpen(false);
       }
     });
   }
@@ -188,7 +226,7 @@ export function AppointmentActions({
             size="sm"
             variant="outline"
             className="h-6 px-2 text-[10px] font-semibold"
-            onClick={() => runStatus("no_show")}
+            onClick={() => setNoShowOpen(true)}
           >
             No-show
           </Button>
@@ -230,6 +268,15 @@ export function AppointmentActions({
         }}
         onConfirm={runCancel}
         isPending={isCancelling}
+      />
+
+      <NoShowDialog
+        open={noShowOpen}
+        onOpenChange={(o) => {
+          if (!isNoShow) setNoShowOpen(o);
+        }}
+        onConfirm={runNoShow}
+        isPending={isNoShow}
       />
     </>
   );

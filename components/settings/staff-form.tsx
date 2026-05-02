@@ -36,16 +36,25 @@ type Department = Pick<Tables<"departments">, "id" | "name">;
 
 // ── Create staff form ────────────────────────────────────────────────────────
 
+interface CreatedSnapshot {
+  full_name: string;
+  role: string;
+  department_name: string | null;
+  phone: string | null;
+}
+
 interface CreateStaffFormProps {
   action: (prev: ActionResult | null, fd: FormData) => Promise<ActionResult>;
   departments: Department[];
   onSuccess?: () => void;
+  onCreated?: (staffId: string, snapshot: CreatedSnapshot) => void;
 }
 
 export function CreateStaffForm({
   action,
   departments,
   onSuccess,
+  onCreated,
 }: CreateStaffFormProps) {
   const [state, formAction, isPending] = useActionState(action, null);
   const router = useRouter();
@@ -64,11 +73,23 @@ export function CreateStaffForm({
   useEffect(() => {
     if (state?.success) {
       toast.success("Staff member created. They will be prompted to set their password on first login.");
-      form.reset();
-      router.refresh();
-      onSuccess?.();
+      if (state.staffId && onCreated) {
+        const values = form.getValues();
+        const deptName =
+          departments.find((d) => d.id === values.department_id)?.name ?? null;
+        onCreated(state.staffId, {
+          full_name: values.full_name,
+          role: values.role,
+          department_name: deptName,
+          phone: values.phone ?? null,
+        });
+      } else {
+        form.reset();
+        router.refresh();
+        onSuccess?.();
+      }
     }
-  }, [state, form, router, onSuccess]);
+  }, [state, form, router, onSuccess, onCreated, departments]);
 
   function onSubmit(values: CreateStaffValues) {
     // Auto-prefix "Dr. " when role is doctor (unless already present)

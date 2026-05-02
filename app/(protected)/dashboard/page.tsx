@@ -336,6 +336,7 @@ export default async function DashboardPage() {
     { data: insuranceAppts },
     { data: allDoctorProfiles },
     { data: doctorAppts },
+    { data: allDepartments },
   ] = await Promise.all([
     supabase
       .from("appointments")
@@ -395,10 +396,15 @@ export default async function DashboardPage() {
       .eq("is_active", true),
     supabase
       .from("appointments")
-      .select("doctor_id, status, paid_amount, insurance_amount, secondary_amount")
+      .select("doctor_id, department_id, patient_id, status, paid_amount, insurance_amount, secondary_amount")
       .eq("clinic_id", clinicId)
       .gte("scheduled_at", thisMonth.start)
       .lte("scheduled_at", thisMonth.end),
+    supabase
+      .from("departments")
+      .select("id, name")
+      .eq("clinic_id", clinicId)
+      .eq("is_active", true),
   ]);
 
   // Build insurance breakdown
@@ -446,6 +452,38 @@ export default async function DashboardPage() {
     (a, b) => b.total - a.total,
   );
 
+  // Build department stats
+  const deptStatsMap = new Map<
+    string,
+    { name: string; appointments: number; patients: number; revenue: number }
+  >();
+  const deptPatientSets = new Map<string, Set<string>>();
+  for (const dept of allDepartments ?? []) {
+    deptStatsMap.set(dept.id, { name: dept.name, appointments: 0, patients: 0, revenue: 0 });
+    deptPatientSets.set(dept.id, new Set());
+  }
+  for (const a of doctorAppts ?? []) {
+    if (!a.department_id) continue;
+    const entry = deptStatsMap.get(a.department_id);
+    const pset = deptPatientSets.get(a.department_id);
+    if (!entry || !pset) continue;
+    entry.appointments++;
+    pset.add(a.patient_id);
+    if (a.status === "completed") {
+      entry.revenue +=
+        (a.paid_amount ?? 0) +
+        (a.insurance_amount ?? 0) +
+        (a.secondary_amount ?? 0);
+    }
+  }
+  for (const [id, pset] of deptPatientSets) {
+    const entry = deptStatsMap.get(id);
+    if (entry) entry.patients = pset.size;
+  }
+  const initialDepartments = Array.from(deptStatsMap.values()).sort(
+    (a, b) => b.appointments - a.appointments,
+  );
+
   // Calculate rates
   const mc = monthCount ?? 0;
   const noShowRate = mc === 0 ? 0 : Math.round(((noShowCount ?? 0) / mc) * 100);
@@ -464,6 +502,7 @@ export default async function DashboardPage() {
       initialDailySeries={buildDailySeries(last30Appts ?? [])}
       initialInsuranceSeries={initialInsuranceSeries}
       initialDoctors={initialDoctors}
+      initialDepartments={initialDepartments}
     />
   );
 }

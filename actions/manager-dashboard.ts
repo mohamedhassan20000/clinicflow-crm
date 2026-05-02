@@ -90,6 +90,65 @@ export async function fetchDoctorStats(
   return Array.from(statsMap.values()).sort((a, b) => b.total - a.total);
 }
 
+export interface DepartmentStat {
+  name: string;
+  appointments: number;
+  patients: number;
+  revenue: number;
+}
+
+export async function fetchDepartmentStats(
+  clinicId: string,
+  start: string,
+  end: string,
+): Promise<DepartmentStat[]> {
+  const supabase = await createClient();
+
+  const [{ data: departments }, { data: appts }] = await Promise.all([
+    supabase
+      .from("departments")
+      .select("id, name")
+      .eq("clinic_id", clinicId)
+      .eq("is_active", true),
+    supabase
+      .from("appointments")
+      .select("department_id, patient_id, status, paid_amount, insurance_amount, secondary_amount")
+      .eq("clinic_id", clinicId)
+      .gte("scheduled_at", start)
+      .lte("scheduled_at", end),
+  ]);
+
+  const statsMap = new Map<string, DepartmentStat>();
+  const patientSets = new Map<string, Set<string>>();
+
+  for (const dept of departments ?? []) {
+    statsMap.set(dept.id, { name: dept.name, appointments: 0, patients: 0, revenue: 0 });
+    patientSets.set(dept.id, new Set());
+  }
+
+  for (const a of appts ?? []) {
+    if (!a.department_id) continue;
+    const entry = statsMap.get(a.department_id);
+    const pset = patientSets.get(a.department_id);
+    if (!entry || !pset) continue;
+    entry.appointments++;
+    pset.add(a.patient_id);
+    if (a.status === "completed") {
+      entry.revenue +=
+        (a.paid_amount ?? 0) +
+        (a.insurance_amount ?? 0) +
+        (a.secondary_amount ?? 0);
+    }
+  }
+
+  for (const [id, pset] of patientSets) {
+    const entry = statsMap.get(id);
+    if (entry) entry.patients = pset.size;
+  }
+
+  return Array.from(statsMap.values()).sort((a, b) => b.appointments - a.appointments);
+}
+
 export async function fetchAppointmentsSeries(
   clinicId: string,
   start: string,

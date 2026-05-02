@@ -33,7 +33,9 @@ import {
   fetchInsuranceBreakdown,
   fetchDoctorStats,
   fetchAppointmentsSeries,
+  fetchDepartmentStats,
   type DoctorStat,
+  type DepartmentStat,
 } from "@/actions/manager-dashboard";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -60,6 +62,7 @@ export interface ManagerDashboardProps {
   initialDailySeries: DailyPoint[];
   initialInsuranceSeries: InsurancePoint[];
   initialDoctors: DoctorStat[];
+  initialDepartments: DepartmentStat[];
 }
 
 // ── Chart colours (readable in both light and dark mode) ─────────────────────
@@ -121,21 +124,29 @@ function dateRangeToISO(from: string, to: string) {
 
 // ── Shared UI pieces ─────────────────────────────────────────────────────────
 
+// color-scheme makes native browser date/month pickers respect dark mode
+const INPUT_CLS =
+  "h-8 rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground [color-scheme:light] dark:[color-scheme:dark] focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 disabled:opacity-50";
+
+const TICK = { fontSize: 11, fill: "hsl(var(--muted-foreground))" } as const;
+const GRID_PROPS = {
+  stroke: "hsl(var(--border))",
+  strokeOpacity: 0.4,
+  strokeDasharray: "3 3",
+} as const;
+const LEGEND_STYLE = { fontSize: 11, color: "hsl(var(--foreground))" } as const;
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function ChartTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-lg border border-border bg-card/95 px-3 py-2 text-sm shadow-lg backdrop-blur-sm">
+    <div className="rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-lg">
       <p className="mb-1 font-medium text-foreground">{label}</p>
       {payload.map(
         (p: { color: string; name: string; value: number }, i: number) => (
           <p key={i} className="text-xs" style={{ color: p.color }}>
             {p.name}:{" "}
-            <span className="font-semibold">
-              {typeof p.value === "number" && p.name.includes("₺")
-                ? `₺${p.value.toLocaleString()}`
-                : p.value}
-            </span>
+            <span className="font-semibold text-foreground">{p.value}</span>
           </p>
         ),
       )}
@@ -148,11 +159,11 @@ function RevenueTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
   const p = payload[0];
   return (
-    <div className="rounded-lg border border-border bg-card/95 px-3 py-2 text-sm shadow-lg backdrop-blur-sm">
+    <div className="rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-lg">
       <p className="mb-1 font-medium text-foreground">{label}</p>
       <p className="text-xs" style={{ color: p.color }}>
         Revenue:{" "}
-        <span className="font-semibold">
+        <span className="font-semibold text-foreground">
           ₺{(p.value as number).toLocaleString()}
         </span>
       </p>
@@ -170,9 +181,6 @@ function EmptyState() {
 
 type FilterMode = "month" | "range";
 
-const INPUT_CLS =
-  "h-8 rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 disabled:opacity-50";
-
 interface DateFilterProps {
   filterMode: FilterMode;
   month: string;
@@ -183,6 +191,15 @@ interface DateFilterProps {
   onMonthChange: (m: string) => void;
   onRangeFromChange: (d: string) => void;
   onRangeToChange: (d: string) => void;
+}
+
+function modeBtnCls(active: boolean) {
+  return cn(
+    "rounded px-2.5 py-0.5 text-xs font-medium transition-colors",
+    active
+      ? "bg-background text-foreground shadow-sm dark:bg-input/30"
+      : "text-muted-foreground hover:text-foreground",
+  );
 }
 
 function DateFilter({
@@ -196,32 +213,16 @@ function DateFilter({
   onRangeFromChange,
   onRangeToChange,
 }: DateFilterProps) {
-  const btnCls = (active: boolean) =>
-    cn(
-      "rounded px-2.5 py-0.5 text-xs font-medium transition-colors",
-      active
-        ? "bg-background text-foreground shadow-sm dark:bg-input/30 dark:text-foreground"
-        : "text-muted-foreground hover:text-foreground",
-    );
-
   return (
     <div className="flex flex-wrap items-center gap-2">
       {isPending && (
         <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
       )}
       <div className="flex items-center rounded-lg border border-input bg-muted p-[3px]">
-        <button
-          type="button"
-          onClick={() => onFilterModeChange("month")}
-          className={btnCls(filterMode === "month")}
-        >
+        <button type="button" onClick={() => onFilterModeChange("month")} className={modeBtnCls(filterMode === "month")}>
           Month
         </button>
-        <button
-          type="button"
-          onClick={() => onFilterModeChange("range")}
-          className={btnCls(filterMode === "range")}
-        >
+        <button type="button" onClick={() => onFilterModeChange("range")} className={modeBtnCls(filterMode === "range")}>
           Custom range
         </button>
       </div>
@@ -258,6 +259,103 @@ function DateFilter({
   );
 }
 
+function useDateFilter(clinicId: string, refetchFn: (start: string, end: string) => void) {
+  const [filterMode, setFilterMode] = useState<FilterMode>("month");
+  const [month, setMonth] = useState(currentYearMonth());
+  const [rangeFrom, setRangeFrom] = useState(daysAgoStr(29));
+  const [rangeTo, setRangeTo] = useState(todayStr());
+
+  function handleFilterModeChange(m: FilterMode) {
+    setFilterMode(m);
+    if (m === "month") {
+      const { start, end } = monthToRange(month);
+      refetchFn(start, end);
+    } else if (rangeFrom && rangeTo && rangeFrom <= rangeTo) {
+      const { start, end } = dateRangeToISO(rangeFrom, rangeTo);
+      refetchFn(start, end);
+    }
+  }
+
+  function handleMonthChange(m: string) {
+    setMonth(m);
+    const { start, end } = monthToRange(m);
+    refetchFn(start, end);
+  }
+
+  function handleRangeFromChange(d: string) {
+    setRangeFrom(d);
+    if (d && rangeTo && d <= rangeTo) {
+      const { start, end } = dateRangeToISO(d, rangeTo);
+      refetchFn(start, end);
+    }
+  }
+
+  function handleRangeToChange(d: string) {
+    setRangeTo(d);
+    if (rangeFrom && d && rangeFrom <= d) {
+      const { start, end } = dateRangeToISO(rangeFrom, d);
+      refetchFn(start, end);
+    }
+  }
+
+  return {
+    filterMode,
+    month,
+    rangeFrom,
+    rangeTo,
+    handleFilterModeChange,
+    handleMonthChange,
+    handleRangeFromChange,
+    handleRangeToChange,
+  };
+}
+
+// ── Horizontal bar chart shared props ────────────────────────────────────────
+
+function HBarChart({
+  data,
+  yWidth = 110,
+  children,
+}: {
+  data: object[];
+  yWidth?: number;
+  children: React.ReactNode;
+}) {
+  const h = Math.max(220, data.length * 48);
+  return (
+    <ResponsiveContainer width="100%" height={h}>
+      <BarChart data={data} layout="vertical" margin={{ top: 0, right: 16, bottom: 0, left: 0 }}>
+        <CartesianGrid horizontal={false} {...GRID_PROPS} />
+        <XAxis type="number" allowDecimals={false} tick={TICK} tickLine={false} axisLine={false} />
+        <YAxis type="category" dataKey="name" width={yWidth} tick={TICK} tickLine={false} axisLine={false} />
+        {children}
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+function HBarChartRevenue({ data, yWidth = 110 }: { data: object[]; yWidth?: number }) {
+  const h = Math.max(220, data.length * 48);
+  return (
+    <ResponsiveContainer width="100%" height={h}>
+      <BarChart data={data} layout="vertical" margin={{ top: 0, right: 16, bottom: 0, left: 0 }}>
+        <CartesianGrid horizontal={false} {...GRID_PROPS} />
+        <XAxis
+          type="number"
+          allowDecimals={false}
+          tick={TICK}
+          tickLine={false}
+          axisLine={false}
+          tickFormatter={(v) => `₺${v.toLocaleString()}`}
+        />
+        <YAxis type="category" dataKey="name" width={yWidth} tick={TICK} tickLine={false} axisLine={false} />
+        <Tooltip content={<RevenueTooltip />} />
+        <Bar dataKey="revenue" name="Revenue (₺)" fill={C.amber} radius={[0, 4, 4, 0]} maxBarSize={22} />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
 // ── Appointments section ─────────────────────────────────────────────────────
 
 function AppointmentsSection({
@@ -267,15 +365,11 @@ function AppointmentsSection({
   clinicId: string;
   initialSeries: DailyPoint[];
 }) {
-  const [rangeFrom, setRangeFrom] = useState(daysAgoStr(29));
-  const [rangeTo, setRangeTo] = useState(todayStr());
   const [series, setSeries] = useState<DailyPoint[]>(initialSeries);
   const [isPending, startTransition] = useTransition();
 
   const refetch = useCallback(
-    (from: string, to: string) => {
-      if (!from || !to || from > to) return;
-      const { start, end } = dateRangeToISO(from, to);
+    (start: string, end: string) => {
       startTransition(async () => {
         const data = await fetchAppointmentsSeries(clinicId, start, end);
         setSeries(data);
@@ -284,39 +378,23 @@ function AppointmentsSection({
     [clinicId],
   );
 
+  const df = useDateFilter(clinicId, refetch);
+
   return (
     <div className="rounded-xl border border-border/60 bg-card p-5 shadow-sm">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-sm font-semibold text-foreground">Appointments</h2>
-        <div className="flex flex-wrap items-center gap-2">
-          {isPending && (
-            <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-          )}
-          <div className="flex items-center gap-1.5">
-            <input
-              type="date"
-              value={rangeFrom}
-              max={rangeTo || todayStr()}
-              onChange={(e) => {
-                setRangeFrom(e.target.value);
-                refetch(e.target.value, rangeTo);
-              }}
-              className={INPUT_CLS}
-            />
-            <span className="text-xs text-muted-foreground">to</span>
-            <input
-              type="date"
-              value={rangeTo}
-              min={rangeFrom}
-              max={todayStr()}
-              onChange={(e) => {
-                setRangeTo(e.target.value);
-                refetch(rangeFrom, e.target.value);
-              }}
-              className={INPUT_CLS}
-            />
-          </div>
-        </div>
+        <DateFilter
+          filterMode={df.filterMode}
+          month={df.month}
+          rangeFrom={df.rangeFrom}
+          rangeTo={df.rangeTo}
+          isPending={isPending}
+          onFilterModeChange={df.handleFilterModeChange}
+          onMonthChange={df.handleMonthChange}
+          onRangeFromChange={df.handleRangeFromChange}
+          onRangeToChange={df.handleRangeToChange}
+        />
       </div>
 
       <div className={cn("transition-opacity", isPending && "opacity-60")}>
@@ -324,28 +402,10 @@ function AppointmentsSection({
           <EmptyState />
         ) : (
           <ResponsiveContainer width="100%" height={220}>
-            <LineChart
-              data={series}
-              margin={{ top: 4, right: 8, bottom: 0, left: -20 }}
-            >
-              <CartesianGrid
-                strokeDasharray="3 3"
-                stroke="hsl(var(--border))"
-                strokeOpacity={0.4}
-              />
-              <XAxis
-                dataKey="date"
-                tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-                tickLine={false}
-                axisLine={false}
-                interval="preserveStartEnd"
-              />
-              <YAxis
-                allowDecimals={false}
-                tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-                tickLine={false}
-                axisLine={false}
-              />
+            <LineChart data={series} margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
+              <CartesianGrid {...GRID_PROPS} />
+              <XAxis dataKey="date" tick={TICK} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+              <YAxis allowDecimals={false} tick={TICK} tickLine={false} axisLine={false} />
               <Tooltip content={<ChartTooltip />} />
               <Line
                 type="monotone"
@@ -373,10 +433,6 @@ function InsuranceSection({
   clinicId: string;
   initialSeries: InsurancePoint[];
 }) {
-  const [filterMode, setFilterMode] = useState<FilterMode>("month");
-  const [month, setMonth] = useState(currentYearMonth());
-  const [rangeFrom, setRangeFrom] = useState(daysAgoStr(29));
-  const [rangeTo, setRangeTo] = useState(todayStr());
   const [series, setSeries] = useState<InsurancePoint[]>(initialSeries);
   const [isPending, startTransition] = useTransition();
 
@@ -390,55 +446,22 @@ function InsuranceSection({
     [clinicId],
   );
 
-  function handleFilterModeChange(m: FilterMode) {
-    setFilterMode(m);
-    if (m === "month") {
-      const { start, end } = monthToRange(month);
-      refetch(start, end);
-    } else if (rangeFrom && rangeTo && rangeFrom <= rangeTo) {
-      const { start, end } = dateRangeToISO(rangeFrom, rangeTo);
-      refetch(start, end);
-    }
-  }
-
-  function handleMonthChange(m: string) {
-    setMonth(m);
-    const { start, end } = monthToRange(m);
-    refetch(start, end);
-  }
-
-  function handleRangeFromChange(d: string) {
-    setRangeFrom(d);
-    if (d && rangeTo && d <= rangeTo) {
-      const { start, end } = dateRangeToISO(d, rangeTo);
-      refetch(start, end);
-    }
-  }
-
-  function handleRangeToChange(d: string) {
-    setRangeTo(d);
-    if (rangeFrom && d && rangeFrom <= d) {
-      const { start, end } = dateRangeToISO(rangeFrom, d);
-      refetch(start, end);
-    }
-  }
+  const df = useDateFilter(clinicId, refetch);
 
   return (
     <div className="rounded-xl border border-border/60 bg-card p-5 shadow-sm">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-sm font-semibold text-foreground">
-          Insurance breakdown
-        </h2>
+        <h2 className="text-sm font-semibold text-foreground">Insurance breakdown</h2>
         <DateFilter
-          filterMode={filterMode}
-          month={month}
-          rangeFrom={rangeFrom}
-          rangeTo={rangeTo}
+          filterMode={df.filterMode}
+          month={df.month}
+          rangeFrom={df.rangeFrom}
+          rangeTo={df.rangeTo}
           isPending={isPending}
-          onFilterModeChange={handleFilterModeChange}
-          onMonthChange={handleMonthChange}
-          onRangeFromChange={handleRangeFromChange}
-          onRangeToChange={handleRangeToChange}
+          onFilterModeChange={df.handleFilterModeChange}
+          onMonthChange={df.handleMonthChange}
+          onRangeFromChange={df.handleRangeFromChange}
+          onRangeToChange={df.handleRangeToChange}
         />
       </div>
 
@@ -458,22 +481,11 @@ function InsuranceSection({
                 dataKey="value"
               >
                 {series.map((_, i) => (
-                  <Cell
-                    key={i}
-                    fill={PIE_COLORS[i % PIE_COLORS.length]}
-                    stroke="transparent"
-                  />
+                  <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} stroke="transparent" />
                 ))}
               </Pie>
               <Tooltip content={<ChartTooltip />} />
-              <Legend
-                iconType="circle"
-                iconSize={8}
-                wrapperStyle={{
-                  fontSize: 11,
-                  color: "hsl(var(--foreground))",
-                }}
-              />
+              <Legend iconType="circle" iconSize={8} wrapperStyle={LEGEND_STYLE} />
             </PieChart>
           </ResponsiveContainer>
         )}
@@ -493,10 +505,6 @@ function DoctorsSection({
   clinicId: string;
   initialDoctors: DoctorStat[];
 }) {
-  const [filterMode, setFilterMode] = useState<FilterMode>("month");
-  const [month, setMonth] = useState(currentYearMonth());
-  const [rangeFrom, setRangeFrom] = useState(daysAgoStr(29));
-  const [rangeTo, setRangeTo] = useState(todayStr());
   const [doctorMode, setDoctorMode] = useState<DoctorMode>("appointments");
   const [doctors, setDoctors] = useState<DoctorStat[]>(initialDoctors);
   const [isPending, startTransition] = useTransition();
@@ -511,87 +519,36 @@ function DoctorsSection({
     [clinicId],
   );
 
-  function handleFilterModeChange(m: FilterMode) {
-    setFilterMode(m);
-    if (m === "month") {
-      const { start, end } = monthToRange(month);
-      refetch(start, end);
-    } else if (rangeFrom && rangeTo && rangeFrom <= rangeTo) {
-      const { start, end } = dateRangeToISO(rangeFrom, rangeTo);
-      refetch(start, end);
-    }
-  }
-
-  function handleMonthChange(m: string) {
-    setMonth(m);
-    const { start, end } = monthToRange(m);
-    refetch(start, end);
-  }
-
-  function handleRangeFromChange(d: string) {
-    setRangeFrom(d);
-    if (d && rangeTo && d <= rangeTo) {
-      const { start, end } = dateRangeToISO(d, rangeTo);
-      refetch(start, end);
-    }
-  }
-
-  function handleRangeToChange(d: string) {
-    setRangeTo(d);
-    if (rangeFrom && d && rangeFrom <= d) {
-      const { start, end } = dateRangeToISO(rangeFrom, d);
-      refetch(start, end);
-    }
-  }
-
+  const df = useDateFilter(clinicId, refetch);
   const chartData = doctors.map((d) => ({
     ...d,
     other: Math.max(0, d.total - d.confirmed - d.cancelled),
   }));
 
-  const barHeight = Math.max(220, doctors.length * 48);
-
-  const doctorBtnCls = (active: boolean) =>
-    cn(
-      "rounded px-2.5 py-0.5 text-xs font-medium transition-colors",
-      active
-        ? "bg-background text-foreground shadow-sm dark:bg-input/30 dark:text-foreground"
-        : "text-muted-foreground hover:text-foreground",
-    );
-
   return (
     <div className="rounded-xl border border-border/60 bg-card p-5 shadow-sm">
-      {/* Header row */}
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <h2 className="text-sm font-semibold text-foreground">All doctors</h2>
           <div className="flex items-center rounded-lg border border-input bg-muted p-[3px]">
-            <button
-              type="button"
-              onClick={() => setDoctorMode("appointments")}
-              className={doctorBtnCls(doctorMode === "appointments")}
-            >
+            <button type="button" onClick={() => setDoctorMode("appointments")} className={modeBtnCls(doctorMode === "appointments")}>
               By appointments
             </button>
-            <button
-              type="button"
-              onClick={() => setDoctorMode("revenue")}
-              className={doctorBtnCls(doctorMode === "revenue")}
-            >
+            <button type="button" onClick={() => setDoctorMode("revenue")} className={modeBtnCls(doctorMode === "revenue")}>
               By revenue
             </button>
           </div>
         </div>
         <DateFilter
-          filterMode={filterMode}
-          month={month}
-          rangeFrom={rangeFrom}
-          rangeTo={rangeTo}
+          filterMode={df.filterMode}
+          month={df.month}
+          rangeFrom={df.rangeFrom}
+          rangeTo={df.rangeTo}
           isPending={isPending}
-          onFilterModeChange={handleFilterModeChange}
-          onMonthChange={handleMonthChange}
-          onRangeFromChange={handleRangeFromChange}
-          onRangeToChange={handleRangeToChange}
+          onFilterModeChange={df.handleFilterModeChange}
+          onMonthChange={df.handleMonthChange}
+          onRangeFromChange={df.handleRangeFromChange}
+          onRangeToChange={df.handleRangeToChange}
         />
       </div>
 
@@ -599,105 +556,99 @@ function DoctorsSection({
         {doctors.length === 0 ? (
           <EmptyState />
         ) : doctorMode === "appointments" ? (
-          <ResponsiveContainer width="100%" height={barHeight}>
-            <BarChart
-              data={chartData}
-              layout="vertical"
-              margin={{ top: 0, right: 16, bottom: 0, left: 0 }}
-            >
-              <CartesianGrid
-                horizontal={false}
-                strokeDasharray="3 3"
-                stroke="hsl(var(--border))"
-                strokeOpacity={0.4}
-              />
-              <XAxis
-                type="number"
-                allowDecimals={false}
-                tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-                tickLine={false}
-                axisLine={false}
-              />
-              <YAxis
-                type="category"
-                dataKey="name"
-                width={100}
-                tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-                tickLine={false}
-                axisLine={false}
-              />
-              <Tooltip content={<ChartTooltip />} />
-              <Legend
-                iconType="rect"
-                iconSize={8}
-                wrapperStyle={{
-                  fontSize: 11,
-                  color: "hsl(var(--foreground))",
-                }}
-              />
-              <Bar
-                dataKey="confirmed"
-                name="Confirmed"
-                fill={C.emerald}
-                stackId="a"
-                maxBarSize={22}
-              />
-              <Bar
-                dataKey="cancelled"
-                name="Cancelled"
-                fill={C.rose}
-                stackId="a"
-                maxBarSize={22}
-              />
-              <Bar
-                dataKey="other"
-                name="Other"
-                fill={C.blue}
-                stackId="a"
-                maxBarSize={22}
-                radius={[0, 4, 4, 0]}
-              />
-            </BarChart>
-          </ResponsiveContainer>
+          <HBarChart data={chartData}>
+            <Tooltip content={<ChartTooltip />} />
+            <Legend iconType="rect" iconSize={8} wrapperStyle={LEGEND_STYLE} />
+            <Bar dataKey="confirmed" name="Confirmed" fill={C.emerald} stackId="a" maxBarSize={22} />
+            <Bar dataKey="cancelled" name="Cancelled" fill={C.rose} stackId="a" maxBarSize={22} />
+            <Bar dataKey="other" name="Other" fill={C.blue} stackId="a" maxBarSize={22} radius={[0, 4, 4, 0]} />
+          </HBarChart>
         ) : (
-          <ResponsiveContainer width="100%" height={barHeight}>
-            <BarChart
-              data={chartData}
-              layout="vertical"
-              margin={{ top: 0, right: 16, bottom: 0, left: 0 }}
-            >
-              <CartesianGrid
-                horizontal={false}
-                strokeDasharray="3 3"
-                stroke="hsl(var(--border))"
-                strokeOpacity={0.4}
-              />
-              <XAxis
-                type="number"
-                allowDecimals={false}
-                tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-                tickLine={false}
-                axisLine={false}
-                tickFormatter={(v) => `₺${v.toLocaleString()}`}
-              />
-              <YAxis
-                type="category"
-                dataKey="name"
-                width={100}
-                tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-                tickLine={false}
-                axisLine={false}
-              />
-              <Tooltip content={<RevenueTooltip />} />
-              <Bar
-                dataKey="revenue"
-                name="Revenue (₺)"
-                fill={C.amber}
-                radius={[0, 4, 4, 0]}
-                maxBarSize={22}
-              />
-            </BarChart>
-          </ResponsiveContainer>
+          <HBarChartRevenue data={chartData} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Department section ───────────────────────────────────────────────────────
+
+type DeptMode = "appointments" | "patients" | "revenue";
+
+function DepartmentSection({
+  clinicId,
+  initialDepartments,
+}: {
+  clinicId: string;
+  initialDepartments: DepartmentStat[];
+}) {
+  const [deptMode, setDeptMode] = useState<DeptMode>("appointments");
+  const [departments, setDepartments] = useState<DepartmentStat[]>(initialDepartments);
+  const [isPending, startTransition] = useTransition();
+
+  const refetch = useCallback(
+    (start: string, end: string) => {
+      startTransition(async () => {
+        const data = await fetchDepartmentStats(clinicId, start, end);
+        setDepartments(data);
+      });
+    },
+    [clinicId],
+  );
+
+  const df = useDateFilter(clinicId, refetch);
+
+  const sorted = [...departments].sort((a, b) => {
+    if (deptMode === "revenue") return b.revenue - a.revenue;
+    if (deptMode === "patients") return b.patients - a.patients;
+    return b.appointments - a.appointments;
+  });
+
+  return (
+    <div className="rounded-xl border border-border/60 bg-card p-5 shadow-sm">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-sm font-semibold text-foreground">Department engagement</h2>
+          <div className="flex items-center rounded-lg border border-input bg-muted p-[3px]">
+            <button type="button" onClick={() => setDeptMode("appointments")} className={modeBtnCls(deptMode === "appointments")}>
+              Appointments
+            </button>
+            <button type="button" onClick={() => setDeptMode("patients")} className={modeBtnCls(deptMode === "patients")}>
+              Patients
+            </button>
+            <button type="button" onClick={() => setDeptMode("revenue")} className={modeBtnCls(deptMode === "revenue")}>
+              Revenue
+            </button>
+          </div>
+        </div>
+        <DateFilter
+          filterMode={df.filterMode}
+          month={df.month}
+          rangeFrom={df.rangeFrom}
+          rangeTo={df.rangeTo}
+          isPending={isPending}
+          onFilterModeChange={df.handleFilterModeChange}
+          onMonthChange={df.handleMonthChange}
+          onRangeFromChange={df.handleRangeFromChange}
+          onRangeToChange={df.handleRangeToChange}
+        />
+      </div>
+
+      <div className={cn("transition-opacity", isPending && "opacity-60")}>
+        {departments.length === 0 ? (
+          <EmptyState />
+        ) : deptMode === "revenue" ? (
+          <HBarChartRevenue data={sorted} yWidth={120} />
+        ) : deptMode === "patients" ? (
+          <HBarChart data={sorted} yWidth={120}>
+            <Tooltip content={<ChartTooltip />} />
+            <Bar dataKey="patients" name="Patients" fill={C.violet} radius={[0, 4, 4, 0]} maxBarSize={22} />
+          </HBarChart>
+        ) : (
+          <HBarChart data={sorted} yWidth={120}>
+            <Tooltip content={<ChartTooltip />} />
+            <Bar dataKey="appointments" name="Appointments" fill={C.cyan} radius={[0, 4, 4, 0]} maxBarSize={22} />
+          </HBarChart>
         )}
       </div>
     </div>
@@ -718,6 +669,7 @@ export function ManagerDashboard({
   initialDailySeries,
   initialInsuranceSeries,
   initialDoctors,
+  initialDepartments,
 }: ManagerDashboardProps) {
   return (
     <div className="space-y-6">
@@ -725,9 +677,7 @@ export function ManagerDashboard({
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Analytics</h1>
-          <p className="text-sm text-muted-foreground">
-            Welcome back, {fullName}.
-          </p>
+          <p className="text-sm text-muted-foreground">Welcome back, {fullName}.</p>
         </div>
         <a href="/appointments/export" download>
           <Button variant="outline" size="sm" className="gap-2">
@@ -739,19 +689,9 @@ export function ManagerDashboard({
 
       {/* KPIs */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        <KpiCard
-          title="Today"
-          value={todayCount}
-          icon={CalendarDays}
-          variant="primary"
-        />
+        <KpiCard title="Today" value={todayCount} icon={CalendarDays} variant="primary" />
         <KpiCard title="This week" value={weekCount} icon={TrendingUp} />
-        <KpiCard
-          title="This month"
-          value={monthCount}
-          icon={BarChart3}
-          variant="success"
-        />
+        <KpiCard title="This month" value={monthCount} icon={BarChart3} variant="success" />
         <KpiCard title="Total patients" value={totalPatients} icon={Users} />
         <KpiCard
           title="No-show rate"
@@ -767,14 +707,17 @@ export function ManagerDashboard({
         />
       </div>
 
-      {/* Appointments with date range picker */}
+      {/* Appointments line chart */}
       <AppointmentsSection clinicId={clinicId} initialSeries={initialDailySeries} />
 
-      {/* Insurance + Doctors side by side on large screens */}
+      {/* Insurance + Doctors */}
       <div className="grid gap-6 xl:grid-cols-2">
         <InsuranceSection clinicId={clinicId} initialSeries={initialInsuranceSeries} />
         <DoctorsSection clinicId={clinicId} initialDoctors={initialDoctors} />
       </div>
+
+      {/* Department engagement */}
+      <DepartmentSection clinicId={clinicId} initialDepartments={initialDepartments} />
     </div>
   );
 }

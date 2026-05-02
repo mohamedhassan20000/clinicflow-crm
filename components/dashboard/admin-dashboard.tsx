@@ -8,11 +8,13 @@ import {
   Users,
   TrendingUp,
   AlertCircle,
+  BarChart3,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { StatusBadge } from "@/components/appointments/status-badge";
 import { RevenueWidget, type RevenueWidgetProps } from "@/components/dashboard/revenue-widget";
+import { AnalyticsSection, type AnalyticsSectionProps } from "@/components/dashboard/analytics-section";
 import type { Tables } from "@/types/database";
 
 type Appointment = Tables<"appointments"> & {
@@ -31,6 +33,7 @@ interface AdminDashboardProps {
   todayAppointments: Appointment[];
   upcomingAppointments: Appointment[];
   revenue: RevenueWidgetProps;
+  analytics: AnalyticsSectionProps;
 }
 
 function formatTime(iso: string) {
@@ -61,6 +64,7 @@ export function AdminDashboard({
   todayAppointments,
   upcomingAppointments,
   revenue,
+  analytics,
 }: AdminDashboardProps) {
   const monthTrend =
     lastMonthCount === 0
@@ -247,6 +251,15 @@ export function AdminDashboard({
             )}
           </div>
         </div>
+      </div>
+
+      {/* Analytics section */}
+      <div>
+        <div className="mb-4 flex items-center gap-2">
+          <BarChart3 className="h-5 w-5 text-primary" />
+          <h2 className="text-lg font-semibold tracking-tight">Analytics</h2>
+        </div>
+        <AnalyticsSection {...analytics} />
       </div>
     </div>
   );

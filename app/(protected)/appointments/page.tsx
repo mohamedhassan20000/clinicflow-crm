@@ -50,6 +50,8 @@ function parseLocalMonth(iso: string): Date {
 
 export default async function AppointmentsPage({ searchParams }: PageProps) {
   const user = await requireUser();
+  const isDoctor = user.role === "doctor";
+
   const {
     view: viewParam,
     week,
@@ -107,13 +109,15 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
   const supabase = await createClient();
 
   const [{ data: doctors }, { data: departments }] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select("id, full_name")
-      .eq("clinic_id", user.clinicId)
-      .eq("role", "doctor")
-      .eq("is_active", true)
-      .order("full_name"),
+    isDoctor
+      ? Promise.resolve({ data: [] as { id: string; full_name: string }[] })
+      : supabase
+          .from("profiles")
+          .select("id, full_name")
+          .eq("clinic_id", user.clinicId)
+          .eq("role", "doctor")
+          .eq("is_active", true)
+          .order("full_name"),
     supabase
       .from("departments")
       .select("id, name, color")
@@ -150,7 +154,9 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
     .lt("scheduled_at", rangeEnd.toISOString())
     .order("scheduled_at");
 
-  if (doctor) query = query.eq("doctor_id", doctor);
+  // Doctors always see only their own appointments
+  if (isDoctor) query = query.eq("doctor_id", user.id);
+  else if (doctor) query = query.eq("doctor_id", doctor);
   if (dept) query = query.eq("department_id", dept);
   if (patientIds) query = query.in("patient_id", patientIds);
 
@@ -161,7 +167,7 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
 
   const total = appts.length;
   const activeFilterCount =
-    Number(!!doctor) +
+    Number(!isDoctor && !!doctor) +
     Number(!!dept) +
     Number(!!file) +
     Number(!!nat) +
@@ -191,25 +197,26 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
       <AppointmentsFilterBar
         doctors={doctors ?? []}
         departments={departments ?? []}
+        hideDoctorFilter={isDoctor}
       />
 
       {view === "day" ? (
         <DayCalendar
           appointments={appts}
           date={dayAnchor}
-          canEdit={user.role !== "manager"}
+          canEdit={!isDoctor && user.role !== "manager"}
         />
       ) : view === "month" ? (
         <MonthCalendar
           appointments={appts}
           monthStart={monthStart}
-          canEdit={user.role !== "manager"}
+          canEdit={!isDoctor && user.role !== "manager"}
         />
       ) : (
         <WeekCalendar
           appointments={appts}
           weekStart={weekStart}
-          canEdit={user.role !== "manager"}
+          canEdit={!isDoctor && user.role !== "manager"}
         />
       )}
     </div>

@@ -41,6 +41,7 @@ function buildNav(role: string): NavEntry[] {
   if (role === "doctor") {
     items.push(
       { href: "/patients", label: "Patients", icon: Users },
+      { href: "/appointments", label: "Appointments", icon: CalendarDays },
       { href: "/followups", label: "Follow-ups", icon: PhoneCall },
     );
   }

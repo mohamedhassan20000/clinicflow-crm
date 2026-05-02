@@ -39,6 +39,7 @@ type FilterKey =
 interface Props {
   doctors: { id: string; full_name: string }[];
   departments: { id: string; name: string; color: string }[];
+  hideDoctorFilter?: boolean;
 }
 
 const ICONS: Record<FilterKey, React.ComponentType<{ className?: string }>> = {
@@ -59,7 +60,7 @@ const LABELS: Record<FilterKey, string> = {
   name: "Name",
 };
 
-export function AppointmentsFilterBar({ doctors, departments }: Props) {
+export function AppointmentsFilterBar({ doctors, departments, hideDoctorFilter = false }: Props) {
   const router = useRouter();
   const params = useSearchParams();
   const [, startTransition] = useTransition();
@@ -95,17 +96,19 @@ export function AppointmentsFilterBar({ doctors, departments }: Props) {
         Filter
       </span>
 
-      <FilterChip
-        filterKey="doctor"
-        active={!!params.get("doctor")}
-        value={doctorName(doctors, params.get("doctor"))}
-      >
-        <DoctorFilter
-          current={params.get("doctor")}
-          doctors={doctors}
-          onApply={(v) => apply("doctor", v)}
-        />
-      </FilterChip>
+      {!hideDoctorFilter && (
+        <FilterChip
+          filterKey="doctor"
+          active={!!params.get("doctor")}
+          value={doctorName(doctors, params.get("doctor"))}
+        >
+          <DoctorFilter
+            current={params.get("doctor")}
+            doctors={doctors}
+            onApply={(v) => apply("doctor", v)}
+          />
+        </FilterChip>
+      )}
 
       <FilterChip
         filterKey="dept"

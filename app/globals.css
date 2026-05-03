@@ -280,13 +280,14 @@
     max-width: none !important;
     min-width: 0 !important;
   }
-  /* Table: fill the printable page, tight padding, no horizontal scroll. */
+  /* Table: fill the printable page, tight padding, no horizontal scroll.
+     table-layout: fixed distributes columns equally — consistent widths
+     across all tables on the same printed page (patient records, etc.). */
   table {
     width: 100% !important;
-    table-layout: auto;
+    table-layout: fixed;
     font-size: 10px !important;
     page-break-inside: auto;
-    /* Schematic grid — every cell gets a visible border in print. */
     border-collapse: collapse !important;
     border: 1px solid #000 !important;
   }
@@ -299,30 +300,28 @@
     color: #000 !important;
   }
   table thead th {
-    background: #f1f5f9 !important; /* slate-100 */
+    background: #fff !important;
     color: #000 !important;
-    font-weight: 600 !important;
+    font-weight: 700 !important;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    border-bottom: 1.5px solid #000 !important;
+    border-bottom: 2px solid #000 !important;
   }
   table tfoot td {
-    background: #f1f5f9 !important;
+    background: #fff !important;
     font-weight: 700 !important;
-    border-top: 1.5px solid #000 !important;
+    border-top: 2px solid #000 !important;
   }
-  /* Zebra striping for legibility on paper */
-  table tbody tr:nth-child(even) td {
-    background: #fafafa !important;
-  }
-  /* Strip decorative on-screen badges/chips that hurt print legibility */
+  /* Strip decorative on-screen badges/chips */
   table .rounded-full,
   table [class*="bg-"] {
     background: transparent !important;
   }
   tr    { page-break-inside: avoid; page-break-after: auto; }
   thead { display: table-header-group; }
-  tfoot { display: table-footer-group; }
+  /* table-row-group prevents tfoot repeating at the bottom of every printed
+     page — it renders only once at its natural end-of-table position. */
+  tfoot { display: table-row-group; }
 
   /* "Print settlements only" mode — hides the main report and shows just
      the settlements section. Toggled by adding `print-settlements-only`

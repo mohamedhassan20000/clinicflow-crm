@@ -185,6 +185,69 @@ export async function deleteStaff(staffId: string): Promise<ActionResult> {
   return { success: true };
 }
 
+export async function softDeleteStaff(staffId: string): Promise<ActionResult> {
+  const user = await requireRole("admin");
+
+  if (staffId === user.id) {
+    return { error: "You cannot delete your own account." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("profiles")
+    .update({ is_deleted: true, deleted_at: new Date().toISOString(), is_active: false })
+    .eq("id", staffId)
+    .eq("clinic_id", user.clinicId);
+
+  if (error) return { error: error.message };
+  revalidatePath("/settings/staff");
+  return { success: true };
+}
+
+export async function restoreStaff(staffId: string): Promise<ActionResult> {
+  const user = await requireRole("admin");
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({ is_deleted: false, deleted_at: null, is_active: true })
+    .eq("id", staffId)
+    .eq("clinic_id", user.clinicId);
+
+  if (error) return { error: error.message };
+  revalidatePath("/settings/staff");
+  return { success: true };
+}
+
+export async function permanentDeleteStaff(staffId: string): Promise<ActionResult> {
+  const user = await requireRole("admin");
+
+  if (staffId === user.id) {
+    return { error: "You cannot delete your own account." };
+  }
+
+  const supabase = await createClient();
+
+  const { data: target } = await supabase
+    .from("profiles")
+    .select("id, clinic_id")
+    .eq("id", staffId)
+    .single();
+
+  if (!target || target.clinic_id !== user.clinicId) {
+    return { error: "Staff member not found." };
+  }
+
+  const adminClient = createAdminClient();
+  const { error } = await adminClient.auth.admin.deleteUser(staffId);
+  if (error) return { error: error.message };
+
+  await supabase.from("profiles").delete().eq("id", staffId);
+
+  revalidatePath("/settings/staff");
+  return { success: true };
+}
+
 export async function resetStaffPassword(staffId: string): Promise<ActionResult> {
   await requireRole("admin");
 

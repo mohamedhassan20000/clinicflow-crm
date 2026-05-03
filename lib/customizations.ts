@@ -6,6 +6,10 @@
 
 export type AccessLevel = "hidden" | "read_only" | "read_edit";
 
+// Special feature key stored alongside regular features to mark an entire page as hidden.
+// Absence = visible; access="hidden" = page hidden for this user.
+export const PAGE_VISIBILITY_KEY = "_visible";
+
 export interface FeatureDef {
   key: string;
   label: string;
@@ -141,6 +145,32 @@ export const FEATURE_REGISTRY: PageDef[] = [
         key: "record_outcome",
         label: "Record follow-up outcome",
         defaults: { admin: "read_edit", receptionist: "read_edit", manager: "hidden", doctor: "read_only" },
+      },
+    ],
+  },
+  {
+    key: "settings",
+    label: "Settings",
+    features: [
+      {
+        key: "staff",
+        label: "Staff & Roles",
+        defaults: { admin: "read_edit", receptionist: "hidden", manager: "read_only", doctor: "hidden" },
+      },
+      {
+        key: "departments",
+        label: "Departments",
+        defaults: { admin: "read_edit", receptionist: "hidden", manager: "read_only", doctor: "hidden" },
+      },
+      {
+        key: "services",
+        label: "Services",
+        defaults: { admin: "read_edit", receptionist: "hidden", manager: "read_only", doctor: "hidden" },
+      },
+      {
+        key: "insurance",
+        label: "Insurance providers",
+        defaults: { admin: "read_edit", receptionist: "hidden", manager: "read_only", doctor: "hidden" },
       },
     ],
   },

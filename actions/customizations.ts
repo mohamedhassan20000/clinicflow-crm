@@ -10,14 +10,11 @@ import type {
 
 // ── Server actions ────────────────────────────────────────────────────────────
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyClient = any;
-
 export async function getCustomizationsForUser(
   profileId: string,
 ): Promise<UserCustomization[]> {
   await requireRole("admin");
-  const supabase: AnyClient = await createClient();
+  const supabase = await createClient();
   const { data } = await supabase
     .from("user_customizations")
     .select("page, feature, access")
@@ -32,7 +29,7 @@ export async function upsertCustomization(
   access: AccessLevel,
 ): Promise<{ error?: string }> {
   const admin = await requireRole("admin");
-  const supabase: AnyClient = await createClient();
+  const supabase = await createClient();
 
   const { error } = await supabase.from("user_customizations").upsert(
     {
@@ -54,7 +51,7 @@ export async function resetUserCustomizations(
   profileId: string,
 ): Promise<{ error?: string }> {
   const admin = await requireRole("admin");
-  const supabase: AnyClient = await createClient();
+  const supabase = await createClient();
 
   const { error } = await supabase
     .from("user_customizations")

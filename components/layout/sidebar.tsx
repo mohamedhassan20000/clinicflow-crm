@@ -25,6 +25,7 @@ interface SidebarProps {
   role: string;
   fullName: string;
   theme: "light" | "dark";
+  hiddenPages?: string[];
 }
 
 function buildNav(role: string): NavEntry[] {
@@ -82,8 +83,10 @@ function NavLink({ href, label, icon: Icon }: NavEntry) {
   );
 }
 
-export function Sidebar({ role, fullName, theme }: SidebarProps) {
-  const nav = buildNav(role);
+export function Sidebar({ role, fullName, theme, hiddenPages = [] }: SidebarProps) {
+  const nav = buildNav(role).filter(
+    (n) => !hiddenPages.includes(n.href.replace(/^\//, "").split("/")[0]),
+  );
 
   return (
     <aside className="flex h-full flex-col">

@@ -10,9 +10,10 @@ interface MobileNavProps {
   role: string;
   fullName: string;
   theme: "light" | "dark";
+  hiddenPages?: string[];
 }
 
-export function MobileNav({ role, fullName, theme }: MobileNavProps) {
+export function MobileNav({ role, fullName, theme, hiddenPages = [] }: MobileNavProps) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -31,7 +32,7 @@ export function MobileNav({ role, fullName, theme }: MobileNavProps) {
         <SheetContent side="left" className="w-60 p-0">
           <SheetTitle className="sr-only">Navigation menu</SheetTitle>
           <div onClick={() => setOpen(false)}>
-            <Sidebar role={role} fullName={fullName} theme={theme} />
+            <Sidebar role={role} fullName={fullName} theme={theme} hiddenPages={hiddenPages} />
           </div>
         </SheetContent>
       </Sheet>

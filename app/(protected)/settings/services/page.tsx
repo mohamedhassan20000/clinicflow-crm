@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { requireRole } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
+import { fetchUserCustomizationMap, featureAccess } from "@/lib/get-user-customizations";
 import { AddServiceDialog } from "@/components/settings/add-service-dialog";
 import { ServiceRowActions } from "@/components/settings/service-row-actions";
 
@@ -16,6 +17,8 @@ function fmtTRY(n: number) {
 
 export default async function ServicesSettingsPage() {
   const user = await requireRole(["admin", "manager"]);
+  const customMap = await fetchUserCustomizationMap(user.id);
+  const canEdit = featureAccess(customMap, "settings", "services", user.role) === "read_edit";
   const isAdmin = user.role === "admin";
   const supabase = await createClient();
 
@@ -62,7 +65,7 @@ export default async function ServicesSettingsPage() {
             {groups.length} department{groups.length !== 1 ? "s" : ""}.
           </p>
         </div>
-        {isAdmin && <AddServiceDialog departments={deptList} />}
+        {canEdit && <AddServiceDialog departments={deptList} />}
       </div>
 
       {deptList.length === 0 ? (
@@ -111,7 +114,7 @@ export default async function ServicesSettingsPage() {
                     <th className="px-4 py-2 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground">
                       Price
                     </th>
-                    {isAdmin && (
+                    {canEdit && (
                       <th className="px-4 py-2 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground">
                         <span className="sr-only">Actions</span>
                       </th>
@@ -125,7 +128,7 @@ export default async function ServicesSettingsPage() {
                       <td className="px-4 py-2.5 text-right tabular-nums">
                         {fmtTRY(Number(s.price))}
                       </td>
-                      {isAdmin && (
+                      {canEdit && (
                         <td className="px-4 py-2 text-right">
                           <ServiceRowActions
                             service={{

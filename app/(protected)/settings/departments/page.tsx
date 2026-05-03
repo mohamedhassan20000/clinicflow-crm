@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { requireRole } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
+import { fetchUserCustomizationMap, featureAccess } from "@/lib/get-user-customizations";
 import { Badge } from "@/components/ui/badge";
 import {
   updateDepartment,
@@ -13,6 +14,8 @@ export const metadata: Metadata = { title: "Departments" };
 
 export default async function DepartmentsSettingsPage() {
   const user = await requireRole(["admin", "manager"]);
+  const customMap = await fetchUserCustomizationMap(user.id);
+  const canEdit = featureAccess(customMap, "settings", "departments", user.role) === "read_edit";
   const isAdmin = user.role === "admin";
   const supabase = await createClient();
 
@@ -31,7 +34,7 @@ export default async function DepartmentsSettingsPage() {
             {departments?.length ?? 0} department{(departments?.length ?? 0) !== 1 ? "s" : ""}
           </p>
         </div>
-        {isAdmin && <AddDepartmentDialog />}
+        {canEdit && <AddDepartmentDialog />}
       </div>
 
       <div className="rounded-xl border border-border/50 overflow-hidden">
@@ -43,7 +46,7 @@ export default async function DepartmentsSettingsPage() {
                 Description
               </th>
               <th className="px-4 py-3 text-left font-medium text-muted-foreground">Status</th>
-              {isAdmin && (
+              {canEdit && (
                 <th className="px-4 py-3 text-right font-medium text-muted-foreground">
                   <span className="sr-only">Actions</span>
                 </th>
@@ -80,7 +83,7 @@ export default async function DepartmentsSettingsPage() {
                     {dept.is_active ? "Active" : "Inactive"}
                   </Badge>
                 </td>
-                {isAdmin && (
+                {canEdit && (
                   <td className="px-4 py-3 text-right">
                     <DepartmentActions
                       dept={dept}

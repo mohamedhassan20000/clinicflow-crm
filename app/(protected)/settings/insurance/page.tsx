@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { requireRole } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
+import { fetchUserCustomizationMap, featureAccess } from "@/lib/get-user-customizations";
 import { Badge } from "@/components/ui/badge";
 import { InsuranceActions } from "@/components/settings/insurance-actions";
 import { AddInsuranceDialog } from "@/components/settings/add-insurance-dialog";
@@ -13,6 +14,8 @@ export const metadata: Metadata = { title: "Insurance" };
 
 export default async function InsuranceSettingsPage() {
   const user = await requireRole(["admin", "manager"]);
+  const customMap = await fetchUserCustomizationMap(user.id);
+  const canEdit = featureAccess(customMap, "settings", "insurance", user.role) === "read_edit";
   const isAdmin = user.role === "admin";
   const supabase = await createClient();
 
@@ -31,7 +34,7 @@ export default async function InsuranceSettingsPage() {
             {providers?.length ?? 0} provider{(providers?.length ?? 0) !== 1 ? "s" : ""}
           </p>
         </div>
-        {isAdmin && <AddInsuranceDialog />}
+        {canEdit && <AddInsuranceDialog />}
       </div>
 
       <div className="rounded-xl border border-border/50 overflow-hidden">
@@ -43,7 +46,7 @@ export default async function InsuranceSettingsPage() {
                 Code
               </th>
               <th className="px-4 py-3 text-left font-medium text-muted-foreground">Status</th>
-              {isAdmin && (
+              {canEdit && (
                 <th className="px-4 py-3 text-right font-medium text-muted-foreground">
                   <span className="sr-only">Actions</span>
                 </th>
@@ -53,7 +56,7 @@ export default async function InsuranceSettingsPage() {
           <tbody className="divide-y divide-border/50">
             {(providers ?? []).length === 0 && (
               <tr>
-                <td colSpan={isAdmin ? 4 : 3} className="py-10 text-center text-sm text-muted-foreground">
+                <td colSpan={canEdit ? 4 : 3} className="py-10 text-center text-sm text-muted-foreground">
                   No insurance providers yet.
                 </td>
               </tr>
@@ -72,7 +75,7 @@ export default async function InsuranceSettingsPage() {
                     {provider.is_active ? "Active" : "Inactive"}
                   </Badge>
                 </td>
-                {isAdmin && (
+                {canEdit && (
                   <td className="px-4 py-3 text-right">
                     <InsuranceActions
                       provider={provider}

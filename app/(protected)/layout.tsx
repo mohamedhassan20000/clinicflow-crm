@@ -1,9 +1,10 @@
 import { redirect } from "next/navigation";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { requireUser } from "@/lib/rbac";
 import { Sidebar } from "@/components/layout/sidebar";
 import { MobileNav } from "@/components/layout/mobile-nav";
 import { fetchUserCustomizationMap, getHiddenPages } from "@/lib/get-user-customizations";
+import { FEATURE_REGISTRY } from "@/lib/customizations";
 
 export default async function ProtectedLayout({
   children,
@@ -21,6 +22,19 @@ export default async function ProtectedLayout({
 
   const customMap = await fetchUserCustomizationMap(user.id);
   const hiddenPages = getHiddenPages(customMap, user.role);
+
+  // Block access to pages that are hidden for this user.
+  if (hiddenPages.length > 0) {
+    const reqHeaders = await headers();
+    const pathname = reqHeaders.get("x-pathname") ?? "/";
+    const currentPageKey = pathname.split("/").filter(Boolean)[0] ?? "";
+    if (hiddenPages.includes(currentPageKey)) {
+      const firstVisible =
+        FEATURE_REGISTRY.map((p) => p.key).find((k) => !hiddenPages.includes(k)) ??
+        "dashboard";
+      redirect(`/${firstVisible}`);
+    }
+  }
 
   return (
     <div className="flex min-h-dvh bg-background">

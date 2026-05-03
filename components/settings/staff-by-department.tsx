@@ -13,7 +13,6 @@ interface Props {
   staff: StaffMember[];
   departments: DepartmentLite[];
   currentUserId: string;
-  isAdmin?: boolean;
   readOnly?: boolean;
 }
 
@@ -23,7 +22,6 @@ export function StaffByDepartment({
   staff,
   departments,
   currentUserId,
-  isAdmin = false,
   readOnly = false,
 }: Props) {
   const groups = useMemo(() => {
@@ -66,7 +64,6 @@ export function StaffByDepartment({
                 staff={members}
                 departments={deptOptions}
                 currentUserId={currentUserId}
-                isAdmin={isAdmin}
                 readOnly={readOnly}
               />
             )}
@@ -85,7 +82,6 @@ export function StaffByDepartment({
             staff={groups.unassigned}
             departments={deptOptions}
             currentUserId={currentUserId}
-            isAdmin={isAdmin}
             readOnly={readOnly}
           />
         </DepartmentSection>

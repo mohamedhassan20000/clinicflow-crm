@@ -19,8 +19,6 @@ export interface FeatureDef {
 export interface PageDef {
   key: string;
   label: string;
-  /** Roles that can see this page by default (before any admin override). */
-  visibleFor: string[];
   features: FeatureDef[];
 }
 
@@ -28,7 +26,6 @@ export const FEATURE_REGISTRY: PageDef[] = [
   {
     key: "dashboard",
     label: "Dashboard",
-    visibleFor: ["admin", "receptionist", "manager", "doctor"],
     features: [
       {
         key: "revenue_widget",
@@ -60,7 +57,6 @@ export const FEATURE_REGISTRY: PageDef[] = [
   {
     key: "appointments",
     label: "Appointments",
-    visibleFor: ["admin", "receptionist", "doctor"],
     features: [
       {
         key: "book_appointment",
@@ -97,7 +93,6 @@ export const FEATURE_REGISTRY: PageDef[] = [
   {
     key: "patients",
     label: "Patients",
-    visibleFor: ["admin", "receptionist", "doctor"],
     features: [
       {
         key: "create_patient",
@@ -129,7 +124,6 @@ export const FEATURE_REGISTRY: PageDef[] = [
   {
     key: "revenue",
     label: "Revenue",
-    visibleFor: ["admin", "manager"],
     features: [
       {
         key: "view_transactions",
@@ -146,7 +140,6 @@ export const FEATURE_REGISTRY: PageDef[] = [
   {
     key: "followups",
     label: "Follow-ups",
-    visibleFor: ["admin", "receptionist", "doctor"],
     features: [
       {
         key: "record_outcome",
@@ -158,7 +151,6 @@ export const FEATURE_REGISTRY: PageDef[] = [
   {
     key: "settings",
     label: "Settings",
-    visibleFor: ["admin", "manager"],
     features: [
       {
         key: "staff",

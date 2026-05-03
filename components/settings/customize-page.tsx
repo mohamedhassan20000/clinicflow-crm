@@ -125,11 +125,6 @@ export function CustomizePage({ staff }: CustomizePageProps) {
     const override = customMap[page]?.[feature];
     if (override) return override;
     const pageDef = FEATURE_REGISTRY.find((p) => p.key === page);
-    // Page visibility: fall back to visibleFor list, not "always visible".
-    if (feature === PAGE_VISIBILITY_KEY) {
-      const role = selectedStaff?.role ?? "";
-      return pageDef?.visibleFor.includes(role) ? "read_edit" : "hidden";
-    }
     const featDef = pageDef?.features.find((f) => f.key === feature);
     return featDef?.defaults[selectedStaff?.role ?? ""] ?? "hidden";
   }

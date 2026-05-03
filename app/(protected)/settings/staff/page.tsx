@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { requireRole } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { fetchUserCustomizationMap, featureAccess } from "@/lib/get-user-customizations";
 import { StaffByDepartment } from "@/components/settings/staff-by-department";
 import { AddStaffDialog } from "@/components/settings/add-staff-dialog";
 import { StaffTrash } from "@/components/settings/staff-trash";
@@ -11,8 +10,6 @@ export const metadata: Metadata = { title: "Staff" };
 
 export default async function StaffSettingsPage() {
   const user = await requireRole(["admin", "manager"]);
-  const customMap = await fetchUserCustomizationMap(user.id);
-  const canEdit = featureAccess(customMap, "settings", "staff", user.role) === "read_edit";
   const isAdmin = user.role === "admin";
   const supabase = await createClient();
 
@@ -87,8 +84,7 @@ export default async function StaffSettingsPage() {
         }
         departments={departments ?? []}
         currentUserId={user.id}
-        isAdmin={isAdmin}
-        readOnly={!canEdit}
+        readOnly={!isAdmin}
       />
 
       {isAdmin && (

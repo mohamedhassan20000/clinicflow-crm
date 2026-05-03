@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { requireUser } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
-import { fetchUserCustomizationMap, featureAccess } from "@/lib/get-user-customizations";
 import { WeekCalendar } from "@/components/appointments/week-calendar";
 import { DayCalendar } from "@/components/appointments/day-calendar";
 import { MonthCalendar } from "@/components/appointments/month-calendar";
@@ -54,8 +53,6 @@ function parseLocalMonth(iso: string): Date {
 export default async function AppointmentsPage({ searchParams }: PageProps) {
   const user = await requireUser();
   const isDoctor = user.role === "doctor";
-  const customMap = await fetchUserCustomizationMap(user.id);
-  const canEdit = featureAccess(customMap, "appointments", "book_appointment", user.role) === "read_edit";
 
   const {
     view: viewParam,
@@ -212,19 +209,19 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
         <DayCalendar
           appointments={appts}
           date={dayAnchor}
-          canEdit={canEdit}
+          canEdit={!isDoctor && user.role !== "manager"}
         />
       ) : view === "month" ? (
         <MonthCalendar
           appointments={appts}
           monthStart={monthStart}
-          canEdit={canEdit}
+          canEdit={!isDoctor && user.role !== "manager"}
         />
       ) : (
         <WeekCalendar
           appointments={appts}
           weekStart={weekStart}
-          canEdit={canEdit}
+          canEdit={!isDoctor && user.role !== "manager"}
         />
       )}
     </div>

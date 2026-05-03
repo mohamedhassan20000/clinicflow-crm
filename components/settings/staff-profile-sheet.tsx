@@ -67,10 +67,9 @@ interface Props {
   staff: StaffMember | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  isAdmin?: boolean;
 }
 
-export function StaffProfileSheet({ staff, open, onOpenChange, isAdmin = false }: Props) {
+export function StaffProfileSheet({ staff, open, onOpenChange }: Props) {
   const [files, setFiles] = useState<StaffFiles | null>(null);
   const [loadingFiles, setLoadingFiles] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -81,7 +80,7 @@ export function StaffProfileSheet({ staff, open, onOpenChange, isAdmin = false }
   const otherRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (!open || !staff || !isAdmin) {
+    if (!open || !staff) {
       setFiles(null);
       return;
     }
@@ -97,7 +96,7 @@ export function StaffProfileSheet({ staff, open, onOpenChange, isAdmin = false }
         if (active) setLoadingFiles(false);
       });
     return () => { active = false; };
-  }, [open, staff, isAdmin]);
+  }, [open, staff]);
 
   function triggerUpload(
     ref: React.RefObject<HTMLInputElement | null>,
@@ -178,7 +177,7 @@ export function StaffProfileSheet({ staff, open, onOpenChange, isAdmin = false }
         <Tabs defaultValue="profile" className="flex flex-1 flex-col overflow-hidden">
           <TabsList className="mx-8 mt-4 w-fit">
             <TabsTrigger value="profile">Profile</TabsTrigger>
-            {isAdmin && <TabsTrigger value="documents">Documents</TabsTrigger>}
+            <TabsTrigger value="documents">Documents</TabsTrigger>
           </TabsList>
 
           {/* ── Profile tab ── */}

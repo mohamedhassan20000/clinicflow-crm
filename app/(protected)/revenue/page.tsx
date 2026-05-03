@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { requireUser } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
@@ -90,7 +89,6 @@ interface PageProps {
 
 export default async function RevenuePage({ searchParams }: PageProps) {
   const user = await requireUser();
-  if (user.role === "receptionist") redirect("/dashboard");
 
   const sp = await searchParams;
   const preset = (sp.preset as PresetKey) ?? "this_month";

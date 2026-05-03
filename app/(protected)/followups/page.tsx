@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
+import { fetchUserCustomizationMap, featureAccess } from "@/lib/get-user-customizations";
 import { FollowupsView } from "@/components/followups/followups-view";
 
 export const metadata: Metadata = { title: "Follow-ups" };
@@ -59,9 +59,9 @@ function resolveRange(scope: Scope, dateStr?: string) {
 
 export default async function FollowupsPage({ searchParams }: PageProps) {
   const user = await requireUser();
-  if (user.role === "manager") redirect("/dashboard");
-
   const isDoctor = user.role === "doctor";
+  const customMap = await fetchUserCustomizationMap(user.id);
+  const canRecordOutcome = featureAccess(customMap, "followups", "record_outcome", user.role) === "read_edit";
 
   const sp = await searchParams;
   const scope = ((sp.scope as Scope) ?? "day") as Scope;
@@ -181,7 +181,7 @@ export default async function FollowupsPage({ searchParams }: PageProps) {
         start: range.start.toISOString(),
         end: range.end.toISOString(),
       }}
-      readOnly={isDoctor}
+      readOnly={!canRecordOutcome}
     />
   );
 }

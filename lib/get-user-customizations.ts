@@ -33,7 +33,9 @@ export function isPageVisible(
   if (role === "admin") return true;
   const override = map[pageKey]?.[PAGE_VISIBILITY_KEY];
   if (override !== undefined) return override !== "hidden";
-  return true;
+  // No DB override — fall back to role-based default defined in the registry.
+  const pageDef = FEATURE_REGISTRY.find((p) => p.key === pageKey);
+  return pageDef?.visibleFor.includes(role) ?? false;
 }
 
 /** Returns effective access for a feature. Admins always get read_edit. */

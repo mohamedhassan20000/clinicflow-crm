@@ -124,9 +124,12 @@ export function CustomizePage({ staff }: CustomizePageProps) {
     if (pendingMap[key]) return pendingMap[key].access;
     const override = customMap[page]?.[feature];
     if (override) return override;
-    // Page visibility defaults to visible — absence of a DB row means "shown".
-    if (feature === PAGE_VISIBILITY_KEY) return "read_edit";
     const pageDef = FEATURE_REGISTRY.find((p) => p.key === page);
+    // Page visibility: fall back to visibleFor list, not "always visible".
+    if (feature === PAGE_VISIBILITY_KEY) {
+      const role = selectedStaff?.role ?? "";
+      return pageDef?.visibleFor.includes(role) ? "read_edit" : "hidden";
+    }
     const featDef = pageDef?.features.find((f) => f.key === feature);
     return featDef?.defaults[selectedStaff?.role ?? ""] ?? "hidden";
   }

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { requireUser } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
+import { fetchUserCustomizationMap, featureAccess } from "@/lib/get-user-customizations";
 import { PatientTable } from "@/components/patients/patient-table";
 import { PatientsFilterBar } from "@/components/patients/filter-bar";
 
@@ -20,6 +21,8 @@ interface PageProps {
 export default async function PatientsPage({ searchParams }: PageProps) {
   const user = await requireUser();
   const isDoctor = user.role === "doctor";
+  const customMap = await fetchUserCustomizationMap(user.id);
+  const canCreate = featureAccess(customMap, "patients", "create_patient", user.role) === "read_edit";
 
   const { q = "", page: pageStr = "1", dept, doctor } = await searchParams;
   const page = Math.max(1, parseInt(pageStr, 10) || 1);
@@ -123,7 +126,7 @@ export default async function PatientsPage({ searchParams }: PageProps) {
         total={count ?? 0}
         page={page}
         pageSize={PAGE_SIZE}
-        canCreate={!isDoctor && user.role !== "manager"}
+        canCreate={canCreate}
       />
     </div>
   );

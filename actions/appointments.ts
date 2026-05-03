@@ -74,11 +74,15 @@ export async function createAppointment(
     }
   }
 
-  const { error } = await supabase.from("appointments").insert({
-    ...parsed.data,
-    clinic_id: user.clinicId,
-    created_by: user.id,
-  });
+  const { data: newAppt, error } = await supabase
+    .from("appointments")
+    .insert({
+      ...parsed.data,
+      clinic_id: user.clinicId,
+      created_by: user.id,
+    })
+    .select("id")
+    .single();
 
   if (error) {
     if (error.code === "23505") {
@@ -98,7 +102,7 @@ export async function createAppointment(
   }
 
   revalidatePath("/appointments");
-  redirect("/appointments");
+  redirect(`/appointments?undo=${newAppt?.id ?? ""}`);
 }
 
 export type BillingInput = BillingValues;
@@ -267,6 +271,86 @@ export async function cancelAppointment(
   reason: string,
 ): Promise<ActionResult> {
   return updateAppointmentStatus(id, "cancelled", null, reason);
+}
+
+/**
+ * Reverts an appointment to a previous status within the undo window.
+ * For reverting a "completed" appointment, also deletes the billing records.
+ */
+export async function undoAppointmentAction(
+  id: string,
+  previousStatus: string,
+): Promise<ActionResult> {
+  const user = await requireRole(["admin", "receptionist"]);
+  const supabase = await createClient();
+
+  const update: TablesUpdate<"appointments"> = {
+    status: previousStatus as TablesUpdate<"appointments">["status"],
+    updated_by: user.id,
+    cancellation_reason: null,
+    cancelled_at: null,
+    cancelled_by: null,
+    no_show_reason: null,
+    no_showed_at: null,
+    no_showed_by: null,
+  };
+
+  // Reverting from completed: clear billing fields and remove line items
+  if (previousStatus === "confirmed") {
+    update.paid_at = null;
+    update.paid_amount = 0;
+    update.insurance_amount = 0;
+    update.secondary_amount = 0;
+    update.deposit_amount = 0;
+    update.total_amount = null;
+    update.outstanding_amount = 0;
+    update.payment_method = null;
+    update.secondary_payment_method = null;
+    update.payment_note = null;
+
+    await supabase
+      .from("appointment_services")
+      .delete()
+      .eq("appointment_id", id)
+      .eq("clinic_id", user.clinicId);
+  }
+
+  const { error } = await supabase
+    .from("appointments")
+    .update(update)
+    .eq("id", id)
+    .eq("clinic_id", user.clinicId);
+
+  if (error) return { error: "Failed to undo action." };
+
+  revalidatePath("/appointments");
+  return {};
+}
+
+/**
+ * Soft-deletes (cancels) a newly booked appointment for the booking undo flow.
+ */
+export async function deleteNewAppointment(id: string): Promise<ActionResult> {
+  const user = await requireRole(["admin", "receptionist"]);
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("appointments")
+    .update({
+      status: "cancelled",
+      cancellation_reason: "Booking undone by user",
+      cancelled_at: new Date().toISOString(),
+      cancelled_by: user.id,
+      updated_by: user.id,
+    })
+    .eq("id", id)
+    .eq("clinic_id", user.clinicId)
+    .eq("status", "pending");
+
+  if (error) return { error: "Failed to undo booking." };
+
+  revalidatePath("/appointments");
+  return {};
 }
 
 export interface BillingContext {

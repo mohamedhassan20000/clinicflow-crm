@@ -162,6 +162,22 @@
   }
 }
 
+/* ─── Recharts dark-mode text fix ─────────────────────────────────────────
+   Recharts sets tick labels as SVG presentation attributes, which don't
+   resolve CSS custom properties. A CSS rule (higher specificity) overrides
+   the attribute so oklch variables resolve correctly in dark mode.          */
+.dark .recharts-text,
+.dark .recharts-cartesian-axis-tick-value,
+.dark .recharts-polar-angle-axis-tick-value {
+  fill: var(--muted-foreground) !important;
+}
+.dark .recharts-legend-item-text {
+  color: var(--foreground) !important;
+}
+.dark .recharts-label {
+  fill: var(--foreground) !important;
+}
+
 /* ─── Aurora animation for auth pages ─── */
 @keyframes aurora-drift {
   0%, 100% { transform: translate(0%, 0%) scale(1); opacity: 0.6; }

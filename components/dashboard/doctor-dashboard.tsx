@@ -297,10 +297,11 @@ export function DoctorDashboard({
                     </Pie>
                     <Tooltip
                       contentStyle={{
-                        background: "hsl(var(--card))",
-                        border: "1px solid hsl(var(--border))",
+                        background: "var(--card)",
+                        border: "1px solid var(--border)",
                         borderRadius: "8px",
                         fontSize: "11px",
+                        color: "var(--card-foreground)",
                       }}
                       formatter={(val, name) => [`${val} patients`, name]}
                     />
@@ -328,29 +329,30 @@ export function DoctorDashboard({
         {stats.dailySeries.length > 1 ? (
           <ResponsiveContainer width="100%" height={220}>
             <LineChart data={stats.dailySeries} margin={{ top: 4, right: 16, left: -16, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.5} />
               <XAxis
                 dataKey="date"
-                tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
                 tickLine={false}
                 axisLine={false}
                 interval="preserveStartEnd"
               />
               <YAxis
                 allowDecimals={false}
-                tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
                 tickLine={false}
                 axisLine={false}
               />
               <Tooltip
                 contentStyle={{
-                  background: "hsl(var(--card))",
-                  border: "1px solid hsl(var(--border))",
+                  background: "var(--card)",
+                  border: "1px solid var(--border)",
                   borderRadius: "8px",
                   fontSize: "12px",
+                  color: "var(--card-foreground)",
                 }}
               />
-              <Legend wrapperStyle={{ fontSize: "12px" }} />
+              <Legend wrapperStyle={{ fontSize: "12px", color: "var(--foreground)" }} />
               <Line
                 type="monotone"
                 dataKey="mine"

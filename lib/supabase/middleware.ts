@@ -11,8 +11,8 @@ const PROTECTED_PREFIXES = [
 
 const AUTH_PAGES = ["/login", "/change-password"];
 
-// Routes only admins may access
-const ADMIN_ONLY_PREFIXES = ["/settings"];
+// Routes only admins and managers may access
+const ADMIN_MANAGER_PREFIXES = ["/settings"];
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -84,11 +84,12 @@ export async function updateSession(request: NextRequest) {
       return NextResponse.redirect(url);
     }
 
-    // Role-based route guard: admin-only routes
+    // Role-based route guard: admin/manager-only routes
     if (
       profile &&
       profile.role !== "admin" &&
-      ADMIN_ONLY_PREFIXES.some((p) => pathname.startsWith(p))
+      profile.role !== "manager" &&
+      ADMIN_MANAGER_PREFIXES.some((p) => pathname.startsWith(p))
     ) {
       const url = request.nextUrl.clone();
       url.pathname = "/dashboard";

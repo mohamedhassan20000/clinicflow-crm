@@ -71,9 +71,10 @@ interface StaffTableProps {
   staff: StaffMember[];
   departments: Department[];
   currentUserId: string;
+  readOnly?: boolean;
 }
 
-export function StaffTable({ staff, departments, currentUserId }: StaffTableProps) {
+export function StaffTable({ staff, departments, currentUserId, readOnly = false }: StaffTableProps) {
   const [editTarget, setEditTarget] = useState<StaffMember | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<StaffMember | null>(null);
   const [profileTarget, setProfileTarget] = useState<StaffMember | null>(null);
@@ -166,7 +167,7 @@ export function StaffTable({ staff, departments, currentUserId }: StaffTableProp
                 >
                   {isPending ? (
                     <Loader2 className="ml-auto h-4 w-4 animate-spin text-muted-foreground" />
-                  ) : (
+                  ) : readOnly ? null : (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon" className="h-7 w-7">

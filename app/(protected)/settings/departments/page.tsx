@@ -12,7 +12,8 @@ import { AddDepartmentDialog } from "@/components/settings/add-department-dialog
 export const metadata: Metadata = { title: "Departments" };
 
 export default async function DepartmentsSettingsPage() {
-  const user = await requireRole("admin");
+  const user = await requireRole(["admin", "manager"]);
+  const isAdmin = user.role === "admin";
   const supabase = await createClient();
 
   const { data: departments } = await supabase
@@ -30,7 +31,7 @@ export default async function DepartmentsSettingsPage() {
             {departments?.length ?? 0} department{(departments?.length ?? 0) !== 1 ? "s" : ""}
           </p>
         </div>
-        <AddDepartmentDialog />
+        {isAdmin && <AddDepartmentDialog />}
       </div>
 
       <div className="rounded-xl border border-border/50 overflow-hidden">
@@ -42,9 +43,11 @@ export default async function DepartmentsSettingsPage() {
                 Description
               </th>
               <th className="px-4 py-3 text-left font-medium text-muted-foreground">Status</th>
-              <th className="px-4 py-3 text-right font-medium text-muted-foreground">
-                <span className="sr-only">Actions</span>
-              </th>
+              {isAdmin && (
+                <th className="px-4 py-3 text-right font-medium text-muted-foreground">
+                  <span className="sr-only">Actions</span>
+                </th>
+              )}
             </tr>
           </thead>
           <tbody className="divide-y divide-border/50">
@@ -77,13 +80,15 @@ export default async function DepartmentsSettingsPage() {
                     {dept.is_active ? "Active" : "Inactive"}
                   </Badge>
                 </td>
-                <td className="px-4 py-3 text-right">
-                  <DepartmentActions
-                    dept={dept}
-                    updateAction={updateDepartment.bind(null, dept.id)}
-                    toggleAction={toggleDepartmentActive.bind(null, dept.id)}
-                  />
-                </td>
+                {isAdmin && (
+                  <td className="px-4 py-3 text-right">
+                    <DepartmentActions
+                      dept={dept}
+                      updateAction={updateDepartment.bind(null, dept.id)}
+                      toggleAction={toggleDepartmentActive.bind(null, dept.id)}
+                    />
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>

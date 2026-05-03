@@ -60,6 +60,8 @@ export interface AnalyticsSectionProps {
   initialInsuranceSeries: InsurancePoint[];
   initialDoctors: DoctorStat[];
   initialDepartments: DepartmentStat[];
+  /** When true, hides the top KPI row (used in admin dashboard where KPIs are already shown above) */
+  hideKpis?: boolean;
 }
 
 // ── Chart colours ─────────────────────────────────────────────────────────────
@@ -115,9 +117,9 @@ function dateRangeToISO(from: string, to: string) {
 const INPUT_CLS =
   "h-8 rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground [color-scheme:light] dark:[color-scheme:dark] focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 disabled:opacity-50";
 
-const TICK = { fontSize: 11, fill: "hsl(var(--muted-foreground))" } as const;
-const GRID_PROPS = { stroke: "hsl(var(--border))", strokeOpacity: 0.4, strokeDasharray: "3 3" } as const;
-const LEGEND_STYLE = { fontSize: 11, color: "hsl(var(--foreground))" } as const;
+const TICK = { fontSize: 11, fill: "var(--muted-foreground)" } as const;
+const GRID_PROPS = { stroke: "var(--border)", strokeOpacity: 0.4, strokeDasharray: "3 3" } as const;
+const LEGEND_STYLE = { fontSize: 11, color: "var(--foreground)" } as const;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function ChartTooltip({ active, payload, label }: any) {
@@ -490,18 +492,21 @@ export function AnalyticsSection({
   initialInsuranceSeries,
   initialDoctors,
   initialDepartments,
+  hideKpis,
 }: AnalyticsSectionProps) {
   return (
     <div className="space-y-6">
-      {/* KPI cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        <KpiCard title="Today" value={todayCount} icon={CalendarDays} variant="primary" />
-        <KpiCard title="This week" value={weekCount} icon={TrendingUp} />
-        <KpiCard title="This month" value={monthCount} icon={BarChart3} variant="success" />
-        <KpiCard title="Total patients" value={totalPatients} icon={Users} />
-        <KpiCard title="No-show rate" value={`${noShowRate}%`} icon={UserX} variant={noShowRate > 10 ? "warning" : "default"} />
-        <KpiCard title="Cancellation rate" value={`${cancelRate}%`} icon={XCircle} variant={cancelRate > 15 ? "warning" : "default"} />
-      </div>
+      {/* KPI cards — hidden in admin dashboard where the top section already shows them */}
+      {!hideKpis && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+          <KpiCard title="Today" value={todayCount} icon={CalendarDays} variant="primary" />
+          <KpiCard title="This week" value={weekCount} icon={TrendingUp} />
+          <KpiCard title="This month" value={monthCount} icon={BarChart3} variant="success" />
+          <KpiCard title="Total patients" value={totalPatients} icon={Users} />
+          <KpiCard title="No-show rate" value={`${noShowRate}%`} icon={UserX} variant={noShowRate > 10 ? "warning" : "default"} />
+          <KpiCard title="Cancellation rate" value={`${cancelRate}%`} icon={XCircle} variant={cancelRate > 15 ? "warning" : "default"} />
+        </div>
+      )}
 
       <AppointmentsSection clinicId={clinicId} initialSeries={initialDailySeries} />
 

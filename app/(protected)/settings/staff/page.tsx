@@ -7,7 +7,8 @@ import { AddStaffDialog } from "@/components/settings/add-staff-dialog";
 export const metadata: Metadata = { title: "Staff" };
 
 export default async function StaffSettingsPage() {
-  const user = await requireRole("admin");
+  const user = await requireRole(["admin", "manager"]);
+  const isAdmin = user.role === "admin";
   const supabase = await createClient();
 
   const [{ data: staff }, { data: departments }] = await Promise.all([
@@ -35,11 +36,13 @@ export default async function StaffSettingsPage() {
             {(departments?.length ?? 0) !== 1 ? "s" : ""}
           </p>
         </div>
-        <AddStaffDialog
-          departments={
-            (departments ?? []).map(({ id, name }) => ({ id, name }))
-          }
-        />
+        {isAdmin && (
+          <AddStaffDialog
+            departments={
+              (departments ?? []).map(({ id, name }) => ({ id, name }))
+            }
+          />
+        )}
       </div>
 
       <StaffByDepartment
@@ -50,6 +53,7 @@ export default async function StaffSettingsPage() {
         }
         departments={departments ?? []}
         currentUserId={user.id}
+        readOnly={!isAdmin}
       />
     </div>
   );

@@ -13,7 +13,6 @@ interface Props {
   staff: StaffMember[];
   departments: DepartmentLite[];
   currentUserId: string;
-  readOnly?: boolean;
 }
 
 const UNASSIGNED_COLOR = "#94a3b8"; // slate-400
@@ -22,7 +21,6 @@ export function StaffByDepartment({
   staff,
   departments,
   currentUserId,
-  readOnly = false,
 }: Props) {
   const groups = useMemo(() => {
     const byDept = new Map<string, StaffMember[]>();
@@ -64,7 +62,6 @@ export function StaffByDepartment({
                 staff={members}
                 departments={deptOptions}
                 currentUserId={currentUserId}
-                readOnly={readOnly}
               />
             )}
           </DepartmentSection>
@@ -82,7 +79,6 @@ export function StaffByDepartment({
             staff={groups.unassigned}
             departments={deptOptions}
             currentUserId={currentUserId}
-            readOnly={readOnly}
           />
         </DepartmentSection>
       )}

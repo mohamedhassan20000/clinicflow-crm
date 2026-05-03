@@ -24,9 +24,10 @@ import type { ActionResult } from "@/actions/settings";
 interface ClinicFormProps {
   defaultValues: ClinicValues;
   logoUrl: string | null;
+  readOnly?: boolean;
 }
 
-export function ClinicForm({ defaultValues, logoUrl: initialLogoUrl }: ClinicFormProps) {
+export function ClinicForm({ defaultValues, logoUrl: initialLogoUrl, readOnly = false }: ClinicFormProps) {
   const [state, formAction, isPending] = useActionState(
     updateClinic as (prev: ActionResult | null, fd: FormData) => Promise<ActionResult>,
     null,
@@ -101,7 +102,7 @@ export function ClinicForm({ defaultValues, logoUrl: initialLogoUrl }: ClinicFor
                 variant="outline"
                 size="sm"
                 className="gap-2"
-                disabled={logoUploading}
+                disabled={logoUploading || readOnly}
                 onClick={() => fileInputRef.current?.click()}
               >
                 {logoUploading ? (
@@ -154,7 +155,7 @@ export function ClinicForm({ defaultValues, logoUrl: initialLogoUrl }: ClinicFor
                 <FormItem>
                   <FormLabel>Clinic name</FormLabel>
                   <FormControl>
-                    <Input {...field} disabled={isPending} />
+                    <Input {...field} disabled={isPending || readOnly} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -170,7 +171,7 @@ export function ClinicForm({ defaultValues, logoUrl: initialLogoUrl }: ClinicFor
                     <Input
                       {...field}
                       value={field.value ?? ""}
-                      disabled={isPending}
+                      disabled={isPending || readOnly}
                       placeholder="0212 000 00 00"
                     />
                   </FormControl>
@@ -188,7 +189,7 @@ export function ClinicForm({ defaultValues, logoUrl: initialLogoUrl }: ClinicFor
                     <Textarea
                       {...field}
                       value={field.value ?? ""}
-                      disabled={isPending}
+                      disabled={isPending || readOnly}
                       rows={3}
                       className="resize-none text-sm"
                       placeholder="Full address…"
@@ -200,7 +201,7 @@ export function ClinicForm({ defaultValues, logoUrl: initialLogoUrl }: ClinicFor
             />
 
             <div className="flex justify-end pt-2">
-              <Button type="submit" disabled={isPending} className="gap-2">
+              <Button type="submit" disabled={isPending || readOnly} className="gap-2">
                 {isPending ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (

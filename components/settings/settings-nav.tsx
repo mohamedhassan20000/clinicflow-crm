@@ -4,28 +4,20 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
-interface NavItem {
-  href: string;
-  label: string;
-  adminOnly?: boolean;
-}
-
-const NAV: NavItem[] = [
+const NAV = [
   { href: "/settings/staff", label: "Staff" },
   { href: "/settings/departments", label: "Departments" },
   { href: "/settings/services", label: "Services" },
   { href: "/settings/insurance", label: "Insurance" },
-  { href: "/settings/clinic", label: "Clinic", adminOnly: true },
-  { href: "/settings/customize", label: "Customize", adminOnly: true },
-];
+  { href: "/settings/clinic", label: "Clinic" },
+] as const;
 
-export function SettingsNav({ hideClinic = false }: { hideClinic?: boolean }) {
+export function SettingsNav() {
   const pathname = usePathname();
-  const visible = NAV.filter((n) => !(hideClinic && n.adminOnly));
 
   return (
     <nav className="flex gap-1 border-b border-border/50 overflow-x-auto pb-px">
-      {visible.map((n) => (
+      {NAV.map((n) => (
         <Link
           key={n.href}
           href={n.href}

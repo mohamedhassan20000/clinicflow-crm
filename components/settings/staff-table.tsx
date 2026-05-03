@@ -12,6 +12,16 @@ import {
   Trash2,
   FolderOpen,
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,8 +43,7 @@ import {
   updateStaff,
   resetStaffPassword,
   toggleStaffActive,
-  softDeleteStaff,
-  restoreStaff,
+  deleteStaff,
 } from "@/actions/settings";
 import type { Tables } from "@/types/database";
 
@@ -62,33 +71,20 @@ interface StaffTableProps {
   staff: StaffMember[];
   departments: Department[];
   currentUserId: string;
-  readOnly?: boolean;
 }
 
-export function StaffTable({ staff, departments, currentUserId, readOnly = false }: StaffTableProps) {
+export function StaffTable({ staff, departments, currentUserId }: StaffTableProps) {
   const [editTarget, setEditTarget] = useState<StaffMember | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<StaffMember | null>(null);
   const [profileTarget, setProfileTarget] = useState<StaffMember | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  function handleDelete(member: StaffMember) {
+  function handleDelete(id: string) {
     startTransition(async () => {
-      const result = await softDeleteStaff(member.id);
-      if (result.error) {
-        toast.error(result.error);
-        return;
-      }
-      toast.success(`${member.full_name} moved to trash.`, {
-        duration: 10000,
-        action: {
-          label: "Undo",
-          onClick: () => {
-            restoreStaff(member.id).then((res) => {
-              if (res.error) toast.error(res.error);
-              else toast.success(`${member.full_name} restored.`);
-            });
-          },
-        },
-      });
+      const result = await deleteStaff(id);
+      if (result.error) toast.error(result.error);
+      else toast.success("Staff member deleted.");
+      setDeleteTarget(null);
     });
   }
 
@@ -170,7 +166,7 @@ export function StaffTable({ staff, departments, currentUserId, readOnly = false
                 >
                   {isPending ? (
                     <Loader2 className="ml-auto h-4 w-4 animate-spin text-muted-foreground" />
-                  ) : readOnly ? null : (
+                  ) : (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon" className="h-7 w-7">
@@ -212,7 +208,7 @@ export function StaffTable({ staff, departments, currentUserId, readOnly = false
                               )}
                             </DropdownMenuItem>
                             <DropdownMenuItem
-                              onClick={() => handleDelete(s)}
+                              onClick={() => setDeleteTarget(s)}
                               className="text-destructive focus:text-destructive"
                             >
                               <Trash2 className="mr-2 h-4 w-4" />
@@ -260,6 +256,34 @@ export function StaffTable({ staff, departments, currentUserId, readOnly = false
         </DialogContent>
       </Dialog>
 
+      {/* Delete confirmation */}
+      <AlertDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete staff member?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes <strong>{deleteTarget?.full_name}</strong>{" "}
+              from the clinic and revokes their login. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isPending}
+              onClick={(e) => {
+                e.preventDefault();
+                if (deleteTarget) handleDelete(deleteTarget.id);
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isPending ? "Deleting…" : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

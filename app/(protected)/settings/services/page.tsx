@@ -15,8 +15,7 @@ function fmtTRY(n: number) {
 }
 
 export default async function ServicesSettingsPage() {
-  const user = await requireRole(["admin", "manager"]);
-  const isAdmin = user.role === "admin";
+  const user = await requireRole("admin");
   const supabase = await createClient();
 
   const [{ data: departments }, { data: services }] = await Promise.all([
@@ -62,7 +61,7 @@ export default async function ServicesSettingsPage() {
             {groups.length} department{groups.length !== 1 ? "s" : ""}.
           </p>
         </div>
-        {isAdmin && <AddServiceDialog departments={deptList} />}
+        <AddServiceDialog departments={deptList} />
       </div>
 
       {deptList.length === 0 ? (
@@ -111,11 +110,9 @@ export default async function ServicesSettingsPage() {
                     <th className="px-4 py-2 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground">
                       Price
                     </th>
-                    {isAdmin && (
-                      <th className="px-4 py-2 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                        <span className="sr-only">Actions</span>
-                      </th>
-                    )}
+                    <th className="px-4 py-2 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      <span className="sr-only">Actions</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/40">
@@ -125,19 +122,17 @@ export default async function ServicesSettingsPage() {
                       <td className="px-4 py-2.5 text-right tabular-nums">
                         {fmtTRY(Number(s.price))}
                       </td>
-                      {isAdmin && (
-                        <td className="px-4 py-2 text-right">
-                          <ServiceRowActions
-                            service={{
-                              id: s.id,
-                              name: s.name,
-                              price: Number(s.price),
-                              department_id: s.department_id,
-                            }}
-                            departments={deptList}
-                          />
-                        </td>
-                      )}
+                      <td className="px-4 py-2 text-right">
+                        <ServiceRowActions
+                          service={{
+                            id: s.id,
+                            name: s.name,
+                            price: Number(s.price),
+                            department_id: s.department_id,
+                          }}
+                          departments={deptList}
+                        />
+                      </td>
                     </tr>
                   ))}
                 </tbody>

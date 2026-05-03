@@ -25,7 +25,6 @@ interface SidebarProps {
   role: string;
   fullName: string;
   theme: "light" | "dark";
-  hiddenPages?: string[];
 }
 
 function buildNav(role: string): NavEntry[] {
@@ -49,7 +48,7 @@ function buildNav(role: string): NavEntry[] {
   if (role === "admin" || role === "manager") {
     items.push({ href: "/revenue", label: "Revenue", icon: Wallet });
   }
-  if (role === "admin" || role === "manager") {
+  if (role === "admin") {
     items.push({ href: "/settings", label: "Settings", icon: Settings });
   }
   return items;
@@ -83,10 +82,8 @@ function NavLink({ href, label, icon: Icon }: NavEntry) {
   );
 }
 
-export function Sidebar({ role, fullName, theme, hiddenPages = [] }: SidebarProps) {
-  const nav = buildNav(role).filter(
-    (n) => !hiddenPages.includes(n.href.replace(/^\//, "").split("/")[0]),
-  );
+export function Sidebar({ role, fullName, theme }: SidebarProps) {
+  const nav = buildNav(role);
 
   return (
     <aside className="flex h-full flex-col">

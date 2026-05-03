@@ -162,22 +162,6 @@
   }
 }
 
-/* ─── Recharts dark-mode text fix ─────────────────────────────────────────
-   Recharts sets tick labels as SVG presentation attributes, which don't
-   resolve CSS custom properties. A CSS rule (higher specificity) overrides
-   the attribute so oklch variables resolve correctly in dark mode.          */
-.dark .recharts-text,
-.dark .recharts-cartesian-axis-tick-value,
-.dark .recharts-polar-angle-axis-tick-value {
-  fill: var(--muted-foreground) !important;
-}
-.dark .recharts-legend-item-text {
-  color: var(--foreground) !important;
-}
-.dark .recharts-label {
-  fill: var(--foreground) !important;
-}
-
 /* ─── Aurora animation for auth pages ─── */
 @keyframes aurora-drift {
   0%, 100% { transform: translate(0%, 0%) scale(1); opacity: 0.6; }
@@ -280,14 +264,13 @@
     max-width: none !important;
     min-width: 0 !important;
   }
-  /* Table: fill the printable page, tight padding, no horizontal scroll.
-     table-layout: fixed distributes columns equally — consistent widths
-     across all tables on the same printed page (patient records, etc.). */
+  /* Table: fill the printable page, tight padding, no horizontal scroll. */
   table {
     width: 100% !important;
-    table-layout: fixed;
+    table-layout: auto;
     font-size: 10px !important;
     page-break-inside: auto;
+    /* Schematic grid — every cell gets a visible border in print. */
     border-collapse: collapse !important;
     border: 1px solid #000 !important;
   }
@@ -300,28 +283,30 @@
     color: #000 !important;
   }
   table thead th {
-    background: #fff !important;
+    background: #f1f5f9 !important; /* slate-100 */
     color: #000 !important;
-    font-weight: 700 !important;
+    font-weight: 600 !important;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    border-bottom: 2px solid #000 !important;
+    border-bottom: 1.5px solid #000 !important;
   }
   table tfoot td {
-    background: #fff !important;
+    background: #f1f5f9 !important;
     font-weight: 700 !important;
-    border-top: 2px solid #000 !important;
+    border-top: 1.5px solid #000 !important;
   }
-  /* Strip decorative on-screen badges/chips */
+  /* Zebra striping for legibility on paper */
+  table tbody tr:nth-child(even) td {
+    background: #fafafa !important;
+  }
+  /* Strip decorative on-screen badges/chips that hurt print legibility */
   table .rounded-full,
   table [class*="bg-"] {
     background: transparent !important;
   }
   tr    { page-break-inside: avoid; page-break-after: auto; }
   thead { display: table-header-group; }
-  /* table-row-group prevents tfoot repeating at the bottom of every printed
-     page — it renders only once at its natural end-of-table position. */
-  tfoot { display: table-row-group; }
+  tfoot { display: table-footer-group; }
 
   /* "Print settlements only" mode — hides the main report and shows just
      the settlements section. Toggled by adding `print-settlements-only`

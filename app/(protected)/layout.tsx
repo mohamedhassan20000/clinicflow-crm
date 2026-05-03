@@ -3,7 +3,6 @@ import { cookies } from "next/headers";
 import { requireUser } from "@/lib/rbac";
 import { Sidebar } from "@/components/layout/sidebar";
 import { MobileNav } from "@/components/layout/mobile-nav";
-import { fetchUserCustomizationMap, getHiddenPages } from "@/lib/get-user-customizations";
 
 export default async function ProtectedLayout({
   children,
@@ -19,21 +18,18 @@ export default async function ProtectedLayout({
   const cookieStore = await cookies();
   const theme = (cookieStore.get("theme")?.value ?? "light") as "light" | "dark";
 
-  const customMap = await fetchUserCustomizationMap(user.id);
-  const hiddenPages = getHiddenPages(customMap, user.role);
-
   return (
     <div className="flex min-h-dvh bg-background">
       {/* Desktop sidebar */}
       <aside className="hidden w-60 shrink-0 border-r border-border/50 bg-card lg:block">
-        <Sidebar role={user.role} fullName={user.fullName} theme={theme} hiddenPages={hiddenPages} />
+        <Sidebar role={user.role} fullName={user.fullName} theme={theme} />
       </aside>
 
       {/* Main column */}
       <div className="flex flex-1 flex-col min-w-0">
         {/* Top header */}
         <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border/50 bg-card px-4 lg:px-6">
-          <MobileNav role={user.role} fullName={user.fullName} theme={theme} hiddenPages={hiddenPages} />
+          <MobileNav role={user.role} fullName={user.fullName} theme={theme} />
           {/* ClinicFlow brand for mobile */}
           <span className="flex items-center gap-2 lg:hidden">
             <span className="flex h-6 w-6 items-center justify-center rounded bg-primary text-primary-foreground text-[10px] font-bold">

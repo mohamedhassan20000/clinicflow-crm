@@ -6,7 +6,6 @@ import { ReceptionistDashboard } from "@/components/dashboard/receptionist-dashb
 import { ManagerDashboard } from "@/components/dashboard/manager-dashboard";
 import { DoctorDashboard } from "@/components/dashboard/doctor-dashboard";
 import { fetchDoctorDashboardStats } from "@/actions/doctor-dashboard";
-import { fetchReceptionistStats } from "@/actions/manager-dashboard";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -380,12 +379,6 @@ export default async function DashboardPage() {
         aAllDepartments,
       );
 
-    const initialReceptionists = await fetchReceptionistStats(
-      clinicId,
-      thisMonth.start,
-      thisMonth.end,
-    );
-
     return (
       <AdminDashboard
         fullName={user.fullName}
@@ -395,8 +388,6 @@ export default async function DashboardPage() {
         lastMonthCount={lastMonthCount ?? 0}
         totalPatients={totalPatients ?? 0}
         pendingCount={pendingCount ?? 0}
-        noShowRate={aNoShowRate}
-        cancelRate={aCancelRate}
         todayAppointments={(todayAppts ?? []) as Parameters<typeof AdminDashboard>[0]["todayAppointments"]}
         upcomingAppointments={(upcomingAppts ?? []) as Parameters<typeof AdminDashboard>[0]["upcomingAppointments"]}
         revenue={{
@@ -420,7 +411,6 @@ export default async function DashboardPage() {
           initialDoctors,
           initialDepartments,
         }}
-        initialReceptionists={initialReceptionists}
       />
     );
   }

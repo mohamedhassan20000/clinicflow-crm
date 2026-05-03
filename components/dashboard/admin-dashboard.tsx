@@ -9,16 +9,12 @@ import {
   TrendingUp,
   AlertCircle,
   BarChart3,
-  UserX,
-  XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { StatusBadge } from "@/components/appointments/status-badge";
 import { RevenueWidget, type RevenueWidgetProps } from "@/components/dashboard/revenue-widget";
 import { AnalyticsSection, type AnalyticsSectionProps } from "@/components/dashboard/analytics-section";
-import { ReceptionistInvoiceChart } from "@/components/dashboard/receptionist-invoice-chart";
-import type { ReceptionistStat } from "@/actions/manager-dashboard";
 import type { Tables } from "@/types/database";
 
 type Appointment = Tables<"appointments"> & {
@@ -34,13 +30,10 @@ interface AdminDashboardProps {
   lastMonthCount: number;
   totalPatients: number;
   pendingCount: number;
-  noShowRate: number;
-  cancelRate: number;
   todayAppointments: Appointment[];
   upcomingAppointments: Appointment[];
   revenue: RevenueWidgetProps;
   analytics: AnalyticsSectionProps;
-  initialReceptionists: ReceptionistStat[];
 }
 
 function formatTime(iso: string) {
@@ -68,13 +61,10 @@ export function AdminDashboard({
   lastMonthCount,
   totalPatients,
   pendingCount,
-  noShowRate,
-  cancelRate,
   todayAppointments,
   upcomingAppointments,
   revenue,
   analytics,
-  initialReceptionists,
 }: AdminDashboardProps) {
   const monthTrend =
     lastMonthCount === 0
@@ -108,7 +98,7 @@ export function AdminDashboard({
       </div>
 
       {/* KPI grid */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
           title="Today's appointments"
           value={todayCount}
@@ -133,18 +123,6 @@ export function AdminDashboard({
           value={totalPatients}
           icon={Users}
           variant="default"
-        />
-        <KpiCard
-          title="No-show rate"
-          value={`${noShowRate}%`}
-          icon={UserX}
-          variant={noShowRate > 10 ? "warning" : "default"}
-        />
-        <KpiCard
-          title="Cancellation rate"
-          value={`${cancelRate}%`}
-          icon={XCircle}
-          variant={cancelRate > 15 ? "warning" : "default"}
         />
       </div>
 
@@ -281,13 +259,7 @@ export function AdminDashboard({
           <BarChart3 className="h-5 w-5 text-primary" />
           <h2 className="text-lg font-semibold tracking-tight">Analytics</h2>
         </div>
-        <div className="space-y-6">
-          <ReceptionistInvoiceChart
-            clinicId={analytics.clinicId}
-            initialStats={initialReceptionists}
-          />
-          <AnalyticsSection {...analytics} hideKpis />
-        </div>
+        <AnalyticsSection {...analytics} />
       </div>
     </div>
   );

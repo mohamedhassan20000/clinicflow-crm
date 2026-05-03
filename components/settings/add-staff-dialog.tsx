@@ -277,12 +277,24 @@ export function AddStaffDialog({ departments }: { departments: Department[] }) {
               )}
             </div>
 
-            <div className="border-t border-border/50 px-8 py-4">
+            <div className="border-t border-border/50 px-8 py-4 flex flex-col gap-2">
               <Button
                 className="w-full"
+                onClick={() => {
+                  handleOpenChange(false);
+                  if (created) {
+                    router.push(`/settings/customize?user=${created.staffId}`);
+                  }
+                }}
+              >
+                Set permissions in Customize →
+              </Button>
+              <Button
+                variant="ghost"
+                className="w-full text-muted-foreground"
                 onClick={() => handleOpenChange(false)}
               >
-                Done
+                Done — set permissions later
               </Button>
             </div>
           </>

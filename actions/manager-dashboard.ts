@@ -2,57 +2,6 @@
 
 import { createClient } from "@/lib/supabase/server";
 
-// ── Receptionist stats ────────────────────────────────────────────────────────
-
-export interface ReceptionistStat {
-  id: string;
-  name: string;
-  invoices: number;
-  revenue: number;
-}
-
-export async function fetchReceptionistStats(
-  clinicId: string,
-  start: string,
-  end: string,
-): Promise<ReceptionistStat[]> {
-  const supabase = await createClient();
-
-  const [{ data: receptionists }, { data: completed }] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select("id, full_name")
-      .eq("clinic_id", clinicId)
-      .eq("role", "receptionist")
-      .eq("is_active", true),
-    supabase
-      .from("appointments")
-      .select("updated_by, paid_amount, insurance_amount, secondary_amount")
-      .eq("clinic_id", clinicId)
-      .eq("status", "completed")
-      .gte("paid_at", start)
-      .lte("paid_at", end),
-  ]);
-
-  const statsMap = new Map<string, ReceptionistStat>();
-  for (const r of receptionists ?? []) {
-    statsMap.set(r.id, { id: r.id, name: r.full_name, invoices: 0, revenue: 0 });
-  }
-
-  for (const a of completed ?? []) {
-    if (!a.updated_by) continue;
-    const entry = statsMap.get(a.updated_by);
-    if (!entry) continue;
-    entry.invoices++;
-    entry.revenue +=
-      (a.paid_amount ?? 0) +
-      (a.insurance_amount ?? 0) +
-      (a.secondary_amount ?? 0);
-  }
-
-  return Array.from(statsMap.values()).sort((a, b) => b.invoices - a.invoices);
-}
-
 export interface DoctorStat {
   name: string;
   total: number;

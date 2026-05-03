@@ -27,6 +27,13 @@ interface ReceptionistDashboardProps {
   todayAppointments: Appointment[];
   pendingAppointments: Appointment[];
   nextTwoHoursAppointments: Appointment[];
+  // Widget visibility
+  showKpiToday?: boolean;
+  showKpiPendingConfirmations?: boolean;
+  showKpiConfirmedToday?: boolean;
+  showNextApptAlert?: boolean;
+  showTodaySchedule?: boolean;
+  showPendingConfirmationsList?: boolean;
 }
 
 function formatTime(iso: string) {
@@ -46,6 +53,12 @@ export function ReceptionistDashboard({
   todayAppointments,
   pendingAppointments,
   nextTwoHoursAppointments,
+  showKpiToday = true,
+  showKpiPendingConfirmations = true,
+  showKpiConfirmedToday = true,
+  showNextApptAlert = true,
+  showTodaySchedule = true,
+  showPendingConfirmationsList = true,
 }: ReceptionistDashboardProps) {
   return (
     <div className="space-y-6">
@@ -74,29 +87,22 @@ export function ReceptionistDashboard({
       </div>
 
       {/* KPIs */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        <KpiCard
-          title="Today's appointments"
-          value={todayCount}
-          icon={CalendarDays}
-          variant="primary"
-        />
-        <KpiCard
-          title="Pending confirmation"
-          value={pendingCount}
-          icon={Hourglass}
-          variant={pendingCount > 0 ? "warning" : "default"}
-        />
-        <KpiCard
-          title="Confirmed today"
-          value={confirmedCount}
-          icon={CheckCircle2}
-          variant="success"
-        />
-      </div>
+      {(showKpiToday || showKpiPendingConfirmations || showKpiConfirmedToday) && (
+        <div className="grid gap-4 sm:grid-cols-3">
+          {showKpiToday && (
+            <KpiCard title="Today's appointments" value={todayCount} icon={CalendarDays} variant="primary" />
+          )}
+          {showKpiPendingConfirmations && (
+            <KpiCard title="Pending confirmation" value={pendingCount} icon={Hourglass} variant={pendingCount > 0 ? "warning" : "default"} />
+          )}
+          {showKpiConfirmedToday && (
+            <KpiCard title="Confirmed today" value={confirmedCount} icon={CheckCircle2} variant="success" />
+          )}
+        </div>
+      )}
 
       {/* Next 2 hours alert */}
-      {nextTwoHoursAppointments.length > 0 && (
+      {showNextApptAlert && nextTwoHoursAppointments.length > 0 && (
         <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3">
           <div className="flex items-center gap-2 mb-2">
             <Clock className="h-4 w-4 text-primary shrink-0" />
@@ -124,9 +130,9 @@ export function ReceptionistDashboard({
         </div>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      {(showTodaySchedule || showPendingConfirmationsList) && <div className="grid gap-6 lg:grid-cols-2">
         {/* Today's full schedule */}
-        <div className="rounded-xl border border-border/50 bg-card">
+        {showTodaySchedule && <div className="rounded-xl border border-border/50 bg-card">
           <div className="flex items-center justify-between border-b border-border/50 px-5 py-4">
             <div className="flex items-center gap-2">
               <CalendarDays className="h-4 w-4 text-primary" />
@@ -176,10 +182,10 @@ export function ReceptionistDashboard({
               ))
             )}
           </div>
-        </div>
+        </div>}
 
         {/* Pending confirmation list */}
-        <div className="rounded-xl border border-border/50 bg-card">
+        {showPendingConfirmationsList && <div className="rounded-xl border border-border/50 bg-card">
           <div className="flex items-center gap-2 border-b border-border/50 px-5 py-4">
             <AlertCircle className="h-4 w-4 text-amber-500" />
             <h2 className="font-semibold text-sm">Needs confirmation</h2>
@@ -219,8 +225,8 @@ export function ReceptionistDashboard({
               ))
             )}
           </div>
-        </div>
-      </div>
+        </div>}
+      </div>}
     </div>
   );
 }

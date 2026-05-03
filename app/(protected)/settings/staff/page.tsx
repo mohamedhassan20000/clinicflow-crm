@@ -1,60 +1,28 @@
 import type { Metadata } from "next";
 import { requireRole } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { StaffByDepartment } from "@/components/settings/staff-by-department";
 import { AddStaffDialog } from "@/components/settings/add-staff-dialog";
-import { StaffTrash } from "@/components/settings/staff-trash";
 
 export const metadata: Metadata = { title: "Staff" };
 
 export default async function StaffSettingsPage() {
-  const user = await requireRole(["admin", "manager"]);
-  const isAdmin = user.role === "admin";
+  const user = await requireRole("admin");
   const supabase = await createClient();
 
-  // Lazy 30-day cleanup: permanently delete any soft-deleted staff past their expiry
-  if (isAdmin) {
-    const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-    const { data: expired } = await supabase
+  const [{ data: staff }, { data: departments }] = await Promise.all([
+    supabase
       .from("profiles")
-      .select("id")
+      .select("*, departments(name, color)")
       .eq("clinic_id", user.clinicId)
-      .eq("is_deleted", true)
-      .lt("deleted_at", cutoff);
-
-    if (expired?.length) {
-      const adminClient = createAdminClient();
-      for (const s of expired) {
-        await adminClient.auth.admin.deleteUser(s.id);
-        await supabase.from("profiles").delete().eq("id", s.id);
-      }
-    }
-  }
-
-  const [{ data: staff }, { data: departments }, { data: deletedStaff }] =
-    await Promise.all([
-      supabase
-        .from("profiles")
-        .select("*, departments(name, color)")
-        .eq("clinic_id", user.clinicId)
-        .eq("is_deleted", false)
-        .order("full_name"),
-      supabase
-        .from("departments")
-        .select("id, name, color")
-        .eq("clinic_id", user.clinicId)
-        .eq("is_active", true)
-        .order("name"),
-      isAdmin
-        ? supabase
-            .from("profiles")
-            .select("id, full_name, role, phone, deleted_at, departments(name, color)")
-            .eq("clinic_id", user.clinicId)
-            .eq("is_deleted", true)
-            .order("deleted_at", { ascending: false })
-        : Promise.resolve({ data: [] }),
-    ]);
+      .order("full_name"),
+    supabase
+      .from("departments")
+      .select("id, name, color")
+      .eq("clinic_id", user.clinicId)
+      .eq("is_active", true)
+      .order("name"),
+  ]);
 
   return (
     <div className="space-y-5">
@@ -67,13 +35,11 @@ export default async function StaffSettingsPage() {
             {(departments?.length ?? 0) !== 1 ? "s" : ""}
           </p>
         </div>
-        {isAdmin && (
-          <AddStaffDialog
-            departments={
-              (departments ?? []).map(({ id, name }) => ({ id, name }))
-            }
-          />
-        )}
+        <AddStaffDialog
+          departments={
+            (departments ?? []).map(({ id, name }) => ({ id, name }))
+          }
+        />
       </div>
 
       <StaffByDepartment
@@ -84,16 +50,7 @@ export default async function StaffSettingsPage() {
         }
         departments={departments ?? []}
         currentUserId={user.id}
-        readOnly={!isAdmin}
       />
-
-      {isAdmin && (
-        <StaffTrash
-          deletedStaff={
-            (deletedStaff ?? []) as Parameters<typeof StaffTrash>[0]["deletedStaff"]
-          }
-        />
-      )}
     </div>
   );
 }

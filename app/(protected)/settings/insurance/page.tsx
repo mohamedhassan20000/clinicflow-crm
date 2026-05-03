@@ -12,8 +12,7 @@ import {
 export const metadata: Metadata = { title: "Insurance" };
 
 export default async function InsuranceSettingsPage() {
-  const user = await requireRole(["admin", "manager"]);
-  const isAdmin = user.role === "admin";
+  const user = await requireRole("admin");
   const supabase = await createClient();
 
   const { data: providers } = await supabase
@@ -31,7 +30,7 @@ export default async function InsuranceSettingsPage() {
             {providers?.length ?? 0} provider{(providers?.length ?? 0) !== 1 ? "s" : ""}
           </p>
         </div>
-        {isAdmin && <AddInsuranceDialog />}
+        <AddInsuranceDialog />
       </div>
 
       <div className="rounded-xl border border-border/50 overflow-hidden">
@@ -43,17 +42,15 @@ export default async function InsuranceSettingsPage() {
                 Code
               </th>
               <th className="px-4 py-3 text-left font-medium text-muted-foreground">Status</th>
-              {isAdmin && (
-                <th className="px-4 py-3 text-right font-medium text-muted-foreground">
-                  <span className="sr-only">Actions</span>
-                </th>
-              )}
+              <th className="px-4 py-3 text-right font-medium text-muted-foreground">
+                <span className="sr-only">Actions</span>
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/50">
             {(providers ?? []).length === 0 && (
               <tr>
-                <td colSpan={isAdmin ? 4 : 3} className="py-10 text-center text-sm text-muted-foreground">
+                <td colSpan={4} className="py-10 text-center text-sm text-muted-foreground">
                   No insurance providers yet.
                 </td>
               </tr>
@@ -72,15 +69,13 @@ export default async function InsuranceSettingsPage() {
                     {provider.is_active ? "Active" : "Inactive"}
                   </Badge>
                 </td>
-                {isAdmin && (
-                  <td className="px-4 py-3 text-right">
-                    <InsuranceActions
-                      provider={provider}
-                      updateAction={updateInsurance.bind(null, provider.id)}
-                      toggleAction={toggleInsuranceActive.bind(null, provider.id)}
-                    />
-                  </td>
-                )}
+                <td className="px-4 py-3 text-right">
+                  <InsuranceActions
+                    provider={provider}
+                    updateAction={updateInsurance.bind(null, provider.id)}
+                    toggleAction={toggleInsuranceActive.bind(null, provider.id)}
+                  />
+                </td>
               </tr>
             ))}
           </tbody>

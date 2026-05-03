@@ -1,12 +1,10 @@
 import type { Metadata } from "next";
-import { Suspense } from "react";
 import { requireUser } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
 import { WeekCalendar } from "@/components/appointments/week-calendar";
 import { DayCalendar } from "@/components/appointments/day-calendar";
 import { MonthCalendar } from "@/components/appointments/month-calendar";
 import { AppointmentsFilterBar } from "@/components/appointments/filter-bar";
-import { UndoNewToast } from "@/components/appointments/undo-new-toast";
 import {
   ViewSwitcher,
   type CalendarView,
@@ -185,9 +183,6 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
 
   return (
     <div className="space-y-6">
-      <Suspense>
-        <UndoNewToast />
-      </Suspense>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Appointments</h1>

@@ -87,6 +87,7 @@ export default async function StaffSettingsPage() {
         }
         departments={departments ?? []}
         currentUserId={user.id}
+        isAdmin={isAdmin}
         readOnly={!canEdit}
       />
 

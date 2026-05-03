@@ -62,10 +62,11 @@ interface StaffTableProps {
   staff: StaffMember[];
   departments: Department[];
   currentUserId: string;
+  isAdmin?: boolean;
   readOnly?: boolean;
 }
 
-export function StaffTable({ staff, departments, currentUserId, readOnly = false }: StaffTableProps) {
+export function StaffTable({ staff, departments, currentUserId, isAdmin = false, readOnly = false }: StaffTableProps) {
   const [editTarget, setEditTarget] = useState<StaffMember | null>(null);
   const [profileTarget, setProfileTarget] = useState<StaffMember | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -235,6 +236,7 @@ export function StaffTable({ staff, departments, currentUserId, readOnly = false
         staff={profileTarget}
         open={!!profileTarget}
         onOpenChange={(open) => !open && setProfileTarget(null)}
+        isAdmin={isAdmin}
       />
 
       {/* Edit dialog */}

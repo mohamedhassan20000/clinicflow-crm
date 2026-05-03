@@ -124,6 +124,8 @@ export function CustomizePage({ staff }: CustomizePageProps) {
     if (pendingMap[key]) return pendingMap[key].access;
     const override = customMap[page]?.[feature];
     if (override) return override;
+    // Page visibility defaults to visible — absence of a DB row means "shown".
+    if (feature === PAGE_VISIBILITY_KEY) return "read_edit";
     const pageDef = FEATURE_REGISTRY.find((p) => p.key === page);
     const featDef = pageDef?.features.find((f) => f.key === feature);
     return featDef?.defaults[selectedStaff?.role ?? ""] ?? "hidden";

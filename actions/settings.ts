@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/rbac";
+import { ensureDefaultPagePermissions } from "@/actions/page-permissions";
 import {
   createStaffSchema,
   updateStaffSchema,
@@ -82,6 +83,8 @@ export async function createStaff(
     return { error: profileError.message };
   }
 
+  await ensureDefaultPagePermissions(userId, role, user.clinicId);
+
   revalidatePath("/settings/staff");
   return { success: true, staffId: userId };
 }
@@ -125,6 +128,8 @@ export async function updateStaff(
 
   if (error) return { error: error.message };
   if (!count) return { error: "Could not update this staff member. You may lack permission." };
+
+  await ensureDefaultPagePermissions(staffId, parsed.data.role, user.clinicId);
 
   revalidatePath("/settings/staff");
   return { success: true };

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { requireRole } from "@/lib/rbac";
 import { SettingsNav } from "@/components/settings/settings-nav";
+import { isPrimaryClinicAdmin } from "@/lib/primary-admin";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -9,7 +10,11 @@ export default async function SettingsLayout({
 }: {
   children: React.ReactNode;
 }) {
-  await requireRole(["admin", "manager"]);
+  const user = await requireRole(["admin", "manager"]);
+  const canCustomize = user.role === "admin" && await isPrimaryClinicAdmin(
+    user.id,
+    user.clinicId,
+  );
 
   return (
     <div className="space-y-6">
@@ -20,7 +25,7 @@ export default async function SettingsLayout({
         </p>
       </div>
 
-      <SettingsNav />
+      <SettingsNav role={user.role} canCustomize={canCustomize} />
 
       {children}
     </div>

@@ -5,14 +5,16 @@ import { Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Sidebar } from "@/components/layout/sidebar";
+import type { PageSlug } from "@/lib/page-permissions";
 
 interface MobileNavProps {
   role: string;
   fullName: string;
   theme: "light" | "dark";
+  visiblePages?: PageSlug[];
 }
 
-export function MobileNav({ role, fullName, theme }: MobileNavProps) {
+export function MobileNav({ role, fullName, theme, visiblePages }: MobileNavProps) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -31,7 +33,12 @@ export function MobileNav({ role, fullName, theme }: MobileNavProps) {
         <SheetContent side="left" className="w-60 p-0">
           <SheetTitle className="sr-only">Navigation menu</SheetTitle>
           <div onClick={() => setOpen(false)}>
-            <Sidebar role={role} fullName={fullName} theme={theme} />
+            <Sidebar
+              role={role}
+              fullName={fullName}
+              theme={theme}
+              visiblePages={visiblePages}
+            />
           </div>
         </SheetContent>
       </Sheet>

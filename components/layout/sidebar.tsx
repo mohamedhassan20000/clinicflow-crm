@@ -14,44 +14,41 @@ import {
 import { cn } from "@/lib/utils";
 import { signOut } from "@/actions/auth";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
+import { getRolePages, type PageSlug } from "@/lib/page-permissions";
 
 interface NavEntry {
   href: string;
   label: string;
   icon: typeof LayoutDashboard;
+  slug: PageSlug;
 }
 
 interface SidebarProps {
   role: string;
   fullName: string;
   theme: "light" | "dark";
+  visiblePages?: PageSlug[];
 }
 
-function buildNav(role: string): NavEntry[] {
-  const items: NavEntry[] = [
-    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  ];
-  if (role === "admin" || role === "receptionist") {
-    items.push(
-      { href: "/patients", label: "Patients", icon: Users },
-      { href: "/appointments", label: "Appointments", icon: CalendarDays },
-      { href: "/followups", label: "Follow-ups", icon: PhoneCall },
-    );
-  }
-  if (role === "doctor") {
-    items.push(
-      { href: "/patients", label: "Patients", icon: Users },
-      { href: "/appointments", label: "Appointments", icon: CalendarDays },
-      { href: "/followups", label: "Follow-ups", icon: PhoneCall },
-    );
-  }
-  if (role === "admin" || role === "manager") {
-    items.push({ href: "/revenue", label: "Revenue", icon: Wallet });
-  }
-  if (role === "admin" || role === "manager") {
-    items.push({ href: "/settings", label: "Settings", icon: Settings });
-  }
-  return items;
+const ICONS: Record<PageSlug, typeof LayoutDashboard> = {
+  dashboard: LayoutDashboard,
+  patients: Users,
+  appointments: CalendarDays,
+  followups: PhoneCall,
+  revenue: Wallet,
+  settings: Settings,
+};
+
+function buildNav(role: string, visiblePages?: PageSlug[]): NavEntry[] {
+  const visible = new Set(visiblePages);
+  return getRolePages(role)
+    .filter((page) => page.alwaysVisible || !visiblePages || visible.has(page.slug))
+    .map((page) => ({
+      href: page.href,
+      label: page.label,
+      slug: page.slug,
+      icon: ICONS[page.slug],
+    }));
 }
 
 function NavLink({ href, label, icon: Icon }: NavEntry) {
@@ -82,8 +79,8 @@ function NavLink({ href, label, icon: Icon }: NavEntry) {
   );
 }
 
-export function Sidebar({ role, fullName, theme }: SidebarProps) {
-  const nav = buildNav(role);
+export function Sidebar({ role, fullName, theme, visiblePages }: SidebarProps) {
+  const nav = buildNav(role, visiblePages);
 
   return (
     <aside className="flex h-full flex-col">

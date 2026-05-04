@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/sheet";
 import { CreateStaffForm } from "@/components/settings/staff-form";
 import { createStaff } from "@/actions/settings";
+import { resetUserPageVisibilityToRoleDefaults } from "@/actions/page-permissions";
 import {
   deleteStaffFile,
   listStaffFiles,
@@ -48,7 +49,15 @@ interface CreatedSnapshot {
   phone: string | null;
 }
 
-export function AddStaffDialog({ departments }: { departments: Department[] }) {
+export function AddStaffDialog({
+  departments,
+  currentRole,
+  canCustomize,
+}: {
+  departments: Department[];
+  currentRole: string;
+  canCustomize: boolean;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<"form" | "files">("form");
@@ -131,6 +140,24 @@ export function AddStaffDialog({ departments }: { departments: Department[] }) {
     });
   }
 
+  function useRoleDefaults() {
+    if (!created) return;
+    startTransition(async () => {
+      const res = await resetUserPageVisibilityToRoleDefaults(created.staffId);
+      if (res.error) toast.error(res.error);
+      else {
+        toast.success("Role default pages saved.");
+        handleOpenChange(false);
+      }
+    });
+  }
+
+  function customizePagesNow() {
+    if (!created) return;
+    handleOpenChange(false);
+    router.push(`/settings/customize?staff=${created.staffId}`);
+  }
+
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>
       <SheetTrigger asChild>
@@ -182,6 +209,31 @@ export function AddStaffDialog({ departments }: { departments: Department[] }) {
             </SheetHeader>
 
             <div className="flex-1 overflow-y-auto px-8 py-6">
+              <div className="mb-6 grid gap-2 sm:grid-cols-2">
+                {currentRole === "admin" && canCustomize && (
+                  <Button
+                    type="button"
+                    variant="default"
+                    onClick={customizePagesNow}
+                    disabled={!created || isPending}
+                  >
+                    Customize pages now
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={useRoleDefaults}
+                  disabled={!created || isPending}
+                  className={
+                    currentRole === "admin" && canCustomize ? "" : "sm:col-span-2"
+                  }
+                >
+                  {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Use role defaults
+                </Button>
+              </div>
+
               {/* Hidden inputs */}
               <input
                 ref={photoRef}

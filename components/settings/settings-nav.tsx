@@ -10,14 +10,24 @@ const NAV = [
   { href: "/settings/services", label: "Services" },
   { href: "/settings/insurance", label: "Insurance" },
   { href: "/settings/clinic", label: "Clinic" },
+  { href: "/settings/customize", label: "Customize", adminOnly: true },
 ] as const;
 
-export function SettingsNav() {
+export function SettingsNav({
+  role,
+  canCustomize,
+}: {
+  role: string;
+  canCustomize: boolean;
+}) {
   const pathname = usePathname();
+  const nav = NAV.filter(
+    (item) => !("adminOnly" in item) || (role === "admin" && canCustomize),
+  );
 
   return (
     <nav className="flex gap-1 border-b border-border/50 overflow-x-auto pb-px">
-      {NAV.map((n) => (
+      {nav.map((n) => (
         <Link
           key={n.href}
           href={n.href}

@@ -5,6 +5,7 @@ import { StaffByDepartment } from "@/components/settings/staff-by-department";
 import { AddStaffDialog } from "@/components/settings/add-staff-dialog";
 import { SettingsTrashSection, type TrashItem } from "@/components/settings/settings-trash-section";
 import { restoreStaff, deleteStaff } from "@/actions/settings";
+import { isPrimaryClinicAdmin } from "@/lib/primary-admin";
 
 export const metadata: Metadata = { title: "Staff" };
 
@@ -13,6 +14,10 @@ const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 export default async function StaffSettingsPage() {
   const user = await requireRole(["admin", "manager"]);
   const supabase = await createClient();
+  const canCustomize = user.role === "admin" && await isPrimaryClinicAdmin(
+    user.id,
+    user.clinicId,
+  );
 
   const [{ data: allStaff }, { data: departments }] = await Promise.all([
     supabase
@@ -56,6 +61,8 @@ export default async function StaffSettingsPage() {
           departments={
             (departments ?? []).map(({ id, name }) => ({ id, name }))
           }
+          currentRole={user.role}
+          canCustomize={canCustomize}
         />
       </div>
 

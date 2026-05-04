@@ -95,6 +95,8 @@ interface BillingDialogProps {
   insuranceProviderName?: string | null;
   departmentName?: string | null;
   departmentColor?: string | null;
+  initialPayload?: BillingPayload | null;
+  draftKey?: number;
 }
 
 function fmtTRY(n: number) {
@@ -126,6 +128,8 @@ export function BillingDialog({
   insuranceProviderName,
   departmentName,
   departmentColor,
+  initialPayload,
+  draftKey = 0,
 }: BillingDialogProps) {
   const [lines, setLines] = useState<DraftLine[]>([]);
   const [pickerValue, setPickerValue] = useState<string>("");
@@ -188,12 +192,38 @@ export function BillingDialog({
     setDeferAll(false);
   }
 
+  function applyPayload(payload: BillingPayload) {
+    setLines(
+      payload.line_items.map((line) => ({
+        ...line,
+        _key: uid(),
+      })),
+    );
+    setPickerValue("");
+    setPaid(payload.paid_amount ? String(payload.paid_amount) : "");
+    setInsurance(
+      payload.insurance_amount ? String(payload.insurance_amount) : "",
+    );
+    setDeposit(payload.deposit_amount ? String(payload.deposit_amount) : "");
+    setMethod(payload.payment_method);
+    setShowSplit(Boolean(payload.secondary_payment_method));
+    setSecondaryMethod(payload.secondary_payment_method ?? "credit_card");
+    setSecondaryAmount(
+      payload.secondary_amount ? String(payload.secondary_amount) : "",
+    );
+    setNote(payload.payment_note ?? "");
+    setDeferAll(false);
+  }
+
   // Reset when dialog re-opens (so we don't keep stale state across appointments)
   useEffect(() => {
     if (!open) return;
-    queueMicrotask(() => reset());
+    queueMicrotask(() => {
+      if (initialPayload) applyPayload(initialPayload);
+      else reset();
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open, draftKey]);
 
   function addServiceById(serviceId: string) {
     const svc = services.find((s) => s.id === serviceId);
@@ -304,15 +334,13 @@ export function BillingDialog({
         </DialogHeader>
 
         {loadingContext && (
-          <div className="flex items-center justify-center gap-2 py-12 text-xs text-muted-foreground">
+          <div className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
-            Loading invoice details…
+            Loading price list and patient billing details in the background.
           </div>
         )}
 
-        <div
-          className={cn("space-y-5 py-1", loadingContext && "hidden")}
-        >
+        <div className="space-y-5 py-1">
           {/* Summary strip */}
           <div className="grid grid-cols-3 gap-2 rounded-lg border border-border/60 bg-muted/30 p-3 text-center">
             <div>

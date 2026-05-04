@@ -27,7 +27,7 @@ export default async function DepartmentsSettingsPage() {
     .eq("clinic_id", user.clinicId)
     .order("name");
 
-  const cutoff = new Date(Date.now() - THIRTY_DAYS_MS).toISOString();
+  const cutoff = new Date(new Date().getTime() - THIRTY_DAYS_MS).toISOString();
   const departments = (allDepartments ?? []).filter((d) => !d.deleted_at);
   const trashedDepts = (allDepartments ?? []).filter(
     (d) => d.deleted_at && d.deleted_at > cutoff,

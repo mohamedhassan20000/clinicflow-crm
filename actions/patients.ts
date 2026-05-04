@@ -2,12 +2,46 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole, requireUser } from "@/lib/rbac";
 import { patientSchema, medicalNoteSchema } from "@/lib/validations/patient";
 import { depositSchema } from "@/lib/validations/appointment";
+import type { TablesInsert } from "@/types/database";
 
-export type ActionResult = { error?: string; fieldErrors?: Record<string, string[]> };
+export type ActionResult = {
+  error?: string;
+  fieldErrors?: Record<string, string[]>;
+  note?: TablesInsert<"medical_notes">;
+};
+
+async function getMedicalNoteForClinic(noteId: string, clinicId: string) {
+  if (!noteId) return null;
+
+  const adminClient = createAdminClient();
+  const { data: notes, error: noteError } = await adminClient
+    .from("medical_notes")
+    .select("id, patient_id, doctor_id, created_by, created_at, note")
+    .eq("id", noteId)
+    .limit(1);
+
+  if (noteError) throw new Error(noteError.message);
+
+  const note = notes?.[0];
+  if (!note) return null;
+
+  const { data: patients, error: patientError } = await adminClient
+    .from("patients")
+    .select("id")
+    .eq("id", note.patient_id)
+    .eq("clinic_id", clinicId)
+    .limit(1);
+
+  if (patientError) throw new Error(patientError.message);
+  if (!patients?.[0]) return null;
+
+  return note;
+}
 
 export async function createPatient(
   _prev: ActionResult | null,
@@ -192,6 +226,72 @@ export async function addMedicalNote(
   }
 
   revalidatePath(`/patients/${parsed.data.patient_id}`);
+  return {};
+}
+
+export async function updateMedicalNote(
+  noteId: string,
+  note: string,
+): Promise<ActionResult> {
+  const user = await requireRole(["admin", "doctor"]);
+  const trimmed = note.trim();
+  if (!trimmed) return { error: "Note is required." };
+  if (trimmed.length > 2000) return { error: "Note is too long." };
+
+  let existing: Awaited<ReturnType<typeof getMedicalNoteForClinic>>;
+  try {
+    existing = await getMedicalNoteForClinic(noteId, user.clinicId);
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Failed to find note.",
+    };
+  }
+  if (!existing) return { error: "Medical note not found." };
+
+  const adminClient = createAdminClient();
+  const { error } = await adminClient
+    .from("medical_notes")
+    .update({ note: trimmed })
+    .eq("id", existing.id);
+
+  if (error) return { error: error.message || "Failed to update note." };
+
+  revalidatePath(`/patients/${existing.patient_id}`);
+  return {};
+}
+
+export async function deleteMedicalNote(noteId: string): Promise<ActionResult> {
+  const user = await requireRole(["admin", "doctor"]);
+  let existing: Awaited<ReturnType<typeof getMedicalNoteForClinic>>;
+  try {
+    existing = await getMedicalNoteForClinic(noteId, user.clinicId);
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Failed to find note.",
+    };
+  }
+  if (!existing) return { error: "Medical note not found." };
+
+  const adminClient = createAdminClient();
+  const { error } = await adminClient
+    .from("medical_notes")
+    .delete()
+    .eq("id", existing.id);
+
+  if (error) return { error: error.message || "Failed to delete note." };
+
+  revalidatePath(`/patients/${existing.patient_id}`);
+  return { note: existing };
+}
+
+export async function restoreMedicalNote(
+  note: TablesInsert<"medical_notes">,
+): Promise<ActionResult> {
+  await requireRole(["admin", "doctor"]);
+  const supabase = await createClient();
+  const { error } = await supabase.from("medical_notes").insert(note);
+  if (error) return { error: error.message || "Failed to restore note." };
+  revalidatePath(`/patients/${note.patient_id}`);
   return {};
 }
 

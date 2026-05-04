@@ -27,7 +27,7 @@ export default async function InsuranceSettingsPage() {
     .eq("clinic_id", user.clinicId)
     .order("name");
 
-  const cutoff = new Date(Date.now() - THIRTY_DAYS_MS).toISOString();
+  const cutoff = new Date(new Date().getTime() - THIRTY_DAYS_MS).toISOString();
   const providers = (allProviders ?? []).filter((p) => !p.deleted_at);
   const trashedProviders = (allProviders ?? []).filter(
     (p) => p.deleted_at && p.deleted_at > cutoff,

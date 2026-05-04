@@ -11,6 +11,7 @@ import {
   Filter,
   Phone,
   PhoneOff,
+  Pencil,
   Printer,
   Search,
   Stethoscope,
@@ -161,6 +162,7 @@ export function FollowupsView({
   const [, startTransition] = useTransition();
   const [q, setQ] = useState(activeQuery);
   const [activeRow, setActiveRow] = useState<PendingRow | null>(null);
+  const [editRow, setEditRow] = useState<DoneRow | null>(null);
   const initialQRef = useRef(activeQuery);
 
   // Per-table pagination: each Awaiting group + the Completed table keeps its
@@ -769,6 +771,7 @@ export function FollowupsView({
                         <col className="w-36" />
                         <col className="w-32" />
                         <col className="w-48" />
+                        <col className="w-24 print:hidden" />
                       </colgroup>
                       <thead className="border-b border-border/40 bg-muted/30 text-[10px] uppercase tracking-wider text-muted-foreground">
                         <tr>
@@ -789,6 +792,9 @@ export function FollowupsView({
                           </th>
                           <th className="px-4 py-2.5 text-left font-medium">
                             Notes
+                          </th>
+                          <th className="px-4 py-2.5 text-right font-medium print:hidden">
+                            Action
                           </th>
                         </tr>
                       </thead>
@@ -876,6 +882,20 @@ export function FollowupsView({
                                   </p>
                                 )}
                               </td>
+                              <td className="px-4 py-3 text-right print:hidden">
+                                {!readOnly && (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 gap-1 px-2 text-[11px]"
+                                    onClick={() => setEditRow(d)}
+                                  >
+                                    <Pencil className="h-3 w-3" />
+                                    Edit
+                                  </Button>
+                                )}
+                              </td>
                             </tr>
                           );
                         })}
@@ -937,13 +957,30 @@ export function FollowupsView({
       </section>
 
       {!readOnly && (
-        <RecordFollowupDialog
-          row={activeRow}
-          open={!!activeRow}
-          onOpenChange={(o) => {
-            if (!o) setActiveRow(null);
-          }}
-        />
+        <>
+          <RecordFollowupDialog
+            row={activeRow}
+            open={!!activeRow}
+            onOpenChange={(o) => {
+              if (!o) setActiveRow(null);
+            }}
+            onUndoReopen={() => {
+              if (activeRow) setActiveRow(activeRow);
+            }}
+          />
+          <RecordFollowupDialog
+            row={null}
+            followup={editRow}
+            mode="edit"
+            open={!!editRow}
+            onOpenChange={(o) => {
+              if (!o) setEditRow(null);
+            }}
+            onUndoReopen={() => {
+              if (editRow) setEditRow(editRow);
+            }}
+          />
+        </>
       )}
     </div>
   );

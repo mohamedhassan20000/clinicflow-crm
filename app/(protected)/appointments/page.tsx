@@ -9,8 +9,17 @@ import {
   ViewSwitcher,
   type CalendarView,
 } from "@/components/appointments/view-switcher";
+import {
+  AppointmentsRecycleBin,
+  type AppointmentTrashItem,
+} from "@/components/appointments/appointments-recycle-bin";
+import {
+  permanentDeleteAppointment,
+  restoreAppointment,
+} from "@/actions/appointments";
 
 export const metadata: Metadata = { title: "Appointments" };
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 interface PageProps {
   searchParams: Promise<{
@@ -107,6 +116,16 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
   }
 
   const supabase = await createClient();
+  const canEditAppointments = !isDoctor && user.role !== "manager";
+  const cutoff = new Date(new Date().getTime() - THIRTY_DAYS_MS).toISOString();
+
+  if (canEditAppointments) {
+    await supabase
+      .from("appointments")
+      .delete()
+      .eq("clinic_id", user.clinicId)
+      .lt("deleted_at", cutoff);
+  }
 
   const [{ data: doctors }, { data: departments }] = await Promise.all([
     isDoctor
@@ -162,9 +181,33 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
   if (patientIds) query = query.in("patient_id", patientIds);
 
   const { data: appointments } = await query;
+  const { data: deletedAppointments } = canEditAppointments
+    ? await supabase
+        .from("appointments")
+        .select(
+          "id, scheduled_at, deleted_at, patients(full_name), profiles!doctor_id(full_name)",
+        )
+        .eq("clinic_id", user.clinicId)
+        .not("deleted_at", "is", null)
+        .gt("deleted_at", cutoff)
+        .order("deleted_at", { ascending: false })
+        .limit(100)
+    : { data: [] };
   const appts = (appointments ?? []) as Parameters<
     typeof WeekCalendar
   >[0]["appointments"];
+  const trashItems: AppointmentTrashItem[] = (deletedAppointments ?? []).map(
+    (a) => ({
+      id: a.id,
+      patientName:
+        (a.patients as { full_name: string } | null)?.full_name ?? "Unknown",
+      doctorName:
+        (a.profiles as { full_name: string } | null)?.full_name ??
+        "Unassigned",
+      scheduledAt: a.scheduled_at,
+      deletedAt: a.deleted_at!,
+    }),
+  );
 
   const total = appts.length;
   const activeFilterCount =
@@ -206,19 +249,27 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
         <DayCalendar
           appointments={appts}
           date={dayAnchor}
-          canEdit={!isDoctor && user.role !== "manager"}
+          canEdit={canEditAppointments}
         />
       ) : view === "month" ? (
         <MonthCalendar
           appointments={appts}
           monthStart={monthStart}
-          canEdit={!isDoctor && user.role !== "manager"}
+          canEdit={canEditAppointments}
         />
       ) : (
         <WeekCalendar
           appointments={appts}
           weekStart={weekStart}
-          canEdit={!isDoctor && user.role !== "manager"}
+          canEdit={canEditAppointments}
+        />
+      )}
+
+      {canEditAppointments && (
+        <AppointmentsRecycleBin
+          items={trashItems}
+          onRestore={restoreAppointment}
+          onPermanentDelete={permanentDeleteAppointment}
         />
       )}
     </div>

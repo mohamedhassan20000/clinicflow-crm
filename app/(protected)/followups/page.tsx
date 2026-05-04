@@ -103,6 +103,7 @@ export default async function FollowupsPage({ searchParams }: PageProps) {
     )
     .eq("clinic_id", user.clinicId)
     .eq("status", "completed")
+    .is("deleted_at", null)
     .gte("scheduled_at", range.start.toISOString())
     .lte("scheduled_at", range.end.toISOString())
     .order("scheduled_at", { ascending: false })

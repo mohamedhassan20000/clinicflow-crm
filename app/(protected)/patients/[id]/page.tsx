@@ -53,6 +53,7 @@ export default async function PatientDetailPage({ params }: PageProps) {
     )
     .eq("patient_id", id)
     .eq("clinic_id", user.clinicId)
+    .is("deleted_at", null)
     .order("scheduled_at", { ascending: false })
     .limit(30)) as { data: {
       id: string;
@@ -87,7 +88,7 @@ export default async function PatientDetailPage({ params }: PageProps) {
     .order("recorded_at", { ascending: false });
 
   // Financial data — only loaded for non-doctor roles
-  let settlementsByAppt = new Map<
+  const settlementsByAppt = new Map<
     string,
     {
       id: string;
@@ -131,7 +132,8 @@ export default async function PatientDetailPage({ params }: PageProps) {
         .from("appointments")
         .select("deposit_amount")
         .eq("patient_id", id)
-        .eq("clinic_id", user.clinicId),
+        .eq("clinic_id", user.clinicId)
+        .is("deleted_at", null),
     ]);
 
     const totalDeposited = (deposits ?? []).reduce(

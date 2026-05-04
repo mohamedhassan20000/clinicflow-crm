@@ -82,6 +82,40 @@ function buildClinicIso(date: string, time: string): string {
   return `${date}T${time}:00${CLINIC_TZ_OFFSET}`;
 }
 
+function clinicNowParts() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Istanbul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date());
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  const hour = Number(get("hour"));
+  const minute = Number(get("minute"));
+  return {
+    date: `${get("year")}-${get("month")}-${get("day")}`,
+    minutes: hour * 60 + minute,
+  };
+}
+
+function timeToMinutes(time: string): number {
+  const [h, m] = time.split(":").map(Number);
+  return h * 60 + m;
+}
+
+function isPastClinicSlot(value: string): boolean {
+  const date = value.split("T")[0] ?? "";
+  const time = value.split("T")[1]?.slice(0, 5) ?? "";
+  if (!date || !time) return false;
+  const now = clinicNowParts();
+  if (date < now.date) return true;
+  if (date > now.date) return false;
+  return timeToMinutes(time) <= now.minutes;
+}
+
 export function AppointmentForm({
   action,
   patients,
@@ -127,6 +161,14 @@ export function AppointmentForm({
     : doctors;
 
   function onSubmit(values: AppointmentFormValues) {
+    if (isPastClinicSlot(values.scheduled_at)) {
+      form.setError("scheduled_at", {
+        type: "validate",
+        message: "Choose a future date and time for the appointment.",
+      });
+      return;
+    }
+
     const fd = new FormData();
     fd.set("patient_id", values.patient_id);
     fd.set("doctor_id", values.doctor_id);
@@ -317,6 +359,7 @@ export function AppointmentForm({
               const timeVal = field.value
                 ? field.value.split("T")[1]?.slice(0, 5)
                 : "";
+              const today = clinicNowParts().date;
               return (
                 <FormItem>
                   <FormLabel>Date</FormLabel>
@@ -325,7 +368,7 @@ export function AppointmentForm({
                       type="date"
                       disabled={isPending}
                       value={dateVal}
-                      min={new Date().toISOString().split("T")[0]}
+                      min={today}
                       onChange={(e) => {
                         const t = timeVal || "09:00";
                         field.onChange(
@@ -349,13 +392,15 @@ export function AppointmentForm({
               const timeVal = field.value
                 ? field.value.split("T")[1]?.slice(0, 5)
                 : "";
+              const now = clinicNowParts();
+              const selectedDate = dateVal || now.date;
               return (
                 <FormItem>
                   <FormLabel>Time</FormLabel>
                   <Select
                     value={timeVal}
                     onValueChange={(t) => {
-                      const d = dateVal || new Date().toISOString().split("T")[0];
+                      const d = selectedDate;
                       field.onChange(buildClinicIso(d, t));
                     }}
                     disabled={isPending}
@@ -366,11 +411,17 @@ export function AppointmentForm({
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {TIME_SLOTS.map((t) => (
-                        <SelectItem key={t} value={t}>
-                          {t}
-                        </SelectItem>
-                      ))}
+                      {TIME_SLOTS.map((t) => {
+                        const disabled =
+                          selectedDate < now.date ||
+                          (selectedDate === now.date &&
+                            timeToMinutes(t) <= now.minutes);
+                        return (
+                          <SelectItem key={t} value={t} disabled={disabled}>
+                            {t}
+                          </SelectItem>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
                   <FormMessage />

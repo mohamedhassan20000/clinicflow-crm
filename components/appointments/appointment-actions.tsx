@@ -1,14 +1,16 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
   getBillingContext,
   updateAppointmentStatus,
-  forceRestoreAppointmentStatus,
+  undoAppointmentStatus,
+  undoInvoiceCompletion,
   type BillingContext,
+  type InvoiceUndoStatus,
 } from "@/actions/appointments";
 import type { Database } from "@/types/database";
 import {
@@ -19,6 +21,7 @@ import { CancelAppointmentDialog } from "@/components/appointments/cancel-dialog
 import { NoShowDialog } from "@/components/appointments/noshow-dialog";
 
 type Status = Database["public"]["Enums"]["appointment_status"];
+type RestorableStatus = Extract<Status, "pending" | "confirmed">;
 
 const TERMINAL: Status[] = ["completed", "cancelled", "no_show"];
 
@@ -41,9 +44,36 @@ export function AppointmentActions({
   const [ctx, setCtx] = useState<BillingContext | null>(null);
   const [loadingCtx, setLoadingCtx] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
+  const [invoiceDraft, setInvoiceDraft] = useState<BillingPayload | null>(null);
+  const [invoiceDraftKey, setInvoiceDraftKey] = useState(0);
+  const undoStatusRef = useRef<Status | null>(null);
 
   const effectiveStatus = optimisticStatus ?? currentStatus;
   const isTerminal = TERMINAL.includes(effectiveStatus);
+
+  function resetCancelState() {
+    setCancelOpen(false);
+    setIsCancelling(false);
+  }
+
+  function resetNoShowState() {
+    setNoShowOpen(false);
+    setIsNoShow(false);
+  }
+
+  function resetBillingState() {
+    setBillingOpen(false);
+    setLoadingCtx(false);
+    setIsCompleting(false);
+    setCtx(null);
+  }
+
+  function reopenInvoiceDraft(payload: BillingPayload) {
+    setInvoiceDraft(payload);
+    setInvoiceDraftKey((key) => key + 1);
+    setOptimisticStatus(undoStatusRef.current ?? "confirmed");
+    setBillingOpen(true);
+  }
 
   // Lazy-load services + balance the moment the dialog opens.
   useEffect(() => {
@@ -58,7 +88,6 @@ export function AppointmentActions({
           if (!active) return;
           if (res.error) {
             toast.error(res.error);
-            setBillingOpen(false);
           } else if (res.data) {
             setCtx(res.data);
           }
@@ -70,7 +99,6 @@ export function AppointmentActions({
               ? err.message
               : "Failed to load invoice details.",
           );
-          setBillingOpen(false);
         })
         .finally(() => {
           if (active) setLoadingCtx(false);
@@ -96,28 +124,20 @@ export function AppointmentActions({
     return () => { active = false; };
   }, [effectiveStatus, appointmentId, ctx]);
 
-  // When the billing dialog closes (whether via Cancel button, Esc, or
-  // outside-click), force-clear the lazy-load + in-flight flags so the next
-  // open starts from a clean slate. Without this, an aborted fetch can leave
-  // `loadingCtx=true` and the dialog reopens stuck on the loading spinner.
-  useEffect(() => {
-    if (billingOpen) return;
-    queueMicrotask(() => {
-      setCtx(null);
-      setLoadingCtx(false);
-      setIsCompleting(false);
-    });
-  }, [billingOpen]);
-
   if (isTerminal) return null;
 
-  function doUndo(prevStatus: Status, fallbackStatus: Status) {
+  function doUndo(fallbackStatus: Status) {
+    const prevStatus = undoStatusRef.current;
+    if (!prevStatus) {
+      toast.error("No previous appointment status was captured.");
+      return;
+    }
+    if (prevStatus !== "pending" && prevStatus !== "confirmed") {
+      toast.error("This appointment cannot be restored to its previous status.");
+      return;
+    }
     setOptimisticStatus(prevStatus);
-    const restorable = prevStatus === "pending" || prevStatus === "confirmed";
-    const promise = restorable
-      ? forceRestoreAppointmentStatus(appointmentId, prevStatus as "pending" | "confirmed")
-      : updateAppointmentStatus(appointmentId, prevStatus);
-    promise.then((res) => {
+    undoAppointmentStatus(appointmentId, prevStatus as RestorableStatus).then((res) => {
       if (res.error) {
         toast.error(res.error);
         setOptimisticStatus(fallbackStatus);
@@ -127,6 +147,7 @@ export function AppointmentActions({
 
   function runStatus(newStatus: Status) {
     const prevStatus = effectiveStatus;
+    undoStatusRef.current = prevStatus;
     setOptimisticStatus(newStatus);
     startTransition(async () => {
       const result = await updateAppointmentStatus(appointmentId, newStatus);
@@ -138,7 +159,7 @@ export function AppointmentActions({
           duration: 10000,
           action: {
             label: "Undo",
-            onClick: () => doUndo(prevStatus, newStatus),
+            onClick: () => doUndo(newStatus),
           },
         });
       }
@@ -147,6 +168,7 @@ export function AppointmentActions({
 
   function runCancel(reason: string) {
     const prevStatus = effectiveStatus;
+    undoStatusRef.current = prevStatus;
     setIsCancelling(true);
     startTransition(async () => {
       const result = await updateAppointmentStatus(
@@ -155,17 +177,17 @@ export function AppointmentActions({
         null,
         reason,
       );
-      setIsCancelling(false);
       if (result.error) {
+        setIsCancelling(false);
         toast.error(result.error);
       } else {
-        setCancelOpen(false);
+        resetCancelState();
         setOptimisticStatus("cancelled");
         toast.success("Appointment cancelled.", {
           duration: 10000,
           action: {
             label: "Undo",
-            onClick: () => doUndo(prevStatus, "cancelled"),
+            onClick: () => doUndo("cancelled"),
           },
         });
       }
@@ -174,6 +196,7 @@ export function AppointmentActions({
 
   function runNoShow(reason: string) {
     const prevStatus = effectiveStatus;
+    undoStatusRef.current = prevStatus;
     setIsNoShow(true);
     setOptimisticStatus("no_show");
     startTransition(async () => {
@@ -184,17 +207,17 @@ export function AppointmentActions({
         null,
         reason,
       );
-      setIsNoShow(false);
       if (result.error) {
+        setIsNoShow(false);
         toast.error(result.error);
         setOptimisticStatus(null);
       } else {
-        setNoShowOpen(false);
+        resetNoShowState();
         toast.success("Appointment marked as no-show.", {
           duration: 10000,
           action: {
             label: "Undo",
-            onClick: () => doUndo(prevStatus, "no_show"),
+            onClick: () => doUndo("no_show"),
           },
         });
       }
@@ -202,6 +225,12 @@ export function AppointmentActions({
   }
 
   function runComplete(payload: BillingPayload) {
+    const prevStatus = effectiveStatus;
+    undoStatusRef.current =
+      prevStatus === "pending" || prevStatus === "confirmed"
+        ? prevStatus
+        : "confirmed";
+    setInvoiceDraft(payload);
     setIsCompleting(true);
     setOptimisticStatus("completed");
     startTransition(async () => {
@@ -210,14 +239,32 @@ export function AppointmentActions({
         "completed",
         payload,
       );
-      setIsCompleting(false);
       if (result.error) {
+        setIsCompleting(false);
         toast.error(result.error);
         setOptimisticStatus(null);
       } else {
-        toast.success("Appointment completed & charged.");
-        setBillingOpen(false);
-        setCtx(null);
+        toast.success("Appointment completed & charged.", {
+          duration: 10000,
+          action: {
+            label: "Undo",
+            onClick: async () => {
+              const target =
+                (undoStatusRef.current === "pending" ||
+                undoStatusRef.current === "confirmed"
+                  ? undoStatusRef.current
+                  : "confirmed") as InvoiceUndoStatus;
+              reopenInvoiceDraft(payload);
+              const undo = await undoInvoiceCompletion(appointmentId, target);
+              if (undo.error) {
+                toast.error(undo.error);
+                setOptimisticStatus("completed");
+                return;
+              }
+            },
+          },
+        });
+        resetBillingState();
       }
     });
   }
@@ -251,7 +298,11 @@ export function AppointmentActions({
               "h-6 px-2 text-[10px] font-semibold",
               "bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600 shadow-sm",
             )}
-            onClick={() => setBillingOpen(true)}
+            onClick={() => {
+              setInvoiceDraft(null);
+              setInvoiceDraftKey((key) => key + 1);
+              setBillingOpen(true);
+            }}
           >
             Complete
           </Button>
@@ -281,11 +332,11 @@ export function AppointmentActions({
       <BillingDialog
         open={billingOpen}
         onOpenChange={(o) => {
-          setBillingOpen(o);
-          if (!o) setCtx(null);
+          if (o) setBillingOpen(true);
+          else resetBillingState();
         }}
         onConfirm={runComplete}
-        isPending={isCompleting || loadingCtx}
+        isPending={isCompleting}
         loadingContext={loadingCtx && !ctx}
         hasInsurance={ctx?.hasInsurance ?? false}
         insuranceProviderName={ctx?.insuranceProviderName ?? null}
@@ -294,12 +345,15 @@ export function AppointmentActions({
         patientName={ctx?.patientName}
         departmentName={ctx?.departmentName ?? null}
         departmentColor={ctx?.departmentColor ?? null}
+        initialPayload={invoiceDraft}
+        draftKey={invoiceDraftKey}
       />
 
       <CancelAppointmentDialog
         open={cancelOpen}
         onOpenChange={(o) => {
-          if (!isCancelling) setCancelOpen(o);
+          if (o) setCancelOpen(true);
+          else resetCancelState();
         }}
         onConfirm={runCancel}
         isPending={isCancelling}
@@ -308,7 +362,8 @@ export function AppointmentActions({
       <NoShowDialog
         open={noShowOpen}
         onOpenChange={(o) => {
-          if (!isNoShow) setNoShowOpen(o);
+          if (o) setNoShowOpen(true);
+          else resetNoShowState();
         }}
         onConfirm={runNoShow}
         isPending={isNoShow}

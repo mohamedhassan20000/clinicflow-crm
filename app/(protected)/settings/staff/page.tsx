@@ -28,7 +28,7 @@ export default async function StaffSettingsPage() {
       .order("name"),
   ]);
 
-  const cutoff = new Date(Date.now() - THIRTY_DAYS_MS).toISOString();
+  const cutoff = new Date(new Date().getTime() - THIRTY_DAYS_MS).toISOString();
   const staff = (allStaff ?? []).filter((s) => !s.deleted_at);
   const trashedStaff = (allStaff ?? []).filter(
     (s) => s.deleted_at && s.deleted_at > cutoff,

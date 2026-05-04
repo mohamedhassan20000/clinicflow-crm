@@ -42,7 +42,7 @@ function staffPath(clinicId: string, staffId: string, segment: string) {
 export async function listStaffFiles(
   staffId: string,
 ): Promise<{ data?: StaffFiles; error?: string }> {
-  const user = await requireRole("admin");
+  const user = await requireRole(["admin", "manager"]);
   const supabase = await createClient();
 
   const { data: profile } = await supabase
@@ -131,7 +131,7 @@ export async function uploadStaffPhoto(
   staffId: string,
   fd: FormData,
 ): Promise<FileActionResult> {
-  const user = await requireRole("admin");
+  const user = await requireRole(["admin", "manager"]);
   const supabase = await createClient();
 
   const file = fd.get("file") as File | null;
@@ -167,7 +167,7 @@ export async function uploadStaffContract(
   staffId: string,
   fd: FormData,
 ): Promise<FileActionResult> {
-  const user = await requireRole("admin");
+  const user = await requireRole(["admin", "manager"]);
   const supabase = await createClient();
 
   const file = fd.get("file") as File | null;
@@ -192,7 +192,7 @@ export async function uploadStaffCertificate(
   staffId: string,
   fd: FormData,
 ): Promise<FileActionResult> {
-  const user = await requireRole("admin");
+  const user = await requireRole(["admin", "manager"]);
   const supabase = await createClient();
 
   const file = fd.get("file") as File | null;
@@ -221,7 +221,7 @@ export async function uploadStaffOtherDoc(
   staffId: string,
   fd: FormData,
 ): Promise<FileActionResult> {
-  const user = await requireRole("admin");
+  const user = await requireRole(["admin", "manager"]);
   const supabase = await createClient();
 
   const file = fd.get("file") as File | null;
@@ -250,7 +250,7 @@ export async function deleteStaffFile(
   staffId: string,
   filePath: string,
 ): Promise<FileActionResult> {
-  const user = await requireRole("admin");
+  const user = await requireRole(["admin", "manager"]);
   const supabase = await createClient();
 
   const expectedPrefix = `staff/${user.clinicId}/${staffId}/`;

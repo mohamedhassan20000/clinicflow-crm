@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { AlertCircle, CheckCircle2, Loader2, PhoneOff } from "lucide-react";
 import {
@@ -15,8 +16,13 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { recordFollowup } from "@/actions/followups";
-import type { PendingRow } from "./followups-view";
+import {
+  deleteFollowup,
+  recordFollowup,
+  restoreFollowup,
+  updateFollowup,
+} from "@/actions/followups";
+import type { DoneRow, PendingRow } from "./followups-view";
 
 type Outcome = "all_fine" | "has_problem" | "no_response";
 
@@ -50,14 +56,26 @@ const OPTIONS: {
 
 interface Props {
   row: PendingRow | null;
+  followup?: DoneRow | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onUndoReopen?: () => void;
+  mode?: "create" | "edit";
 }
 
-export function RecordFollowupDialog({ row, open, onOpenChange }: Props) {
+export function RecordFollowupDialog({
+  row,
+  followup = null,
+  open,
+  onOpenChange,
+  onUndoReopen,
+  mode = "create",
+}: Props) {
+  const router = useRouter();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [notes, setNotes] = useState("");
-  const [state, formAction, isPending] = useActionState(recordFollowup, null);
+  const action = mode === "edit" ? updateFollowup : recordFollowup;
+  const [state, formAction, isPending] = useActionState(action, null);
   // Track which `state` object we've already shown a toast for. Without this,
   // any parent re-render (e.g. the live search updating the URL) recreates
   // `onOpenChange` and re-fires the success effect, spamming the toast.
@@ -70,12 +88,12 @@ export function RecordFollowupDialog({ row, open, onOpenChange }: Props) {
   }, [onOpenChange]);
 
   useEffect(() => {
-    if (open) return;
+    if (!open) return;
     queueMicrotask(() => {
-      setOutcome(null);
-      setNotes("");
+      setOutcome((followup?.outcome as Outcome | undefined) ?? null);
+      setNotes(followup?.notes ?? "");
     });
-  }, [open]);
+  }, [open, followup]);
 
   useEffect(() => {
     if (!state) return;
@@ -84,12 +102,54 @@ export function RecordFollowupDialog({ row, open, onOpenChange }: Props) {
     if (state.error) {
       toast.error(state.error);
     } else {
-      toast.success("Follow-up recorded.");
+      const saved = state.followup;
+      const draftOutcome = outcome;
+      const draftNotes = notes;
+      const previous =
+        mode === "edit" && followup
+          ? {
+              id: followup.id,
+              appointment_id: followup.appointment_id,
+              patient_id: followup.patient_id,
+              outcome: followup.outcome,
+              notes: followup.notes,
+            }
+          : null;
+      toast.success(mode === "edit" ? "Follow-up updated." : "Follow-up recorded.", {
+        duration: 10000,
+        action: saved
+          ? {
+              label: "Undo",
+              onClick: async () => {
+                const res =
+                  mode === "edit" && previous
+                    ? await restoreFollowup(previous)
+                    : await deleteFollowup(saved.id);
+                if (res.error) {
+                  toast.error(res.error);
+                  return;
+                }
+                setOutcome(draftOutcome);
+                setNotes(draftNotes);
+                onUndoReopen?.();
+                router.refresh();
+              },
+            }
+          : undefined,
+      });
       queueMicrotask(() => onOpenChangeRef.current(false));
+      router.refresh();
     }
-  }, [state]);
+  }, [state, mode, followup, outcome, notes, router]);
 
-  if (!row) return null;
+  if (!row && !followup) return null;
+
+  const patientName = row?.patients?.full_name ?? followup?.patients?.full_name;
+  const patientPhone = row?.patients?.phone ?? followup?.patients?.phone;
+  const departmentName =
+    row?.departments?.name ?? followup?.appointment?.departments?.name;
+  const patientId = row?.patient_id ?? followup?.patient_id ?? "";
+  const appointmentId = row?.id ?? followup?.appointment_id ?? "";
 
   const requiresNote = outcome === "has_problem";
   const canSubmit =
@@ -99,21 +159,26 @@ export function RecordFollowupDialog({ row, open, onOpenChange }: Props) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Record follow-up</DialogTitle>
+          <DialogTitle>
+            {mode === "edit" ? "Edit follow-up" : "Record follow-up"}
+          </DialogTitle>
           <DialogDescription>
-            {row.patients?.full_name} ·{" "}
-            {row.patients?.phone && (
-              <span className="font-mono">{row.patients.phone}</span>
+            {patientName} ·{" "}
+            {patientPhone && (
+              <span className="font-mono">{patientPhone}</span>
             )}
-            {row.departments?.name && (
-              <span className="ml-1">· {row.departments.name}</span>
+            {departmentName && (
+              <span className="ml-1">· {departmentName}</span>
             )}
           </DialogDescription>
         </DialogHeader>
 
         <form action={formAction} className="space-y-4 py-1">
-          <input type="hidden" name="appointment_id" value={row.id} />
-          <input type="hidden" name="patient_id" value={row.patient_id} />
+          {followup && (
+            <input type="hidden" name="followup_id" value={followup.id} />
+          )}
+          <input type="hidden" name="appointment_id" value={appointmentId} />
+          <input type="hidden" name="patient_id" value={patientId} />
           {outcome && (
             <input type="hidden" name="outcome" value={outcome} />
           )}
@@ -196,7 +261,7 @@ export function RecordFollowupDialog({ row, open, onOpenChange }: Props) {
             </Button>
             <Button type="submit" disabled={!canSubmit} className="gap-2">
               {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-              Save follow-up
+              {mode === "edit" ? "Save changes" : "Save follow-up"}
             </Button>
           </DialogFooter>
         </form>

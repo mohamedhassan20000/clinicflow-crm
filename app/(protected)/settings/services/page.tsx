@@ -37,7 +37,7 @@ export default async function ServicesSettingsPage() {
   ]);
 
   const deptList = departments ?? [];
-  const cutoff = new Date(Date.now() - THIRTY_DAYS_MS).toISOString();
+  const cutoff = new Date(new Date().getTime() - THIRTY_DAYS_MS).toISOString();
   const svcList = (allServices ?? []).filter((s) => !s.deleted_at);
   const trashedServices = (allServices ?? []).filter(
     (s) => s.deleted_at && s.deleted_at > cutoff,

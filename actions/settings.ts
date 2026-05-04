@@ -25,7 +25,7 @@ export async function createStaff(
   _prev: ActionResult | null,
   fd: FormData,
 ): Promise<ActionResult> {
-  const user = await requireRole("admin");
+  const user = await requireRole(["admin", "manager"]);
 
   const parsed = createStaffSchema.safeParse({
     full_name: fd.get("full_name"),
@@ -190,7 +190,7 @@ export async function restoreStaff(staffId: string): Promise<ActionResult> {
 }
 
 export async function deleteStaff(staffId: string): Promise<ActionResult> {
-  const user = await requireRole("admin");
+  const user = await requireRole(["admin", "manager"]);
 
   if (staffId === user.id) {
     return { error: "You cannot delete your own account." };
@@ -222,7 +222,7 @@ export async function deleteStaff(staffId: string): Promise<ActionResult> {
 }
 
 export async function resetStaffPassword(staffId: string): Promise<ActionResult> {
-  await requireRole("admin");
+  await requireRole(["admin", "manager"]);
 
   const tempPassword = `Clinic@${Math.random().toString(36).slice(2, 10)}`;
   const adminClient = createAdminClient();
@@ -353,7 +353,7 @@ export async function restoreDepartment(deptId: string): Promise<ActionResult> {
 }
 
 export async function permanentDeleteDepartment(deptId: string): Promise<ActionResult> {
-  const user = await requireRole("admin");
+  const user = await requireRole(["admin", "manager"]);
   const supabase = await createClient();
   const { error } = await supabase
     .from("departments")
@@ -473,7 +473,7 @@ export async function restoreInsurance(insuranceId: string): Promise<ActionResul
 }
 
 export async function permanentDeleteInsurance(insuranceId: string): Promise<ActionResult> {
-  const user = await requireRole("admin");
+  const user = await requireRole(["admin", "manager"]);
   const supabase = await createClient();
   const { error } = await supabase
     .from("insurance_providers")

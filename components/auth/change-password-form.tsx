@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -49,6 +49,12 @@ export function ChangePasswordForm() {
   });
 
   const isSubmitting = isPending || form.formState.isSubmitting;
+
+  useEffect(() => {
+    if (actionState?.ok && actionState.redirectTo) {
+      window.location.href = actionState.redirectTo;
+    }
+  }, [actionState]);
 
   if (actionState?.error) {
     toast.error(actionState.error);

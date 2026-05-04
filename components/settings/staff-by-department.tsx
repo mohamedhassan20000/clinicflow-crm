@@ -16,6 +16,11 @@ interface Props {
 }
 
 const UNASSIGNED_COLOR = "#94a3b8"; // slate-400
+const MANAGEMENT_COLOR = "#0f766e"; // teal-700
+
+function isManagementRole(role: string) {
+  return role === "admin" || role === "manager";
+}
 
 export function StaffByDepartment({
   staff,
@@ -25,16 +30,21 @@ export function StaffByDepartment({
   const groups = useMemo(() => {
     const byDept = new Map<string, StaffMember[]>();
     for (const dept of departments) byDept.set(dept.id, []);
+    const management: StaffMember[] = [];
     const unassigned: StaffMember[] = [];
 
     for (const member of staff) {
+      if (isManagementRole(member.role)) {
+        management.push(member);
+        continue;
+      }
       if (member.department_id && byDept.has(member.department_id)) {
         byDept.get(member.department_id)!.push(member);
       } else {
         unassigned.push(member);
       }
     }
-    return { byDept, unassigned };
+    return { byDept, management, unassigned };
   }, [staff, departments]);
 
   // For dropdowns inside StaffTable
@@ -42,6 +52,21 @@ export function StaffByDepartment({
 
   return (
     <div className="space-y-6">
+      {groups.management.length > 0 && (
+        <DepartmentSection
+          name="Management"
+          color={MANAGEMENT_COLOR}
+          count={groups.management.length}
+          subtitle="Admin and manager accounts"
+        >
+          <StaffTable
+            staff={groups.management}
+            departments={deptOptions}
+            currentUserId={currentUserId}
+          />
+        </DepartmentSection>
+      )}
+
       {departments.map((dept) => {
         const members = groups.byDept.get(dept.id) ?? [];
         const color = dept.color ?? UNASSIGNED_COLOR;
@@ -83,7 +108,9 @@ export function StaffByDepartment({
         </DepartmentSection>
       )}
 
-      {departments.length === 0 && groups.unassigned.length === 0 && (
+      {departments.length === 0 &&
+        groups.management.length === 0 &&
+        groups.unassigned.length === 0 && (
         <div className="rounded-xl border border-dashed border-border/60 p-10 text-center text-sm text-muted-foreground">
           No staff members yet. Add a department first, then create staff
           accounts.

@@ -22,11 +22,26 @@ export interface ActionResult {
 
 // ── Staff ────────────────────────────────────────────────────────────────────
 
+async function getStaffTargetForClinic(
+  staffId: string,
+  clinicId: string,
+) {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("profiles")
+    .select("id, clinic_id, role")
+    .eq("id", staffId)
+    .eq("clinic_id", clinicId)
+    .single();
+
+  return data;
+}
+
 export async function createStaff(
   _prev: ActionResult | null,
   fd: FormData,
 ): Promise<ActionResult> {
-  const user = await requireRole(["admin", "manager"]);
+  const user = await requireRole("admin");
 
   const parsed = createStaffSchema.safeParse({
     full_name: fd.get("full_name"),
@@ -110,6 +125,12 @@ export async function updateStaff(
   // Prevent self-deactivation
   if (staffId === user.id && !parsed.data.is_active) {
     return { error: "You cannot deactivate your own account." };
+  }
+
+  const target = await getStaffTargetForClinic(staffId, user.clinicId);
+  if (!target) return { error: "Staff member not found." };
+  if (user.role !== "admin" && parsed.data.role !== target.role) {
+    return { error: "Only admins can change staff roles." };
   }
 
   const supabase = await createClient();
@@ -233,13 +254,19 @@ export async function resetStaffPassword(
   staffId: string,
   temporaryPassword: string,
 ): Promise<ActionResult> {
-  await requireRole(["admin", "manager"]);
+  const user = await requireRole(["admin", "manager"]);
 
   const parsed = temporaryPasswordSchema.safeParse({
     temporary_password: temporaryPassword,
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Invalid password." };
+  }
+
+  const target = await getStaffTargetForClinic(staffId, user.clinicId);
+  if (!target) return { error: "Staff member not found." };
+  if (user.role !== "admin" && target.role === "admin") {
+    return { error: "Only admins can reset admin passwords." };
   }
 
   const adminClient = createAdminClient();
@@ -255,7 +282,8 @@ export async function resetStaffPassword(
   await supabase
     .from("profiles")
     .update({ must_change_password: true })
-    .eq("id", staffId);
+    .eq("id", staffId)
+    .eq("clinic_id", user.clinicId);
 
   revalidatePath("/settings/staff");
   return { success: true };

@@ -21,11 +21,14 @@ export async function getAuthedUser(): Promise<AuthedUser | null> {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role, full_name, clinic_id, department_id, must_change_password")
+    .select(
+      "role, full_name, clinic_id, department_id, must_change_password, is_active, is_deleted, deleted_at",
+    )
     .eq("id", user.id)
     .single();
 
   if (!profile) return null;
+  if (!profile.is_active || profile.is_deleted || profile.deleted_at) return null;
 
   return {
     id: user.id,

@@ -444,8 +444,8 @@ export function RevenueReport({
               )}
             </tbody>
             {rows.length > 0 && (
-              <tfoot className="bg-muted/30 font-semibold">
-                <tr>
+              <tbody className="bg-muted/30 font-semibold print:break-inside-avoid">
+                <tr className="border-t-2 border-border/60 print:border-gray-300">
                   <td className="px-4 py-3 text-xs uppercase tracking-wider text-muted-foreground" colSpan={3}>
                     Totals
                   </td>
@@ -468,7 +468,7 @@ export function RevenueReport({
                     {fmtTRY(outstandingTotal)}
                   </td>
                 </tr>
-              </tfoot>
+              </tbody>
             )}
           </table>
         </div>
@@ -608,8 +608,8 @@ export function RevenueReport({
                   <SettlementTxnRow key={s.id} row={s} />
                 ))}
               </tbody>
-              <tfoot className="bg-muted/30 font-semibold">
-                <tr>
+              <tbody className="bg-muted/30 font-semibold">
+                <tr className="border-t-2 border-border/60">
                   <td
                     className="px-4 py-3 text-xs uppercase tracking-wider text-muted-foreground"
                     colSpan={4}
@@ -621,7 +621,7 @@ export function RevenueReport({
                   </td>
                   <td className="px-4 py-3" />
                 </tr>
-              </tfoot>
+              </tbody>
             </table>
           </div>
 

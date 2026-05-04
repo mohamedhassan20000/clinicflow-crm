@@ -43,7 +43,8 @@ import {
   updateStaff,
   resetStaffPassword,
   toggleStaffActive,
-  deleteStaff,
+  softDeleteStaff,
+  restoreStaff,
 } from "@/actions/settings";
 import type { Tables } from "@/types/database";
 
@@ -79,11 +80,25 @@ export function StaffTable({ staff, departments, currentUserId }: StaffTableProp
   const [profileTarget, setProfileTarget] = useState<StaffMember | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  function handleDelete(id: string) {
+  function handleDelete(id: string, name: string) {
     startTransition(async () => {
-      const result = await deleteStaff(id);
-      if (result.error) toast.error(result.error);
-      else toast.success("Staff member deleted.");
+      const result = await softDeleteStaff(id);
+      if (result.error) {
+        toast.error(result.error);
+      } else {
+        toast.success(`"${name}" moved to recycle bin.`, {
+          duration: 10000,
+          action: {
+            label: "Undo",
+            onClick: () => {
+              restoreStaff(id).then((res) => {
+                if (res.error) toast.error(res.error);
+                else toast.success(`"${name}" restored.`);
+              });
+            },
+          },
+        });
+      }
       setDeleteTarget(null);
     });
   }
@@ -107,7 +122,14 @@ export function StaffTable({ staff, departments, currentUserId }: StaffTableProp
   return (
     <>
       <div className="rounded-xl border border-border/50 overflow-hidden">
-        <table className="w-full text-sm">
+        <table className="w-full table-fixed text-sm">
+          <colgroup>
+            <col />
+            <col className="hidden w-36 sm:table-column" />
+            <col className="w-28" />
+            <col className="w-24" />
+            <col className="w-12" />
+          </colgroup>
           <thead>
             <tr className="border-b border-border/50 bg-muted/30">
               <th className="px-4 py-3 text-left font-medium text-muted-foreground">Name</th>
@@ -263,10 +285,10 @@ export function StaffTable({ staff, departments, currentUserId }: StaffTableProp
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete staff member?</AlertDialogTitle>
+            <AlertDialogTitle>Move to recycle bin?</AlertDialogTitle>
             <AlertDialogDescription>
-              This permanently removes <strong>{deleteTarget?.full_name}</strong>{" "}
-              from the clinic and revokes their login. This cannot be undone.
+              <strong>{deleteTarget?.full_name}</strong> will be deactivated and
+              moved to the recycle bin. They can be restored within 30 days.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -275,11 +297,11 @@ export function StaffTable({ staff, departments, currentUserId }: StaffTableProp
               disabled={isPending}
               onClick={(e) => {
                 e.preventDefault();
-                if (deleteTarget) handleDelete(deleteTarget.id);
+                if (deleteTarget) handleDelete(deleteTarget.id, deleteTarget.full_name);
               }}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {isPending ? "Deleting…" : "Delete"}
+              {isPending ? "Moving…" : "Move to bin"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

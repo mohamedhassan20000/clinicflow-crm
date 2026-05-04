@@ -7,19 +7,37 @@ import { AddInsuranceDialog } from "@/components/settings/add-insurance-dialog";
 import {
   updateInsurance,
   toggleInsuranceActive,
+  softDeleteInsurance,
+  restoreInsurance,
+  permanentDeleteInsurance,
 } from "@/actions/settings";
+import { SettingsTrashSection, type TrashItem } from "@/components/settings/settings-trash-section";
 
 export const metadata: Metadata = { title: "Insurance" };
 
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
 export default async function InsuranceSettingsPage() {
-  const user = await requireRole("admin");
+  const user = await requireRole(["admin", "manager"]);
   const supabase = await createClient();
 
-  const { data: providers } = await supabase
+  const { data: allProviders } = await supabase
     .from("insurance_providers")
     .select("*")
     .eq("clinic_id", user.clinicId)
     .order("name");
+
+  const cutoff = new Date(Date.now() - THIRTY_DAYS_MS).toISOString();
+  const providers = (allProviders ?? []).filter((p) => !p.deleted_at);
+  const trashedProviders = (allProviders ?? []).filter(
+    (p) => p.deleted_at && p.deleted_at > cutoff,
+  );
+  const trashItems: TrashItem[] = trashedProviders.map((p) => ({
+    id: p.id,
+    label: p.name,
+    subtitle: p.code ?? undefined,
+    deletedAt: p.deleted_at!,
+  }));
 
   return (
     <div className="space-y-5">
@@ -34,7 +52,13 @@ export default async function InsuranceSettingsPage() {
       </div>
 
       <div className="rounded-xl border border-border/50 overflow-hidden">
-        <table className="w-full text-sm">
+        <table className="w-full table-fixed text-sm">
+          <colgroup>
+            <col />
+            <col className="hidden w-28 sm:table-column" />
+            <col className="w-24" />
+            <col className="w-28" />
+          </colgroup>
           <thead>
             <tr className="border-b border-border/50 bg-muted/30">
               <th className="px-4 py-3 text-left font-medium text-muted-foreground">Provider</th>
@@ -48,14 +72,14 @@ export default async function InsuranceSettingsPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-border/50">
-            {(providers ?? []).length === 0 && (
+            {providers.length === 0 && (
               <tr>
                 <td colSpan={4} className="py-10 text-center text-sm text-muted-foreground">
                   No insurance providers yet.
                 </td>
               </tr>
             )}
-            {(providers ?? []).map((provider) => (
+            {providers.map((provider) => (
               <tr key={provider.id} className="hover:bg-muted/20 transition-colors">
                 <td className="px-4 py-3 font-medium">{provider.name}</td>
                 <td className="hidden px-4 py-3 text-muted-foreground font-mono text-xs sm:table-cell">
@@ -74,6 +98,7 @@ export default async function InsuranceSettingsPage() {
                     provider={provider}
                     updateAction={updateInsurance.bind(null, provider.id)}
                     toggleAction={toggleInsuranceActive.bind(null, provider.id)}
+                    deleteAction={softDeleteInsurance.bind(null, provider.id)}
                   />
                 </td>
               </tr>
@@ -81,6 +106,13 @@ export default async function InsuranceSettingsPage() {
           </tbody>
         </table>
       </div>
+
+      <SettingsTrashSection
+        items={trashItems}
+        entityLabel="provider"
+        onRestore={restoreInsurance}
+        onPermanentDelete={permanentDeleteInsurance}
+      />
     </div>
   );
 }

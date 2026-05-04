@@ -1,10 +1,13 @@
 "use client";
 
+import { useState, useTransition } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, CalendarPlus } from "lucide-react";
+import { ChevronLeft, ChevronRight, CalendarPlus, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/appointments/status-badge";
 import { AppointmentActions } from "@/components/appointments/appointment-actions";
+import { softDeleteAppointment, restoreAppointment } from "@/actions/appointments";
 import type { Tables } from "@/types/database";
 
 type Appointment = Tables<"appointments"> & {
@@ -152,6 +155,9 @@ function AppointmentCard({
   appt: Appointment;
   canEdit: boolean;
 }) {
+  const [deleted, setDeleted] = useState(false);
+  const [, startDelete] = useTransition();
+
   const time = new Date(appt.scheduled_at).toLocaleTimeString("en-GB", {
     hour: "2-digit",
     minute: "2-digit",
@@ -160,6 +166,32 @@ function AppointmentCard({
 
   const deptColor = appt.departments?.color ?? "#64748b";
   const deptName = appt.departments?.name ?? "General";
+  const patientName = appt.patients?.full_name ?? "Unknown";
+
+  if (deleted) return null;
+
+  function handleDelete() {
+    startDelete(async () => {
+      const res = await softDeleteAppointment(appt.id);
+      if (res.error) {
+        toast.error(res.error);
+      } else {
+        setDeleted(true);
+        toast.success(`Appointment for ${patientName} deleted.`, {
+          duration: 10000,
+          action: {
+            label: "Undo",
+            onClick: () => {
+              restoreAppointment(appt.id).then((r) => {
+                if (r.error) toast.error(r.error);
+                else setDeleted(false);
+              });
+            },
+          },
+        });
+      }
+    });
+  }
 
   return (
     <div
@@ -174,8 +206,19 @@ function AppointmentCard({
         className="absolute inset-y-0 left-0 w-1 rounded-l-lg"
         style={{ backgroundColor: deptColor }}
       />
-      <div className="font-medium text-foreground leading-tight truncate">
-        {appt.patients?.full_name ?? "Unknown"}
+      <div className="flex items-start justify-between gap-1">
+        <div className="font-medium text-foreground leading-tight truncate">
+          {patientName}
+        </div>
+        {canEdit && (
+          <button
+            onClick={handleDelete}
+            className="shrink-0 opacity-0 group-hover:opacity-100 text-muted-foreground/40 hover:text-destructive transition-opacity"
+            title="Delete appointment"
+          >
+            <Trash2 className="h-3 w-3" />
+          </button>
+        )}
       </div>
       <div className="flex items-center justify-between text-muted-foreground">
         <span>{time}</span>

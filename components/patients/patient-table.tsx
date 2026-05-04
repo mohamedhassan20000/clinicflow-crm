@@ -226,7 +226,16 @@ function PatientGroupTable({
         </span>
       </header>
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full table-fixed text-sm">
+          <colgroup>
+            <col className="w-24" />
+            <col />
+            <col className={showDepartmentBadge ? "w-28" : "w-32"} />
+            {showDepartmentBadge && <col className="w-32" />}
+            <col className={showDepartmentBadge ? "w-36" : "w-40"} />
+            <col className={showDepartmentBadge ? "w-28" : "w-32"} />
+            <col className="w-16" />
+          </colgroup>
           <thead className="border-b border-border/50 bg-muted/30">
             <tr>
               <th className="px-4 py-2.5 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
@@ -316,14 +325,14 @@ function PatientRow({
           {patient.file_number ?? "—"}
         </span>
       </td>
-      <td className="px-4 py-3">
-        <div className="flex items-center gap-2">
+      <td className="max-w-0 px-4 py-3">
+        <div className="flex min-w-0 items-center gap-2">
           <span
             aria-hidden
             className="h-2 w-2 shrink-0 rounded-full ring-2 ring-background"
             style={{ backgroundColor: accentColor }}
           />
-          <span className="font-medium text-foreground">
+          <span className="truncate font-medium text-foreground">
             {patient.full_name}
           </span>
         </div>

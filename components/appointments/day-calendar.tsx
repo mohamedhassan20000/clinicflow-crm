@@ -1,10 +1,13 @@
 "use client";
 
+import { useState, useTransition } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, CalendarPlus } from "lucide-react";
+import { ChevronLeft, ChevronRight, CalendarPlus, Trash2, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/appointments/status-badge";
 import { AppointmentActions } from "@/components/appointments/appointment-actions";
+import { softDeleteAppointment, restoreAppointment } from "@/actions/appointments";
 import type { Tables } from "@/types/database";
 
 type Appointment = Tables<"appointments"> & {
@@ -92,6 +95,9 @@ export function DayCalendar({ appointments, date, canEdit }: Props) {
 }
 
 function DayRow({ appt, canEdit }: { appt: Appointment; canEdit: boolean }) {
+  const [deleted, setDeleted] = useState(false);
+  const [isDeleting, startDelete] = useTransition();
+
   const time = new Date(appt.scheduled_at).toLocaleTimeString("en-GB", {
     hour: "2-digit",
     minute: "2-digit",
@@ -99,6 +105,32 @@ function DayRow({ appt, canEdit }: { appt: Appointment; canEdit: boolean }) {
   });
   const deptColor = appt.departments?.color ?? "#64748b";
   const deptName = appt.departments?.name ?? "General";
+  const patientName = appt.patients?.full_name ?? "Unknown";
+
+  if (deleted) return null;
+
+  function handleDelete() {
+    startDelete(async () => {
+      const res = await softDeleteAppointment(appt.id);
+      if (res.error) {
+        toast.error(res.error);
+      } else {
+        setDeleted(true);
+        toast.success(`Appointment for ${patientName} deleted.`, {
+          duration: 10000,
+          action: {
+            label: "Undo",
+            onClick: () => {
+              restoreAppointment(appt.id).then((r) => {
+                if (r.error) toast.error(r.error);
+                else setDeleted(false);
+              });
+            },
+          },
+        });
+      }
+    });
+  }
 
   return (
     <div
@@ -119,9 +151,7 @@ function DayRow({ appt, canEdit }: { appt: Appointment; canEdit: boolean }) {
       />
       <div className="min-w-0 flex-1 space-y-0.5">
         <div className="flex items-center gap-2">
-          <span className="font-medium text-foreground">
-            {appt.patients?.full_name ?? "Unknown"}
-          </span>
+          <span className="font-medium text-foreground">{patientName}</span>
           <span
             className="rounded-sm px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
             style={{
@@ -139,11 +169,27 @@ function DayRow({ appt, canEdit }: { appt: Appointment; canEdit: boolean }) {
       <div className="flex items-center gap-2 shrink-0">
         <StatusBadge status={appt.status} />
         {canEdit && (
-          <AppointmentActions
-            appointmentId={appt.id}
-            currentStatus={appt.status}
-            hasInsurance={Boolean(appt.insurance_provider_id)}
-          />
+          <>
+            <AppointmentActions
+              appointmentId={appt.id}
+              currentStatus={appt.status}
+              hasInsurance={Boolean(appt.insurance_provider_id)}
+            />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 text-muted-foreground/50 hover:text-destructive"
+              onClick={handleDelete}
+              disabled={isDeleting}
+              title="Delete appointment"
+            >
+              {isDeleting ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Trash2 className="h-3.5 w-3.5" />
+              )}
+            </Button>
+          </>
         )}
       </div>
     </div>

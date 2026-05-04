@@ -91,7 +91,7 @@ export async function updateStaff(
   _prev: ActionResult | null,
   fd: FormData,
 ): Promise<ActionResult> {
-  const user = await requireRole("admin");
+  const user = await requireRole(["admin", "manager"]);
 
   const parsed = updateStaffSchema.safeParse({
     full_name: fd.get("full_name"),
@@ -134,7 +134,7 @@ export async function toggleStaffActive(
   staffId: string,
   isActive: boolean,
 ): Promise<ActionResult> {
-  const user = await requireRole("admin");
+  const user = await requireRole(["admin", "manager"]);
 
   if (staffId === user.id && !isActive) {
     return { error: "You cannot deactivate your own account." };
@@ -144,6 +144,42 @@ export async function toggleStaffActive(
   const { error } = await supabase
     .from("profiles")
     .update({ is_active: isActive })
+    .eq("id", staffId)
+    .eq("clinic_id", user.clinicId);
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/settings/staff");
+  return { success: true };
+}
+
+export async function softDeleteStaff(staffId: string): Promise<ActionResult> {
+  const user = await requireRole(["admin", "manager"]);
+
+  if (staffId === user.id) {
+    return { error: "You cannot delete your own account." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("profiles")
+    .update({ deleted_at: new Date().toISOString(), is_active: false })
+    .eq("id", staffId)
+    .eq("clinic_id", user.clinicId);
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/settings/staff");
+  return { success: true };
+}
+
+export async function restoreStaff(staffId: string): Promise<ActionResult> {
+  const user = await requireRole(["admin", "manager"]);
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("profiles")
+    .update({ deleted_at: null, is_active: true })
     .eq("id", staffId)
     .eq("clinic_id", user.clinicId);
 
@@ -214,7 +250,7 @@ export async function createDepartment(
   _prev: ActionResult | null,
   fd: FormData,
 ): Promise<ActionResult> {
-  const user = await requireRole("admin");
+  const user = await requireRole(["admin", "manager"]);
 
   const parsed = departmentSchema.safeParse({
     name: fd.get("name"),
@@ -246,7 +282,7 @@ export async function updateDepartment(
   _prev: ActionResult | null,
   fd: FormData,
 ): Promise<ActionResult> {
-  const user = await requireRole("admin");
+  const user = await requireRole(["admin", "manager"]);
 
   const parsed = departmentSchema.safeParse({
     name: fd.get("name"),
@@ -275,7 +311,7 @@ export async function toggleDepartmentActive(
   deptId: string,
   isActive: boolean,
 ): Promise<ActionResult> {
-  const user = await requireRole("admin");
+  const user = await requireRole(["admin", "manager"]);
 
   const supabase = await createClient();
   const { error } = await supabase
@@ -290,13 +326,53 @@ export async function toggleDepartmentActive(
   return { success: true };
 }
 
+export async function softDeleteDepartment(deptId: string): Promise<ActionResult> {
+  const user = await requireRole(["admin", "manager"]);
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("departments")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", deptId)
+    .eq("clinic_id", user.clinicId);
+  if (error) return { error: error.message };
+  revalidatePath("/settings/departments");
+  return { success: true };
+}
+
+export async function restoreDepartment(deptId: string): Promise<ActionResult> {
+  const user = await requireRole(["admin", "manager"]);
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("departments")
+    .update({ deleted_at: null })
+    .eq("id", deptId)
+    .eq("clinic_id", user.clinicId);
+  if (error) return { error: error.message };
+  revalidatePath("/settings/departments");
+  return { success: true };
+}
+
+export async function permanentDeleteDepartment(deptId: string): Promise<ActionResult> {
+  const user = await requireRole("admin");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("departments")
+    .delete()
+    .eq("id", deptId)
+    .eq("clinic_id", user.clinicId)
+    .not("deleted_at", "is", null);
+  if (error) return { error: error.message };
+  revalidatePath("/settings/departments");
+  return { success: true };
+}
+
 // ── Insurance ────────────────────────────────────────────────────────────────
 
 export async function createInsurance(
   _prev: ActionResult | null,
   fd: FormData,
 ): Promise<ActionResult> {
-  const user = await requireRole("admin");
+  const user = await requireRole(["admin", "manager"]);
 
   const parsed = insuranceSchema.safeParse({
     name: fd.get("name"),
@@ -327,7 +403,7 @@ export async function updateInsurance(
   _prev: ActionResult | null,
   fd: FormData,
 ): Promise<ActionResult> {
-  const user = await requireRole("admin");
+  const user = await requireRole(["admin", "manager"]);
 
   const parsed = insuranceSchema.safeParse({
     name: fd.get("name"),
@@ -355,7 +431,7 @@ export async function toggleInsuranceActive(
   insuranceId: string,
   isActive: boolean,
 ): Promise<ActionResult> {
-  const user = await requireRole("admin");
+  const user = await requireRole(["admin", "manager"]);
 
   const supabase = await createClient();
   const { error } = await supabase
@@ -370,13 +446,53 @@ export async function toggleInsuranceActive(
   return { success: true };
 }
 
+export async function softDeleteInsurance(insuranceId: string): Promise<ActionResult> {
+  const user = await requireRole(["admin", "manager"]);
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("insurance_providers")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", insuranceId)
+    .eq("clinic_id", user.clinicId);
+  if (error) return { error: error.message };
+  revalidatePath("/settings/insurance");
+  return { success: true };
+}
+
+export async function restoreInsurance(insuranceId: string): Promise<ActionResult> {
+  const user = await requireRole(["admin", "manager"]);
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("insurance_providers")
+    .update({ deleted_at: null })
+    .eq("id", insuranceId)
+    .eq("clinic_id", user.clinicId);
+  if (error) return { error: error.message };
+  revalidatePath("/settings/insurance");
+  return { success: true };
+}
+
+export async function permanentDeleteInsurance(insuranceId: string): Promise<ActionResult> {
+  const user = await requireRole("admin");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("insurance_providers")
+    .delete()
+    .eq("id", insuranceId)
+    .eq("clinic_id", user.clinicId)
+    .not("deleted_at", "is", null);
+  if (error) return { error: error.message };
+  revalidatePath("/settings/insurance");
+  return { success: true };
+}
+
 // ── Clinic ───────────────────────────────────────────────────────────────────
 
 export async function updateClinic(
   _prev: ActionResult | null,
   fd: FormData,
 ): Promise<ActionResult> {
-  const user = await requireRole("admin");
+  const user = await requireRole(["admin", "manager"]);
 
   const parsed = clinicSchema.safeParse({
     name: fd.get("name"),
@@ -405,7 +521,7 @@ export async function updateClinic(
 }
 
 export async function uploadClinicLogo(fd: FormData): Promise<ActionResult & { url?: string }> {
-  const user = await requireRole("admin");
+  const user = await requireRole(["admin", "manager"]);
 
   const file = fd.get("logo") as File | null;
   if (!file || file.size === 0) return { error: "No file provided." };
@@ -446,7 +562,7 @@ export async function createService(
   _prev: ActionResult | null,
   fd: FormData,
 ): Promise<ActionResult> {
-  const user = await requireRole("admin");
+  const user = await requireRole(["admin", "manager"]);
 
   const parsed = serviceSchema.safeParse({
     department_id: fd.get("department_id"),
@@ -478,7 +594,7 @@ export async function updateService(
   _prev: ActionResult | null,
   fd: FormData,
 ): Promise<ActionResult> {
-  const user = await requireRole("admin");
+  const user = await requireRole(["admin", "manager"]);
 
   const parsed = serviceSchema.safeParse({
     department_id: fd.get("department_id"),
@@ -507,8 +623,34 @@ export async function updateService(
   return { success: true };
 }
 
+export async function softDeleteService(serviceId: string): Promise<ActionResult> {
+  const user = await requireRole(["admin", "manager"]);
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("services")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", serviceId)
+    .eq("clinic_id", user.clinicId);
+  if (error) return { error: error.message };
+  revalidatePath("/settings/services");
+  return { success: true };
+}
+
+export async function restoreService(serviceId: string): Promise<ActionResult> {
+  const user = await requireRole(["admin", "manager"]);
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("services")
+    .update({ deleted_at: null })
+    .eq("id", serviceId)
+    .eq("clinic_id", user.clinicId);
+  if (error) return { error: error.message };
+  revalidatePath("/settings/services");
+  return { success: true };
+}
+
 export async function deleteService(serviceId: string): Promise<ActionResult> {
-  const user = await requireRole("admin");
+  const user = await requireRole(["admin", "manager"]);
   const supabase = await createClient();
   const { error } = await supabase
     .from("services")
@@ -526,7 +668,7 @@ export async function toggleServiceActive(
   serviceId: string,
   isActive: boolean,
 ): Promise<ActionResult> {
-  const user = await requireRole("admin");
+  const user = await requireRole(["admin", "manager"]);
   const supabase = await createClient();
   const { error } = await supabase
     .from("services")

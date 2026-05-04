@@ -72,14 +72,12 @@ export type Database = {
       appointments: {
         Row: {
           cancellation_reason: string | null
-          no_show_reason: string | null
-          no_showed_at: string | null
-          no_showed_by: string | null
           cancelled_at: string | null
           cancelled_by: string | null
           clinic_id: string
           created_at: string
           created_by: string
+          deleted_at: string | null
           department_id: string | null
           deposit_amount: number
           doctor_id: string
@@ -87,6 +85,9 @@ export type Database = {
           id: string
           insurance_amount: number | null
           insurance_provider_id: string | null
+          no_show_reason: string | null
+          no_showed_at: string | null
+          no_showed_by: string | null
           notes: string | null
           outstanding_amount: number | null
           paid_amount: number | null
@@ -108,14 +109,12 @@ export type Database = {
         }
         Insert: {
           cancellation_reason?: string | null
-          no_show_reason?: string | null
-          no_showed_at?: string | null
-          no_showed_by?: string | null
           cancelled_at?: string | null
           cancelled_by?: string | null
           clinic_id: string
           created_at?: string
           created_by: string
+          deleted_at?: string | null
           department_id?: string | null
           deposit_amount?: number
           doctor_id: string
@@ -123,6 +122,9 @@ export type Database = {
           id?: string
           insurance_amount?: number | null
           insurance_provider_id?: string | null
+          no_show_reason?: string | null
+          no_showed_at?: string | null
+          no_showed_by?: string | null
           notes?: string | null
           outstanding_amount?: number | null
           paid_amount?: number | null
@@ -144,14 +146,12 @@ export type Database = {
         }
         Update: {
           cancellation_reason?: string | null
-          no_show_reason?: string | null
-          no_showed_at?: string | null
-          no_showed_by?: string | null
           cancelled_at?: string | null
           cancelled_by?: string | null
           clinic_id?: string
           created_at?: string
           created_by?: string
+          deleted_at?: string | null
           department_id?: string | null
           deposit_amount?: number
           doctor_id?: string
@@ -159,6 +159,9 @@ export type Database = {
           id?: string
           insurance_amount?: number | null
           insurance_provider_id?: string | null
+          no_show_reason?: string | null
+          no_showed_at?: string | null
+          no_showed_by?: string | null
           notes?: string | null
           outstanding_amount?: number | null
           paid_amount?: number | null
@@ -179,6 +182,13 @@ export type Database = {
           updated_by?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "appointments_cancelled_by_fkey"
+            columns: ["cancelled_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "appointments_clinic_id_fkey"
             columns: ["clinic_id"]
@@ -212,6 +222,13 @@ export type Database = {
             columns: ["insurance_provider_id"]
             isOneToOne: false
             referencedRelation: "insurance_providers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointments_no_showed_by_fkey"
+            columns: ["no_showed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
@@ -338,6 +355,7 @@ export type Database = {
           clinic_id: string
           color: string
           created_at: string
+          deleted_at: string | null
           description: string | null
           id: string
           is_active: boolean
@@ -347,6 +365,7 @@ export type Database = {
           clinic_id: string
           color?: string
           created_at?: string
+          deleted_at?: string | null
           description?: string | null
           id?: string
           is_active?: boolean
@@ -356,6 +375,7 @@ export type Database = {
           clinic_id?: string
           color?: string
           created_at?: string
+          deleted_at?: string | null
           description?: string | null
           id?: string
           is_active?: boolean
@@ -406,7 +426,7 @@ export type Database = {
           {
             foreignKeyName: "feedback_appointment_id_fkey"
             columns: ["appointment_id"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "appointments"
             referencedColumns: ["id"]
           },
@@ -482,6 +502,7 @@ export type Database = {
           clinic_id: string
           code: string | null
           created_at: string
+          deleted_at: string | null
           id: string
           is_active: boolean
           name: string
@@ -491,6 +512,7 @@ export type Database = {
           clinic_id: string
           code?: string | null
           created_at?: string
+          deleted_at?: string | null
           id?: string
           is_active?: boolean
           name: string
@@ -500,6 +522,7 @@ export type Database = {
           clinic_id?: string
           code?: string | null
           created_at?: string
+          deleted_at?: string | null
           id?: string
           is_active?: boolean
           name?: string
@@ -785,10 +808,12 @@ export type Database = {
           avatar_url: string | null
           clinic_id: string
           created_at: string
+          deleted_at: string | null
           department_id: string | null
           full_name: string
           id: string
           is_active: boolean
+          is_deleted: boolean
           last_login_at: string | null
           must_change_password: boolean
           phone: string | null
@@ -799,10 +824,12 @@ export type Database = {
           avatar_url?: string | null
           clinic_id: string
           created_at?: string
+          deleted_at?: string | null
           department_id?: string | null
           full_name: string
           id: string
           is_active?: boolean
+          is_deleted?: boolean
           last_login_at?: string | null
           must_change_password?: boolean
           phone?: string | null
@@ -813,10 +840,12 @@ export type Database = {
           avatar_url?: string | null
           clinic_id?: string
           created_at?: string
+          deleted_at?: string | null
           department_id?: string | null
           full_name?: string
           id?: string
           is_active?: boolean
+          is_deleted?: boolean
           last_login_at?: string | null
           must_change_password?: boolean
           phone?: string | null
@@ -844,6 +873,7 @@ export type Database = {
         Row: {
           clinic_id: string
           created_at: string
+          deleted_at: string | null
           department_id: string
           id: string
           is_active: boolean
@@ -854,6 +884,7 @@ export type Database = {
         Insert: {
           clinic_id: string
           created_at?: string
+          deleted_at?: string | null
           department_id: string
           id?: string
           is_active?: boolean
@@ -864,6 +895,7 @@ export type Database = {
         Update: {
           clinic_id?: string
           created_at?: string
+          deleted_at?: string | null
           department_id?: string
           id?: string
           is_active?: boolean
@@ -943,6 +975,54 @@ export type Database = {
           {
             foreignKeyName: "staff_invitations_invited_by_fkey"
             columns: ["invited_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_customizations: {
+        Row: {
+          access: string
+          clinic_id: string
+          created_at: string
+          feature: string
+          id: string
+          page: string
+          profile_id: string
+          updated_at: string
+        }
+        Insert: {
+          access: string
+          clinic_id: string
+          created_at?: string
+          feature: string
+          id?: string
+          page: string
+          profile_id: string
+          updated_at?: string
+        }
+        Update: {
+          access?: string
+          clinic_id?: string
+          created_at?: string
+          feature?: string
+          id?: string
+          page?: string
+          profile_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_customizations_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_customizations_profile_id_fkey"
+            columns: ["profile_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]

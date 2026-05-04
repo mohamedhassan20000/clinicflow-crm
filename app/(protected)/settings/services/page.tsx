@@ -3,8 +3,12 @@ import { requireRole } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
 import { AddServiceDialog } from "@/components/settings/add-service-dialog";
 import { ServiceRowActions } from "@/components/settings/service-row-actions";
+import { SettingsTrashSection, type TrashItem } from "@/components/settings/settings-trash-section";
+import { restoreService, deleteService } from "@/actions/settings";
 
 export const metadata: Metadata = { title: "Services" };
+
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 function fmtTRY(n: number) {
   return new Intl.NumberFormat("en-GB", {
@@ -15,10 +19,10 @@ function fmtTRY(n: number) {
 }
 
 export default async function ServicesSettingsPage() {
-  const user = await requireRole("admin");
+  const user = await requireRole(["admin", "manager"]);
   const supabase = await createClient();
 
-  const [{ data: departments }, { data: services }] = await Promise.all([
+  const [{ data: departments }, { data: allServices }] = await Promise.all([
     supabase
       .from("departments")
       .select("id, name, color")
@@ -27,15 +31,24 @@ export default async function ServicesSettingsPage() {
       .order("name"),
     supabase
       .from("services")
-      .select("id, name, price, department_id, is_active, departments(id, name, color)")
+      .select("id, name, price, department_id, is_active, deleted_at, departments(id, name, color)")
       .eq("clinic_id", user.clinicId)
       .order("name"),
   ]);
 
   const deptList = departments ?? [];
-  const svcList = services ?? [];
+  const cutoff = new Date(Date.now() - THIRTY_DAYS_MS).toISOString();
+  const svcList = (allServices ?? []).filter((s) => !s.deleted_at);
+  const trashedServices = (allServices ?? []).filter(
+    (s) => s.deleted_at && s.deleted_at > cutoff,
+  );
+  const trashItems: TrashItem[] = trashedServices.map((s) => ({
+    id: s.id,
+    label: s.name,
+    subtitle: (s.departments as { name: string } | null)?.name,
+    deletedAt: s.deleted_at!,
+  }));
 
-  // Group services by department for readability
   const byDept = new Map<
     string,
     { dept: { id: string; name: string; color: string }; rows: typeof svcList }
@@ -101,7 +114,12 @@ export default async function ServicesSettingsPage() {
                   {rows.length} service{rows.length !== 1 ? "s" : ""}
                 </span>
               </div>
-              <table className="w-full text-sm">
+              <table className="w-full table-fixed text-sm">
+                <colgroup>
+                  <col />
+                  <col className="w-36" />
+                  <col className="w-36" />
+                </colgroup>
                 <thead className="border-b border-border/50 bg-muted/20">
                   <tr>
                     <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
@@ -141,6 +159,13 @@ export default async function ServicesSettingsPage() {
           ))}
         </div>
       )}
+
+      <SettingsTrashSection
+        items={trashItems}
+        entityLabel="service"
+        onRestore={restoreService}
+        onPermanentDelete={deleteService}
+      />
     </div>
   );
 }

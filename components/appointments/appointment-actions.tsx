@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import {
   getBillingContext,
   updateAppointmentStatus,
+  forceRestoreAppointmentStatus,
   type BillingContext,
 } from "@/actions/appointments";
 import type { Database } from "@/types/database";
@@ -110,8 +111,22 @@ export function AppointmentActions({
 
   if (isTerminal) return null;
 
+  function doUndo(prevStatus: Status, fallbackStatus: Status) {
+    setOptimisticStatus(prevStatus);
+    const restorable = prevStatus === "pending" || prevStatus === "confirmed";
+    const promise = restorable
+      ? forceRestoreAppointmentStatus(appointmentId, prevStatus as "pending" | "confirmed")
+      : updateAppointmentStatus(appointmentId, prevStatus);
+    promise.then((res) => {
+      if (res.error) {
+        toast.error(res.error);
+        setOptimisticStatus(fallbackStatus);
+      }
+    });
+  }
+
   function runStatus(newStatus: Status) {
-    // Optimistic UI flip — button disappears immediately, no spinner.
+    const prevStatus = effectiveStatus;
     setOptimisticStatus(newStatus);
     startTransition(async () => {
       const result = await updateAppointmentStatus(appointmentId, newStatus);
@@ -119,12 +134,19 @@ export function AppointmentActions({
         toast.error(result.error);
         setOptimisticStatus(null);
       } else {
-        toast.success(`Appointment ${newStatus}.`);
+        toast.success(`Appointment ${newStatus}.`, {
+          duration: 10000,
+          action: {
+            label: "Undo",
+            onClick: () => doUndo(prevStatus, newStatus),
+          },
+        });
       }
     });
   }
 
   function runCancel(reason: string) {
+    const prevStatus = effectiveStatus;
     setIsCancelling(true);
     startTransition(async () => {
       const result = await updateAppointmentStatus(
@@ -137,14 +159,21 @@ export function AppointmentActions({
       if (result.error) {
         toast.error(result.error);
       } else {
-        toast.success("Appointment cancelled.");
         setCancelOpen(false);
         setOptimisticStatus("cancelled");
+        toast.success("Appointment cancelled.", {
+          duration: 10000,
+          action: {
+            label: "Undo",
+            onClick: () => doUndo(prevStatus, "cancelled"),
+          },
+        });
       }
     });
   }
 
   function runNoShow(reason: string) {
+    const prevStatus = effectiveStatus;
     setIsNoShow(true);
     setOptimisticStatus("no_show");
     startTransition(async () => {
@@ -160,8 +189,14 @@ export function AppointmentActions({
         toast.error(result.error);
         setOptimisticStatus(null);
       } else {
-        toast.success("Appointment marked as no-show.");
         setNoShowOpen(false);
+        toast.success("Appointment marked as no-show.", {
+          duration: 10000,
+          action: {
+            label: "Undo",
+            onClick: () => doUndo(prevStatus, "no_show"),
+          },
+        });
       }
     });
   }

@@ -40,6 +40,7 @@ interface Props {
   doctors: { id: string; full_name: string }[];
   departments: { id: string; name: string; color: string }[];
   hideDoctorFilter?: boolean;
+  hideDeptFilter?: boolean;
 }
 
 const ICONS: Record<FilterKey, React.ComponentType<{ className?: string }>> = {
@@ -60,7 +61,7 @@ const LABELS: Record<FilterKey, string> = {
   name: "Name",
 };
 
-export function AppointmentsFilterBar({ doctors, departments, hideDoctorFilter = false }: Props) {
+export function AppointmentsFilterBar({ doctors, departments, hideDoctorFilter = false, hideDeptFilter = false }: Props) {
   const router = useRouter();
   const params = useSearchParams();
   const [, startTransition] = useTransition();
@@ -110,17 +111,19 @@ export function AppointmentsFilterBar({ doctors, departments, hideDoctorFilter =
         </FilterChip>
       )}
 
-      <FilterChip
-        filterKey="dept"
-        active={!!params.get("dept")}
-        value={deptName(departments, params.get("dept"))}
-      >
-        <DeptFilter
-          current={params.get("dept")}
-          departments={departments}
-          onApply={(v) => apply("dept", v)}
-        />
-      </FilterChip>
+      {!hideDeptFilter && (
+        <FilterChip
+          filterKey="dept"
+          active={!!params.get("dept")}
+          value={deptName(departments, params.get("dept"))}
+        >
+          <DeptFilter
+            current={params.get("dept")}
+            departments={departments}
+            onApply={(v) => apply("dept", v)}
+          />
+        </FilterChip>
+      )}
 
       <FilterChip
         filterKey="file"

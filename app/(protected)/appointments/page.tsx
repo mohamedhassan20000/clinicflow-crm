@@ -150,6 +150,7 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
       "*, patients(full_name, file_number), profiles!doctor_id(full_name), departments(name, color)",
     )
     .eq("clinic_id", user.clinicId)
+    .is("deleted_at", null)
     .gte("scheduled_at", rangeStart.toISOString())
     .lt("scheduled_at", rangeEnd.toISOString())
     .order("scheduled_at");
@@ -198,6 +199,7 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
         doctors={doctors ?? []}
         departments={departments ?? []}
         hideDoctorFilter={isDoctor}
+        hideDeptFilter={isDoctor}
       />
 
       {view === "day" ? (

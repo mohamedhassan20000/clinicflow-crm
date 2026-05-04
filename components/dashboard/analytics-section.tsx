@@ -32,8 +32,12 @@ import {
   fetchDoctorStats,
   fetchAppointmentsSeries,
   fetchDepartmentStats,
+  fetchReceptionistStats,
+  fetchFollowUpOutcomes,
   type DoctorStat,
   type DepartmentStat,
+  type ReceptionistStat,
+  type FollowUpOutcomes,
 } from "@/actions/manager-dashboard";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -60,6 +64,10 @@ export interface AnalyticsSectionProps {
   initialInsuranceSeries: InsurancePoint[];
   initialDoctors: DoctorStat[];
   initialDepartments: DepartmentStat[];
+  initialReceptionists: ReceptionistStat[];
+  initialFollowUpOutcomes: FollowUpOutcomes;
+  departmentsList: { id: string; name: string }[];
+  doctorsList: { id: string; name: string }[];
 }
 
 // ── Chart colours ─────────────────────────────────────────────────────────────
@@ -115,9 +123,9 @@ function dateRangeToISO(from: string, to: string) {
 const INPUT_CLS =
   "h-8 rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground [color-scheme:light] dark:[color-scheme:dark] focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 disabled:opacity-50";
 
-const TICK = { fontSize: 11, fill: "hsl(var(--muted-foreground))" } as const;
-const GRID_PROPS = { stroke: "hsl(var(--border))", strokeOpacity: 0.4, strokeDasharray: "3 3" } as const;
-const LEGEND_STYLE = { fontSize: 11, color: "hsl(var(--foreground))" } as const;
+const TICK = { fontSize: 11, fill: "var(--muted-foreground)" };
+const GRID_PROPS = { stroke: "var(--border)", strokeOpacity: 0.4, strokeDasharray: "3 3" };
+const LEGEND_STYLE = { fontSize: 11, color: "var(--foreground)" };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function ChartTooltip({ active, payload, label }: any) {
@@ -348,6 +356,23 @@ function InsuranceSection({ clinicId, initialSeries }: { clinicId: string; initi
   }, [clinicId]);
 
   const df = useDateFilter(refetch);
+  const total = series.reduce((sum, s) => sum + s.value, 0);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function PieTooltip({ active, payload }: any) {
+    if (!active || !payload?.length) return null;
+    const p = payload[0];
+    const pct = total > 0 ? Math.round((p.value / total) * 100) : 0;
+    return (
+      <div className="rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-lg">
+        <p className="mb-1 font-medium text-foreground">{p.name}</p>
+        <p className="text-xs" style={{ color: p.payload.fill }}>
+          {p.value} appointments{" "}
+          <span className="font-semibold text-foreground">({pct}%)</span>
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-xl border border-border/60 bg-card p-5 shadow-sm">
@@ -362,7 +387,7 @@ function InsuranceSection({ clinicId, initialSeries }: { clinicId: string; initi
               <Pie data={series} cx="50%" cy="50%" innerRadius={60} outerRadius={92} paddingAngle={2} dataKey="value">
                 {series.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} stroke="transparent" />)}
               </Pie>
-              <Tooltip content={<ChartTooltip />} />
+              <Tooltip content={<PieTooltip />} />
               <Legend iconType="circle" iconSize={8} wrapperStyle={LEGEND_STYLE} />
             </PieChart>
           </ResponsiveContainer>
@@ -390,6 +415,28 @@ function DoctorsSection({ clinicId, initialDoctors }: { clinicId: string; initia
 
   const df = useDateFilter(refetch);
   const chartData = doctors.map((d) => ({ ...d, other: Math.max(0, d.total - d.confirmed - d.cancelled) }));
+  const totalAppts = doctors.reduce((sum, d) => sum + d.total, 0);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function DoctorTooltip({ active, payload, label }: any) {
+    if (!active || !payload?.length) return null;
+    const entry = payload[0]?.payload as typeof chartData[0] | undefined;
+    if (!entry) return null;
+    const pct = totalAppts > 0 ? Math.round((entry.total / totalAppts) * 100) : 0;
+    return (
+      <div className="rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-lg">
+        <p className="mb-1 font-medium text-foreground">{label}</p>
+        <p className="mb-1 text-xs text-muted-foreground">
+          {entry.total} total <span className="font-semibold text-foreground">({pct}% of clinic)</span>
+        </p>
+        {payload.map((p: { color: string; name: string; value: number }, i: number) => (
+          <p key={i} className="text-xs" style={{ color: p.color }}>
+            {p.name}: <span className="font-semibold text-foreground">{p.value}</span>
+          </p>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-xl border border-border/60 bg-card p-5 shadow-sm">
@@ -406,7 +453,7 @@ function DoctorsSection({ clinicId, initialDoctors }: { clinicId: string; initia
       <div className={cn("transition-opacity", isPending && "opacity-60")}>
         {doctors.length === 0 ? <EmptyState /> : doctorMode === "appointments" ? (
           <HBarChart data={chartData}>
-            <Tooltip content={<ChartTooltip />} />
+            <Tooltip content={<DoctorTooltip />} />
             <Legend iconType="rect" iconSize={8} wrapperStyle={LEGEND_STYLE} />
             <Bar dataKey="confirmed" name="Confirmed" fill={C.emerald} stackId="a" maxBarSize={22} />
             <Bar dataKey="cancelled" name="Cancelled" fill={C.rose} stackId="a" maxBarSize={22} />
@@ -414,6 +461,65 @@ function DoctorsSection({ clinicId, initialDoctors }: { clinicId: string; initia
           </HBarChart>
         ) : (
           <HBarChartRevenue data={chartData} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Receptionists section ─────────────────────────────────────────────────────
+
+function ReceptionistSection({ clinicId, initialReceptionists }: { clinicId: string; initialReceptionists: ReceptionistStat[] }) {
+  const [receptionists, setReceptionists] = useState<ReceptionistStat[]>(initialReceptionists);
+  const [isPending, startTransition] = useTransition();
+
+  const refetch = useCallback((start: string, end: string) => {
+    startTransition(async () => {
+      const data = await fetchReceptionistStats(clinicId, start, end);
+      setReceptionists(data);
+    });
+  }, [clinicId]);
+
+  const df = useDateFilter(refetch);
+  const chartData = receptionists.map((r) => ({ ...r, other: Math.max(0, r.total - r.confirmed - r.cancelled) }));
+  const totalAppts = receptionists.reduce((sum, r) => sum + r.total, 0);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function ReceptionistTooltip({ active, payload, label }: any) {
+    if (!active || !payload?.length) return null;
+    const entry = payload[0]?.payload as typeof chartData[0] | undefined;
+    if (!entry) return null;
+    const pct = totalAppts > 0 ? Math.round((entry.total / totalAppts) * 100) : 0;
+    return (
+      <div className="rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-lg">
+        <p className="mb-1 font-medium text-foreground">{label}</p>
+        <p className="mb-1 text-xs text-muted-foreground">
+          {entry.total} booked <span className="font-semibold text-foreground">({pct}% of total)</span>
+        </p>
+        {payload.map((p: { color: string; name: string; value: number }, i: number) => (
+          <p key={i} className="text-xs" style={{ color: p.color }}>
+            {p.name}: <span className="font-semibold text-foreground">{p.value}</span>
+          </p>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-border/60 bg-card p-5 shadow-sm">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <h3 className="text-sm font-semibold text-foreground">All receptionists</h3>
+        <DateFilter filterMode={df.filterMode} month={df.month} rangeFrom={df.rangeFrom} rangeTo={df.rangeTo} isPending={isPending} onFilterModeChange={df.handleFilterModeChange} onMonthChange={df.handleMonthChange} onRangeFromChange={df.handleRangeFromChange} onRangeToChange={df.handleRangeToChange} />
+      </div>
+      <div className={cn("transition-opacity", isPending && "opacity-60")}>
+        {receptionists.length === 0 ? <EmptyState /> : (
+          <HBarChart data={chartData}>
+            <Tooltip content={<ReceptionistTooltip />} />
+            <Legend iconType="rect" iconSize={8} wrapperStyle={LEGEND_STYLE} />
+            <Bar dataKey="confirmed" name="Confirmed" fill={C.emerald} stackId="a" maxBarSize={22} />
+            <Bar dataKey="cancelled" name="Cancelled" fill={C.rose} stackId="a" maxBarSize={22} />
+            <Bar dataKey="other" name="Other" fill={C.blue} stackId="a" maxBarSize={22} radius={[0, 4, 4, 0]} />
+          </HBarChart>
         )}
       </div>
     </div>
@@ -444,6 +550,29 @@ function DepartmentSection({ clinicId, initialDepartments }: { clinicId: string;
     return b.appointments - a.appointments;
   });
 
+  const totalAppts = departments.reduce((sum, d) => sum + d.appointments, 0);
+  const totalPatients = departments.reduce((sum, d) => sum + d.patients, 0);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function DeptTooltip({ active, payload, label }: any) {
+    if (!active || !payload?.length) return null;
+    const entry = payload[0]?.payload as DepartmentStat | undefined;
+    if (!entry) return null;
+    const p = payload[0];
+    let pct = 0;
+    if (deptMode === "appointments" && totalAppts > 0) pct = Math.round((entry.appointments / totalAppts) * 100);
+    else if (deptMode === "patients" && totalPatients > 0) pct = Math.round((entry.patients / totalPatients) * 100);
+    return (
+      <div className="rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-lg">
+        <p className="mb-1 font-medium text-foreground">{label}</p>
+        <p className="text-xs" style={{ color: p.color }}>
+          {p.name}: <span className="font-semibold text-foreground">{p.value}</span>
+          {deptMode !== "revenue" && <span className="text-muted-foreground"> ({pct}%)</span>}
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="rounded-xl border border-border/60 bg-card p-5 shadow-sm">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
@@ -462,14 +591,199 @@ function DepartmentSection({ clinicId, initialDepartments }: { clinicId: string;
           <HBarChartRevenue data={sorted} yWidth={120} />
         ) : deptMode === "patients" ? (
           <HBarChart data={sorted} yWidth={120}>
-            <Tooltip content={<ChartTooltip />} />
+            <Tooltip content={<DeptTooltip />} />
             <Bar dataKey="patients" name="Patients" fill={C.violet} radius={[0, 4, 4, 0]} maxBarSize={22} />
           </HBarChart>
         ) : (
           <HBarChart data={sorted} yWidth={120}>
-            <Tooltip content={<ChartTooltip />} />
+            <Tooltip content={<DeptTooltip />} />
             <Bar dataKey="appointments" name="Appointments" fill={C.cyan} radius={[0, 4, 4, 0]} maxBarSize={22} />
           </HBarChart>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Follow-up outcome section ─────────────────────────────────────────────────
+
+type OutcomeScope = "clinic" | "department" | "doctor";
+
+function FollowUpOutcomeSection({
+  clinicId,
+  initialOutcomes,
+  departmentsList,
+  doctorsList,
+}: {
+  clinicId: string;
+  initialOutcomes: FollowUpOutcomes;
+  departmentsList: { id: string; name: string }[];
+  doctorsList: { id: string; name: string }[];
+}) {
+  const [outcomes, setOutcomes] = useState<FollowUpOutcomes>(initialOutcomes);
+  const [scope, setScope] = useState<OutcomeScope>("clinic");
+  const [deptId, setDeptId] = useState("");
+  const [docId, setDocId] = useState("");
+  const [filterMode, setFilterMode] = useState<FilterMode>("month");
+  const [month, setMonth] = useState(currentYearMonth());
+  const [rangeFrom, setRangeFrom] = useState(daysAgoStr(29));
+  const [rangeTo, setRangeTo] = useState(todayStr());
+  const [isPending, startTransition] = useTransition();
+
+  function getRange() {
+    if (filterMode === "month") return monthToRange(month);
+    if (rangeFrom && rangeTo && rangeFrom <= rangeTo) return dateRangeToISO(rangeFrom, rangeTo);
+    return monthToRange(month);
+  }
+
+  const doRefetch = useCallback((start: string, end: string, dept?: string, doc?: string) => {
+    startTransition(async () => {
+      const data = await fetchFollowUpOutcomes(clinicId, start, end, dept || null, doc || null);
+      setOutcomes(data);
+    });
+  }, [clinicId]);
+
+  function handleScopeChange(s: OutcomeScope) {
+    setScope(s);
+    const { start, end } = getRange();
+    doRefetch(start, end, s === "department" ? deptId : undefined, s === "doctor" ? docId : undefined);
+  }
+
+  function handleDeptChange(id: string) {
+    setDeptId(id);
+    const { start, end } = getRange();
+    doRefetch(start, end, id || undefined, undefined);
+  }
+
+  function handleDocChange(id: string) {
+    setDocId(id);
+    const { start, end } = getRange();
+    doRefetch(start, end, undefined, id || undefined);
+  }
+
+  function handleFilterModeChange(m: FilterMode) {
+    setFilterMode(m);
+    const range = m === "month" ? monthToRange(month) : (rangeFrom && rangeTo ? dateRangeToISO(rangeFrom, rangeTo) : monthToRange(month));
+    doRefetch(range.start, range.end, scope === "department" ? deptId : undefined, scope === "doctor" ? docId : undefined);
+  }
+
+  function handleMonthChange(m: string) {
+    setMonth(m);
+    const { start, end } = monthToRange(m);
+    doRefetch(start, end, scope === "department" ? deptId : undefined, scope === "doctor" ? docId : undefined);
+  }
+
+  function handleRangeFromChange(d: string) {
+    setRangeFrom(d);
+    if (d && rangeTo && d <= rangeTo) {
+      const { start, end } = dateRangeToISO(d, rangeTo);
+      doRefetch(start, end, scope === "department" ? deptId : undefined, scope === "doctor" ? docId : undefined);
+    }
+  }
+
+  function handleRangeToChange(d: string) {
+    setRangeTo(d);
+    if (rangeFrom && d && rangeFrom <= d) {
+      const { start, end } = dateRangeToISO(rangeFrom, d);
+      doRefetch(start, end, scope === "department" ? deptId : undefined, scope === "doctor" ? docId : undefined);
+    }
+  }
+
+  const countedTotal = outcomes.allFine + outcomes.hasProblem;
+  const allFinePct = countedTotal > 0 ? Math.round((outcomes.allFine / countedTotal) * 100) : 0;
+  const hasProblemPct = countedTotal > 0 ? Math.round((outcomes.hasProblem / countedTotal) * 100) : 0;
+
+  const pieData = [
+    { name: "All Fine", value: outcomes.allFine, pct: allFinePct, fill: C.emerald },
+    { name: "Has Problem", value: outcomes.hasProblem, pct: hasProblemPct, fill: C.rose },
+  ].filter((d) => d.value > 0);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function OutcomeTooltip({ active, payload }: any) {
+    if (!active || !payload?.length) return null;
+    const p = payload[0];
+    const pct = countedTotal > 0 ? Math.round((p.value / countedTotal) * 100) : 0;
+    return (
+      <div className="rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-lg">
+        <p className="mb-1 font-medium text-foreground">{p.name}</p>
+        <p className="text-xs" style={{ color: p.payload.fill }}>
+          {p.value} follow-ups{" "}
+          <span className="font-semibold text-foreground">({pct}%)</span>
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-border/60 bg-card p-5 shadow-sm">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="text-sm font-semibold text-foreground">Follow-up outcomes</h3>
+          <div className="flex items-center rounded-lg border border-input bg-muted p-[3px]">
+            <button type="button" onClick={() => handleScopeChange("clinic")} className={modeBtnCls(scope === "clinic")}>Entire clinic</button>
+            <button type="button" onClick={() => handleScopeChange("department")} className={modeBtnCls(scope === "department")}>Department</button>
+            <button type="button" onClick={() => handleScopeChange("doctor")} className={modeBtnCls(scope === "doctor")}>Doctor</button>
+          </div>
+          {scope === "department" && (
+            <select value={deptId} onChange={(e) => handleDeptChange(e.target.value)} className={INPUT_CLS}>
+              <option value="">All departments</option>
+              {departmentsList.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+          )}
+          {scope === "doctor" && (
+            <select value={docId} onChange={(e) => handleDocChange(e.target.value)} className={INPUT_CLS}>
+              <option value="">All doctors</option>
+              {doctorsList.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {isPending && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+          <div className="flex items-center rounded-lg border border-input bg-muted p-[3px]">
+            <button type="button" onClick={() => handleFilterModeChange("month")} className={modeBtnCls(filterMode === "month")}>Month</button>
+            <button type="button" onClick={() => handleFilterModeChange("range")} className={modeBtnCls(filterMode === "range")}>Custom range</button>
+          </div>
+          {filterMode === "month" ? (
+            <input type="month" value={month} max={currentYearMonth()} onChange={(e) => handleMonthChange(e.target.value)} className={INPUT_CLS} />
+          ) : (
+            <div className="flex items-center gap-1.5">
+              <input type="date" value={rangeFrom} max={rangeTo || todayStr()} onChange={(e) => handleRangeFromChange(e.target.value)} className={INPUT_CLS} />
+              <span className="text-xs text-muted-foreground">to</span>
+              <input type="date" value={rangeTo} min={rangeFrom} max={todayStr()} onChange={(e) => handleRangeToChange(e.target.value)} className={INPUT_CLS} />
+            </div>
+          )}
+        </div>
+      </div>
+      <div className={cn("transition-opacity", isPending && "opacity-60")}>
+        {countedTotal === 0 ? <EmptyState /> : (
+          <div className="flex flex-col items-center gap-6 sm:flex-row sm:items-start">
+            <ResponsiveContainer width="100%" height={240}>
+              <PieChart>
+                <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={92} paddingAngle={3} dataKey="value">
+                  {pieData.map((d, i) => <Cell key={i} fill={d.fill} stroke="transparent" />)}
+                </Pie>
+                <Tooltip content={<OutcomeTooltip />} />
+                <Legend iconType="circle" iconSize={8} wrapperStyle={LEGEND_STYLE} />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="flex shrink-0 flex-col gap-3 sm:pt-4">
+              <div className="flex items-center gap-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-4 py-3">
+                <div className="h-3 w-3 rounded-full bg-emerald-500" />
+                <div>
+                  <p className="text-xs text-muted-foreground">All Fine</p>
+                  <p className="text-lg font-bold text-foreground">{outcomes.allFine} <span className="text-sm font-normal text-muted-foreground">({allFinePct}%)</span></p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 rounded-lg border border-rose-500/20 bg-rose-500/5 px-4 py-3">
+                <div className="h-3 w-3 rounded-full bg-rose-500" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Has Problem</p>
+                  <p className="text-lg font-bold text-foreground">{outcomes.hasProblem} <span className="text-sm font-normal text-muted-foreground">({hasProblemPct}%)</span></p>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">{outcomes.total} follow-up{outcomes.total !== 1 ? "s" : ""} total</p>
+            </div>
+          </div>
         )}
       </div>
     </div>
@@ -490,6 +804,10 @@ export function AnalyticsSection({
   initialInsuranceSeries,
   initialDoctors,
   initialDepartments,
+  initialReceptionists,
+  initialFollowUpOutcomes,
+  departmentsList,
+  doctorsList,
 }: AnalyticsSectionProps) {
   return (
     <div className="space-y-6">
@@ -511,6 +829,15 @@ export function AnalyticsSection({
       </div>
 
       <DepartmentSection clinicId={clinicId} initialDepartments={initialDepartments} />
+
+      <ReceptionistSection clinicId={clinicId} initialReceptionists={initialReceptionists} />
+
+      <FollowUpOutcomeSection
+        clinicId={clinicId}
+        initialOutcomes={initialFollowUpOutcomes}
+        departmentsList={departmentsList}
+        doctorsList={doctorsList}
+      />
     </div>
   );
 }

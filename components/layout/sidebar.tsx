@@ -48,7 +48,7 @@ function buildNav(role: string): NavEntry[] {
   if (role === "admin" || role === "manager") {
     items.push({ href: "/revenue", label: "Revenue", icon: Wallet });
   }
-  if (role === "admin") {
+  if (role === "admin" || role === "manager") {
     items.push({ href: "/settings", label: "Settings", icon: Settings });
   }
   return items;

@@ -9,7 +9,7 @@ export default async function SettingsLayout({
 }: {
   children: React.ReactNode;
 }) {
-  await requireRole("admin");
+  await requireRole(["admin", "manager"]);
 
   return (
     <div className="space-y-6">

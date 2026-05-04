@@ -149,6 +149,105 @@ export async function fetchDepartmentStats(
   return Array.from(statsMap.values()).sort((a, b) => b.appointments - a.appointments);
 }
 
+export interface ReceptionistStat {
+  name: string;
+  total: number;
+  confirmed: number;
+  cancelled: number;
+  other: number;
+}
+
+export async function fetchReceptionistStats(
+  clinicId: string,
+  start: string,
+  end: string,
+): Promise<ReceptionistStat[]> {
+  const supabase = await createClient();
+
+  const [{ data: receptionists }, { data: appts }] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("id, full_name")
+      .eq("clinic_id", clinicId)
+      .eq("role", "receptionist")
+      .eq("is_active", true),
+    supabase
+      .from("appointments")
+      .select("created_by, status")
+      .eq("clinic_id", clinicId)
+      .gte("scheduled_at", start)
+      .lte("scheduled_at", end),
+  ]);
+
+  const statsMap = new Map<string, ReceptionistStat>();
+  for (const r of receptionists ?? []) {
+    statsMap.set(r.id, { name: r.full_name, total: 0, confirmed: 0, cancelled: 0, other: 0 });
+  }
+
+  for (const a of appts ?? []) {
+    if (!a.created_by) continue;
+    const entry = statsMap.get(a.created_by);
+    if (!entry) continue;
+    entry.total++;
+    if (a.status === "confirmed") entry.confirmed++;
+    else if (a.status === "cancelled") entry.cancelled++;
+    else entry.other++;
+  }
+
+  return Array.from(statsMap.values()).sort((a, b) => b.total - a.total);
+}
+
+export interface FollowUpOutcomes {
+  allFine: number;
+  hasProblem: number;
+  total: number;
+}
+
+export async function fetchFollowUpOutcomes(
+  clinicId: string,
+  start: string,
+  end: string,
+  departmentId?: string | null,
+  doctorId?: string | null,
+): Promise<FollowUpOutcomes> {
+  const supabase = await createClient();
+
+  let apptIds: string[] | null = null;
+  if (departmentId || doctorId) {
+    let apptQ = supabase.from("appointments").select("id").eq("clinic_id", clinicId);
+    if (departmentId) apptQ = apptQ.eq("department_id", departmentId);
+    if (doctorId) apptQ = apptQ.eq("doctor_id", doctorId);
+    const { data: appts } = await apptQ;
+    apptIds = (appts ?? []).map((a) => a.id);
+  }
+
+  if (apptIds !== null && apptIds.length === 0) {
+    return { allFine: 0, hasProblem: 0, total: 0 };
+  }
+
+  let fuQ = supabase
+    .from("follow_ups")
+    .select("outcome")
+    .eq("clinic_id", clinicId)
+    .gte("recorded_at", start)
+    .lte("recorded_at", end);
+
+  if (apptIds !== null) {
+    fuQ = fuQ.in("appointment_id", apptIds);
+  }
+
+  const { data } = await fuQ;
+
+  let allFine = 0;
+  let hasProblem = 0;
+  for (const fu of data ?? []) {
+    if (fu.outcome === "all_fine") allFine++;
+    else if (fu.outcome === "has_problem") hasProblem++;
+  }
+
+  return { allFine, hasProblem, total: (data ?? []).length };
+}
+
 export async function fetchAppointmentsSeries(
   clinicId: string,
   start: string,

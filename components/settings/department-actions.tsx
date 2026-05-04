@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Pencil, ToggleLeft, ToggleRight, Loader2 } from "lucide-react";
+import { Pencil, ToggleLeft, ToggleRight, Loader2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -10,8 +10,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { DepartmentForm } from "@/components/settings/department-form";
 import type { ActionResult } from "@/actions/settings";
+import { restoreDepartment } from "@/actions/settings";
 import type { Tables } from "@/types/database";
 
 type Dept = Tables<"departments">;
@@ -20,9 +32,10 @@ interface DepartmentActionsProps {
   dept: Dept;
   updateAction: (prev: ActionResult | null, fd: FormData) => Promise<ActionResult>;
   toggleAction: (isActive: boolean) => Promise<ActionResult>;
+  deleteAction: () => Promise<ActionResult>;
 }
 
-export function DepartmentActions({ dept, updateAction, toggleAction }: DepartmentActionsProps) {
+export function DepartmentActions({ dept, updateAction, toggleAction, deleteAction }: DepartmentActionsProps) {
   const [editOpen, setEditOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 
@@ -31,6 +44,28 @@ export function DepartmentActions({ dept, updateAction, toggleAction }: Departme
       const result = await toggleAction(!dept.is_active);
       if (result.error) toast.error(result.error);
       else toast.success(dept.is_active ? "Department deactivated." : "Department reactivated.");
+    });
+  }
+
+  function handleDelete() {
+    startTransition(async () => {
+      const result = await deleteAction();
+      if (result.error) {
+        toast.error(result.error);
+      } else {
+        toast.success(`"${dept.name}" moved to recycle bin.`, {
+          duration: 10000,
+          action: {
+            label: "Undo",
+            onClick: () => {
+              restoreDepartment(dept.id).then((res) => {
+                if (res.error) toast.error(res.error);
+                else toast.success(`"${dept.name}" restored.`);
+              });
+            },
+          },
+        });
+      }
     });
   }
 
@@ -61,6 +96,31 @@ export function DepartmentActions({ dept, updateAction, toggleAction }: Departme
               <ToggleLeft className="h-4 w-4 text-muted-foreground" />
             )}
           </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-destructive/60 hover:text-destructive"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Move to recycle bin?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  <strong>{dept.name}</strong> will be moved to the recycle bin and can be restored within 30 days.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={handleDelete}>
+                  Move to bin
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </>
       )}
 

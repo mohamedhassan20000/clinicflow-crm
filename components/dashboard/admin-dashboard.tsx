@@ -3,15 +3,11 @@ import {
   CalendarDays,
   UserPlus,
   CalendarPlus,
-  Clock,
   CheckCircle2,
-  Users,
-  TrendingUp,
   AlertCircle,
   BarChart3,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { KpiCard } from "@/components/dashboard/kpi-card";
 import { StatusBadge } from "@/components/appointments/status-badge";
 import { RevenueWidget, type RevenueWidgetProps } from "@/components/dashboard/revenue-widget";
 import { AnalyticsSection, type AnalyticsSectionProps } from "@/components/dashboard/analytics-section";
@@ -24,11 +20,6 @@ type Appointment = Tables<"appointments"> & {
 
 interface AdminDashboardProps {
   fullName: string;
-  todayCount: number;
-  weekCount: number;
-  thisMonthCount: number;
-  lastMonthCount: number;
-  totalPatients: number;
   pendingCount: number;
   todayAppointments: Appointment[];
   upcomingAppointments: Appointment[];
@@ -55,22 +46,12 @@ function formatDate(iso: string) {
 
 export function AdminDashboard({
   fullName,
-  todayCount,
-  weekCount,
-  thisMonthCount,
-  lastMonthCount,
-  totalPatients,
   pendingCount,
   todayAppointments,
   upcomingAppointments,
   revenue,
   analytics,
 }: AdminDashboardProps) {
-  const monthTrend =
-    lastMonthCount === 0
-      ? 0
-      : Math.round(((thisMonthCount - lastMonthCount) / lastMonthCount) * 100);
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -97,46 +78,17 @@ export function AdminDashboard({
         </div>
       </div>
 
-      {/* KPI grid */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard
-          title="Today's appointments"
-          value={todayCount}
-          icon={CalendarDays}
-          variant="primary"
-        />
-        <KpiCard
-          title="This week"
-          value={weekCount}
-          icon={Clock}
-          sub="appointments"
-        />
-        <KpiCard
-          title="This month"
-          value={thisMonthCount}
-          icon={TrendingUp}
-          trend={{ value: monthTrend, label: "vs last month" }}
-          variant="success"
-        />
-        <KpiCard
-          title="Total patients"
-          value={totalPatients}
-          icon={Users}
-          variant="default"
-        />
-      </div>
-
       {/* Pending alert */}
       {pendingCount > 0 && (
         <div className="flex items-center gap-3 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm">
-          <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
-          <span className="text-amber-700">
+          <AlertCircle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+          <span className="text-amber-700 dark:text-amber-300">
             <span className="font-semibold">{pendingCount}</span> appointment
             {pendingCount !== 1 ? "s" : ""} pending confirmation.
           </span>
           <Link
             href="/appointments"
-            className="ml-auto text-xs font-medium text-amber-700 underline-offset-4 hover:underline"
+            className="ml-auto text-xs font-medium text-amber-700 underline-offset-4 hover:underline dark:text-amber-300"
           >
             View →
           </Link>

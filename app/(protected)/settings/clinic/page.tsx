@@ -6,7 +6,7 @@ import { ClinicForm } from "@/components/settings/clinic-form";
 export const metadata: Metadata = { title: "Clinic Settings" };
 
 export default async function ClinicSettingsPage() {
-  const user = await requireRole("admin");
+  const user = await requireRole(["admin", "manager"]);
   const supabase = await createClient();
 
   const { data: clinic } = await supabase

@@ -368,35 +368,37 @@ export function FollowupsView({
           <Filter className="h-3.5 w-3.5" />
           Filter
         </span>
-        <Select
-          value={activeDept ?? ""}
-          onValueChange={(v) => update({ dept: v || null })}
-        >
-          <SelectTrigger
-            className={cn(
-              "h-8 w-[180px] gap-1.5 px-2 text-xs",
-              activeDept &&
-                "border-primary/40 bg-primary/10 text-primary",
-            )}
+        {!readOnly && (
+          <Select
+            value={activeDept ?? ""}
+            onValueChange={(v) => update({ dept: v || null })}
           >
-            <Users className="h-3.5 w-3.5" />
-            <SelectValue placeholder="All departments" />
-          </SelectTrigger>
-          <SelectContent>
-            {departments.map((d) => (
-              <SelectItem key={d.id} value={d.id}>
-                <span className="inline-flex items-center gap-2">
-                  <span
-                    aria-hidden
-                    className="h-2 w-2 rounded-full"
-                    style={{ backgroundColor: d.color }}
-                  />
-                  {d.name}
-                </span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+            <SelectTrigger
+              className={cn(
+                "h-8 w-[180px] gap-1.5 px-2 text-xs",
+                activeDept &&
+                  "border-primary/40 bg-primary/10 text-primary",
+              )}
+            >
+              <Users className="h-3.5 w-3.5" />
+              <SelectValue placeholder="All departments" />
+            </SelectTrigger>
+            <SelectContent>
+              {departments.map((d) => (
+                <SelectItem key={d.id} value={d.id}>
+                  <span className="inline-flex items-center gap-2">
+                    <span
+                      aria-hidden
+                      className="h-2 w-2 rounded-full"
+                      style={{ backgroundColor: d.color }}
+                    />
+                    {d.name}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         <div className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -492,7 +494,15 @@ export function FollowupsView({
                     </span>
                   </header>
                   <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
+                    <table className="w-full table-fixed text-sm">
+                      <colgroup>
+                        <col className="w-32" />
+                        <col />
+                        <col className="w-36" />
+                        <col className="w-32" />
+                        <col className="w-40" />
+                        <col className="w-32 print:hidden" />
+                      </colgroup>
                       <thead className="border-b border-border/40 bg-muted/30 text-[10px] uppercase tracking-wider text-muted-foreground">
                         <tr>
                           <th className="px-4 py-2.5 text-left font-medium">
@@ -532,10 +542,10 @@ export function FollowupsView({
                             <td className="px-4 py-3 text-xs whitespace-nowrap">
                               {fmtDate(a.scheduled_at)}
                             </td>
-                            <td className="px-4 py-3 font-medium">
+                            <td className="max-w-0 px-4 py-3 font-medium">
                               <Link
                                 href={`/patients/${a.patient_id}`}
-                                className="hover:underline"
+                                className="block truncate hover:underline"
                               >
                                 {a.patients?.full_name ?? "—"}
                               </Link>
@@ -751,7 +761,15 @@ export function FollowupsView({
                     </span>
                   </header>
                   <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
+                    <table className="w-full table-fixed text-sm">
+                      <colgroup>
+                        <col className="w-44" />
+                        <col className="w-36" />
+                        <col />
+                        <col className="w-36" />
+                        <col className="w-32" />
+                        <col className="w-48" />
+                      </colgroup>
                       <thead className="border-b border-border/40 bg-muted/30 text-[10px] uppercase tracking-wider text-muted-foreground">
                         <tr>
                           <th className="px-4 py-2.5 text-left font-medium">
@@ -809,14 +827,14 @@ export function FollowupsView({
                               <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
                                 {fmtDateTime(d.recorded_at)}
                               </td>
-                              <td className="px-4 py-3 font-medium">
+                              <td className="max-w-0 px-4 py-3 font-medium">
                                 <Link
                                   href={`/patients/${d.patient_id}`}
-                                  className="hover:underline"
+                                  className="block truncate hover:underline"
                                 >
                                   {d.patients?.full_name ?? "—"}
                                 </Link>
-                                <p className="font-mono text-[10px] text-muted-foreground">
+                                <p className="truncate font-mono text-[10px] text-muted-foreground">
                                   {d.patients?.file_number ?? "—"}
                                 </p>
                               </td>

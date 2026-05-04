@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ServiceForm } from "@/components/settings/service-form";
-import { deleteService, updateService } from "@/actions/settings";
+import { softDeleteService, restoreService, updateService } from "@/actions/settings";
 
 interface Props {
   service: {
@@ -90,10 +90,10 @@ export function ServiceRowActions({ service, departments }: Props) {
         </AlertDialogTrigger>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete &ldquo;{service.name}&rdquo;?</AlertDialogTitle>
+            <AlertDialogTitle>Move &ldquo;{service.name}&rdquo; to recycle bin?</AlertDialogTitle>
             <AlertDialogDescription>
-              This service will be removed from the price list. Appointments
-              that were already billed using this service are unaffected.
+              This service will be hidden from the price list and can be
+              restored within 30 days.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -101,13 +101,27 @@ export function ServiceRowActions({ service, departments }: Props) {
             <AlertDialogAction
               onClick={() =>
                 startDelete(async () => {
-                  const res = await deleteService(service.id);
-                  if (res.error) toast.error(res.error);
-                  else toast.success("Service deleted.");
+                  const res = await softDeleteService(service.id);
+                  if (res.error) {
+                    toast.error(res.error);
+                  } else {
+                    toast.success(`"${service.name}" moved to recycle bin.`, {
+                      duration: 10000,
+                      action: {
+                        label: "Undo",
+                        onClick: () => {
+                          restoreService(service.id).then((r) => {
+                            if (r.error) toast.error(r.error);
+                            else toast.success(`"${service.name}" restored.`);
+                          });
+                        },
+                      },
+                    });
+                  }
                 })
               }
             >
-              Delete service
+              Move to bin
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

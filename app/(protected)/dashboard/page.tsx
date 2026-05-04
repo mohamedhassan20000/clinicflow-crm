@@ -197,7 +197,7 @@ export default async function DashboardPage() {
       { count: todayCount },
       { count: weekCount },
       { count: thisMonthCount },
-      { count: lastMonthCount },
+      {},
       { count: totalPatients },
       { count: pendingCount },
       { data: todayAppts },
@@ -212,6 +212,9 @@ export default async function DashboardPage() {
       { data: aAllDoctors },
       { data: aPeriodAppts },
       { data: aAllDepartments },
+      { data: aReceptionists },
+      { data: aReceptionistAppts },
+      { data: aFollowUps },
     ] = await Promise.all([
       supabase
         .from("appointments")
@@ -251,6 +254,7 @@ export default async function DashboardPage() {
         .from("appointments")
         .select("*, patients(full_name), profiles!doctor_id(full_name)")
         .eq("clinic_id", clinicId)
+        .is("deleted_at", null)
         .gte("scheduled_at", today.start)
         .lte("scheduled_at", today.end)
         .order("scheduled_at"),
@@ -258,6 +262,7 @@ export default async function DashboardPage() {
         .from("appointments")
         .select("*, patients(full_name), profiles!doctor_id(full_name)")
         .eq("clinic_id", clinicId)
+        .is("deleted_at", null)
         .gte("scheduled_at", next7Start.toISOString())
         .lt("scheduled_at", next7End.toISOString())
         .eq("status", "pending")
@@ -326,6 +331,27 @@ export default async function DashboardPage() {
         .select("id, name")
         .eq("clinic_id", clinicId)
         .eq("is_active", true),
+      // Analytics: all active receptionists
+      supabase
+        .from("profiles")
+        .select("id, full_name")
+        .eq("clinic_id", clinicId)
+        .eq("role", "receptionist")
+        .eq("is_active", true),
+      // Analytics: appointments this month with created_by for receptionist stats
+      supabase
+        .from("appointments")
+        .select("created_by, status")
+        .eq("clinic_id", clinicId)
+        .gte("scheduled_at", thisMonth.start)
+        .lte("scheduled_at", thisMonth.end),
+      // Analytics: follow-up outcomes this month
+      supabase
+        .from("follow_ups")
+        .select("outcome")
+        .eq("clinic_id", clinicId)
+        .gte("recorded_at", thisMonth.start)
+        .lte("recorded_at", thisMonth.end),
     ]);
 
     // ── Revenue aggregation ──────────────────────────────────────────────
@@ -379,14 +405,33 @@ export default async function DashboardPage() {
         aAllDepartments,
       );
 
+    // Receptionist stats aggregation
+    const receptionistStatsMap = new Map<string, { name: string; total: number; confirmed: number; cancelled: number; other: number }>();
+    for (const r of aReceptionists ?? []) {
+      receptionistStatsMap.set(r.id, { name: r.full_name, total: 0, confirmed: 0, cancelled: 0, other: 0 });
+    }
+    for (const a of (aReceptionistAppts ?? []) as { created_by: string | null; status: string }[]) {
+      if (!a.created_by) continue;
+      const entry = receptionistStatsMap.get(a.created_by);
+      if (!entry) continue;
+      entry.total++;
+      if (a.status === "confirmed") entry.confirmed++;
+      else if (a.status === "cancelled") entry.cancelled++;
+      else entry.other++;
+    }
+    const initialReceptionists = Array.from(receptionistStatsMap.values()).sort((a, b) => b.total - a.total);
+
+    // Follow-up outcomes aggregation
+    let fuAllFine = 0, fuHasProblem = 0;
+    for (const fu of (aFollowUps ?? []) as { outcome: string }[]) {
+      if (fu.outcome === "all_fine") fuAllFine++;
+      else if (fu.outcome === "has_problem") fuHasProblem++;
+    }
+    const initialFollowUpOutcomes = { allFine: fuAllFine, hasProblem: fuHasProblem, total: (aFollowUps ?? []).length };
+
     return (
       <AdminDashboard
         fullName={user.fullName}
-        todayCount={todayCount ?? 0}
-        weekCount={weekCount ?? 0}
-        thisMonthCount={thisMonthCount ?? 0}
-        lastMonthCount={lastMonthCount ?? 0}
-        totalPatients={totalPatients ?? 0}
         pendingCount={pendingCount ?? 0}
         todayAppointments={(todayAppts ?? []) as Parameters<typeof AdminDashboard>[0]["todayAppointments"]}
         upcomingAppointments={(upcomingAppts ?? []) as Parameters<typeof AdminDashboard>[0]["upcomingAppointments"]}
@@ -410,6 +455,10 @@ export default async function DashboardPage() {
           initialInsuranceSeries,
           initialDoctors,
           initialDepartments,
+          initialReceptionists,
+          initialFollowUpOutcomes,
+          departmentsList: aAllDepartments ?? [],
+          doctorsList: (aAllDoctors ?? []).map((d) => ({ id: d.id, name: d.full_name })),
         }}
       />
     );
@@ -522,6 +571,9 @@ export default async function DashboardPage() {
     { data: allDoctorProfiles },
     { data: doctorAppts },
     { data: allDepartments },
+    { data: mgrReceptionists },
+    { data: mgrReceptionistAppts },
+    { data: mgrFollowUps },
   ] = await Promise.all([
     supabase
       .from("appointments")
@@ -590,6 +642,24 @@ export default async function DashboardPage() {
       .select("id, name")
       .eq("clinic_id", clinicId)
       .eq("is_active", true),
+    supabase
+      .from("profiles")
+      .select("id, full_name")
+      .eq("clinic_id", clinicId)
+      .eq("role", "receptionist")
+      .eq("is_active", true),
+    supabase
+      .from("appointments")
+      .select("created_by, status")
+      .eq("clinic_id", clinicId)
+      .gte("scheduled_at", thisMonth.start)
+      .lte("scheduled_at", thisMonth.end),
+    supabase
+      .from("follow_ups")
+      .select("outcome")
+      .eq("clinic_id", clinicId)
+      .gte("recorded_at", thisMonth.start)
+      .lte("recorded_at", thisMonth.end),
   ]);
 
   const mc = monthCount ?? 0;
@@ -603,6 +673,28 @@ export default async function DashboardPage() {
       doctorAppts as Parameters<typeof buildAnalyticsAggregates>[2],
       allDepartments,
     );
+
+  const mgrReceptionistMap = new Map<string, { name: string; total: number; confirmed: number; cancelled: number; other: number }>();
+  for (const r of mgrReceptionists ?? []) {
+    mgrReceptionistMap.set(r.id, { name: r.full_name, total: 0, confirmed: 0, cancelled: 0, other: 0 });
+  }
+  for (const a of (mgrReceptionistAppts ?? []) as { created_by: string | null; status: string }[]) {
+    if (!a.created_by) continue;
+    const entry = mgrReceptionistMap.get(a.created_by);
+    if (!entry) continue;
+    entry.total++;
+    if (a.status === "confirmed") entry.confirmed++;
+    else if (a.status === "cancelled") entry.cancelled++;
+    else entry.other++;
+  }
+  const mgrInitialReceptionists = Array.from(mgrReceptionistMap.values()).sort((a, b) => b.total - a.total);
+
+  let mgrFuAllFine = 0, mgrFuHasProblem = 0;
+  for (const fu of (mgrFollowUps ?? []) as { outcome: string }[]) {
+    if (fu.outcome === "all_fine") mgrFuAllFine++;
+    else if (fu.outcome === "has_problem") mgrFuHasProblem++;
+  }
+  const mgrInitialFollowUpOutcomes = { allFine: mgrFuAllFine, hasProblem: mgrFuHasProblem, total: (mgrFollowUps ?? []).length };
 
   return (
     <ManagerDashboard
@@ -618,6 +710,10 @@ export default async function DashboardPage() {
       initialInsuranceSeries={initialInsuranceSeries}
       initialDoctors={initialDoctors}
       initialDepartments={initialDepartments}
+      initialReceptionists={mgrInitialReceptionists}
+      initialFollowUpOutcomes={mgrInitialFollowUpOutcomes}
+      departmentsList={allDepartments ?? []}
+      doctorsList={(allDoctorProfiles ?? []).map((d) => ({ id: d.id, name: d.full_name }))}
     />
   );
 }

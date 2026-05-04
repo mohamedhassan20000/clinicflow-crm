@@ -24,6 +24,8 @@ export interface DoctorDashboardStats {
   clinicPatients: number;
   // Daily series
   dailySeries: { date: string; mine: number; dept: number }[];
+  // Follow-up outcomes for this doctor's patients
+  followUpOutcomes: { allFine: number; hasProblem: number; total: number };
 }
 
 function buildDateRange(mode: "today" | "week" | "month", tz = "Europe/Istanbul") {
@@ -68,6 +70,7 @@ export async function fetchDoctorDashboardStats(
     { data: myAppts },
     { data: deptAppts },
     { data: clinicAppts },
+    { data: myFollowUps },
   ] = await Promise.all([
     supabase
       .from("appointments")
@@ -113,6 +116,12 @@ export async function fetchDoctorDashboardStats(
       .eq("clinic_id", clinicId)
       .gte("scheduled_at", start)
       .lte("scheduled_at", end),
+    supabase
+      .from("follow_ups")
+      .select("outcome, appointment:appointments!appointment_id(doctor_id)")
+      .eq("clinic_id", clinicId)
+      .gte("recorded_at", start)
+      .lte("recorded_at", end),
   ]);
 
   // Doctor stats
@@ -185,6 +194,15 @@ export async function fetchDoctorDashboardStats(
     dept: deptByDay.get(date) ?? 0,
   }));
 
+  // Follow-up outcomes scoped to this doctor's appointments
+  let fuAllFine = 0, fuHasProblem = 0;
+  for (const fu of (myFollowUps ?? []) as { outcome: string; appointment: { doctor_id: string } | null }[]) {
+    if (fu.appointment?.doctor_id !== doctorId) continue;
+    if (fu.outcome === "all_fine") fuAllFine++;
+    else if (fu.outcome === "has_problem") fuHasProblem++;
+  }
+  const followUpOutcomes = { allFine: fuAllFine, hasProblem: fuHasProblem, total: fuAllFine + fuHasProblem };
+
   return {
     todayAppts: todayAppts ?? 0,
     weekAppts: weekAppts ?? 0,
@@ -203,5 +221,6 @@ export async function fetchDoctorDashboardStats(
     deptRevenue,
     clinicPatients: clinicPatientsSet.size,
     dailySeries,
+    followUpOutcomes,
   };
 }

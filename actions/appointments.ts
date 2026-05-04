@@ -262,6 +262,70 @@ export async function updateAppointmentStatus(
   return {};
 }
 
+export async function softDeleteAppointment(id: string): Promise<ActionResult> {
+  const user = await requireRole(["admin", "receptionist"]);
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("appointments")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("clinic_id", user.clinicId);
+  if (error) return { error: error.message };
+  revalidatePath("/appointments");
+  return {};
+}
+
+export async function restoreAppointment(id: string): Promise<ActionResult> {
+  const user = await requireRole(["admin", "receptionist"]);
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("appointments")
+    .update({ deleted_at: null })
+    .eq("id", id)
+    .eq("clinic_id", user.clinicId);
+  if (error) return { error: error.message };
+  revalidatePath("/appointments");
+  return {};
+}
+
+// Bypasses state-machine transitions — only used for undo toast to revert
+// a status change (e.g. cancelled → confirmed) that the validator blocks.
+// Directly writes to DB; no transition check.
+export async function forceRestoreAppointmentStatus(
+  id: string,
+  targetStatus: "pending" | "confirmed",
+): Promise<ActionResult> {
+  const user = await requireRole(["admin", "receptionist"]);
+  const supabase = await createClient();
+
+  // Two-step: set status first, then clear terminal-state metadata.
+  const { error } = await supabase
+    .from("appointments")
+    .update({ status: targetStatus, updated_by: user.id })
+    .eq("id", id)
+    .eq("clinic_id", user.clinicId);
+
+  if (error) return { error: error.message };
+
+  // Best-effort cleanup of cancellation / no-show fields so the record
+  // doesn't carry stale metadata after the undo.
+  await supabase
+    .from("appointments")
+    .update({
+      cancellation_reason: null,
+      cancelled_at: null,
+      cancelled_by: null,
+      no_show_reason: null,
+      no_showed_at: null,
+      no_showed_by: null,
+    } as TablesUpdate<"appointments">)
+    .eq("id", id)
+    .eq("clinic_id", user.clinicId);
+
+  revalidatePath("/appointments");
+  return {};
+}
+
 export async function cancelAppointment(
   id: string,
   reason: string,

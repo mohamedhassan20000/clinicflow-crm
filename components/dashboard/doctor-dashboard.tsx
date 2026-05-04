@@ -297,8 +297,8 @@ export function DoctorDashboard({
                     </Pie>
                     <Tooltip
                       contentStyle={{
-                        background: "hsl(var(--card))",
-                        border: "1px solid hsl(var(--border))",
+                        background: "var(--card)",
+                        border: "1px solid var(--border)",
                         borderRadius: "8px",
                         fontSize: "11px",
                       }}
@@ -320,6 +320,76 @@ export function DoctorDashboard({
         </div>
       </div>
 
+      {/* Follow-up outcomes */}
+      {stats.followUpOutcomes.total > 0 && (() => {
+        const fuData = [
+          { name: "All fine", value: stats.followUpOutcomes.allFine, color: "#10B981" },
+          { name: "Has problem", value: stats.followUpOutcomes.hasProblem, color: "#F59E0B" },
+        ].filter((d) => d.value > 0);
+        const total = stats.followUpOutcomes.total;
+        return (
+          <div className="rounded-xl border border-border/50 bg-card p-5 space-y-4">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+              My patients — Follow-up outcomes
+            </h2>
+            <div className="flex flex-wrap items-center gap-6">
+              <div className="h-32 w-32 shrink-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={fuData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={30}
+                      outerRadius={52}
+                      dataKey="value"
+                      strokeWidth={0}
+                    >
+                      {fuData.map((entry, i) => (
+                        <Cell key={i} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      contentStyle={{
+                        background: "var(--card)",
+                        border: "1px solid var(--border)",
+                        borderRadius: "8px",
+                        fontSize: "11px",
+                      }}
+                      formatter={(val, name) => [`${val} (${pct(Number(val), total)}%)`, name]}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="space-y-3 flex-1">
+                {fuData.map((d) => (
+                  <div key={d.name} className="space-y-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="flex items-center gap-1.5 text-muted-foreground">
+                        <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
+                        {d.name}
+                      </span>
+                      <span className="font-semibold tabular-nums">
+                        {d.value} ({pct(d.value, total)}%)
+                      </span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-muted/50 overflow-hidden">
+                      <div
+                        className="h-full rounded-full"
+                        style={{ width: `${pct(d.value, total)}%`, backgroundColor: d.color }}
+                      />
+                    </div>
+                  </div>
+                ))}
+                <p className="text-[10px] text-muted-foreground pt-1">
+                  {total} follow-up{total !== 1 ? "s" : ""} recorded in this period
+                </p>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Appointments chart */}
       <div className="rounded-xl border border-border/50 bg-card p-5 space-y-4">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
@@ -328,24 +398,24 @@ export function DoctorDashboard({
         {stats.dailySeries.length > 1 ? (
           <ResponsiveContainer width="100%" height={220}>
             <LineChart data={stats.dailySeries} margin={{ top: 4, right: 16, left: -16, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.5} />
               <XAxis
                 dataKey="date"
-                tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
                 tickLine={false}
                 axisLine={false}
                 interval="preserveStartEnd"
               />
               <YAxis
                 allowDecimals={false}
-                tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
                 tickLine={false}
                 axisLine={false}
               />
               <Tooltip
                 contentStyle={{
-                  background: "hsl(var(--card))",
-                  border: "1px solid hsl(var(--border))",
+                  background: "var(--card)",
+                  border: "1px solid var(--border)",
                   borderRadius: "8px",
                   fontSize: "12px",
                 }}

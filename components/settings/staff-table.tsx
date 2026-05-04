@@ -27,6 +27,8 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -37,6 +39,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { EditStaffForm } from "@/components/settings/staff-form";
 import { StaffProfileSheet } from "@/components/settings/staff-profile-sheet";
 import {
@@ -78,6 +82,9 @@ export function StaffTable({ staff, departments, currentUserId }: StaffTableProp
   const [editTarget, setEditTarget] = useState<StaffMember | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<StaffMember | null>(null);
   const [profileTarget, setProfileTarget] = useState<StaffMember | null>(null);
+  const [passwordTarget, setPasswordTarget] = useState<StaffMember | null>(null);
+  const [temporaryPassword, setTemporaryPassword] = useState("");
+  const [confirmTemporaryPassword, setConfirmTemporaryPassword] = useState("");
   const [isPending, startTransition] = useTransition();
 
   function handleDelete(id: string, name: string) {
@@ -103,11 +110,46 @@ export function StaffTable({ staff, departments, currentUserId }: StaffTableProp
     });
   }
 
-  function handleResetPassword(id: string) {
+  function resetPasswordDialog() {
+    setPasswordTarget(null);
+    setTemporaryPassword("");
+    setConfirmTemporaryPassword("");
+  }
+
+  function validateTemporaryPassword() {
+    if (temporaryPassword.length < 8) {
+      return "Password must be at least 8 characters.";
+    }
+    if (!/[A-Z]/.test(temporaryPassword)) {
+      return "Password must contain an uppercase letter.";
+    }
+    if (!/[0-9]/.test(temporaryPassword)) {
+      return "Password must contain a number.";
+    }
+    if (temporaryPassword !== confirmTemporaryPassword) {
+      return "Passwords do not match.";
+    }
+    return null;
+  }
+
+  function handleResetPassword() {
+    if (!passwordTarget) return;
+    const validationError = validateTemporaryPassword();
+    if (validationError) {
+      toast.error(validationError);
+      return;
+    }
+
     startTransition(async () => {
-      const result = await resetStaffPassword(id);
+      const result = await resetStaffPassword(
+        passwordTarget.id,
+        temporaryPassword,
+      );
       if (result.error) toast.error(result.error);
-      else toast.success("Password reset. Staff will be prompted to set a new one.");
+      else {
+        toast.success("Temporary password set. Staff will be prompted to change it.");
+        resetPasswordDialog();
+      }
     });
   }
 
@@ -206,9 +248,9 @@ export function StaffTable({ staff, departments, currentUserId }: StaffTableProp
                           <Pencil className="mr-2 h-4 w-4" />
                           Edit
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleResetPassword(s.id)}>
+                        <DropdownMenuItem onClick={() => setPasswordTarget(s)}>
                           <KeyRound className="mr-2 h-4 w-4" />
-                          Reset password
+                          Set temporary password
                         </DropdownMenuItem>
                         {s.id !== currentUserId && (
                           <>
@@ -275,6 +317,71 @@ export function StaffTable({ staff, departments, currentUserId }: StaffTableProp
               onSuccess={() => setEditTarget(null)}
             />
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Set temporary password dialog */}
+      <Dialog
+        open={!!passwordTarget}
+        onOpenChange={(open) => {
+          if (!open) resetPasswordDialog();
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Set temporary password</DialogTitle>
+            <DialogDescription>
+              {passwordTarget?.full_name} will be forced to change this password
+              on next login.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="temporary-password">Temporary password</Label>
+              <Input
+                id="temporary-password"
+                type="password"
+                autoComplete="new-password"
+                value={temporaryPassword}
+                disabled={isPending}
+                onChange={(e) => setTemporaryPassword(e.target.value)}
+                placeholder="Clinic@123"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirm-temporary-password">
+                Confirm temporary password
+              </Label>
+              <Input
+                id="confirm-temporary-password"
+                type="password"
+                autoComplete="new-password"
+                value={confirmTemporaryPassword}
+                disabled={isPending}
+                onChange={(e) => setConfirmTemporaryPassword(e.target.value)}
+                placeholder="Clinic@123"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isPending}
+              onClick={resetPasswordDialog}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={isPending}
+              onClick={handleResetPassword}
+              className="gap-2"
+            >
+              {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+              Save password
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

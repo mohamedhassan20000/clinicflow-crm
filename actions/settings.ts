@@ -31,6 +31,7 @@ export async function createStaff(
   const parsed = createStaffSchema.safeParse({
     full_name: fd.get("full_name"),
     email: fd.get("email"),
+    temporary_password: fd.get("temporary_password"),
     role: fd.get("role"),
     department_id: fd.get("department_id") || null,
     phone: fd.get("phone") || null,
@@ -40,10 +41,8 @@ export async function createStaff(
     return { error: parsed.error.issues[0]?.message ?? "Validation error" };
   }
 
-  const { full_name, email, role, department_id, phone } = parsed.data;
-
-  // Generate a temporary password — user must change on first login
-  const tempPassword = `Clinic@${Math.random().toString(36).slice(2, 10)}`;
+  const { full_name, email, temporary_password, role, department_id, phone } =
+    parsed.data;
 
   const adminClient = createAdminClient();
 
@@ -51,7 +50,7 @@ export async function createStaff(
   const { data: authData, error: authError } =
     await adminClient.auth.admin.createUser({
       email,
-      password: tempPassword,
+      password: temporary_password,
       email_confirm: true,
     });
 
@@ -226,14 +225,27 @@ export async function deleteStaff(staffId: string): Promise<ActionResult> {
   return { success: true };
 }
 
-export async function resetStaffPassword(staffId: string): Promise<ActionResult> {
+const temporaryPasswordSchema = createStaffSchema.pick({
+  temporary_password: true,
+});
+
+export async function resetStaffPassword(
+  staffId: string,
+  temporaryPassword: string,
+): Promise<ActionResult> {
   await requireRole(["admin", "manager"]);
 
-  const tempPassword = `Clinic@${Math.random().toString(36).slice(2, 10)}`;
+  const parsed = temporaryPasswordSchema.safeParse({
+    temporary_password: temporaryPassword,
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid password." };
+  }
+
   const adminClient = createAdminClient();
 
   const { error } = await adminClient.auth.admin.updateUserById(staffId, {
-    password: tempPassword,
+    password: parsed.data.temporary_password,
   });
 
   if (error) return { error: error.message };

@@ -64,6 +64,7 @@ export function CreateStaffForm({
     defaultValues: {
       full_name: "",
       email: "",
+      temporary_password: "",
       role: "receptionist",
       department_id: null,
       phone: "",
@@ -101,6 +102,7 @@ export function CreateStaffForm({
     const fd = new FormData();
     fd.set("full_name", fullName);
     fd.set("email", values.email);
+    fd.set("temporary_password", values.temporary_password);
     fd.set("role", values.role);
     if (values.department_id) fd.set("department_id", values.department_id);
     if (values.phone) fd.set("phone", values.phone);
@@ -142,6 +144,25 @@ export function CreateStaffForm({
                     type="email"
                     disabled={isPending}
                     placeholder="ayse@clinic.com"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="temporary_password"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Temporary password</FormLabel>
+                <FormControl>
+                  <Input
+                    {...field}
+                    type="password"
+                    autoComplete="new-password"
+                    disabled={isPending}
+                    placeholder="Clinic@123"
                   />
                 </FormControl>
                 <FormMessage />

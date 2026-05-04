@@ -5,6 +5,11 @@ import { z } from "zod";
 export const createStaffSchema = z.object({
   full_name: z.string().min(2, "Name must be at least 2 characters").max(100),
   email: z.string().email("Invalid email address"),
+  temporary_password: z
+    .string()
+    .min(8, "Password must be at least 8 characters")
+    .regex(/[A-Z]/, "Password must contain an uppercase letter")
+    .regex(/[0-9]/, "Password must contain a number"),
   role: z.enum(["admin", "doctor", "receptionist", "manager"], {
     error: "Select a role",
   }),

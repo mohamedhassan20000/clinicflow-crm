@@ -105,7 +105,8 @@ export async function changePassword(
   }
 
   revalidatePath("/dashboard");
-  redirect("/dashboard");
+  await supabase.auth.signOut();
+  redirect("/login?password_changed=1");
 }
 
 const forgotSchema = z.object({

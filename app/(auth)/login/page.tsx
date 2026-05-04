@@ -5,7 +5,14 @@ export const metadata: Metadata = {
   title: "Sign in",
 };
 
-export default function LoginPage() {
+interface LoginPageProps {
+  searchParams: Promise<{ password_changed?: string }>;
+}
+
+export default async function LoginPage({ searchParams }: LoginPageProps) {
+  const params = await searchParams;
+  const passwordChanged = params.password_changed === "1";
+
   return (
     <div className="space-y-7">
       <div className="space-y-2 auth-stagger" style={{ animationDelay: "60ms" }}>
@@ -21,6 +28,11 @@ export default function LoginPage() {
           Sign in to continue to ClinicFlow.
         </p>
       </div>
+      {passwordChanged && (
+        <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-300">
+          Password updated. Sign in again with your new password.
+        </div>
+      )}
       <div className="auth-stagger" style={{ animationDelay: "140ms" }}>
         <LoginForm />
       </div>

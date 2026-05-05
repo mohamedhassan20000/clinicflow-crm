@@ -221,134 +221,6 @@ function lineItemTotal(items: LineItemValues[]): number {
   );
 }
 
-function invoiceUpdateFromBilling(
-  billing: BillingValues,
-  total: number,
-  outstanding: number,
-): TablesUpdate<"appointments"> {
-  return {
-    status: "completed",
-    payment_method: billing.payment_method,
-    secondary_payment_method: billing.secondary_payment_method ?? null,
-    secondary_amount: Number(billing.secondary_amount.toFixed(2)),
-    deposit_amount: Number(billing.deposit_amount.toFixed(2)),
-    total_amount: total,
-    paid_amount: Number(billing.paid_amount.toFixed(2)),
-    insurance_amount: Number(billing.insurance_amount.toFixed(2)),
-    outstanding_amount: outstanding,
-    payment_note: billing.payment_note ?? null,
-    paid_at: new Date().toISOString(),
-  };
-}
-
-async function replaceAppointmentForInvoice(
-  appointmentId: string,
-  clinicId: string,
-  updatedBy: string,
-  patch: TablesUpdate<"appointments">,
-): Promise<ActionResult> {
-  const adminClient = createAdminClient();
-  const { data: appt, error: apptError } = await adminClient
-    .from("appointments")
-    .select("*")
-    .eq("id", appointmentId)
-    .eq("clinic_id", clinicId)
-    .single();
-
-  if (apptError || !appt) return { error: "Appointment not found." };
-
-  const replacement: TablesInsert<"appointments"> = {
-    id: appt.id,
-    clinic_id: appt.clinic_id,
-    patient_id: appt.patient_id,
-    doctor_id: appt.doctor_id,
-    department_id: appt.department_id,
-    service_id: appt.service_id,
-    insurance_provider_id: appt.insurance_provider_id,
-    scheduled_at: appt.scheduled_at,
-    duration_minutes: appt.duration_minutes,
-    status: (patch.status ?? appt.status) as AppointmentStatus,
-    notes: appt.notes,
-    created_by: appt.created_by,
-    created_at: appt.created_at,
-    updated_by: updatedBy,
-    deleted_at: appt.deleted_at,
-    reminder_sent_at: appt.reminder_sent_at,
-    cancellation_reason: patch.cancellation_reason ?? appt.cancellation_reason,
-    cancelled_at: patch.cancelled_at ?? appt.cancelled_at,
-    cancelled_by: patch.cancelled_by ?? appt.cancelled_by,
-    no_show_reason: patch.no_show_reason ?? appt.no_show_reason,
-    no_showed_at: patch.no_showed_at ?? appt.no_showed_at,
-    no_showed_by: patch.no_showed_by ?? appt.no_showed_by,
-    payment_method: patch.payment_method ?? appt.payment_method,
-    secondary_payment_method:
-      patch.secondary_payment_method ?? appt.secondary_payment_method,
-    payment_note: patch.payment_note ?? appt.payment_note,
-    paid_at: patch.paid_at ?? appt.paid_at,
-    total_amount: patch.total_amount ?? appt.total_amount,
-    paid_amount: patch.paid_amount ?? appt.paid_amount,
-    insurance_amount: patch.insurance_amount ?? appt.insurance_amount,
-    secondary_amount: patch.secondary_amount ?? appt.secondary_amount,
-    deposit_amount: patch.deposit_amount ?? appt.deposit_amount,
-    outstanding_amount: patch.outstanding_amount ?? appt.outstanding_amount,
-  };
-
-  await adminClient
-    .from("appointment_services")
-    .delete()
-    .eq("appointment_id", appointmentId)
-    .eq("clinic_id", clinicId);
-  await adminClient
-    .from("follow_ups")
-    .update({ appointment_id: null })
-    .eq("appointment_id", appointmentId)
-    .eq("clinic_id", clinicId);
-  await adminClient
-    .from("outstanding_settlements")
-    .update({ appointment_id: null })
-    .eq("appointment_id", appointmentId)
-    .eq("clinic_id", clinicId);
-
-  const { error: deleteError } = await adminClient
-    .from("appointments")
-    .delete()
-    .eq("id", appointmentId)
-    .eq("clinic_id", clinicId);
-  if (deleteError) return { error: deleteError.message };
-
-  const { error: insertError } = await adminClient
-    .from("appointments")
-    .insert(replacement);
-  if (insertError) return { error: insertError.message };
-
-  return {};
-}
-
-async function saveInvoiceLineItems(
-  appointmentId: string,
-  clinicId: string,
-  items: LineItemValues[],
-): Promise<ActionResult> {
-  const adminClient = createAdminClient();
-  await adminClient
-    .from("appointment_services")
-    .delete()
-    .eq("appointment_id", appointmentId)
-    .eq("clinic_id", clinicId);
-
-  const rows = items.map((li) => ({
-    appointment_id: appointmentId,
-    clinic_id: clinicId,
-    service_id: li.service_id ?? null,
-    name: li.name,
-    price: Number(Number(li.price).toFixed(2)),
-    quantity: Number(li.quantity),
-  }));
-  const { error } = await adminClient.from("appointment_services").insert(rows);
-  if (error) return { error: "Failed to save invoice line items." };
-  return {};
-}
-
 export async function updateAppointmentStatus(
   id: string,
   newStatus: string,
@@ -459,19 +331,20 @@ export async function updateAppointmentStatus(
     if (collected > total + 0.001) {
       return { error: "Collected amount exceeds invoice total." };
     }
-    const outstanding = Number(Math.max(0, total - collected).toFixed(2));
+    const { error } = await supabase.rpc("complete_appointment_billing", {
+      p_appointment_id: id,
+      p_line_items: billing.line_items,
+      p_paid_amount: Number(billing.paid_amount.toFixed(2)),
+      p_payment_method: billing.payment_method,
+      p_insurance_amount: Number(billing.insurance_amount.toFixed(2)),
+      p_secondary_amount: Number(billing.secondary_amount.toFixed(2)),
+      p_secondary_payment_method:
+        billing.secondary_payment_method ?? undefined,
+      p_deposit_amount: Number(billing.deposit_amount.toFixed(2)),
+      p_payment_note: billing.payment_note ?? undefined,
+    });
 
-    Object.assign(update, invoiceUpdateFromBilling(billing, total, outstanding));
-
-    const replaced = await replaceAppointmentForInvoice(
-      id,
-      user.clinicId,
-      user.id,
-      update,
-    );
-    if (replaced.error) return replaced;
-    const lines = await saveInvoiceLineItems(id, user.clinicId, billing.line_items);
-    if (lines.error) return lines;
+    if (error) return { error: error.message };
     revalidatePath("/appointments");
     revalidatePath(`/patients/${appt.patient_id}`);
     return {};
@@ -484,18 +357,6 @@ export async function updateAppointmentStatus(
     .eq("clinic_id", user.clinicId);
 
   if (error) return { error: "Failed to update status." };
-
-  if (newStatus === "completed" && billingPayload) {
-    const parsed = billingSchema.safeParse(billingPayload);
-    if (parsed.success) {
-      const lines = await saveInvoiceLineItems(
-        id,
-        user.clinicId,
-        parsed.data.line_items,
-      );
-      if (lines.error) return lines;
-    }
-  }
 
   revalidatePath("/appointments");
   revalidatePath(`/patients/${appt.patient_id}`);

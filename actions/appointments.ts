@@ -9,6 +9,7 @@ import {
   appointmentSchema,
   billingSchema,
   STATUS_TRANSITIONS,
+  type AppointmentFormValues,
   type BillingValues,
   type LineItemValues,
 } from "@/lib/validations/appointment";
@@ -22,10 +23,127 @@ export type ActionResult = {
 };
 type AppointmentStatus = Database["public"]["Enums"]["appointment_status"];
 export type InvoiceUndoStatus = Extract<AppointmentStatus, "pending" | "confirmed">;
+type AppointmentValues = AppointmentFormValues;
 
 function isPastScheduledAt(scheduledAt: string): boolean {
   const scheduledTime = new Date(scheduledAt).getTime();
   return Number.isFinite(scheduledTime) && scheduledTime <= Date.now();
+}
+
+async function validateAppointmentReferences(
+  values: AppointmentValues,
+  clinicId: string,
+): Promise<ActionResult> {
+  const supabase = await createClient();
+  const [patientResult, doctorResult, departmentResult, insuranceResult] =
+    await Promise.all([
+      supabase
+        .from("patients")
+        .select("id")
+        .eq("id", values.patient_id)
+        .eq("clinic_id", clinicId)
+        .eq("is_deleted", false)
+        .maybeSingle(),
+      supabase
+        .from("profiles")
+        .select("id, department_id")
+        .eq("id", values.doctor_id)
+        .eq("clinic_id", clinicId)
+        .eq("role", "doctor")
+        .eq("is_active", true)
+        .eq("is_deleted", false)
+        .is("deleted_at", null)
+        .maybeSingle(),
+      values.department_id
+        ? supabase
+            .from("departments")
+            .select("id")
+            .eq("id", values.department_id)
+            .eq("clinic_id", clinicId)
+            .eq("is_active", true)
+            .is("deleted_at", null)
+            .maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
+      values.insurance_provider_id
+        ? supabase
+            .from("insurance_providers")
+            .select("id")
+            .eq("id", values.insurance_provider_id)
+            .eq("clinic_id", clinicId)
+            .eq("is_active", true)
+            .is("deleted_at", null)
+            .maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
+    ]);
+
+  if (patientResult.error) return { error: "Failed to validate patient." };
+  if (doctorResult.error) return { error: "Failed to validate doctor." };
+  if (departmentResult.error) return { error: "Failed to validate department." };
+  if (insuranceResult.error) return { error: "Failed to validate insurance provider." };
+  if (!patientResult.data) return { error: "Select an active patient in this clinic." };
+  if (!doctorResult.data) return { error: "Select an active doctor in this clinic." };
+  if (values.department_id && !departmentResult.data) {
+    return { error: "Select an active department in this clinic." };
+  }
+  if (values.insurance_provider_id && !insuranceResult.data) {
+    return { error: "Select an active insurance provider in this clinic." };
+  }
+  if (
+    values.department_id &&
+    doctorResult.data.department_id &&
+    doctorResult.data.department_id !== values.department_id
+  ) {
+    return { error: "Selected doctor does not belong to the selected department." };
+  }
+
+  return {};
+}
+
+async function validateAppointmentSlot(
+  values: AppointmentValues,
+  clinicId: string,
+): Promise<ActionResult> {
+  const supabase = await createClient();
+  const startTime = new Date(values.scheduled_at);
+  const endTime = new Date(startTime.getTime() + values.duration_minutes * 60_000);
+  const dayStart = new Date(startTime);
+  dayStart.setHours(0, 0, 0, 0);
+  const dayEnd = new Date(startTime);
+  dayEnd.setHours(23, 59, 59, 999);
+
+  const { data: sameDay, error } = await supabase
+    .from("appointments")
+    .select("scheduled_at, duration_minutes")
+    .eq("doctor_id", values.doctor_id)
+    .eq("clinic_id", clinicId)
+    .is("deleted_at", null)
+    .not("status", "in", '("cancelled","no_show")')
+    .gte("scheduled_at", dayStart.toISOString())
+    .lte("scheduled_at", dayEnd.toISOString());
+
+  if (error) {
+    return {
+      error:
+        "Could not verify the doctor's availability. Please try again before booking.",
+    };
+  }
+
+  const BUFFER_MS = 15 * 60_000;
+  for (const appt of sameDay ?? []) {
+    const exStart = new Date(appt.scheduled_at);
+    const exEnd = new Date(exStart.getTime() + appt.duration_minutes * 60_000);
+    if (
+      startTime < new Date(exEnd.getTime() + BUFFER_MS) &&
+      endTime > new Date(exStart.getTime() - BUFFER_MS)
+    ) {
+      return {
+        error:
+          "The doctor needs at least 15 minutes between appointments. Please choose a different time slot.",
+      };
+    }
+  }
+
+  return {};
 }
 
 export async function createAppointment(
@@ -56,41 +174,16 @@ export async function createAppointment(
     return { error: "Choose a future date and time for the appointment." };
   }
 
+  const references = await validateAppointmentReferences(
+    parsed.data,
+    user.clinicId,
+  );
+  if (references.error) return references;
+
+  const slot = await validateAppointmentSlot(parsed.data, user.clinicId);
+  if (slot.error) return slot;
+
   const supabase = await createClient();
-
-  // 15-minute buffer check — fetch doctor's non-cancelled appts on that day
-  const startTime = new Date(parsed.data.scheduled_at);
-  const endTime = new Date(startTime.getTime() + parsed.data.duration_minutes * 60_000);
-  const dayStart = new Date(startTime);
-  dayStart.setHours(0, 0, 0, 0);
-  const dayEnd = new Date(startTime);
-  dayEnd.setHours(23, 59, 59, 999);
-
-  const { data: sameDay } = await supabase
-    .from("appointments")
-    .select("scheduled_at, duration_minutes")
-    .eq("doctor_id", parsed.data.doctor_id)
-    .eq("clinic_id", user.clinicId)
-    .is("deleted_at", null)
-    .not("status", "in", '("cancelled","no_show")')
-    .gte("scheduled_at", dayStart.toISOString())
-    .lte("scheduled_at", dayEnd.toISOString());
-
-  const BUFFER_MS = 15 * 60_000;
-  for (const appt of sameDay ?? []) {
-    const exStart = new Date(appt.scheduled_at);
-    const exEnd = new Date(exStart.getTime() + appt.duration_minutes * 60_000);
-    if (
-      startTime < new Date(exEnd.getTime() + BUFFER_MS) &&
-      endTime > new Date(exStart.getTime() - BUFFER_MS)
-    ) {
-      return {
-        error:
-          "The doctor needs at least 15 minutes between appointments. Please choose a different time slot.",
-      };
-    }
-  }
-
   const { error } = await supabase.from("appointments").insert({
     ...parsed.data,
     clinic_id: user.clinicId,

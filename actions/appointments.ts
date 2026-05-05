@@ -675,7 +675,28 @@ export async function undoInvoiceCompletion(
   id: string,
   targetStatus: InvoiceUndoStatus,
 ): Promise<ActionResult> {
-  return writeAppointmentStatusDirectly(id, targetStatus);
+  const user = await requireRole(["admin", "receptionist"]);
+  const supabase = await createClient();
+
+  const { data: appt } = await supabase
+    .from("appointments")
+    .select("patient_id")
+    .eq("id", id)
+    .eq("clinic_id", user.clinicId)
+    .single();
+
+  if (!appt) return { error: "Appointment not found." };
+
+  const { error } = await supabase.rpc("undo_appointment_billing", {
+    p_appointment_id: id,
+    p_target_status: targetStatus,
+  });
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/appointments");
+  revalidatePath(`/patients/${appt.patient_id}`);
+  return {};
 }
 
 export async function permanentDeleteAppointment(id: string): Promise<ActionResult> {

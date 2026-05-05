@@ -71,7 +71,7 @@ function canMutateMedicalNote(
 ): boolean {
   if (!note) return false;
   if (user.role === "admin") return true;
-  return note.doctor_id === user.id || note.created_by === user.id;
+  return note.created_by === user.id;
 }
 
 export async function createPatient(

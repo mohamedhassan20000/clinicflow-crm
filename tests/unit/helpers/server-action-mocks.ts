@@ -40,6 +40,11 @@ export function createServerActionMocks() {
     revalidatePath: vi.fn(),
     redirect: vi.fn(),
     requireRole: vi.fn(),
+    queryLog: [] as {
+      table: string;
+      operation: "select" | "insert" | "update" | "delete";
+      args: unknown[];
+    }[],
   };
 
   class QueryBuilder {
@@ -47,55 +52,82 @@ export function createServerActionMocks() {
 
     constructor(private readonly table: string) {}
 
-    select() {
+    select(...args: unknown[]) {
       this.operation = "select";
+      this.log(args);
       return this;
     }
 
-    insert() {
+    insert(...args: unknown[]) {
       this.operation = "insert";
+      this.log(args);
       return this;
     }
 
-    update() {
+    update(...args: unknown[]) {
       this.operation = "update";
+      this.log(args);
       return this;
     }
 
-    delete() {
+    delete(...args: unknown[]) {
       this.operation = "delete";
+      this.log(args);
       return this;
     }
 
-    eq() {
+    eq(...args: unknown[]) {
+      this.logFilter("eq", args);
       return this;
     }
 
-    is() {
+    is(...args: unknown[]) {
+      this.logFilter("is", args);
       return this;
     }
 
-    not() {
+    not(...args: unknown[]) {
+      this.logFilter("not", args);
       return this;
     }
 
-    gt() {
+    gt(...args: unknown[]) {
+      this.logFilter("gt", args);
       return this;
     }
 
-    gte() {
+    gte(...args: unknown[]) {
+      this.logFilter("gte", args);
       return this;
     }
 
-    lte() {
+    lte(...args: unknown[]) {
+      this.logFilter("lte", args);
       return this;
     }
 
-    order() {
+    like(...args: unknown[]) {
+      this.logFilter("like", args);
       return this;
     }
 
-    limit() {
+    or(...args: unknown[]) {
+      this.logFilter("or", args);
+      return this;
+    }
+
+    range(...args: unknown[]) {
+      this.logFilter("range", args);
+      return this;
+    }
+
+    order(...args: unknown[]) {
+      this.logFilter("order", args);
+      return this;
+    }
+
+    limit(...args: unknown[]) {
+      this.logFilter("limit", args);
       return this;
     }
 
@@ -127,12 +159,29 @@ export function createServerActionMocks() {
       }
       return configured ?? { data: null, error: null };
     }
+
+    private log(args: unknown[]) {
+      state.queryLog.push({
+        table: this.table,
+        operation: this.operation,
+        args,
+      });
+    }
+
+    private logFilter(method: string, args: unknown[]) {
+      state.queryLog.push({
+        table: this.table,
+        operation: this.operation,
+        args: [method, ...args],
+      });
+    }
   }
 
   function reset() {
     state.authedUser = defaultAuthedUser();
     state.rpcResults = {};
     state.tableResults = {};
+    state.queryLog = [];
     state.rpc.mockReset();
     state.from.mockReset();
     state.authGetUser.mockReset();
@@ -144,7 +193,7 @@ export function createServerActionMocks() {
     state.revalidatePath.mockReset();
     state.redirect.mockReset();
     state.requireRole.mockReset();
-    state.requireRole.mockResolvedValue(state.authedUser);
+    state.requireRole.mockImplementation(() => Promise.resolve(state.authedUser));
     state.from.mockImplementation((table: string) => new QueryBuilder(table));
     state.rpc.mockImplementation((name: string) =>
       Promise.resolve(state.rpcResults[name] ?? { data: null, error: null }),

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Loader2, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -38,6 +39,7 @@ interface Props {
 export function ServiceRowActions({ service, departments }: Props) {
   const [editOpen, setEditOpen] = useState(false);
   const [isDeleting, startDelete] = useTransition();
+  const router = useRouter();
 
   const updateBound = updateService.bind(null, service.id);
 
@@ -67,7 +69,10 @@ export function ServiceRowActions({ service, departments }: Props) {
               price: service.price,
             }}
             submitLabel="Save changes"
-            onSuccess={() => setEditOpen(false)}
+            onSuccess={() => {
+              setEditOpen(false);
+              router.refresh();
+            }}
           />
         </DialogContent>
       </Dialog>
@@ -112,11 +117,15 @@ export function ServiceRowActions({ service, departments }: Props) {
                         onClick: () => {
                           restoreService(service.id).then((r) => {
                             if (r.error) toast.error(r.error);
-                            else toast.success(`"${service.name}" restored.`);
+                            else {
+                              toast.success(`"${service.name}" restored.`);
+                              router.refresh();
+                            }
                           });
                         },
                       },
                     });
+                    router.refresh();
                   }
                 })
               }

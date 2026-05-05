@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Pencil, ToggleLeft, ToggleRight, Loader2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -38,12 +39,16 @@ interface DepartmentActionsProps {
 export function DepartmentActions({ dept, updateAction, toggleAction, deleteAction }: DepartmentActionsProps) {
   const [editOpen, setEditOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const router = useRouter();
 
   function handleToggle() {
     startTransition(async () => {
       const result = await toggleAction(!dept.is_active);
       if (result.error) toast.error(result.error);
-      else toast.success(dept.is_active ? "Department deactivated." : "Department reactivated.");
+      else {
+        toast.success(dept.is_active ? "Department deactivated." : "Department reactivated.");
+        router.refresh();
+      }
     });
   }
 
@@ -60,11 +65,15 @@ export function DepartmentActions({ dept, updateAction, toggleAction, deleteActi
             onClick: () => {
               restoreDepartment(dept.id).then((res) => {
                 if (res.error) toast.error(res.error);
-                else toast.success(`"${dept.name}" restored.`);
+                else {
+                  toast.success(`"${dept.name}" restored.`);
+                  router.refresh();
+                }
               });
             },
           },
         });
+        router.refresh();
       }
     });
   }
@@ -137,7 +146,10 @@ export function DepartmentActions({ dept, updateAction, toggleAction, deleteActi
               description: dept.description,
             }}
             submitLabel="Save changes"
-            onSuccess={() => setEditOpen(false)}
+            onSuccess={() => {
+              setEditOpen(false);
+              router.refresh();
+            }}
           />
         </DialogContent>
       </Dialog>

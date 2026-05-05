@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Banknote,
   CreditCard,
@@ -78,6 +79,7 @@ export function SettleOutstandingDialog({
     settleOutstanding,
     null,
   );
+  const router = useRouter();
 
   useEffect(() => {
     if (!state) return;
@@ -85,6 +87,7 @@ export function SettleOutstandingDialog({
       toast.error(state.error);
     } else {
       toast.success("Outstanding balance settled.");
+      router.refresh();
       // Defer state resets so we don't trigger cascading renders within the effect.
       queueMicrotask(() => {
         setOpen(false);
@@ -96,7 +99,7 @@ export function SettleOutstandingDialog({
         setSecondaryMethod("credit_card");
       });
     }
-  }, [state]);
+  }, [router, state]);
 
   const amountN = Number(amount) || 0;
   const secondaryN = showSplit ? Math.max(0, Number(secondaryAmount) || 0) : 0;

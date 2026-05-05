@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { Loader2, Send } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -14,16 +15,18 @@ interface NoteComposerProps {
 export function NoteComposer({ patientId }: NoteComposerProps) {
   const [state, formAction, isPending] = useActionState(addMedicalNote, null);
   const formRef = useRef<HTMLFormElement>(null);
+  const router = useRouter();
 
   useEffect(() => {
     if (state && !state.error && !state.fieldErrors) {
       formRef.current?.reset();
       toast.success("Note saved.");
+      router.refresh();
     }
     if (state?.error) {
       toast.error(state.error);
     }
-  }, [state]);
+  }, [router, state]);
 
   return (
     <form ref={formRef} action={formAction} className="space-y-3">

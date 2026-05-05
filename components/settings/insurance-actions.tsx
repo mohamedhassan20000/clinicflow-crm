@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Pencil, ToggleLeft, ToggleRight, Loader2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -38,15 +39,18 @@ interface InsuranceActionsProps {
 export function InsuranceActions({ provider, updateAction, toggleAction, deleteAction }: InsuranceActionsProps) {
   const [editOpen, setEditOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const router = useRouter();
 
   function handleToggle() {
     startTransition(async () => {
       const result = await toggleAction(!provider.is_active);
       if (result.error) toast.error(result.error);
-      else
+      else {
         toast.success(
           provider.is_active ? "Provider deactivated." : "Provider activated.",
         );
+        router.refresh();
+      }
     });
   }
 
@@ -63,11 +67,15 @@ export function InsuranceActions({ provider, updateAction, toggleAction, deleteA
             onClick: () => {
               restoreInsurance(provider.id).then((res) => {
                 if (res.error) toast.error(res.error);
-                else toast.success(`"${provider.name}" restored.`);
+                else {
+                  toast.success(`"${provider.name}" restored.`);
+                  router.refresh();
+                }
               });
             },
           },
         });
+        router.refresh();
       }
     });
   }
@@ -136,7 +144,10 @@ export function InsuranceActions({ provider, updateAction, toggleAction, deleteA
             action={updateAction}
             defaultValues={{ name: provider.name, code: provider.code }}
             submitLabel="Save changes"
-            onSuccess={() => setEditOpen(false)}
+            onSuccess={() => {
+              setEditOpen(false);
+              router.refresh();
+            }}
           />
         </DialogContent>
       </Dialog>

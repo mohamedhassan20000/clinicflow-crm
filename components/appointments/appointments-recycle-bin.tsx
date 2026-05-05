@@ -1,6 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Loader2, RotateCcw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -55,6 +56,7 @@ function RestoreButton({
   onRestore: AppointmentsRecycleBinProps["onRestore"];
 }) {
   const [isPending, start] = useTransition();
+  const router = useRouter();
 
   return (
     <Button
@@ -66,7 +68,10 @@ function RestoreButton({
         start(async () => {
           const res = await onRestore(item.id);
           if (res.error) toast.error(res.error);
-          else toast.success(`Appointment for ${item.patientName} restored.`);
+          else {
+            toast.success(`Appointment for ${item.patientName} restored.`);
+            router.refresh();
+          }
         })
       }
     >
@@ -88,6 +93,7 @@ function PermanentDeleteButton({
   onPermanentDelete: AppointmentsRecycleBinProps["onPermanentDelete"];
 }) {
   const [isPending, start] = useTransition();
+  const router = useRouter();
 
   return (
     <AlertDialog>
@@ -124,7 +130,10 @@ function PermanentDeleteButton({
               start(async () => {
                 const res = await onPermanentDelete(item.id);
                 if (res.error) toast.error(res.error);
-                else toast.success("Appointment permanently deleted.");
+                else {
+                  toast.success("Appointment permanently deleted.");
+                  router.refresh();
+                }
               })
             }
           >

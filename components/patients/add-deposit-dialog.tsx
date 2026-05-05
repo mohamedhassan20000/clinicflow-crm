@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Banknote,
   CreditCard,
@@ -60,6 +61,7 @@ export function AddDepositDialog({ patientId, patientName }: Props) {
     addPatientDeposit,
     null,
   );
+  const router = useRouter();
 
   useEffect(() => {
     if (!state) return;
@@ -67,6 +69,7 @@ export function AddDepositDialog({ patientId, patientName }: Props) {
       toast.error(state.error);
     } else if (!state.fieldErrors) {
       toast.success("Deposit added to patient account.");
+      router.refresh();
       queueMicrotask(() => {
         setOpen(false);
         setAmount("");
@@ -74,7 +77,7 @@ export function AddDepositDialog({ patientId, patientName }: Props) {
         setNote("");
       });
     }
-  }, [state]);
+  }, [router, state]);
 
   const amountN = Number(amount) || 0;
   const invalid = amountN <= 0;

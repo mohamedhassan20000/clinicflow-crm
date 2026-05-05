@@ -159,6 +159,118 @@ function RevenueTooltip({ active, payload, label }: any) {
   );
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function InsuranceTooltip({ active, payload, total }: any & { total: number }) {
+  if (!active || !payload?.length) return null;
+  const p = payload[0];
+  const pct = total > 0 ? Math.round((p.value / total) * 100) : 0;
+  return (
+    <div className="rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-lg">
+      <p className="mb-1 font-medium text-foreground">{p.name}</p>
+      <p className="text-xs" style={{ color: p.payload.fill }}>
+        {p.value} appointments{" "}
+        <span className="font-semibold text-foreground">({pct}%)</span>
+      </p>
+    </div>
+  );
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function DoctorTooltip({ active, payload, label, totalAppts }: any & { totalAppts: number }) {
+  if (!active || !payload?.length) return null;
+  const entry = payload[0]?.payload as DoctorStat | undefined;
+  if (!entry) return null;
+  const pct = totalAppts > 0 ? Math.round((entry.total / totalAppts) * 100) : 0;
+  return (
+    <div className="rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-lg">
+      <p className="mb-1 font-medium text-foreground">{label}</p>
+      <p className="mb-1 text-xs text-muted-foreground">
+        {entry.total} total <span className="font-semibold text-foreground">({pct}% of clinic)</span>
+      </p>
+      {payload.map((p: { color: string; name: string; value: number }, i: number) => (
+        <p key={i} className="text-xs" style={{ color: p.color }}>
+          {p.name}: <span className="font-semibold text-foreground">{p.value}</span>
+        </p>
+      ))}
+    </div>
+  );
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function ReceptionistTooltip({ active, payload, label, totalAppts }: any & { totalAppts: number }) {
+  if (!active || !payload?.length) return null;
+  const entry = payload[0]?.payload as ReceptionistStat | undefined;
+  if (!entry) return null;
+  const pct = totalAppts > 0 ? Math.round((entry.total / totalAppts) * 100) : 0;
+  return (
+    <div className="rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-lg">
+      <p className="mb-1 font-medium text-foreground">{label}</p>
+      <p className="mb-1 text-xs text-muted-foreground">
+        {entry.total} booked <span className="font-semibold text-foreground">({pct}% of total)</span>
+      </p>
+      {payload.map((p: { color: string; name: string; value: number }, i: number) => (
+        <p key={i} className="text-xs" style={{ color: p.color }}>
+          {p.name}: <span className="font-semibold text-foreground">{p.value}</span>
+        </p>
+      ))}
+    </div>
+  );
+}
+
+function DeptTooltip({
+  active,
+  payload,
+  label,
+  deptMode,
+  totalAppts,
+  totalPatients,
+}: {
+  active?: boolean;
+  payload?: {
+    color: string;
+    name: string;
+    value: number;
+    payload?: DepartmentStat;
+  }[];
+  label?: string;
+  deptMode: DeptMode;
+  totalAppts: number;
+  totalPatients: number;
+}) {
+  if (!active || !payload?.length) return null;
+  const entry = payload[0]?.payload as DepartmentStat | undefined;
+  if (!entry) return null;
+  const p = payload[0];
+  let pct = 0;
+  if (deptMode === "appointments" && totalAppts > 0) pct = Math.round((entry.appointments / totalAppts) * 100);
+  else if (deptMode === "patients" && totalPatients > 0) pct = Math.round((entry.patients / totalPatients) * 100);
+  return (
+    <div className="rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-lg">
+      <p className="mb-1 font-medium text-foreground">{label}</p>
+      <p className="text-xs" style={{ color: p.color }}>
+        {p.name}: <span className="font-semibold text-foreground">{p.value}</span>
+        {deptMode !== "revenue" && <span className="text-muted-foreground"> ({pct}%)</span>}
+      </p>
+    </div>
+  );
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function OutcomeTooltip({ active, payload, countedTotal }: any & { countedTotal: number }) {
+  if (!active || !payload?.length) return null;
+  const p = payload[0];
+  const pct = countedTotal > 0 ? Math.round((p.value / countedTotal) * 100) : 0;
+  return (
+    <div className="rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-lg">
+      <p className="mb-1 font-medium text-foreground">{p.name}</p>
+      <p className="text-xs" style={{ color: p.payload.fill }}>
+        {p.value} follow-ups{" "}
+        <span className="font-semibold text-foreground">({pct}%)</span>
+      </p>
+    </div>
+  );
+}
+
 function EmptyState() {
   return (
     <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">
@@ -358,22 +470,6 @@ function InsuranceSection({ clinicId, initialSeries }: { clinicId: string; initi
   const df = useDateFilter(refetch);
   const total = series.reduce((sum, s) => sum + s.value, 0);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  function PieTooltip({ active, payload }: any) {
-    if (!active || !payload?.length) return null;
-    const p = payload[0];
-    const pct = total > 0 ? Math.round((p.value / total) * 100) : 0;
-    return (
-      <div className="rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-lg">
-        <p className="mb-1 font-medium text-foreground">{p.name}</p>
-        <p className="text-xs" style={{ color: p.payload.fill }}>
-          {p.value} appointments{" "}
-          <span className="font-semibold text-foreground">({pct}%)</span>
-        </p>
-      </div>
-    );
-  }
-
   return (
     <div className="rounded-xl border border-border/60 bg-card p-5 shadow-sm">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -387,7 +483,7 @@ function InsuranceSection({ clinicId, initialSeries }: { clinicId: string; initi
               <Pie data={series} cx="50%" cy="50%" innerRadius={60} outerRadius={92} paddingAngle={2} dataKey="value">
                 {series.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} stroke="transparent" />)}
               </Pie>
-              <Tooltip content={<PieTooltip />} />
+              <Tooltip content={<InsuranceTooltip total={total} />} />
               <Legend iconType="circle" iconSize={8} wrapperStyle={LEGEND_STYLE} />
             </PieChart>
           </ResponsiveContainer>
@@ -417,27 +513,6 @@ function DoctorsSection({ clinicId, initialDoctors }: { clinicId: string; initia
   const chartData = doctors.map((d) => ({ ...d, other: Math.max(0, d.total - d.confirmed - d.cancelled) }));
   const totalAppts = doctors.reduce((sum, d) => sum + d.total, 0);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  function DoctorTooltip({ active, payload, label }: any) {
-    if (!active || !payload?.length) return null;
-    const entry = payload[0]?.payload as typeof chartData[0] | undefined;
-    if (!entry) return null;
-    const pct = totalAppts > 0 ? Math.round((entry.total / totalAppts) * 100) : 0;
-    return (
-      <div className="rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-lg">
-        <p className="mb-1 font-medium text-foreground">{label}</p>
-        <p className="mb-1 text-xs text-muted-foreground">
-          {entry.total} total <span className="font-semibold text-foreground">({pct}% of clinic)</span>
-        </p>
-        {payload.map((p: { color: string; name: string; value: number }, i: number) => (
-          <p key={i} className="text-xs" style={{ color: p.color }}>
-            {p.name}: <span className="font-semibold text-foreground">{p.value}</span>
-          </p>
-        ))}
-      </div>
-    );
-  }
-
   return (
     <div className="rounded-xl border border-border/60 bg-card p-5 shadow-sm">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
@@ -453,7 +528,7 @@ function DoctorsSection({ clinicId, initialDoctors }: { clinicId: string; initia
       <div className={cn("transition-opacity", isPending && "opacity-60")}>
         {doctors.length === 0 ? <EmptyState /> : doctorMode === "appointments" ? (
           <HBarChart data={chartData}>
-            <Tooltip content={<DoctorTooltip />} />
+            <Tooltip content={<DoctorTooltip totalAppts={totalAppts} />} />
             <Legend iconType="rect" iconSize={8} wrapperStyle={LEGEND_STYLE} />
             <Bar dataKey="confirmed" name="Confirmed" fill={C.emerald} stackId="a" maxBarSize={22} />
             <Bar dataKey="cancelled" name="Cancelled" fill={C.rose} stackId="a" maxBarSize={22} />
@@ -484,27 +559,6 @@ function ReceptionistSection({ clinicId, initialReceptionists }: { clinicId: str
   const chartData = receptionists.map((r) => ({ ...r, other: Math.max(0, r.total - r.confirmed - r.cancelled) }));
   const totalAppts = receptionists.reduce((sum, r) => sum + r.total, 0);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  function ReceptionistTooltip({ active, payload, label }: any) {
-    if (!active || !payload?.length) return null;
-    const entry = payload[0]?.payload as typeof chartData[0] | undefined;
-    if (!entry) return null;
-    const pct = totalAppts > 0 ? Math.round((entry.total / totalAppts) * 100) : 0;
-    return (
-      <div className="rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-lg">
-        <p className="mb-1 font-medium text-foreground">{label}</p>
-        <p className="mb-1 text-xs text-muted-foreground">
-          {entry.total} booked <span className="font-semibold text-foreground">({pct}% of total)</span>
-        </p>
-        {payload.map((p: { color: string; name: string; value: number }, i: number) => (
-          <p key={i} className="text-xs" style={{ color: p.color }}>
-            {p.name}: <span className="font-semibold text-foreground">{p.value}</span>
-          </p>
-        ))}
-      </div>
-    );
-  }
-
   return (
     <div className="rounded-xl border border-border/60 bg-card p-5 shadow-sm">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
@@ -514,7 +568,7 @@ function ReceptionistSection({ clinicId, initialReceptionists }: { clinicId: str
       <div className={cn("transition-opacity", isPending && "opacity-60")}>
         {receptionists.length === 0 ? <EmptyState /> : (
           <HBarChart data={chartData}>
-            <Tooltip content={<ReceptionistTooltip />} />
+            <Tooltip content={<ReceptionistTooltip totalAppts={totalAppts} />} />
             <Legend iconType="rect" iconSize={8} wrapperStyle={LEGEND_STYLE} />
             <Bar dataKey="confirmed" name="Confirmed" fill={C.emerald} stackId="a" maxBarSize={22} />
             <Bar dataKey="cancelled" name="Cancelled" fill={C.rose} stackId="a" maxBarSize={22} />
@@ -553,26 +607,6 @@ function DepartmentSection({ clinicId, initialDepartments }: { clinicId: string;
   const totalAppts = departments.reduce((sum, d) => sum + d.appointments, 0);
   const totalPatients = departments.reduce((sum, d) => sum + d.patients, 0);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  function DeptTooltip({ active, payload, label }: any) {
-    if (!active || !payload?.length) return null;
-    const entry = payload[0]?.payload as DepartmentStat | undefined;
-    if (!entry) return null;
-    const p = payload[0];
-    let pct = 0;
-    if (deptMode === "appointments" && totalAppts > 0) pct = Math.round((entry.appointments / totalAppts) * 100);
-    else if (deptMode === "patients" && totalPatients > 0) pct = Math.round((entry.patients / totalPatients) * 100);
-    return (
-      <div className="rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-lg">
-        <p className="mb-1 font-medium text-foreground">{label}</p>
-        <p className="text-xs" style={{ color: p.color }}>
-          {p.name}: <span className="font-semibold text-foreground">{p.value}</span>
-          {deptMode !== "revenue" && <span className="text-muted-foreground"> ({pct}%)</span>}
-        </p>
-      </div>
-    );
-  }
-
   return (
     <div className="rounded-xl border border-border/60 bg-card p-5 shadow-sm">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
@@ -591,12 +625,12 @@ function DepartmentSection({ clinicId, initialDepartments }: { clinicId: string;
           <HBarChartRevenue data={sorted} yWidth={120} />
         ) : deptMode === "patients" ? (
           <HBarChart data={sorted} yWidth={120}>
-            <Tooltip content={<DeptTooltip />} />
+            <Tooltip content={<DeptTooltip deptMode={deptMode} totalAppts={totalAppts} totalPatients={totalPatients} />} />
             <Bar dataKey="patients" name="Patients" fill={C.violet} radius={[0, 4, 4, 0]} maxBarSize={22} />
           </HBarChart>
         ) : (
           <HBarChart data={sorted} yWidth={120}>
-            <Tooltip content={<DeptTooltip />} />
+            <Tooltip content={<DeptTooltip deptMode={deptMode} totalAppts={totalAppts} totalPatients={totalPatients} />} />
             <Bar dataKey="appointments" name="Appointments" fill={C.cyan} radius={[0, 4, 4, 0]} maxBarSize={22} />
           </HBarChart>
         )}
@@ -698,22 +732,6 @@ function FollowUpOutcomeSection({
     { name: "Has Problem", value: outcomes.hasProblem, pct: hasProblemPct, fill: C.rose },
   ].filter((d) => d.value > 0);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  function OutcomeTooltip({ active, payload }: any) {
-    if (!active || !payload?.length) return null;
-    const p = payload[0];
-    const pct = countedTotal > 0 ? Math.round((p.value / countedTotal) * 100) : 0;
-    return (
-      <div className="rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-lg">
-        <p className="mb-1 font-medium text-foreground">{p.name}</p>
-        <p className="text-xs" style={{ color: p.payload.fill }}>
-          {p.value} follow-ups{" "}
-          <span className="font-semibold text-foreground">({pct}%)</span>
-        </p>
-      </div>
-    );
-  }
-
   return (
     <div className="rounded-xl border border-border/60 bg-card p-5 shadow-sm">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
@@ -762,7 +780,7 @@ function FollowUpOutcomeSection({
                 <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={92} paddingAngle={3} dataKey="value">
                   {pieData.map((d, i) => <Cell key={i} fill={d.fill} stroke="transparent" />)}
                 </Pie>
-                <Tooltip content={<OutcomeTooltip />} />
+                <Tooltip content={<OutcomeTooltip countedTotal={countedTotal} />} />
                 <Legend iconType="circle" iconSize={8} wrapperStyle={LEGEND_STYLE} />
               </PieChart>
             </ResponsiveContainer>

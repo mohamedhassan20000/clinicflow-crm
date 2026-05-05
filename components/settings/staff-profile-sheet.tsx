@@ -71,7 +71,6 @@ interface Props {
 
 export function StaffProfileSheet({ staff, open, onOpenChange }: Props) {
   const [files, setFiles] = useState<StaffFiles | null>(null);
-  const [loadingFiles, setLoadingFiles] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   const photoRef = useRef<HTMLInputElement>(null);
@@ -80,23 +79,26 @@ export function StaffProfileSheet({ staff, open, onOpenChange }: Props) {
   const otherRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (!open || !staff) {
-      setFiles(null);
-      return;
-    }
+    if (!open || !staff) return;
     let active = true;
-    setLoadingFiles(true);
     listStaffFiles(staff.id)
       .then((res) => {
         if (!active) return;
-        if (res.error) toast.error(res.error);
+        if (res.error) {
+          toast.error(res.error);
+          setFiles({ photo: null, contract: null, certificates: [], other: [] });
+        }
         else setFiles(res.data ?? null);
-      })
-      .finally(() => {
-        if (active) setLoadingFiles(false);
       });
     return () => { active = false; };
   }, [open, staff]);
+
+  function handleOpenChange(nextOpen: boolean) {
+    if (!nextOpen) {
+      setFiles(null);
+    }
+    onOpenChange(nextOpen);
+  }
 
   function triggerUpload(
     ref: React.RefObject<HTMLInputElement | null>,
@@ -128,9 +130,10 @@ export function StaffProfileSheet({ staff, open, onOpenChange }: Props) {
   }
 
   if (!staff) return null;
+  const loadingFiles = open && files === null;
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet open={open} onOpenChange={handleOpenChange}>
       <SheetContent
         side="right"
         className="flex w-full flex-col gap-0 p-0 sm:max-w-2xl"

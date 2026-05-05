@@ -11,10 +11,10 @@ export default async function SettingsLayout({
   children: React.ReactNode;
 }) {
   const user = await requireRole(["admin", "manager"]);
-  const canCustomize = user.role === "admin" && await isPrimaryClinicAdmin(
-    user.id,
-    user.clinicId,
-  );
+  const canCustomize =
+    user.role === "manager" ||
+    (user.role === "admin" &&
+      await isPrimaryClinicAdmin(user.id, user.clinicId));
 
   return (
     <div className="space-y-6">
@@ -25,7 +25,7 @@ export default async function SettingsLayout({
         </p>
       </div>
 
-      <SettingsNav role={user.role} canCustomize={canCustomize} />
+      <SettingsNav canCustomize={canCustomize} />
 
       {children}
     </div>

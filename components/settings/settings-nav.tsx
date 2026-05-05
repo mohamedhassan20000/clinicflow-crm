@@ -14,15 +14,13 @@ const NAV = [
 ] as const;
 
 export function SettingsNav({
-  role,
   canCustomize,
 }: {
-  role: string;
   canCustomize: boolean;
 }) {
   const pathname = usePathname();
   const nav = NAV.filter(
-    (item) => !("adminOnly" in item) || (role === "admin" && canCustomize),
+    (item) => !("adminOnly" in item) || canCustomize,
   );
 
   return (

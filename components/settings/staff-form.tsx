@@ -46,6 +46,7 @@ interface CreatedSnapshot {
 interface CreateStaffFormProps {
   action: (prev: ActionResult | null, fd: FormData) => Promise<ActionResult>;
   departments: Department[];
+  canCreateAdmin?: boolean;
   onSuccess?: () => void;
   onCreated?: (staffId: string, snapshot: CreatedSnapshot) => void;
 }
@@ -53,6 +54,7 @@ interface CreateStaffFormProps {
 export function CreateStaffForm({
   action,
   departments,
+  canCreateAdmin = true,
   onSuccess,
   onCreated,
 }: CreateStaffFormProps) {
@@ -186,7 +188,7 @@ export function CreateStaffForm({
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="admin">Admin</SelectItem>
+                    {canCreateAdmin && <SelectItem value="admin">Admin</SelectItem>}
                     <SelectItem value="doctor">Doctor</SelectItem>
                     <SelectItem value="receptionist">Receptionist</SelectItem>
                     <SelectItem value="manager">Manager</SelectItem>

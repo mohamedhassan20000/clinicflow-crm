@@ -41,7 +41,7 @@ export async function createStaff(
   _prev: ActionResult | null,
   fd: FormData,
 ): Promise<ActionResult> {
-  const user = await requireRole("admin");
+  const user = await requireRole(["admin", "manager"]);
 
   const parsed = createStaffSchema.safeParse({
     full_name: fd.get("full_name"),
@@ -58,6 +58,10 @@ export async function createStaff(
 
   const { full_name, email, temporary_password, role, department_id, phone } =
     parsed.data;
+
+  if (user.role !== "admin" && role === "admin") {
+    return { error: "Only admins can create admin users." };
+  }
 
   const adminClient = createAdminClient();
 
@@ -129,6 +133,9 @@ export async function updateStaff(
 
   const target = await getStaffTargetForClinic(staffId, user.clinicId);
   if (!target) return { error: "Staff member not found." };
+  if (user.role !== "admin" && target.role === "admin") {
+    return { error: "Only admins can edit admin users." };
+  }
   if (user.role !== "admin" && parsed.data.role !== target.role) {
     return { error: "Only admins can change staff roles." };
   }
@@ -165,6 +172,12 @@ export async function toggleStaffActive(
     return { error: "You cannot deactivate your own account." };
   }
 
+  const target = await getStaffTargetForClinic(staffId, user.clinicId);
+  if (!target) return { error: "Staff member not found." };
+  if (user.role !== "admin" && target.role === "admin") {
+    return { error: "Only admins can activate or deactivate admin users." };
+  }
+
   const supabase = await createClient();
   const { error } = await supabase
     .from("profiles")
@@ -185,6 +198,12 @@ export async function softDeleteStaff(staffId: string): Promise<ActionResult> {
     return { error: "You cannot delete your own account." };
   }
 
+  const target = await getStaffTargetForClinic(staffId, user.clinicId);
+  if (!target) return { error: "Staff member not found." };
+  if (user.role !== "admin" && target.role === "admin") {
+    return { error: "Only admins can delete admin users." };
+  }
+
   const supabase = await createClient();
   const { error } = await supabase
     .from("profiles")
@@ -200,6 +219,12 @@ export async function softDeleteStaff(staffId: string): Promise<ActionResult> {
 
 export async function restoreStaff(staffId: string): Promise<ActionResult> {
   const user = await requireRole(["admin", "manager"]);
+
+  const target = await getStaffTargetForClinic(staffId, user.clinicId);
+  if (!target) return { error: "Staff member not found." };
+  if (user.role !== "admin" && target.role === "admin") {
+    return { error: "Only admins can restore admin users." };
+  }
 
   const supabase = await createClient();
   const { error } = await supabase
@@ -226,12 +251,15 @@ export async function deleteStaff(staffId: string): Promise<ActionResult> {
   // Verify same clinic (RLS also enforces)
   const { data: target } = await supabase
     .from("profiles")
-    .select("id, clinic_id")
+    .select("id, clinic_id, role")
     .eq("id", staffId)
     .single();
 
   if (!target || target.clinic_id !== user.clinicId) {
     return { error: "Staff member not found." };
+  }
+  if (user.role !== "admin" && target.role === "admin") {
+    return { error: "Only admins can delete admin users." };
   }
 
   // Delete auth user → cascades to profile via FK on auth.users

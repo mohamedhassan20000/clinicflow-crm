@@ -184,6 +184,7 @@ export function AddStaffDialog({
               <CreateStaffForm
                 action={createStaff}
                 departments={departments}
+                canCreateAdmin={currentRole === "admin"}
                 onCreated={handleCreated}
               />
             </div>
@@ -210,7 +211,7 @@ export function AddStaffDialog({
 
             <div className="flex-1 overflow-y-auto px-8 py-6">
               <div className="mb-6 grid gap-2 sm:grid-cols-2">
-                {currentRole === "admin" && canCustomize && (
+                {canCustomize && (
                   <Button
                     type="button"
                     variant="default"
@@ -226,7 +227,7 @@ export function AddStaffDialog({
                   onClick={useRoleDefaults}
                   disabled={!created || isPending}
                   className={
-                    currentRole === "admin" && canCustomize ? "" : "sm:col-span-2"
+                    canCustomize ? "" : "sm:col-span-2"
                   }
                 >
                   {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

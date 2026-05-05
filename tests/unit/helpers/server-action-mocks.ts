@@ -3,6 +3,7 @@ import { vi } from "vitest";
 type QueryResult = {
   data?: unknown;
   error?: { message?: string; code?: string } | null;
+  count?: number | null;
 };
 
 type TableResults = Record<string, QueryResult | QueryResult[]>;
@@ -14,18 +15,28 @@ export type MockAuthedUser = {
   departmentId?: string | null;
 };
 
+function defaultAuthedUser(): MockAuthedUser {
+  return {
+    id: "user-1",
+    clinicId: "clinic-1",
+    role: "receptionist",
+    departmentId: null,
+  };
+}
+
 export function createServerActionMocks() {
   const state = {
-    authedUser: {
-      id: "user-1",
-      clinicId: "clinic-1",
-      role: "receptionist",
-      departmentId: null,
-    } satisfies MockAuthedUser,
+    authedUser: defaultAuthedUser(),
     rpcResults: {} as Record<string, QueryResult>,
     tableResults: {} as TableResults,
     rpc: vi.fn(),
     from: vi.fn(),
+    authGetUser: vi.fn(),
+    authUpdateUser: vi.fn(),
+    authSignOut: vi.fn(),
+    adminCreateUser: vi.fn(),
+    adminUpdateUserById: vi.fn(),
+    adminDeleteUser: vi.fn(),
     revalidatePath: vi.fn(),
     redirect: vi.fn(),
     requireRole: vi.fn(),
@@ -119,16 +130,17 @@ export function createServerActionMocks() {
   }
 
   function reset() {
-    state.authedUser = {
-      id: "user-1",
-      clinicId: "clinic-1",
-      role: "receptionist",
-      departmentId: null,
-    };
+    state.authedUser = defaultAuthedUser();
     state.rpcResults = {};
     state.tableResults = {};
     state.rpc.mockReset();
     state.from.mockReset();
+    state.authGetUser.mockReset();
+    state.authUpdateUser.mockReset();
+    state.authSignOut.mockReset();
+    state.adminCreateUser.mockReset();
+    state.adminUpdateUserById.mockReset();
+    state.adminDeleteUser.mockReset();
     state.revalidatePath.mockReset();
     state.redirect.mockReset();
     state.requireRole.mockReset();
@@ -137,12 +149,39 @@ export function createServerActionMocks() {
     state.rpc.mockImplementation((name: string) =>
       Promise.resolve(state.rpcResults[name] ?? { data: null, error: null }),
     );
+    state.authGetUser.mockResolvedValue({
+      data: {
+        user: {
+          id: state.authedUser.id,
+          email: "user@example.com",
+        },
+      },
+      error: null,
+    });
+    state.authUpdateUser.mockResolvedValue({ data: {}, error: null });
+    state.authSignOut.mockResolvedValue({ error: null });
+    state.adminCreateUser.mockResolvedValue({
+      data: { user: { id: "created-user-1" } },
+      error: null,
+    });
+    state.adminUpdateUserById.mockResolvedValue({ data: {}, error: null });
+    state.adminDeleteUser.mockResolvedValue({ data: {}, error: null });
   }
 
   function client() {
     return {
       from: state.from,
       rpc: state.rpc,
+      auth: {
+        getUser: state.authGetUser,
+        updateUser: state.authUpdateUser,
+        signOut: state.authSignOut,
+        admin: {
+          createUser: state.adminCreateUser,
+          updateUserById: state.adminUpdateUserById,
+          deleteUser: state.adminDeleteUser,
+        },
+      },
     };
   }
 

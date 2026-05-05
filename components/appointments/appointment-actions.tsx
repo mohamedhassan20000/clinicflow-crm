@@ -82,7 +82,6 @@ export function AppointmentActions({
     setLoadingCtx(false);
     setIsCompleting(false);
     if (pendingActionRef.current === "complete") setActionPending(null);
-    setCtx(null);
   }
 
   function reopenInvoiceDraft(payload: BillingPayload) {
@@ -127,19 +126,6 @@ export function AppointmentActions({
     // Intentionally do NOT depend on loadingCtx — its state change inside this
     // effect would cancel the in-flight fetch and leave the dialog stuck.
   }, [billingOpen, appointmentId, ctx]);
-
-  // Prefetch billing context when the appointment is confirmed so the
-  // Complete dialog opens instantly instead of showing a loading spinner.
-  useEffect(() => {
-    if (effectiveStatus !== "confirmed") return;
-    if (ctx) return;
-    let active = true;
-    getBillingContext(appointmentId).then((res) => {
-      if (!active || res.error || !res.data) return;
-      setCtx(res.data);
-    });
-    return () => { active = false; };
-  }, [effectiveStatus, appointmentId, ctx]);
 
   if (isTerminal) return null;
 

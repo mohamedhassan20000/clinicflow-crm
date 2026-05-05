@@ -36,14 +36,19 @@ export default async function PatientDetailPage({ params }: PageProps) {
 
   if (!patient) notFound();
 
+  const isDoctor = user.role === "doctor";
+  const isAdmin = user.role === "admin";
+  const doctorCanAccessPatient =
+    patient.assigned_doctor_id === user.id ||
+    (!!user.departmentId && patient.department_id === user.departmentId);
+
+  if (isDoctor && !doctorCanAccessPatient) notFound();
+
   const { data: notes } = await supabase
     .from("medical_notes")
     .select("*, profiles!doctor_id(full_name)")
     .eq("patient_id", id)
     .order("created_at", { ascending: false });
-
-  const isDoctor = user.role === "doctor";
-  const isAdmin = user.role === "admin";
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: appointments } = (await supabase

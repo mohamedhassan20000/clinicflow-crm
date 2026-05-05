@@ -4,15 +4,14 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { requireRole, requireUser } from "@/lib/rbac";
+import { requireRole, type AuthedUser } from "@/lib/rbac";
 import { patientSchema, medicalNoteSchema } from "@/lib/validations/patient";
 import { depositSchema } from "@/lib/validations/appointment";
-import type { TablesInsert } from "@/types/database";
 
 export type ActionResult = {
   error?: string;
   fieldErrors?: Record<string, string[]>;
-  note?: TablesInsert<"medical_notes">;
+  success?: boolean;
 };
 
 async function getMedicalNoteForClinic(noteId: string, clinicId: string) {
@@ -43,11 +42,43 @@ async function getMedicalNoteForClinic(noteId: string, clinicId: string) {
   return note;
 }
 
+async function canAccessPatientForMedicalNotes(
+  patientId: string,
+  user: AuthedUser,
+): Promise<boolean> {
+  const adminClient = createAdminClient();
+  const { data: patient, error } = await adminClient
+    .from("patients")
+    .select("id, department_id, assigned_doctor_id")
+    .eq("id", patientId)
+    .eq("clinic_id", user.clinicId)
+    .eq("is_deleted", false)
+    .single();
+
+  if (error || !patient) return false;
+  if (user.role === "admin") return true;
+  if (user.role !== "doctor") return false;
+
+  return (
+    patient.assigned_doctor_id === user.id ||
+    (!!user.departmentId && patient.department_id === user.departmentId)
+  );
+}
+
+function canMutateMedicalNote(
+  note: Awaited<ReturnType<typeof getMedicalNoteForClinic>>,
+  user: AuthedUser,
+): boolean {
+  if (!note) return false;
+  if (user.role === "admin") return true;
+  return note.doctor_id === user.id || note.created_by === user.id;
+}
+
 export async function createPatient(
   _prev: ActionResult | null,
   formData: FormData,
 ): Promise<ActionResult> {
-  const user = await requireUser();
+  const user = await requireRole(["admin", "receptionist"]);
 
   const raw = {
     full_name: formData.get("full_name"),
@@ -125,7 +156,7 @@ export async function updatePatient(
   _prev: ActionResult | null,
   formData: FormData,
 ): Promise<ActionResult> {
-  const user = await requireUser();
+  const user = await requireRole(["admin", "receptionist"]);
 
   const raw = {
     full_name: formData.get("full_name"),
@@ -213,6 +244,10 @@ export async function addMedicalNote(
     return { fieldErrors: parsed.error.flatten().fieldErrors };
   }
 
+  if (!(await canAccessPatientForMedicalNotes(parsed.data.patient_id, user))) {
+    return { error: "Patient not found or you do not have permission." };
+  }
+
   const supabase = await createClient();
   const { error } = await supabase.from("medical_notes").insert({
     patient_id: parsed.data.patient_id,
@@ -247,6 +282,9 @@ export async function updateMedicalNote(
     };
   }
   if (!existing) return { error: "Medical note not found." };
+  if (!canMutateMedicalNote(existing, user)) {
+    return { error: "You can only edit your own medical notes." };
+  }
 
   const adminClient = createAdminClient();
   const { error } = await adminClient
@@ -271,6 +309,9 @@ export async function deleteMedicalNote(noteId: string): Promise<ActionResult> {
     };
   }
   if (!existing) return { error: "Medical note not found." };
+  if (!canMutateMedicalNote(existing, user)) {
+    return { error: "You can only delete your own medical notes." };
+  }
 
   const adminClient = createAdminClient();
   const { error } = await adminClient
@@ -281,18 +322,7 @@ export async function deleteMedicalNote(noteId: string): Promise<ActionResult> {
   if (error) return { error: error.message || "Failed to delete note." };
 
   revalidatePath(`/patients/${existing.patient_id}`);
-  return { note: existing };
-}
-
-export async function restoreMedicalNote(
-  note: TablesInsert<"medical_notes">,
-): Promise<ActionResult> {
-  await requireRole(["admin", "doctor"]);
-  const supabase = await createClient();
-  const { error } = await supabase.from("medical_notes").insert(note);
-  if (error) return { error: error.message || "Failed to restore note." };
-  revalidatePath(`/patients/${note.patient_id}`);
-  return {};
+  return { success: true };
 }
 
 const PAYMENT_METHODS = [

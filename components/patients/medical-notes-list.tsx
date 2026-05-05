@@ -7,11 +7,7 @@ import { toast } from "sonner";
 import type { Tables } from "@/types/database";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  deleteMedicalNote,
-  restoreMedicalNote,
-  updateMedicalNote,
-} from "@/actions/patients";
+import { deleteMedicalNote, updateMedicalNote } from "@/actions/patients";
 
 type MedicalNote = Tables<"medical_notes"> & {
   profiles: { full_name: string } | null;
@@ -80,29 +76,13 @@ export function MedicalNotesList({ notes }: MedicalNotesListProps) {
                 onClick={() =>
                   startTransition(async () => {
                     const res = await deleteMedicalNote(note.id);
-                    if (res.error || !res.note) {
+                    if (res.error) {
                       toast.error(res.error ?? "Failed to delete note.");
                       return;
                     }
                     setHiddenIds((prev) => new Set(prev).add(note.id));
-                    toast.success("Medical note deleted.", {
-                      duration: 10000,
-                      action: {
-                        label: "Undo",
-                        onClick: async () => {
-                          const restored = await restoreMedicalNote(res.note!);
-                          if (restored.error) toast.error(restored.error);
-                          else {
-                            setHiddenIds((prev) => {
-                              const next = new Set(prev);
-                              next.delete(note.id);
-                              return next;
-                            });
-                            router.refresh();
-                          }
-                        },
-                      },
-                    });
+                    toast.success("Medical note deleted.");
+                    router.refresh();
                   })
                 }
               >

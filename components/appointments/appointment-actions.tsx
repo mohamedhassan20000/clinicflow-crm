@@ -22,6 +22,12 @@ import { NoShowDialog } from "@/components/appointments/noshow-dialog";
 
 type Status = Database["public"]["Enums"]["appointment_status"];
 type RestorableStatus = Extract<Status, "pending" | "confirmed">;
+type PendingAction =
+  | "confirm"
+  | "complete"
+  | "cancel"
+  | "no_show"
+  | "undo";
 
 const TERMINAL: Status[] = ["completed", "cancelled", "no_show"];
 
@@ -44,27 +50,38 @@ export function AppointmentActions({
   const [ctx, setCtx] = useState<BillingContext | null>(null);
   const [loadingCtx, setLoadingCtx] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+  const pendingActionRef = useRef<PendingAction | null>(null);
   const [invoiceDraft, setInvoiceDraft] = useState<BillingPayload | null>(null);
   const [invoiceDraftKey, setInvoiceDraftKey] = useState(0);
   const undoStatusRef = useRef<Status | null>(null);
 
   const effectiveStatus = optimisticStatus ?? currentStatus;
   const isTerminal = TERMINAL.includes(effectiveStatus);
+  const hasPendingAction = pendingAction !== null;
+
+  function setActionPending(action: PendingAction | null) {
+    pendingActionRef.current = action;
+    setPendingAction(action);
+  }
 
   function resetCancelState() {
     setCancelOpen(false);
     setIsCancelling(false);
+    if (pendingActionRef.current === "cancel") setActionPending(null);
   }
 
   function resetNoShowState() {
     setNoShowOpen(false);
     setIsNoShow(false);
+    if (pendingActionRef.current === "no_show") setActionPending(null);
   }
 
   function resetBillingState() {
     setBillingOpen(false);
     setLoadingCtx(false);
     setIsCompleting(false);
+    if (pendingActionRef.current === "complete") setActionPending(null);
     setCtx(null);
   }
 
@@ -127,6 +144,7 @@ export function AppointmentActions({
   if (isTerminal) return null;
 
   function doUndo(fallbackStatus: Status) {
+    if (pendingActionRef.current) return;
     const prevStatus = undoStatusRef.current;
     if (!prevStatus) {
       toast.error("No previous appointment status was captured.");
@@ -136,18 +154,23 @@ export function AppointmentActions({
       toast.error("This appointment cannot be restored to its previous status.");
       return;
     }
+    setActionPending("undo");
     setOptimisticStatus(prevStatus);
     undoAppointmentStatus(appointmentId, prevStatus as RestorableStatus).then((res) => {
       if (res.error) {
         toast.error(res.error);
         setOptimisticStatus(fallbackStatus);
       }
+    }).finally(() => {
+      setActionPending(null);
     });
   }
 
   function runStatus(newStatus: Status) {
+    if (pendingActionRef.current) return;
     const prevStatus = effectiveStatus;
     undoStatusRef.current = prevStatus;
+    setActionPending(newStatus === "confirmed" ? "confirm" : null);
     setOptimisticStatus(newStatus);
     startTransition(async () => {
       const result = await updateAppointmentStatus(appointmentId, newStatus);
@@ -163,12 +186,15 @@ export function AppointmentActions({
           },
         });
       }
+      setActionPending(null);
     });
   }
 
   function runCancel(reason: string) {
+    if (pendingActionRef.current) return;
     const prevStatus = effectiveStatus;
     undoStatusRef.current = prevStatus;
+    setActionPending("cancel");
     setIsCancelling(true);
     startTransition(async () => {
       const result = await updateAppointmentStatus(
@@ -179,6 +205,7 @@ export function AppointmentActions({
       );
       if (result.error) {
         setIsCancelling(false);
+        setActionPending(null);
         toast.error(result.error);
       } else {
         resetCancelState();
@@ -195,8 +222,10 @@ export function AppointmentActions({
   }
 
   function runNoShow(reason: string) {
+    if (pendingActionRef.current) return;
     const prevStatus = effectiveStatus;
     undoStatusRef.current = prevStatus;
+    setActionPending("no_show");
     setIsNoShow(true);
     setOptimisticStatus("no_show");
     startTransition(async () => {
@@ -209,6 +238,7 @@ export function AppointmentActions({
       );
       if (result.error) {
         setIsNoShow(false);
+        setActionPending(null);
         toast.error(result.error);
         setOptimisticStatus(null);
       } else {
@@ -225,12 +255,14 @@ export function AppointmentActions({
   }
 
   function runComplete(payload: BillingPayload) {
+    if (pendingActionRef.current) return;
     const prevStatus = effectiveStatus;
     undoStatusRef.current =
       prevStatus === "pending" || prevStatus === "confirmed"
         ? prevStatus
         : "confirmed";
     setInvoiceDraft(payload);
+    setActionPending("complete");
     setIsCompleting(true);
     setOptimisticStatus("completed");
     startTransition(async () => {
@@ -241,6 +273,7 @@ export function AppointmentActions({
       );
       if (result.error) {
         setIsCompleting(false);
+        setActionPending(null);
         toast.error(result.error);
         setOptimisticStatus(null);
       } else {
@@ -249,18 +282,22 @@ export function AppointmentActions({
           action: {
             label: "Undo",
             onClick: async () => {
+              if (pendingActionRef.current) return;
               const target =
                 (undoStatusRef.current === "pending" ||
                 undoStatusRef.current === "confirmed"
                   ? undoStatusRef.current
                   : "confirmed") as InvoiceUndoStatus;
+              setActionPending("undo");
               reopenInvoiceDraft(payload);
               const undo = await undoInvoiceCompletion(appointmentId, target);
               if (undo.error) {
                 toast.error(undo.error);
                 setOptimisticStatus("completed");
+                setActionPending(null);
                 return;
               }
+              setActionPending(null);
             },
           },
         });
@@ -285,6 +322,7 @@ export function AppointmentActions({
             size="sm"
             variant="default"
             className="h-6 px-2 text-[10px] font-semibold"
+            disabled={hasPendingAction}
             onClick={() => runStatus("confirmed")}
           >
             Confirm
@@ -298,7 +336,9 @@ export function AppointmentActions({
               "h-6 px-2 text-[10px] font-semibold",
               "bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600 shadow-sm",
             )}
+            disabled={hasPendingAction || loadingCtx}
             onClick={() => {
+              if (hasPendingAction || loadingCtx) return;
               setInvoiceDraft(null);
               setInvoiceDraftKey((key) => key + 1);
               setBillingOpen(true);
@@ -312,6 +352,7 @@ export function AppointmentActions({
             size="sm"
             variant="outline"
             className="h-6 px-2 text-[10px] font-semibold"
+            disabled={hasPendingAction}
             onClick={() => setNoShowOpen(true)}
           >
             No-show
@@ -322,6 +363,7 @@ export function AppointmentActions({
             size="sm"
             variant="outline"
             className="h-6 px-2 text-[10px] font-semibold"
+            disabled={hasPendingAction}
             onClick={() => setCancelOpen(true)}
           >
             Cancel

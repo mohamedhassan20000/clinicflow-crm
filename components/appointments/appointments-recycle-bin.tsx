@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useRef, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, RotateCcw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -57,6 +57,7 @@ function RestoreButton({
 }) {
   const [isPending, start] = useTransition();
   const router = useRouter();
+  const pendingRef = useRef(false);
 
   return (
     <Button
@@ -66,12 +67,15 @@ function RestoreButton({
       disabled={isPending}
       onClick={() =>
         start(async () => {
+          if (pendingRef.current) return;
+          pendingRef.current = true;
           const res = await onRestore(item.id);
           if (res.error) toast.error(res.error);
           else {
             toast.success(`Appointment for ${item.patientName} restored.`);
             router.refresh();
           }
+          pendingRef.current = false;
         })
       }
     >
@@ -94,6 +98,7 @@ function PermanentDeleteButton({
 }) {
   const [isPending, start] = useTransition();
   const router = useRouter();
+  const pendingRef = useRef(false);
 
   return (
     <AlertDialog>
@@ -123,17 +128,21 @@ function PermanentDeleteButton({
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
           <AlertDialogAction
+            disabled={isPending}
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             onClick={() =>
               start(async () => {
+                if (pendingRef.current) return;
+                pendingRef.current = true;
                 const res = await onPermanentDelete(item.id);
                 if (res.error) toast.error(res.error);
                 else {
                   toast.success("Appointment permanently deleted.");
                   router.refresh();
                 }
+                pendingRef.current = false;
               })
             }
           >

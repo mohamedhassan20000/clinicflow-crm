@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import {
   MoreHorizontal,
@@ -58,6 +58,11 @@ type StaffMember = Tables<"profiles"> & {
 type Department = Pick<Tables<"departments">, "id" | "name">;
 export type { StaffMember };
 
+type StaffPendingAction = {
+  id: string;
+  action: "delete" | "password" | "restore" | "toggle";
+} | null;
+
 const ROLE_LABELS: Record<string, string> = {
   admin: "Admin",
   doctor: "Doctor",
@@ -85,9 +90,18 @@ export function StaffTable({ staff, departments, currentUserId }: StaffTableProp
   const [passwordTarget, setPasswordTarget] = useState<StaffMember | null>(null);
   const [temporaryPassword, setTemporaryPassword] = useState("");
   const [confirmTemporaryPassword, setConfirmTemporaryPassword] = useState("");
-  const [isPending, startTransition] = useTransition();
+  const [pendingAction, setPendingActionState] = useState<StaffPendingAction>(null);
+  const pendingActionRef = useRef<StaffPendingAction>(null);
+  const [, startTransition] = useTransition();
+
+  function setPendingAction(action: StaffPendingAction) {
+    pendingActionRef.current = action;
+    setPendingActionState(action);
+  }
 
   function handleDelete(id: string, name: string) {
+    if (pendingActionRef.current) return;
+    setPendingAction({ id, action: "delete" });
     startTransition(async () => {
       const result = await softDeleteStaff(id);
       if (result.error) {
@@ -98,15 +112,20 @@ export function StaffTable({ staff, departments, currentUserId }: StaffTableProp
           action: {
             label: "Undo",
             onClick: () => {
-              restoreStaff(id).then((res) => {
-                if (res.error) toast.error(res.error);
-                else toast.success(`"${name}" restored.`);
-              });
+              if (pendingActionRef.current) return;
+              setPendingAction({ id, action: "restore" });
+              restoreStaff(id)
+                .then((res) => {
+                  if (res.error) toast.error(res.error);
+                  else toast.success(`"${name}" restored.`);
+                })
+                .finally(() => setPendingAction(null));
             },
           },
         });
       }
       setDeleteTarget(null);
+      setPendingAction(null);
     });
   }
 
@@ -134,12 +153,14 @@ export function StaffTable({ staff, departments, currentUserId }: StaffTableProp
 
   function handleResetPassword() {
     if (!passwordTarget) return;
+    if (pendingActionRef.current) return;
     const validationError = validateTemporaryPassword();
     if (validationError) {
       toast.error(validationError);
       return;
     }
 
+    setPendingAction({ id: passwordTarget.id, action: "password" });
     startTransition(async () => {
       const result = await resetStaffPassword(
         passwordTarget.id,
@@ -150,14 +171,18 @@ export function StaffTable({ staff, departments, currentUserId }: StaffTableProp
         toast.success("Temporary password set. Staff will be prompted to change it.");
         resetPasswordDialog();
       }
+      setPendingAction(null);
     });
   }
 
   function handleToggleActive(id: string, newState: boolean) {
+    if (pendingActionRef.current) return;
+    setPendingAction({ id, action: "toggle" });
     startTransition(async () => {
       const result = await toggleStaffActive(id, newState);
       if (result.error) toast.error(result.error);
       else toast.success(newState ? "Staff member reactivated." : "Staff member deactivated.");
+      setPendingAction(null);
     });
   }
 
@@ -196,7 +221,9 @@ export function StaffTable({ staff, departments, currentUserId }: StaffTableProp
                 </td>
               </tr>
             )}
-            {staff.map((s) => (
+            {staff.map((s) => {
+              const rowPending = pendingAction?.id === s.id;
+              return (
               <tr
                 key={s.id}
                 className="hover:bg-muted/20 transition-colors cursor-pointer"
@@ -228,7 +255,7 @@ export function StaffTable({ staff, departments, currentUserId }: StaffTableProp
                   className="px-4 py-3 text-right"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  {isPending ? (
+                  {rowPending ? (
                     <Loader2 className="ml-auto h-4 w-4 animate-spin text-muted-foreground" />
                   ) : (
                     <DropdownMenu>
@@ -285,7 +312,8 @@ export function StaffTable({ staff, departments, currentUserId }: StaffTableProp
                   )}
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -343,7 +371,7 @@ export function StaffTable({ staff, departments, currentUserId }: StaffTableProp
                 type="password"
                 autoComplete="new-password"
                 value={temporaryPassword}
-                disabled={isPending}
+                disabled={pendingAction?.action === "password"}
                 onChange={(e) => setTemporaryPassword(e.target.value)}
                 placeholder="Clinic@123"
               />
@@ -357,7 +385,7 @@ export function StaffTable({ staff, departments, currentUserId }: StaffTableProp
                 type="password"
                 autoComplete="new-password"
                 value={confirmTemporaryPassword}
-                disabled={isPending}
+                disabled={pendingAction?.action === "password"}
                 onChange={(e) => setConfirmTemporaryPassword(e.target.value)}
                 placeholder="Clinic@123"
               />
@@ -367,18 +395,20 @@ export function StaffTable({ staff, departments, currentUserId }: StaffTableProp
             <Button
               type="button"
               variant="outline"
-              disabled={isPending}
+              disabled={pendingAction?.action === "password"}
               onClick={resetPasswordDialog}
             >
               Cancel
             </Button>
             <Button
               type="button"
-              disabled={isPending}
+              disabled={pendingAction?.action === "password"}
               onClick={handleResetPassword}
               className="gap-2"
             >
-              {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+              {pendingAction?.action === "password" && (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              )}
               Save password
             </Button>
           </DialogFooter>
@@ -399,16 +429,18 @@ export function StaffTable({ staff, departments, currentUserId }: StaffTableProp
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={pendingAction?.action === "delete"}>
+              Cancel
+            </AlertDialogCancel>
             <AlertDialogAction
-              disabled={isPending}
+              disabled={pendingAction?.action === "delete"}
               onClick={(e) => {
                 e.preventDefault();
                 if (deleteTarget) handleDelete(deleteTarget.id, deleteTarget.full_name);
               }}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {isPending ? "Moving…" : "Move to bin"}
+              {pendingAction?.action === "delete" ? "Moving…" : "Move to bin"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

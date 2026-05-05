@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -40,6 +40,7 @@ export function ServiceRowActions({ service, departments }: Props) {
   const [editOpen, setEditOpen] = useState(false);
   const [isDeleting, startDelete] = useTransition();
   const router = useRouter();
+  const deletePendingRef = useRef(false);
 
   const updateBound = updateService.bind(null, service.id);
 
@@ -102,10 +103,13 @@ export function ServiceRowActions({ service, departments }: Props) {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
             <AlertDialogAction
+              disabled={isDeleting}
               onClick={() =>
                 startDelete(async () => {
+                  if (deletePendingRef.current) return;
+                  deletePendingRef.current = true;
                   const res = await softDeleteService(service.id);
                   if (res.error) {
                     toast.error(res.error);
@@ -115,18 +119,25 @@ export function ServiceRowActions({ service, departments }: Props) {
                       action: {
                         label: "Undo",
                         onClick: () => {
-                          restoreService(service.id).then((r) => {
-                            if (r.error) toast.error(r.error);
-                            else {
-                              toast.success(`"${service.name}" restored.`);
-                              router.refresh();
-                            }
-                          });
+                          if (deletePendingRef.current) return;
+                          deletePendingRef.current = true;
+                          restoreService(service.id)
+                            .then((r) => {
+                              if (r.error) toast.error(r.error);
+                              else {
+                                toast.success(`"${service.name}" restored.`);
+                                router.refresh();
+                              }
+                            })
+                            .finally(() => {
+                              deletePendingRef.current = false;
+                            });
                         },
                       },
                     });
                     router.refresh();
                   }
+                  deletePendingRef.current = false;
                 })
               }
             >

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, CalendarPlus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -156,7 +156,9 @@ function AppointmentCard({
   canEdit: boolean;
 }) {
   const [deleted, setDeleted] = useState(false);
-  const [, startDelete] = useTransition();
+  const [isDeleting, startDelete] = useTransition();
+  const [isRestoring, setIsRestoring] = useState(false);
+  const isRestoringRef = useRef(false);
 
   const time = new Date(appt.scheduled_at).toLocaleTimeString("en-GB", {
     hour: "2-digit",
@@ -171,6 +173,7 @@ function AppointmentCard({
   if (deleted) return null;
 
   function handleDelete() {
+    if (isDeleting || isRestoring) return;
     startDelete(async () => {
       const res = await softDeleteAppointment(appt.id);
       if (res.error) {
@@ -182,10 +185,18 @@ function AppointmentCard({
           action: {
             label: "Undo",
             onClick: () => {
-              restoreAppointment(appt.id).then((r) => {
-                if (r.error) toast.error(r.error);
-                else setDeleted(false);
-              });
+              if (isRestoringRef.current) return;
+              isRestoringRef.current = true;
+              setIsRestoring(true);
+              restoreAppointment(appt.id)
+                .then((r) => {
+                  if (r.error) toast.error(r.error);
+                  else setDeleted(false);
+                })
+                .finally(() => {
+                  isRestoringRef.current = false;
+                  setIsRestoring(false);
+                });
             },
           },
         });
@@ -213,6 +224,7 @@ function AppointmentCard({
         {canEdit && (
           <button
             onClick={handleDelete}
+            disabled={isDeleting || isRestoring}
             className="shrink-0 opacity-0 group-hover:opacity-100 text-muted-foreground/40 hover:text-destructive transition-opacity"
             title="Delete appointment"
           >

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Pencil, ToggleLeft, ToggleRight, Loader2, Trash2 } from "lucide-react";
@@ -40,8 +40,11 @@ export function DepartmentActions({ dept, updateAction, toggleAction, deleteActi
   const [editOpen, setEditOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
+  const pendingRef = useRef(false);
 
   function handleToggle() {
+    if (pendingRef.current) return;
+    pendingRef.current = true;
     startTransition(async () => {
       const result = await toggleAction(!dept.is_active);
       if (result.error) toast.error(result.error);
@@ -49,10 +52,13 @@ export function DepartmentActions({ dept, updateAction, toggleAction, deleteActi
         toast.success(dept.is_active ? "Department deactivated." : "Department reactivated.");
         router.refresh();
       }
+      pendingRef.current = false;
     });
   }
 
   function handleDelete() {
+    if (pendingRef.current) return;
+    pendingRef.current = true;
     startTransition(async () => {
       const result = await deleteAction();
       if (result.error) {
@@ -63,18 +69,25 @@ export function DepartmentActions({ dept, updateAction, toggleAction, deleteActi
           action: {
             label: "Undo",
             onClick: () => {
-              restoreDepartment(dept.id).then((res) => {
-                if (res.error) toast.error(res.error);
-                else {
-                  toast.success(`"${dept.name}" restored.`);
-                  router.refresh();
-                }
-              });
+              if (pendingRef.current) return;
+              pendingRef.current = true;
+              restoreDepartment(dept.id)
+                .then((res) => {
+                  if (res.error) toast.error(res.error);
+                  else {
+                    toast.success(`"${dept.name}" restored.`);
+                    router.refresh();
+                  }
+                })
+                .finally(() => {
+                  pendingRef.current = false;
+                });
             },
           },
         });
         router.refresh();
       }
+      pendingRef.current = false;
     });
   }
 
@@ -123,8 +136,8 @@ export function DepartmentActions({ dept, updateAction, toggleAction, deleteActi
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={handleDelete}>
+                <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
+                <AlertDialogAction disabled={isPending} onClick={handleDelete}>
                   Move to bin
                 </AlertDialogAction>
               </AlertDialogFooter>

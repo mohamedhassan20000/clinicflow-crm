@@ -404,7 +404,7 @@ export async function settleOutstanding(
   _prev: ActionResult | null,
   formData: FormData,
 ): Promise<ActionResult> {
-  const user = await requireRole(["admin", "receptionist"]);
+  await requireRole(["admin", "receptionist"]);
 
   const patientId = String(formData.get("patient_id") ?? "");
   const appointmentId = String(formData.get("appointment_id") ?? "") || null;
@@ -437,81 +437,22 @@ export async function settleOutstanding(
 
   const supabase = await createClient();
 
-  // If no specific appointment was requested, link this settlement to the
-  // oldest still-outstanding appointment so the revenue settlements table can
-  // surface the department + doctor it was paid against.
-  let linkedAppointmentId = appointmentId;
-  if (!linkedAppointmentId) {
-    const { data: oldestDebt } = await supabase
-      .from("appointments")
-      .select("id")
-      .eq("patient_id", patientId)
-      .eq("clinic_id", user.clinicId)
-      .gt("outstanding_amount", 0)
-      .order("scheduled_at", { ascending: true })
-      .limit(1)
-      .maybeSingle();
-    linkedAppointmentId = oldestDebt?.id ?? null;
-  }
+  const { error } = await supabase.rpc("settle_patient_outstanding", {
+    p_patient_id: patientId,
+    p_appointment_id: appointmentId ?? undefined,
+    p_amount: Number(amountRaw.toFixed(2)),
+    p_payment_method: method,
+    p_secondary_amount: hasSecondary
+      ? Number(secondaryAmountRaw.toFixed(2))
+      : 0,
+    p_secondary_payment_method: hasSecondary
+      ? (secondaryMethodRaw as PaymentMethod)
+      : undefined,
+    p_note: note ?? undefined,
+  });
 
-  // Insert one settlement row per method so the revenue settlements table
-  // reflects each tender separately.
-  const settlementRows = [
-    {
-      patient_id: patientId,
-      appointment_id: linkedAppointmentId,
-      clinic_id: user.clinicId,
-      amount: Number(amountRaw.toFixed(2)),
-      payment_method: method,
-      note,
-      created_by: user.id,
-    },
-    ...(hasSecondary
-      ? [
-          {
-            patient_id: patientId,
-            appointment_id: linkedAppointmentId,
-            clinic_id: user.clinicId,
-            amount: Number(secondaryAmountRaw.toFixed(2)),
-            payment_method: secondaryMethod as PaymentMethod,
-            note,
-            created_by: user.id,
-          },
-        ]
-      : []),
-  ];
-
-  const { error: insertError } = await supabase
-    .from("outstanding_settlements")
-    .insert(settlementRows);
-
-  if (insertError) {
-    return { error: insertError.message || "Failed to save settlement." };
-  }
-
-  // Deduct from appointments' outstanding_amount (oldest-first) until amount is exhausted.
-  let remaining = Number(
-    (amountRaw + (hasSecondary ? secondaryAmountRaw : 0)).toFixed(2),
-  );
-  const { data: debts } = await supabase
-    .from("appointments")
-    .select("id, outstanding_amount")
-    .eq("patient_id", patientId)
-    .eq("clinic_id", user.clinicId)
-    .gt("outstanding_amount", 0)
-    .order("scheduled_at", { ascending: true });
-
-  for (const d of debts ?? []) {
-    if (remaining <= 0) break;
-    const owed = Number(d.outstanding_amount ?? 0);
-    const applied = Math.min(owed, remaining);
-    const next = Number((owed - applied).toFixed(2));
-    await supabase
-      .from("appointments")
-      .update({ outstanding_amount: next })
-      .eq("id", d.id)
-      .eq("clinic_id", user.clinicId);
-    remaining = Number((remaining - applied).toFixed(2));
+  if (error) {
+    return { error: error.message || "Failed to save settlement." };
   }
 
   revalidatePath(`/patients/${patientId}`);

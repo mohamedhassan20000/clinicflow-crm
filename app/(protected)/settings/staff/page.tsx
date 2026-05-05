@@ -27,9 +27,11 @@ export default async function StaffSettingsPage() {
       .eq("clinic_id", user.clinicId)
       .eq("is_active", true)
       .order("name"),
-    user.role === "admin"
-      ? isPrimaryClinicAdmin(user.id, user.clinicId)
-      : Promise.resolve(false),
+    user.role === "manager"
+      ? Promise.resolve(true)
+      : user.role === "admin"
+        ? isPrimaryClinicAdmin(user.id, user.clinicId)
+        : Promise.resolve(false),
   ]);
 
   const cutoff = new Date(new Date().getTime() - THIRTY_DAYS_MS).toISOString();

@@ -221,20 +221,18 @@ export function AddStaffDialog({
                     Customize pages now
                   </Button>
                 )}
-                {currentRole === "admin" && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={useRoleDefaults}
-                    disabled={!created || isPending}
-                    className={
-                      canCustomize ? "" : "sm:col-span-2"
-                    }
-                  >
-                    {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Use role defaults
-                  </Button>
-                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={useRoleDefaults}
+                  disabled={!created || isPending}
+                  className={
+                    canCustomize ? "" : "sm:col-span-2"
+                  }
+                >
+                  {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Use role defaults
+                </Button>
               </div>
 
               {/* Hidden inputs */}

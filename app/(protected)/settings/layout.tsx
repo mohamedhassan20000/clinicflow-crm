@@ -12,8 +12,9 @@ export default async function SettingsLayout({
 }) {
   const user = await requireRole(["admin", "manager"]);
   const canCustomize =
-    user.role === "admin" &&
-    await isPrimaryClinicAdmin(user.id, user.clinicId);
+    user.role === "manager" ||
+    (user.role === "admin" &&
+      await isPrimaryClinicAdmin(user.id, user.clinicId));
 
   return (
     <div className="space-y-6">

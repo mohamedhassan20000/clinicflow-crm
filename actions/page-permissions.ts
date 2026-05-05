@@ -106,8 +106,11 @@ export async function listStaffPagePermissions(): Promise<{
   data?: StaffPagePermissionsRow[];
   error?: string;
 }> {
-  const user = await requireRole("admin");
-  if (!(await isPrimaryClinicAdmin(user.id, user.clinicId))) {
+  const user = await requireRole(["admin", "manager"]);
+  if (
+    user.role === "admin" &&
+    !(await isPrimaryClinicAdmin(user.id, user.clinicId))
+  ) {
     return { error: "Only the primary clinic admin can customize page visibility." };
   }
   const adminClient = createAdminClient();
@@ -122,7 +125,10 @@ export async function listStaffPagePermissions(): Promise<{
     .order("full_name");
 
   if (staffError) return { error: staffError.message };
-  const staff = staffRows ?? [];
+  const staff =
+    user.role === "manager"
+      ? (staffRows ?? []).filter((member) => member.role !== "admin")
+      : (staffRows ?? []);
 
   const ids = staff.map((member) => member.id);
   const { data: stored, error: permissionsError } = ids.length
@@ -205,8 +211,11 @@ export async function updateUserPageVisibility(
   pageSlug: PageSlug,
   isVisible: boolean,
 ): Promise<PagePermissionResult> {
-  const user = await requireRole("admin");
-  if (!(await isPrimaryClinicAdmin(user.id, user.clinicId))) {
+  const user = await requireRole(["admin", "manager"]);
+  if (
+    user.role === "admin" &&
+    !(await isPrimaryClinicAdmin(user.id, user.clinicId))
+  ) {
     return { error: "Only the primary clinic admin can customize page visibility." };
   }
   if (pageSlug === "dashboard") return { error: "Dashboard cannot be hidden." };
@@ -220,6 +229,9 @@ export async function updateUserPageVisibility(
     .single();
 
   if (targetError || !target) return { error: "Staff member not found." };
+  if (user.role === "manager" && target.role === "admin") {
+    return { error: "Only admins can customize admin users." };
+  }
   if (target.id === await getPrimaryClinicAdminId(user.clinicId)) {
     return { error: "The primary clinic admin cannot be customized." };
   }
@@ -255,8 +267,11 @@ export async function saveUserPageVisibilityChanges(
   targetUserId: string,
   changes: PendingPageVisibilityChange[],
 ): Promise<PagePermissionResult> {
-  const user = await requireRole("admin");
-  if (!(await isPrimaryClinicAdmin(user.id, user.clinicId))) {
+  const user = await requireRole(["admin", "manager"]);
+  if (
+    user.role === "admin" &&
+    !(await isPrimaryClinicAdmin(user.id, user.clinicId))
+  ) {
     return { error: "Only the primary clinic admin can customize page visibility." };
   }
   const primaryAdminId = await getPrimaryClinicAdminId(user.clinicId);
@@ -273,6 +288,9 @@ export async function saveUserPageVisibilityChanges(
     .single();
 
   if (targetError || !target) return { error: "Staff member not found." };
+  if (user.role === "manager" && target.role === "admin") {
+    return { error: "Only admins can customize admin users." };
+  }
 
   const roleSlugs = new Set(getRolePageSlugs(target.role));
   const rows = changes
@@ -309,7 +327,7 @@ export async function saveUserPageVisibilityChanges(
 export async function resetUserPageVisibilityToRoleDefaults(
   targetUserId: string,
 ): Promise<PagePermissionResult> {
-  const user = await requireRole("admin");
+  const user = await requireRole(["admin", "manager"]);
   const adminClient = createAdminClient();
   const { data: target, error: targetError } = await adminClient
     .from("profiles")
@@ -319,6 +337,9 @@ export async function resetUserPageVisibilityToRoleDefaults(
     .single();
 
   if (targetError || !target) return { error: "Staff member not found." };
+  if (user.role === "manager" && target.role === "admin") {
+    return { error: "Only admins can reset admin users." };
+  }
 
   const { error: deleteError } = await adminClient
     .from("user_page_permissions")

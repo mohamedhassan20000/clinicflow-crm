@@ -101,7 +101,7 @@ export async function createStaff(
     return { error: profileError.message };
   }
 
-  if (user.role === "admin") {
+  if (user.role === "admin" || user.role === "manager") {
     await ensureDefaultPagePermissions(userId, role, user.clinicId);
   }
 
@@ -155,7 +155,7 @@ export async function updateStaff(
   if (error) return { error: error.message };
   if (!count) return { error: "Could not update this staff member. You may lack permission." };
 
-  if (user.role === "admin") {
+  if (user.role === "admin" || user.role === "manager") {
     await ensureDefaultPagePermissions(staffId, parsed.data.role, user.clinicId);
   }
 

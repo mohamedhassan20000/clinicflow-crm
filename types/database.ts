@@ -7,10 +7,30 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.5"
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
   public: {
     Tables: {
@@ -426,7 +446,7 @@ export type Database = {
           {
             foreignKeyName: "feedback_appointment_id_fkey"
             columns: ["appointment_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "appointments"
             referencedColumns: ["id"]
           },
@@ -803,48 +823,6 @@ export type Database = {
           },
         ]
       }
-      user_page_permissions: {
-        Row: {
-          clinic_id: string
-          created_at: string
-          is_visible: boolean
-          page_slug: string
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          clinic_id: string
-          created_at?: string
-          is_visible?: boolean
-          page_slug: string
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          clinic_id?: string
-          created_at?: string
-          is_visible?: boolean
-          page_slug?: string
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "user_page_permissions_clinic_id_fkey"
-            columns: ["clinic_id"]
-            isOneToOne: false
-            referencedRelation: "clinics"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "user_page_permissions_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -1071,12 +1049,55 @@ export type Database = {
           },
         ]
       }
+      user_page_permissions: {
+        Row: {
+          clinic_id: string
+          created_at: string
+          is_visible: boolean
+          page_slug: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          clinic_id: string
+          created_at?: string
+          is_visible?: boolean
+          page_slug: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          clinic_id?: string
+          created_at?: string
+          is_visible?: boolean
+          page_slug?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_page_permissions_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_page_permissions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
       auth_clinic_id: { Args: never; Returns: string }
+      auth_department_id: { Args: never; Returns: string }
       auth_profile: {
         Args: never
         Returns: {
@@ -1090,8 +1111,38 @@ export type Database = {
         Returns: Database["public"]["Enums"]["user_role"]
       }
       clear_own_must_change_password: { Args: never; Returns: undefined }
+      complete_appointment_billing: {
+        Args: {
+          p_appointment_id: string
+          p_deposit_amount?: number
+          p_insurance_amount?: number
+          p_line_items: Json
+          p_paid_amount: number
+          p_payment_method: string
+          p_payment_note?: string
+          p_secondary_amount?: number
+          p_secondary_payment_method?: string
+        }
+        Returns: undefined
+      }
+      settle_patient_outstanding: {
+        Args: {
+          p_amount?: number
+          p_appointment_id?: string
+          p_note?: string
+          p_patient_id: string
+          p_payment_method?: string
+          p_secondary_amount?: number
+          p_secondary_payment_method?: string
+        }
+        Returns: undefined
+      }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
+      undo_appointment_billing: {
+        Args: { p_appointment_id: string; p_target_status: string }
+        Returns: undefined
+      }
     }
     Enums: {
       appointment_status:
@@ -1234,6 +1285,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       appointment_status: [
@@ -1256,3 +1310,4 @@ export const Constants = {
     },
   },
 } as const
+

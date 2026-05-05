@@ -23,6 +23,10 @@ COMMENT ON SCHEMA "public" IS 'standard public schema';
 
 
 
+CREATE EXTENSION IF NOT EXISTS "pg_trgm" WITH SCHEMA "public";
+
+
+
 CREATE TYPE "public"."appointment_status" AS ENUM (
     'pending',
     'confirmed',
@@ -1447,7 +1451,6 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TAB
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "anon";
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "authenticated";
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "service_role";
-
 
 
 

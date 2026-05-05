@@ -10,7 +10,10 @@ import { AppointmentActions } from "@/components/appointments/appointment-action
 import { softDeleteAppointment, restoreAppointment } from "@/actions/appointments";
 import type { Tables } from "@/types/database";
 
-type Appointment = Tables<"appointments"> & {
+type Appointment = Pick<
+  Tables<"appointments">,
+  "id" | "scheduled_at" | "status" | "insurance_provider_id"
+> & {
   patients: { full_name: string } | null;
   profiles: { full_name: string } | null;
   departments: { name: string; color: string } | null;

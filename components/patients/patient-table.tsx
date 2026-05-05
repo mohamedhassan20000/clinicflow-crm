@@ -15,9 +15,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import type { Tables } from "@/types/database";
-
-type Patient = Tables<"patients"> & {
+type Patient = {
+  id: string;
+  file_number: string | null;
+  full_name: string;
+  national_id: string | null;
+  phone: string | null;
+  blood_type: string | null;
+  department_id: string | null;
+  assigned_doctor_id: string | null;
   departments?: { id: string; name: string; color: string } | null;
   assigned_doctor?: { id: string; full_name: string } | null;
 };

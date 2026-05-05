@@ -30,7 +30,7 @@ export default async function PatientsPage({ searchParams }: PageProps) {
   let query = supabase
     .from("patients")
     .select(
-      "*, departments(id, name, color), assigned_doctor:profiles!assigned_doctor_id(id, full_name)",
+      "id, file_number, full_name, national_id, phone, blood_type, department_id, assigned_doctor_id, departments(id, name, color), assigned_doctor:profiles!assigned_doctor_id(id, full_name)",
       { count: "exact" },
     )
     .eq("clinic_id", user.clinicId)

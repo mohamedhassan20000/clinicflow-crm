@@ -95,13 +95,14 @@ export async function changePassword(
     return { error: "Failed to update password. Please try again." };
   }
 
-  // Clear must_change_password flag
-  const { data: { user } } = await supabase.auth.getUser();
-  if (user) {
-    await supabase
-      .from("profiles")
-      .update({ must_change_password: false })
-      .eq("id", user.id);
+  const { error: clearFlagError } = await supabase.rpc(
+    "clear_own_must_change_password",
+  );
+  if (clearFlagError) {
+    return {
+      error:
+        "Password updated, but we could not clear the password change requirement. Please contact your administrator.",
+    };
   }
 
   revalidatePath("/dashboard");

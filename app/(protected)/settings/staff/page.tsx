@@ -14,12 +14,8 @@ const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 export default async function StaffSettingsPage() {
   const user = await requireRole(["admin", "manager"]);
   const supabase = await createClient();
-  const canCustomize = user.role === "admin" && await isPrimaryClinicAdmin(
-    user.id,
-    user.clinicId,
-  );
 
-  const [{ data: allStaff }, { data: departments }] = await Promise.all([
+  const [{ data: allStaff }, { data: departments }, canCustomize] = await Promise.all([
     supabase
       .from("profiles")
       .select("*, departments(name, color)")
@@ -31,6 +27,9 @@ export default async function StaffSettingsPage() {
       .eq("clinic_id", user.clinicId)
       .eq("is_active", true)
       .order("name"),
+    user.role === "admin"
+      ? isPrimaryClinicAdmin(user.id, user.clinicId)
+      : Promise.resolve(false),
   ]);
 
   const cutoff = new Date(new Date().getTime() - THIRTY_DAYS_MS).toISOString();

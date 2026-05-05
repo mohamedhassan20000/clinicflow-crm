@@ -44,53 +44,39 @@ export default async function PatientDetailPage({ params }: PageProps) {
 
   if (isDoctor && !doctorCanAccessPatient) notFound();
 
-  const { data: notes } = await supabase
-    .from("medical_notes")
-    .select("*, profiles!doctor_id(full_name)")
-    .eq("patient_id", id)
-    .order("created_at", { ascending: false });
+  const [
+    { data: notes },
+    appointmentsResult,
+    { data: followups },
+  ] = await Promise.all([
+    supabase
+      .from("medical_notes")
+      .select("*, profiles!doctor_id(full_name)")
+      .eq("patient_id", id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("appointments")
+      .select(
+        "id, scheduled_at, status, payment_method, paid_at, total_amount, paid_amount, insurance_amount, secondary_amount, deposit_amount, outstanding_amount, secondary_payment_method, payment_note, cancellation_reason, cancelled_at, profiles!doctor_id(full_name), departments(name, color), insurance_providers(name), appointment_services(id, name, price, quantity)",
+      )
+      .eq("patient_id", id)
+      .eq("clinic_id", user.clinicId)
+      .is("deleted_at", null)
+      .order("scheduled_at", { ascending: false })
+      .limit(30),
+    // Follow-ups recorded for this patient (any of their sessions).
+    supabase
+      .from("follow_ups")
+      .select(
+        "id, recorded_at, outcome, notes, appointment_id, recorded_by:profiles!recorded_by(full_name), appointment:appointments!appointment_id(scheduled_at, departments(name, color), profiles!doctor_id(full_name))",
+      )
+      .eq("patient_id", id)
+      .eq("clinic_id", user.clinicId)
+      .order("recorded_at", { ascending: false }),
+  ]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: appointments } = (await supabase
-    .from("appointments")
-    .select(
-      "id, scheduled_at, status, payment_method, paid_at, total_amount, paid_amount, insurance_amount, secondary_amount, deposit_amount, outstanding_amount, secondary_payment_method, payment_note, cancellation_reason, cancelled_at, profiles!doctor_id(full_name), departments(name, color), insurance_providers(name), appointment_services(id, name, price, quantity)",
-    )
-    .eq("patient_id", id)
-    .eq("clinic_id", user.clinicId)
-    .is("deleted_at", null)
-    .order("scheduled_at", { ascending: false })
-    .limit(30)) as { data: {
-      id: string;
-      scheduled_at: string;
-      status: string;
-      payment_method?: string | null;
-      paid_at?: string | null;
-      total_amount?: number | null;
-      paid_amount?: number | null;
-      insurance_amount?: number | null;
-      secondary_amount?: number | null;
-      deposit_amount?: number | null;
-      outstanding_amount?: number | null;
-      secondary_payment_method?: string | null;
-      payment_note?: string | null;
-      cancellation_reason?: string | null;
-      cancelled_at?: string | null;
-      profiles?: { full_name: string } | null;
-      departments?: { name: string; color: string } | null;
-      insurance_providers?: { name: string } | null;
-      appointment_services?: { id: string; name: string; price: number; quantity: number }[];
-    }[] | null };
-
-  // Follow-ups recorded for this patient (any of their sessions).
-  const { data: followups } = await supabase
-    .from("follow_ups")
-    .select(
-      "id, recorded_at, outcome, notes, appointment_id, recorded_by:profiles!recorded_by(full_name), appointment:appointments!appointment_id(scheduled_at, departments(name, color), profiles!doctor_id(full_name))",
-    )
-    .eq("patient_id", id)
-    .eq("clinic_id", user.clinicId)
-    .order("recorded_at", { ascending: false });
+  const appointments = appointmentsResult.data as any[] | null;
 
   // Financial data — only loaded for non-doctor roles
   const settlementsByAppt = new Map<
@@ -107,12 +93,29 @@ export default async function PatientDetailPage({ params }: PageProps) {
   let accountBalance = 0;
 
   if (!isDoctor) {
-    const { data: settlements } = await supabase
-      .from("outstanding_settlements")
-      .select("id, appointment_id, settled_at, amount, payment_method, note")
-      .eq("patient_id", id)
-      .eq("clinic_id", user.clinicId)
-      .order("settled_at", { ascending: true });
+    const [
+      { data: settlements },
+      { data: deposits },
+      { data: spentRows },
+    ] = await Promise.all([
+      supabase
+        .from("outstanding_settlements")
+        .select("id, appointment_id, settled_at, amount, payment_method, note")
+        .eq("patient_id", id)
+        .eq("clinic_id", user.clinicId)
+        .order("settled_at", { ascending: true }),
+      supabase
+        .from("patient_deposits")
+        .select("amount")
+        .eq("patient_id", id)
+        .eq("clinic_id", user.clinicId),
+      supabase
+        .from("appointments")
+        .select("deposit_amount")
+        .eq("patient_id", id)
+        .eq("clinic_id", user.clinicId)
+        .is("deleted_at", null),
+    ]);
 
     for (const s of settlements ?? []) {
       if (!s.appointment_id) continue;
@@ -126,20 +129,6 @@ export default async function PatientDetailPage({ params }: PageProps) {
       });
       settlementsByAppt.set(s.appointment_id, list);
     }
-
-    const [{ data: deposits }, { data: spentRows }] = await Promise.all([
-      supabase
-        .from("patient_deposits")
-        .select("amount")
-        .eq("patient_id", id)
-        .eq("clinic_id", user.clinicId),
-      supabase
-        .from("appointments")
-        .select("deposit_amount")
-        .eq("patient_id", id)
-        .eq("clinic_id", user.clinicId)
-        .is("deleted_at", null),
-    ]);
 
     const totalDeposited = (deposits ?? []).reduce(
       (s, r) => s + Number(r.amount ?? 0),

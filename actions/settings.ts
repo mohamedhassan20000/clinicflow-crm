@@ -101,7 +101,9 @@ export async function createStaff(
     return { error: profileError.message };
   }
 
-  await ensureDefaultPagePermissions(userId, role, user.clinicId);
+  if (user.role === "admin") {
+    await ensureDefaultPagePermissions(userId, role, user.clinicId);
+  }
 
   revalidatePath("/settings/staff");
   return { success: true, staffId: userId };
@@ -133,9 +135,6 @@ export async function updateStaff(
 
   const target = await getStaffTargetForClinic(staffId, user.clinicId);
   if (!target) return { error: "Staff member not found." };
-  if (user.role !== "admin" && target.role === "admin") {
-    return { error: "Only admins can edit admin users." };
-  }
   if (user.role !== "admin" && parsed.data.role !== target.role) {
     return { error: "Only admins can change staff roles." };
   }
@@ -156,7 +155,9 @@ export async function updateStaff(
   if (error) return { error: error.message };
   if (!count) return { error: "Could not update this staff member. You may lack permission." };
 
-  await ensureDefaultPagePermissions(staffId, parsed.data.role, user.clinicId);
+  if (user.role === "admin") {
+    await ensureDefaultPagePermissions(staffId, parsed.data.role, user.clinicId);
+  }
 
   revalidatePath("/settings/staff");
   return { success: true };
@@ -174,9 +175,6 @@ export async function toggleStaffActive(
 
   const target = await getStaffTargetForClinic(staffId, user.clinicId);
   if (!target) return { error: "Staff member not found." };
-  if (user.role !== "admin" && target.role === "admin") {
-    return { error: "Only admins can activate or deactivate admin users." };
-  }
 
   const supabase = await createClient();
   const { error } = await supabase
@@ -200,9 +198,6 @@ export async function softDeleteStaff(staffId: string): Promise<ActionResult> {
 
   const target = await getStaffTargetForClinic(staffId, user.clinicId);
   if (!target) return { error: "Staff member not found." };
-  if (user.role !== "admin" && target.role === "admin") {
-    return { error: "Only admins can delete admin users." };
-  }
 
   const supabase = await createClient();
   const { error } = await supabase
@@ -222,9 +217,6 @@ export async function restoreStaff(staffId: string): Promise<ActionResult> {
 
   const target = await getStaffTargetForClinic(staffId, user.clinicId);
   if (!target) return { error: "Staff member not found." };
-  if (user.role !== "admin" && target.role === "admin") {
-    return { error: "Only admins can restore admin users." };
-  }
 
   const supabase = await createClient();
   const { error } = await supabase
@@ -258,9 +250,6 @@ export async function deleteStaff(staffId: string): Promise<ActionResult> {
   if (!target || target.clinic_id !== user.clinicId) {
     return { error: "Staff member not found." };
   }
-  if (user.role !== "admin" && target.role === "admin") {
-    return { error: "Only admins can delete admin users." };
-  }
 
   // Delete auth user → cascades to profile via FK on auth.users
   const adminClient = createAdminClient();
@@ -293,9 +282,6 @@ export async function resetStaffPassword(
 
   const target = await getStaffTargetForClinic(staffId, user.clinicId);
   if (!target) return { error: "Staff member not found." };
-  if (user.role !== "admin" && target.role === "admin") {
-    return { error: "Only admins can reset admin passwords." };
-  }
 
   const adminClient = createAdminClient();
 

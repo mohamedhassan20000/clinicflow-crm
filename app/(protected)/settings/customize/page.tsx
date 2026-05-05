@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/rbac";
 import { listStaffPagePermissions } from "@/actions/page-permissions";
 import { PageVisibilityCustomizer } from "@/components/settings/page-visibility-customizer";
+import { isPrimaryClinicAdmin } from "@/lib/primary-admin";
 
 export const metadata: Metadata = { title: "Customize" };
 
@@ -10,7 +12,10 @@ interface PageProps {
 }
 
 export default async function CustomizeSettingsPage({ searchParams }: PageProps) {
-  await requireRole(["admin", "manager"]);
+  const user = await requireRole("admin");
+  if (!(await isPrimaryClinicAdmin(user.id, user.clinicId))) {
+    redirect("/dashboard");
+  }
   const params = await searchParams;
   const { data, error } = await listStaffPagePermissions();
 

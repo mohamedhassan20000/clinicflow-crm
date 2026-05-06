@@ -250,7 +250,6 @@ export function AppointmentActions({
     setInvoiceDraft(payload);
     setActionPending("complete");
     setIsCompleting(true);
-    setOptimisticStatus("completed");
     startTransition(async () => {
       const result = await updateAppointmentStatus(
         appointmentId,
@@ -263,6 +262,7 @@ export function AppointmentActions({
         toast.error(result.error);
         setOptimisticStatus(null);
       } else {
+        setOptimisticStatus("completed");
         toast.success("Appointment completed & charged.", {
           duration: 10000,
           action: {

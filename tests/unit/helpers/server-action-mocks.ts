@@ -31,6 +31,7 @@ export function createServerActionMocks() {
     tableResults: {} as TableResults,
     rpc: vi.fn(),
     from: vi.fn(),
+    authSignInWithPassword: vi.fn(),
     authGetUser: vi.fn(),
     authUpdateUser: vi.fn(),
     authSignOut: vi.fn(),
@@ -184,6 +185,7 @@ export function createServerActionMocks() {
     state.queryLog = [];
     state.rpc.mockReset();
     state.from.mockReset();
+    state.authSignInWithPassword.mockReset();
     state.authGetUser.mockReset();
     state.authUpdateUser.mockReset();
     state.authSignOut.mockReset();
@@ -198,6 +200,15 @@ export function createServerActionMocks() {
     state.rpc.mockImplementation((name: string) =>
       Promise.resolve(state.rpcResults[name] ?? { data: null, error: null }),
     );
+    state.authSignInWithPassword.mockResolvedValue({
+      data: {
+        user: {
+          id: state.authedUser.id,
+          email: "user@example.com",
+        },
+      },
+      error: null,
+    });
     state.authGetUser.mockResolvedValue({
       data: {
         user: {
@@ -222,6 +233,7 @@ export function createServerActionMocks() {
       from: state.from,
       rpc: state.rpc,
       auth: {
+        signInWithPassword: state.authSignInWithPassword,
         getUser: state.authGetUser,
         updateUser: state.authUpdateUser,
         signOut: state.authSignOut,

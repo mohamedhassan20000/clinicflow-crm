@@ -6,7 +6,6 @@ import { headers } from "next/headers";
 import { z } from "zod";
 import { createClient as createSupabaseJs } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
-import { getAuthedUser } from "@/lib/rbac";
 
 const signInSchema = z.object({
   email: z.string().email(),
@@ -48,21 +47,28 @@ export async function signIn(
   }
 
   const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword(parsed.data);
+  const { data, error } = await supabase.auth.signInWithPassword(parsed.data);
 
-  if (error) {
+  if (error || !data.user) {
     return { error: "Invalid email or password." };
   }
 
-  // Fetch profile to determine where to redirect
-  const user = await getAuthedUser();
-  if (!user) return { error: "Profile not found. Contact your administrator." };
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("must_change_password, is_active, is_deleted, deleted_at")
+    .eq("id", data.user.id)
+    .single();
+
+  if (!profile) return { error: "Profile not found. Contact your administrator." };
+  if (!profile.is_active || profile.is_deleted || profile.deleted_at) {
+    return { error: "Your account is inactive. Contact your administrator." };
+  }
 
   // Client will navigate after awaiting — ensures fresh session cookies
   // are fully committed before middleware runs on the next request.
   return {
     ok: true,
-    redirectTo: user.mustChangePassword ? "/change-password" : "/dashboard",
+    redirectTo: profile.must_change_password ? "/change-password" : "/dashboard",
   };
 }
 

@@ -123,6 +123,45 @@ describe("auth and RBAC boundaries", () => {
     expect(mocks.state.redirect).toHaveBeenCalledWith("/login");
   });
 
+  it("uses the freshly signed-in user when choosing the login redirect", async () => {
+    const { signIn, mocks } = await loadAuthActions();
+    mocks.state.authSignInWithPassword.mockResolvedValue({
+      data: {
+        user: {
+          id: "fresh-login-user",
+          email: "manager@example.com",
+        },
+      },
+      error: null,
+    });
+    mocks.state.authGetUser.mockResolvedValue({
+      data: {
+        user: {
+          id: "stale-cookie-user",
+          email: "old@example.com",
+        },
+      },
+      error: null,
+    });
+    mocks.state.tableResults["profiles.select"] = {
+      data: profile({ must_change_password: false }),
+      error: null,
+    };
+    const form = new FormData();
+    form.set("email", "manager@example.com");
+    form.set("password", "NewPass123");
+
+    const result = await signIn(form);
+
+    expect(result).toEqual({ ok: true, redirectTo: "/dashboard" });
+    expect(mocks.state.authGetUser).not.toHaveBeenCalled();
+    expect(mocks.state.queryLog).toContainEqual({
+      table: "profiles",
+      operation: "select",
+      args: ["eq", "id", "fresh-login-user"],
+    });
+  });
+
   it("clears forced password changes through the secure RPC helper", async () => {
     const { changePassword, mocks } = await loadAuthActions();
     mocks.state.tableResults["profiles.select"] = {

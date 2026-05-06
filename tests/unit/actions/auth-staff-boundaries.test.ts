@@ -219,10 +219,9 @@ describe("auth and RBAC boundaries", () => {
 
     const result = await changePassword(null, form);
 
-    expect(result).toEqual({
-      error:
-        "Password updated, but your password change requirement is still active. Please contact your administrator.",
-    });
+    expect(result.error).toMatch(
+      /final verification still sees must_change_password=true/,
+    );
     expect(mocks.state.authUpdateUser).toHaveBeenCalledWith({
       password: "NewPass123",
     });
@@ -246,10 +245,9 @@ describe("auth and RBAC boundaries", () => {
 
     const result = await changePassword(null, form);
 
-    expect(result).toEqual({
-      error:
-        "Password updated, but we could not clear the password change requirement. Please contact your administrator.",
-    });
+    expect(result.error).toMatch(
+      /forced-password flag was not cleared\. Admin update count=0/,
+    );
     expect(mocks.state.rpc).toHaveBeenCalledWith(
       "clear_own_must_change_password",
     );

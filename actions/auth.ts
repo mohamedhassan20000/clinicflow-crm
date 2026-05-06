@@ -13,6 +13,44 @@ const signInSchema = z.object({
   password: z.string().min(1),
 });
 
+const CHANGE_PASSWORD_ACTION_VERSION = "trace-forced-password-2026-05-06-1";
+
+function authTrace(
+  traceId: string,
+  step: string,
+  details: Record<string, unknown> = {},
+) {
+  console.info("[forced-password-change]", {
+    traceId,
+    actionVersion: CHANGE_PASSWORD_ACTION_VERSION,
+    step,
+    ...details,
+  });
+}
+
+function authTraceError(
+  traceId: string,
+  step: string,
+  details: Record<string, unknown> = {},
+) {
+  console.error("[forced-password-change]", {
+    traceId,
+    actionVersion: CHANGE_PASSWORD_ACTION_VERSION,
+    step,
+    ...details,
+  });
+}
+
+function errorMessage(error: unknown) {
+  if (!error) return null;
+  if (error instanceof Error) return error.message;
+  if (typeof error === "object" && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string") return message;
+  }
+  return String(error);
+}
+
 const changePasswordSchema = z
   .object({
     password: z
@@ -83,6 +121,9 @@ export async function changePassword(
   _prev: AuthActionResult | null,
   formData: FormData,
 ): Promise<AuthActionResult> {
+  const traceId = crypto.randomUUID();
+  authTrace(traceId, "action_start");
+
   const raw = {
     password: formData.get("password"),
     confirmPassword: formData.get("confirmPassword"),
@@ -90,62 +131,109 @@ export async function changePassword(
 
   const parsed = changePasswordSchema.safeParse(raw);
   if (!parsed.success) {
+    authTrace(traceId, "validation_failed", {
+      fields: Object.keys(parsed.error.flatten().fieldErrors),
+    });
     return { fieldErrors: parsed.error.flatten().fieldErrors };
   }
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+      error: getUserError,
+    } = await supabase.auth.getUser();
+    authTrace(traceId, "get_user_before_update", {
+      userId: user?.id ?? null,
+      error: errorMessage(getUserError),
+    });
+
+    if (!user) {
+      return {
+        error:
+          `Trace ${traceId}: Your session expired. Sign in again with your temporary password to set a new password.`,
+      };
+    }
+
+    const { data: updateData, error } = await supabase.auth.updateUser({
+      password: parsed.data.password,
+    });
+    authTrace(traceId, "auth_update_user_result", {
+      userId: user.id,
+      updatedUserId: updateData.user?.id ?? null,
+      error: errorMessage(error),
+    });
+
+    if (error) {
+      return {
+        error: `Trace ${traceId}: Failed to update password: ${error.message}`,
+      };
+    }
+
+    const { data: rpcData, error: rpcError } = await supabase.rpc(
+      "clear_own_must_change_password",
+    );
+    authTrace(traceId, "clear_rpc_result", {
+      userId: user.id,
+      data: rpcData ?? null,
+      error: errorMessage(rpcError),
+    });
+
+    const adminClient = createAdminClient();
+    const { error: clearFlagError, count } = await adminClient
+      .from("profiles")
+      .update({ must_change_password: false }, { count: "exact" })
+      .eq("id", user.id)
+      .eq("is_active", true)
+      .eq("is_deleted", false)
+      .is("deleted_at", null);
+    authTrace(traceId, "admin_profile_update_result", {
+      userId: user.id,
+      count,
+      error: errorMessage(clearFlagError),
+    });
+
+    if (clearFlagError || count !== 1) {
+      return {
+        error:
+          `Trace ${traceId}: Password updated, but the forced-password flag was not cleared. Admin update count=${count ?? "null"}, error=${errorMessage(clearFlagError) ?? "none"}.`,
+      };
+    }
+
+    const { data: profile, error: profileError } = await adminClient
+      .from("profiles")
+      .select("must_change_password")
+      .eq("id", user.id)
+      .single();
+    authTrace(traceId, "final_profile_verify_result", {
+      userId: user.id,
+      mustChangePassword: profile?.must_change_password ?? null,
+      error: errorMessage(profileError),
+    });
+
+    if (profileError || !profile || profile.must_change_password) {
+      return {
+        error:
+          `Trace ${traceId}: Password updated, but final verification still sees must_change_password=${profile?.must_change_password ?? "unknown"}, error=${errorMessage(profileError) ?? "none"}.`,
+      };
+    }
+
+    revalidatePath("/dashboard");
+    const { error: signOutError } = await supabase.auth.signOut();
+    authTrace(traceId, "sign_out_result", {
+      userId: user.id,
+      error: errorMessage(signOutError),
+    });
+    return { ok: true, redirectTo: "/login?password_changed=1" };
+  } catch (err) {
+    authTraceError(traceId, "unexpected_exception", {
+      error: errorMessage(err),
+    });
     return {
       error:
-        "Your session expired. Sign in again with your temporary password to set a new password.",
+        `Trace ${traceId}: Unexpected forced password error: ${errorMessage(err) ?? "unknown error"}`,
     };
   }
-
-  const { error } = await supabase.auth.updateUser({
-    password: parsed.data.password,
-  });
-
-  if (error) {
-    return { error: "Failed to update password. Please try again." };
-  }
-
-  await supabase.rpc("clear_own_must_change_password");
-
-  const adminClient = createAdminClient();
-  const { error: clearFlagError, count } = await adminClient
-    .from("profiles")
-    .update({ must_change_password: false }, { count: "exact" })
-    .eq("id", user.id)
-    .eq("is_active", true)
-    .eq("is_deleted", false)
-    .is("deleted_at", null);
-
-  if (clearFlagError || count !== 1) {
-    return {
-      error:
-        "Password updated, but we could not clear the password change requirement. Please contact your administrator.",
-    };
-  }
-
-  const { data: profile, error: profileError } = await adminClient
-    .from("profiles")
-    .select("must_change_password")
-    .eq("id", user.id)
-    .single();
-
-  if (profileError || !profile || profile.must_change_password) {
-    return {
-      error:
-        "Password updated, but your password change requirement is still active. Please contact your administrator.",
-    };
-  }
-
-  revalidatePath("/dashboard");
-  await supabase.auth.signOut();
-  return { ok: true, redirectTo: "/login?password_changed=1" };
 }
 
 const forgotSchema = z.object({

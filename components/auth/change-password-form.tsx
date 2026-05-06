@@ -54,11 +54,11 @@ export function ChangePasswordForm() {
     if (actionState?.ok && actionState.redirectTo) {
       window.location.href = actionState.redirectTo;
     }
-  }, [actionState]);
 
-  if (actionState?.error) {
-    toast.error(actionState.error);
-  }
+    if (actionState?.error) {
+      toast.error(actionState.error);
+    }
+  }, [actionState]);
 
   function onSubmit(values: FormValues) {
     const fd = new FormData();
@@ -74,6 +74,18 @@ export function ChangePasswordForm() {
         className="space-y-4"
         noValidate
       >
+        {actionState?.error && (
+          <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {actionState.error}
+          </div>
+        )}
+
+        {actionState?.fieldErrors && (
+          <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {Object.values(actionState.fieldErrors).flat().join(" ")}
+          </div>
+        )}
+
         <FormField
           control={form.control}
           name="password"

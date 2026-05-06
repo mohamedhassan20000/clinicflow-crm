@@ -13,34 +13,6 @@ const signInSchema = z.object({
   password: z.string().min(1),
 });
 
-const CHANGE_PASSWORD_ACTION_VERSION = "trace-forced-password-2026-05-06-2-debug";
-
-function authTrace(
-  traceId: string,
-  step: string,
-  details: Record<string, unknown> = {},
-) {
-  console.info("[forced-password-change]", {
-    traceId,
-    actionVersion: CHANGE_PASSWORD_ACTION_VERSION,
-    step,
-    ...details,
-  });
-}
-
-function authTraceError(
-  traceId: string,
-  step: string,
-  details: Record<string, unknown> = {},
-) {
-  console.error("[forced-password-change]", {
-    traceId,
-    actionVersion: CHANGE_PASSWORD_ACTION_VERSION,
-    step,
-    ...details,
-  });
-}
-
 function errorMessage(error: unknown) {
   if (!error) return null;
   if (error instanceof Error) return error.message;
@@ -70,38 +42,7 @@ export type AuthActionResult = {
   redirectTo?: string;
   error?: string;
   fieldErrors?: Record<string, string[]>;
-  debug?: ForcedPasswordDebug;
 };
-
-export type ForcedPasswordDebug = {
-  actionVersion: string;
-  traceId: string;
-  rpcSucceeded: boolean | null;
-  rpcError: string | null;
-  profileMustChangePassword: boolean | null;
-  adminProfileMustChangePassword: boolean | null;
-  profileFlagCleared: boolean | null;
-  finalRedirectTarget: string | null;
-  finalStep: string;
-};
-
-function forcedPasswordDebug(
-  traceId: string,
-  overrides: Partial<ForcedPasswordDebug> = {},
-): ForcedPasswordDebug {
-  return {
-    actionVersion: CHANGE_PASSWORD_ACTION_VERSION,
-    traceId,
-    rpcSucceeded: null,
-    rpcError: null,
-    profileMustChangePassword: null,
-    adminProfileMustChangePassword: null,
-    profileFlagCleared: null,
-    finalRedirectTarget: null,
-    finalStep: "started",
-    ...overrides,
-  };
-}
 
 export async function signIn(
   formData: FormData,
@@ -152,10 +93,6 @@ export async function changePassword(
   _prev: AuthActionResult | null,
   formData: FormData,
 ): Promise<AuthActionResult> {
-  const traceId = crypto.randomUUID();
-  authTrace(traceId, "action_start");
-  let debug = forcedPasswordDebug(traceId);
-
   const raw = {
     password: formData.get("password"),
     confirmPassword: formData.get("confirmPassword"),
@@ -163,76 +100,44 @@ export async function changePassword(
 
   const parsed = changePasswordSchema.safeParse(raw);
   if (!parsed.success) {
-    authTrace(traceId, "validation_failed", {
-      fields: Object.keys(parsed.error.flatten().fieldErrors),
-    });
-    debug = forcedPasswordDebug(traceId, { finalStep: "validation_failed" });
-    return { fieldErrors: parsed.error.flatten().fieldErrors, debug };
+    return { fieldErrors: parsed.error.flatten().fieldErrors };
   }
 
   try {
     const supabase = await createClient();
     const {
       data: { user },
-      error: getUserError,
     } = await supabase.auth.getUser();
-    authTrace(traceId, "get_user_before_update", {
-      userId: user?.id ?? null,
-      error: errorMessage(getUserError),
-    });
 
     if (!user) {
-      debug = forcedPasswordDebug(traceId, { finalStep: "missing_session" });
       return {
         error:
-          `Trace ${traceId}: Your session expired. Sign in again with your temporary password to set a new password.`,
-        debug,
+          "Your session expired. Sign in again with your temporary password to set a new password.",
       };
     }
 
     const { data: updateData, error } = await supabase.auth.updateUser({
       password: parsed.data.password,
     });
-    authTrace(traceId, "auth_update_user_result", {
-      userId: user.id,
-      updatedUserId: updateData.user?.id ?? null,
-      error: errorMessage(error),
-    });
+    const updatedUserId = updateData.user?.id;
 
     if (error) {
-      debug = forcedPasswordDebug(traceId, {
-        finalStep: "auth_update_user_failed",
-      });
       return {
-        error: `Trace ${traceId}: Failed to update password: ${error.message}`,
-        debug,
+        error: `Failed to update password: ${error.message}`,
       };
     }
+    if (updatedUserId && updatedUserId !== user.id) {
+      return { error: "Password update returned an unexpected user." };
+    }
 
-    authTrace(traceId, "clear_rpc_before_call", {
-      userId: user.id,
-      migrationDependentPath: "clear_own_must_change_password",
-    });
-    const { data: rpcData, error: rpcError } = await supabase.rpc(
+    const { error: rpcError } = await supabase.rpc(
       "clear_own_must_change_password",
     );
-    debug = forcedPasswordDebug(traceId, {
-      rpcSucceeded: !rpcError,
-      rpcError: errorMessage(rpcError),
-      finalStep: "clear_rpc_result",
-    });
-    authTrace(traceId, "clear_rpc_result", {
-      userId: user.id,
-      data: rpcData ?? null,
-      error: errorMessage(rpcError),
-      rpcSucceeded: !rpcError,
-    });
 
     if (rpcError) {
       return {
         error:
-          `Trace ${traceId}: Password updated, but the forced-password flag clear failed: ${rpcError.message}`,
-        debug,
+          `Password updated, but the forced-password flag clear failed: ${rpcError.message}`,
       };
     }
 
@@ -256,21 +161,6 @@ export async function changePassword(
       adminProfileMustChangePassword === false ||
       (adminProfileMustChangePassword === null &&
         profileMustChangePassword === false);
-    debug = {
-      ...debug,
-      profileMustChangePassword,
-      adminProfileMustChangePassword,
-      profileFlagCleared,
-      finalStep: "final_profile_verify_result",
-    };
-    authTrace(traceId, "final_profile_verify_result", {
-      userId: user.id,
-      mustChangePassword: profileMustChangePassword,
-      error: errorMessage(profileError),
-      adminMustChangePassword: adminProfileMustChangePassword,
-      adminError: errorMessage(adminProfileError),
-      profileFlagCleared,
-    });
 
     if (
       profileError ||
@@ -281,37 +171,20 @@ export async function changePassword(
     ) {
       return {
         error:
-          `Trace ${traceId}: Password updated, but final verification still sees must_change_password=${adminProfileMustChangePassword ?? profileMustChangePassword ?? "unknown"}, error=${errorMessage(adminProfileError) ?? errorMessage(profileError) ?? "none"}.`,
-        debug,
+          `Password updated, but final verification still sees must_change_password=${adminProfileMustChangePassword ?? profileMustChangePassword ?? "unknown"}, error=${errorMessage(adminProfileError) ?? errorMessage(profileError) ?? "none"}.`,
       };
     }
 
     revalidatePath("/dashboard");
-    const { error: signOutError } = await supabase.auth.signOut();
-    debug = {
-      ...debug,
-      finalRedirectTarget: "/login?password_changed=1",
-      finalStep: "success_ready_to_redirect",
-    };
-    authTrace(traceId, "sign_out_result", {
-      userId: user.id,
-      error: errorMessage(signOutError),
-      finalRedirectTarget: debug.finalRedirectTarget,
-    });
+    await supabase.auth.signOut();
     return {
       ok: true,
       redirectTo: "/login?password_changed=1",
-      debug,
     };
   } catch (err) {
-    authTraceError(traceId, "unexpected_exception", {
-      error: errorMessage(err),
-    });
-    debug = { ...debug, finalStep: "unexpected_exception" };
     return {
       error:
-        `Trace ${traceId}: Unexpected forced password error: ${errorMessage(err) ?? "unknown error"}`,
-      debug,
+        `Unexpected forced password error: ${errorMessage(err) ?? "unknown error"}`,
     };
   }
 }

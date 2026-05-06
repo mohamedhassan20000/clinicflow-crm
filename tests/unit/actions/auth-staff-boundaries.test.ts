@@ -64,6 +64,9 @@ async function loadAuthActions() {
   vi.doMock("@/lib/supabase/server", () => ({
     createClient: vi.fn(async () => mocks.client()),
   }));
+  vi.doMock("@/lib/supabase/admin", () => ({
+    createAdminClient: vi.fn(() => mocks.client()),
+  }));
   vi.doMock("@supabase/supabase-js", () => ({
     createClient: vi.fn(),
   }));
@@ -164,6 +167,11 @@ describe("auth and RBAC boundaries", () => {
 
   it("clears forced password changes through the secure RPC helper", async () => {
     const { changePassword, mocks } = await loadAuthActions();
+    mocks.state.tableResults["profiles.update"] = {
+      data: null,
+      error: null,
+      count: 1,
+    };
     mocks.state.tableResults["profiles.select"] = {
       data: { must_change_password: false },
       error: null,
@@ -181,11 +189,26 @@ describe("auth and RBAC boundaries", () => {
     expect(mocks.state.rpc).toHaveBeenCalledWith(
       "clear_own_must_change_password",
     );
+    expect(mocks.state.queryLog).toContainEqual({
+      table: "profiles",
+      operation: "update",
+      args: [{ must_change_password: false }, { count: "exact" }],
+    });
+    expect(mocks.state.queryLog).toContainEqual({
+      table: "profiles",
+      operation: "update",
+      args: ["eq", "id", "user-1"],
+    });
     expect(mocks.state.authSignOut).toHaveBeenCalled();
   });
 
   it("does not complete password change if the profile flag remains active", async () => {
     const { changePassword, mocks } = await loadAuthActions();
+    mocks.state.tableResults["profiles.update"] = {
+      data: null,
+      error: null,
+      count: 1,
+    };
     mocks.state.tableResults["profiles.select"] = {
       data: { must_change_password: true },
       error: null,
@@ -202,6 +225,30 @@ describe("auth and RBAC boundaries", () => {
     });
     expect(mocks.state.authUpdateUser).toHaveBeenCalledWith({
       password: "NewPass123",
+    });
+    expect(mocks.state.rpc).toHaveBeenCalledWith(
+      "clear_own_must_change_password",
+    );
+    expect(mocks.state.authSignOut).not.toHaveBeenCalled();
+    expect(mocks.state.revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("returns an error if the scoped profile flag update affects no rows", async () => {
+    const { changePassword, mocks } = await loadAuthActions();
+    mocks.state.tableResults["profiles.update"] = {
+      data: null,
+      error: null,
+      count: 0,
+    };
+    const form = new FormData();
+    form.set("password", "NewPass123");
+    form.set("confirmPassword", "NewPass123");
+
+    const result = await changePassword(null, form);
+
+    expect(result).toEqual({
+      error:
+        "Password updated, but we could not clear the password change requirement. Please contact your administrator.",
     });
     expect(mocks.state.rpc).toHaveBeenCalledWith(
       "clear_own_must_change_password",

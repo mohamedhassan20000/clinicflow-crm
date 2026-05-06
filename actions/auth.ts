@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { z } from "zod";
 import { createClient as createSupabaseJs } from "@supabase/supabase-js";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 const signInSchema = z.object({
@@ -93,6 +94,16 @@ export async function changePassword(
   }
 
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return {
+      error:
+        "Your session expired. Sign in again with your temporary password to set a new password.",
+    };
+  }
+
   const { error } = await supabase.auth.updateUser({
     password: parsed.data.password,
   });
@@ -101,27 +112,25 @@ export async function changePassword(
     return { error: "Failed to update password. Please try again." };
   }
 
-  const { error: clearFlagError } = await supabase.rpc(
-    "clear_own_must_change_password",
-  );
-  if (clearFlagError) {
+  await supabase.rpc("clear_own_must_change_password");
+
+  const adminClient = createAdminClient();
+  const { error: clearFlagError, count } = await adminClient
+    .from("profiles")
+    .update({ must_change_password: false }, { count: "exact" })
+    .eq("id", user.id)
+    .eq("is_active", true)
+    .eq("is_deleted", false)
+    .is("deleted_at", null);
+
+  if (clearFlagError || count !== 1) {
     return {
       error:
         "Password updated, but we could not clear the password change requirement. Please contact your administrator.",
     };
   }
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return {
-      error:
-        "Password updated, but we could not verify your account. Please contact your administrator.",
-    };
-  }
-
-  const { data: profile, error: profileError } = await supabase
+  const { data: profile, error: profileError } = await adminClient
     .from("profiles")
     .select("must_change_password")
     .eq("id", user.id)

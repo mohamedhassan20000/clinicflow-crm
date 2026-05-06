@@ -5,7 +5,6 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { z } from "zod";
 import { createClient as createSupabaseJs } from "@supabase/supabase-js";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 const signInSchema = z.object({
@@ -179,28 +178,14 @@ export async function changePassword(
       error: errorMessage(rpcError),
     });
 
-    const adminClient = createAdminClient();
-    const { error: clearFlagError, count } = await adminClient
-      .from("profiles")
-      .update({ must_change_password: false }, { count: "exact" })
-      .eq("id", user.id)
-      .eq("is_active", true)
-      .eq("is_deleted", false)
-      .is("deleted_at", null);
-    authTrace(traceId, "admin_profile_update_result", {
-      userId: user.id,
-      count,
-      error: errorMessage(clearFlagError),
-    });
-
-    if (clearFlagError || count !== 1) {
+    if (rpcError) {
       return {
         error:
-          `Trace ${traceId}: Password updated, but the forced-password flag was not cleared. Admin update count=${count ?? "null"}, error=${errorMessage(clearFlagError) ?? "none"}.`,
+          `Trace ${traceId}: Password updated, but the forced-password flag clear failed: ${rpcError.message}`,
       };
     }
 
-    const { data: profile, error: profileError } = await adminClient
+    const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("must_change_password")
       .eq("id", user.id)

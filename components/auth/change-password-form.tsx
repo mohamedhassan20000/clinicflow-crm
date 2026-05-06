@@ -51,10 +51,6 @@ export function ChangePasswordForm() {
   const isSubmitting = isPending || form.formState.isSubmitting;
 
   useEffect(() => {
-    if (actionState?.ok && actionState.redirectTo) {
-      window.location.href = actionState.redirectTo;
-    }
-
     if (actionState?.error) {
       toast.error(actionState.error);
     }
@@ -74,6 +70,73 @@ export function ChangePasswordForm() {
         className="space-y-4"
         noValidate
       >
+        {actionState?.debug && (
+          <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-xs text-amber-950 dark:text-amber-100">
+            <div className="mb-1 font-medium">Temporary password-change debug</div>
+            <dl className="space-y-1">
+              <div className="flex justify-between gap-3">
+                <dt>Action version</dt>
+                <dd className="break-all text-right">
+                  {actionState.debug.actionVersion}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt>Trace ID</dt>
+                <dd className="break-all text-right">
+                  {actionState.debug.traceId}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt>RPC succeeded</dt>
+                <dd>{String(actionState.debug.rpcSucceeded)}</dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt>Flag became false</dt>
+                <dd>{String(actionState.debug.profileFlagCleared)}</dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt>User profile flag</dt>
+                <dd>
+                  {String(actionState.debug.profileMustChangePassword)}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt>Admin profile flag</dt>
+                <dd>
+                  {String(actionState.debug.adminProfileMustChangePassword)}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt>Final step</dt>
+                <dd className="text-right">{actionState.debug.finalStep}</dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt>Redirect target</dt>
+                <dd>{actionState.debug.finalRedirectTarget ?? "none"}</dd>
+              </div>
+              {actionState.debug.rpcError && (
+                <div className="pt-1">
+                  <dt>RPC error</dt>
+                  <dd className="break-words">{actionState.debug.rpcError}</dd>
+                </div>
+              )}
+            </dl>
+            {actionState.ok && actionState.redirectTo && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-2 h-8"
+                onClick={() => {
+                  window.location.href = actionState.redirectTo!;
+                }}
+              >
+                Continue to login
+              </Button>
+            )}
+          </div>
+        )}
+
         {actionState?.error && (
           <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {actionState.error}

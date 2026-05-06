@@ -177,7 +177,19 @@ describe("auth and RBAC boundaries", () => {
 
     const result = await changePassword(null, form);
 
-    expect(result).toEqual({ ok: true, redirectTo: "/login?password_changed=1" });
+    expect(result).toMatchObject({
+      ok: true,
+      redirectTo: "/login?password_changed=1",
+      debug: {
+        actionVersion: "trace-forced-password-2026-05-06-2-debug",
+        rpcSucceeded: true,
+        profileMustChangePassword: false,
+        adminProfileMustChangePassword: false,
+        profileFlagCleared: true,
+        finalRedirectTarget: "/login?password_changed=1",
+        finalStep: "success_ready_to_redirect",
+      },
+    });
     expect(mocks.state.authUpdateUser).toHaveBeenCalledWith({
       password: "NewPass123",
     });
@@ -207,6 +219,12 @@ describe("auth and RBAC boundaries", () => {
     expect(result.error).toMatch(
       /final verification still sees must_change_password=true/,
     );
+    expect(result.debug).toMatchObject({
+      rpcSucceeded: true,
+      profileFlagCleared: false,
+      finalRedirectTarget: null,
+      finalStep: "final_profile_verify_result",
+    });
     expect(mocks.state.authUpdateUser).toHaveBeenCalledWith({
       password: "NewPass123",
     });
@@ -232,6 +250,13 @@ describe("auth and RBAC boundaries", () => {
     expect(result.error).toMatch(
       /forced-password flag clear failed: Managers cannot update protected staff profile fields/,
     );
+    expect(result.debug).toMatchObject({
+      rpcSucceeded: false,
+      rpcError: "Managers cannot update protected staff profile fields",
+      profileFlagCleared: null,
+      finalRedirectTarget: null,
+      finalStep: "clear_rpc_result",
+    });
     expect(mocks.state.rpc).toHaveBeenCalledWith(
       "clear_own_must_change_password",
     );

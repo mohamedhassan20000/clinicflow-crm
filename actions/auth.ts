@@ -105,6 +105,29 @@ export async function changePassword(
     };
   }
 
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return {
+      error:
+        "Password updated, but we could not verify your account. Please contact your administrator.",
+    };
+  }
+
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("must_change_password")
+    .eq("id", user.id)
+    .single();
+
+  if (profileError || !profile || profile.must_change_password) {
+    return {
+      error:
+        "Password updated, but your password change requirement is still active. Please contact your administrator.",
+    };
+  }
+
   revalidatePath("/dashboard");
   await supabase.auth.signOut();
   return { ok: true, redirectTo: "/login?password_changed=1" };

@@ -132,13 +132,20 @@ async function validateAppointmentSlot(
   for (const appt of sameDay ?? []) {
     const exStart = new Date(appt.scheduled_at);
     const exEnd = new Date(exStart.getTime() + appt.duration_minutes * 60_000);
+    const overlapsSession = startTime < exEnd && endTime > exStart;
+    if (overlapsSession) {
+      return {
+        error:
+          "This doctor is already booked during the selected session time. Please choose a different time slot.",
+      };
+    }
     if (
       startTime < new Date(exEnd.getTime() + BUFFER_MS) &&
       endTime > new Date(exStart.getTime() - BUFFER_MS)
     ) {
       return {
         error:
-          "The doctor needs at least 15 minutes between appointments. Please choose a different time slot.",
+          "This doctor needs a 15-minute recovery/buffer window between appointments. Please choose a different time slot.",
       };
     }
   }

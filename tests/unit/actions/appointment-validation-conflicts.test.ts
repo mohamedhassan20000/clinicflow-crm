@@ -218,9 +218,51 @@ describe("appointment conflict prevention", () => {
 
     expect(result).toEqual({
       error:
-        "The doctor needs at least 15 minutes between appointments. Please choose a different time slot.",
+        "This doctor needs a 15-minute recovery/buffer window between appointments. Please choose a different time slot.",
     });
     expect(wroteAppointments(mocks)).toBe(false);
+  });
+
+  it("rejects same-doctor session overlaps with a clear booked message", async () => {
+    const { createAppointment, mocks } = await loadAppointmentsActions();
+    allowValidReferences(mocks, {
+      sameDay: [
+        {
+          scheduled_at: "2099-01-01T10:00:00.000Z",
+          duration_minutes: 30,
+        },
+      ],
+    });
+
+    const result = await createAppointment(
+      null,
+      appointmentForm({ scheduled_at: "2099-01-01T10:15:00.000Z" }),
+    );
+
+    expect(result).toEqual({
+      error:
+        "This doctor is already booked during the selected session time. Please choose a different time slot.",
+    });
+    expect(wroteAppointments(mocks)).toBe(false);
+  });
+
+  it("allows different doctors in the same department at the same time", async () => {
+    const { createAppointment, mocks } = await loadAppointmentsActions();
+    allowValidReferences(mocks, { sameDay: [] });
+
+    await createAppointment(
+      null,
+      appointmentForm({ scheduled_at: "2099-01-01T10:00:00.000Z" }),
+    );
+
+    expect(mocks.state.queryLog).toContainEqual(
+      expect.objectContaining({
+        table: "appointments",
+        operation: "select",
+        args: ["eq", "doctor_id", DOCTOR_ID],
+      }),
+    );
+    expect(mocks.state.redirect).toHaveBeenCalledWith("/appointments");
   });
 
   it("allows appointments exactly at the 15-minute buffer boundary", async () => {
@@ -242,6 +284,25 @@ describe("appointment conflict prevention", () => {
     expect(mocks.state.redirect).toHaveBeenCalledWith("/appointments");
   });
 
+  it("allows appointments ending exactly at the 15-minute buffer boundary before another session", async () => {
+    const { createAppointment, mocks } = await loadAppointmentsActions();
+    allowValidReferences(mocks, {
+      sameDay: [
+        {
+          scheduled_at: "2099-01-01T10:45:00.000Z",
+          duration_minutes: 30,
+        },
+      ],
+    });
+
+    await createAppointment(
+      null,
+      appointmentForm({ scheduled_at: "2099-01-01T10:00:00.000Z" }),
+    );
+
+    expect(mocks.state.redirect).toHaveBeenCalledWith("/appointments");
+  });
+
   it("rejects appointments one minute inside the buffer boundary", async () => {
     const { createAppointment, mocks } = await loadAppointmentsActions();
     allowValidReferences(mocks, {
@@ -258,7 +319,7 @@ describe("appointment conflict prevention", () => {
       appointmentForm({ scheduled_at: "2099-01-01T10:44:00.000Z" }),
     );
 
-    expect(result.error).toContain("15 minutes between appointments");
+    expect(result.error).toContain("15-minute recovery/buffer window");
     expect(wroteAppointments(mocks)).toBe(false);
   });
 });
@@ -321,5 +382,76 @@ describe("appointment status and role boundaries", () => {
       error: "Cannot transition from completed to confirmed.",
     });
     expect(wroteAppointments(mocks)).toBe(false);
+  });
+
+  it("undoes confirmed status back to pending through the direct rollback path", async () => {
+    const { undoAppointmentStatus, mocks } = await loadAppointmentsActions();
+    mocks.state.tableResults["appointments.select"] = {
+      data: {
+        id: APPOINTMENT_ID,
+        clinic_id: "clinic-1",
+        patient_id: PATIENT_ID,
+        doctor_id: DOCTOR_ID,
+        department_id: DEPARTMENT_ID,
+        service_id: null,
+        insurance_provider_id: INSURANCE_ID,
+        scheduled_at: "2099-01-01T10:00:00.000Z",
+        duration_minutes: 30,
+        status: "confirmed",
+        notes: null,
+        created_by: "user-1",
+        created_at: "2099-01-01T09:00:00.000Z",
+        updated_by: "user-1",
+        deleted_at: null,
+        reminder_sent_at: null,
+        cancellation_reason: null,
+        cancelled_at: null,
+        cancelled_by: null,
+        no_show_reason: null,
+        no_showed_at: null,
+        no_showed_by: null,
+        payment_method: null,
+        secondary_payment_method: null,
+        payment_note: null,
+        paid_at: null,
+        total_amount: null,
+        paid_amount: null,
+        insurance_amount: null,
+        secondary_amount: 0,
+        deposit_amount: 0,
+        outstanding_amount: null,
+      },
+      error: null,
+    };
+    mocks.state.tableResults["appointments.delete"] = {
+      data: null,
+      error: null,
+    };
+    mocks.state.tableResults["appointments.insert"] = {
+      data: null,
+      error: null,
+    };
+
+    const result = await undoAppointmentStatus(APPOINTMENT_ID, "pending");
+
+    expect(result).toEqual({});
+    expect(mocks.state.queryLog).toContainEqual(
+      expect.objectContaining({
+        table: "appointments",
+        operation: "insert",
+        args: [
+          expect.objectContaining({
+            id: APPOINTMENT_ID,
+            status: "pending",
+            cancellation_reason: null,
+            no_show_reason: null,
+          }),
+        ],
+      }),
+    );
+    expect(mocks.state.revalidatePath).toHaveBeenCalledWith("/appointments");
+    expect(mocks.state.revalidatePath).toHaveBeenCalledWith(
+      `/patients/${PATIENT_ID}`,
+    );
   });
 });

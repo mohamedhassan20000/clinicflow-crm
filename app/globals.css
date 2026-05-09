@@ -351,6 +351,22 @@
   table [class*="bg-"] {
     background: transparent !important;
   }
+  [data-patient-roster-section],
+  [data-patient-roster-section] * {
+    border-color: #000 !important;
+    box-shadow: none !important;
+    color: #000 !important;
+  }
+  [data-patient-roster-section],
+  [data-patient-roster-section] header,
+  [data-patient-roster-section] table,
+  [data-patient-roster-section] th,
+  [data-patient-roster-section] td {
+    background: #fff !important;
+  }
+  [data-patient-name-dot] {
+    display: none !important;
+  }
   tr    { page-break-inside: avoid; page-break-after: auto; }
   thead { display: table-header-group; }
   tfoot { display: table-footer-group; }

@@ -16,6 +16,7 @@ type Patient = {
   blood_type: string | null;
   department_id: string | null;
   assigned_doctor_id: string | null;
+  has_outstanding_balance?: boolean;
   departments?: { id: string; name: string; color: string } | null;
   assigned_doctor?: { id: string; full_name: string } | null;
 };
@@ -30,6 +31,11 @@ interface PatientTableProps {
 
 const UNASSIGNED_COLOR = "#94a3b8"; // slate-400
 const UNASSIGNED_KEY = "__unassigned__";
+
+function formatDoctorName(name: string | null | undefined) {
+  if (!name) return "—";
+  return /^dr\.?\s/i.test(name.trim()) ? name.trim() : `Dr. ${name.trim()}`;
+}
 
 export function PatientTable({
   data,
@@ -185,11 +191,12 @@ function PatientGroupTable({
 }) {
   return (
     <section
-      className="overflow-hidden rounded-xl border bg-card shadow-sm"
+      data-patient-roster-section
+      className="overflow-hidden rounded-xl border bg-card shadow-sm print:rounded-none print:border-black print:shadow-none"
       style={{ borderColor: `color-mix(in oklab, ${color} 35%, transparent)` }}
     >
       <header
-        className="flex items-center justify-between gap-3 border-b px-4 py-3"
+        className="flex items-center justify-between gap-3 border-b px-4 py-3 print:border-black print:bg-white"
         style={{
           backgroundColor: `color-mix(in oklab, ${color} 10%, transparent)`,
           borderColor: `color-mix(in oklab, ${color} 25%, transparent)`,
@@ -198,18 +205,18 @@ function PatientGroupTable({
         <div className="flex items-center gap-3">
           <span
             aria-hidden
-            className="inline-block h-3 w-3 rounded-full"
+            className="inline-block h-3 w-3 rounded-full print:hidden"
             style={{ backgroundColor: color }}
           />
           <h3
-            className="text-sm font-semibold tracking-tight"
+            className="text-sm font-semibold tracking-tight print:text-black"
             style={{ color }}
           >
             {name}
           </h3>
         </div>
         <span
-          className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium"
+          className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium print:border print:border-black print:bg-white print:text-black"
           style={{
             backgroundColor: `color-mix(in oklab, ${color} 18%, transparent)`,
             color,
@@ -322,13 +329,22 @@ function PatientRow({
       <td className="max-w-0 px-4 py-3">
         <div className="flex min-w-0 items-center gap-2">
           <span
+            data-patient-name-dot
             aria-hidden
-            className="h-2 w-2 shrink-0 rounded-full ring-2 ring-background"
+            className="h-2 w-2 shrink-0 rounded-full ring-2 ring-background print:hidden"
             style={{ backgroundColor: accentColor }}
           />
           <span className="truncate font-medium text-foreground">
             {patient.full_name}
           </span>
+          {patient.has_outstanding_balance && (
+            <Badge
+              variant="outline"
+              className="shrink-0 border-amber-500/40 bg-amber-500/10 px-1.5 py-0 text-[10px] font-medium text-amber-700 dark:text-amber-300 print:border-black print:bg-white print:text-black"
+            >
+              Balance
+            </Badge>
+          )}
         </div>
       </td>
       <td className="px-4 py-3">
@@ -358,14 +374,16 @@ function PatientRow({
       <td className="px-4 py-3">
         {doc ? (
           <span className="text-xs text-muted-foreground">
-            Dr. {doc.full_name}
+            {formatDoctorName(doc.full_name)}
           </span>
         ) : (
           <span className="text-muted-foreground/40">—</span>
         )}
       </td>
       <td className="px-4 py-3">
-        <span className="text-muted-foreground">{patient.phone ?? "—"}</span>
+        <span className="whitespace-nowrap text-muted-foreground">
+          {patient.phone ?? "—"}
+        </span>
       </td>
       <td className="px-4 py-3">
         {blood ? (

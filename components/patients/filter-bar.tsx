@@ -26,6 +26,18 @@ interface Props {
   showScopeFilters?: boolean;
 }
 
+function formatDoctorName(name: string | null | undefined) {
+  if (!name) return "—";
+  return /^dr\.?\s/i.test(name.trim()) ? name.trim() : `Dr. ${name.trim()}`;
+}
+
+function formatDoctorFirstName(name: string | null | undefined) {
+  const formatted = formatDoctorName(name);
+  if (formatted === "—") return formatted;
+  const withoutTitle = formatted.replace(/^dr\.?\s+/i, "");
+  return `Dr. ${withoutTitle.split(" ")[0]}`;
+}
+
 export function PatientsFilterBar({
   doctors,
   departments,
@@ -155,7 +167,7 @@ export function PatientsFilterBar({
               Doctor
               {doc && (
                 <span className="max-w-[120px] truncate font-semibold">
-                  : Dr. {doc.full_name.split(" ")[0]}
+                  : {formatDoctorFirstName(doc.full_name)}
                 </span>
               )}
             </Button>
@@ -172,7 +184,7 @@ export function PatientsFilterBar({
                 <SelectContent>
                   {doctors.map((d) => (
                     <SelectItem key={d.id} value={d.id}>
-                      Dr. {d.full_name}
+                      {formatDoctorName(d.full_name)}
                     </SelectItem>
                   ))}
                 </SelectContent>

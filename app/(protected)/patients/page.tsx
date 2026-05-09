@@ -8,6 +8,11 @@ export const metadata: Metadata = { title: "Patients" };
 
 const PAGE_SIZE = 20;
 
+function formatDoctorName(name: string | null | undefined) {
+  if (!name) return "—";
+  return /^dr\.?\s/i.test(name.trim()) ? name.trim() : `Dr. ${name.trim()}`;
+}
+
 interface PageProps {
   searchParams: Promise<{
     q?: string;
@@ -77,6 +82,30 @@ export default async function PatientsPage({ searchParams }: PageProps) {
     isDoctor ? d.id === user.departmentId : d.id === dept,
   ) ?? null;
   const activeDoctor = isDoctor ? null : (doctors?.find((d) => d.id === doctor) ?? null);
+  const visiblePatients = patients ?? [];
+  const outstandingPatientIds = new Set<string>();
+
+  if (!isDoctor && visiblePatients.length > 0) {
+    const { data: outstandingRows } = await supabase
+      .from("appointments")
+      .select("patient_id")
+      .eq("clinic_id", user.clinicId)
+      .in(
+        "patient_id",
+        visiblePatients.map((patient) => patient.id),
+      )
+      .gt("outstanding_amount", 0)
+      .is("deleted_at", null);
+
+    for (const row of outstandingRows ?? []) {
+      outstandingPatientIds.add(row.patient_id);
+    }
+  }
+
+  const patientsWithBalance = visiblePatients.map((patient) => ({
+    ...patient,
+    has_outstanding_balance: outstandingPatientIds.has(patient.id),
+  }));
 
   return (
     <div className="space-y-6">
@@ -87,7 +116,7 @@ export default async function PatientsPage({ searchParams }: PageProps) {
             {count ?? 0} patient{count !== 1 ? "s" : ""}
             {isDoctor ? " in your department" : " in your clinic"}
             {activeDept && ` · ${activeDept.name}`}
-            {activeDoctor && ` · Dr. ${activeDoctor.full_name}`}.
+            {activeDoctor && ` · ${formatDoctorName(activeDoctor.full_name)}`}.
           </p>
         </div>
       </div>
@@ -109,16 +138,18 @@ export default async function PatientsPage({ searchParams }: PageProps) {
           {activeDept
             ? `Department: ${activeDept.name}`
             : activeDoctor
-              ? `Doctor: Dr. ${activeDoctor.full_name}`
+              ? `Doctor: ${formatDoctorName(activeDoctor.full_name)}`
               : "All patients"}
-          {activeDept && activeDoctor && ` · Doctor: Dr. ${activeDoctor.full_name}`}
+          {activeDept &&
+            activeDoctor &&
+            ` · Doctor: ${formatDoctorName(activeDoctor.full_name)}`}
           {" · "}
           Printed {new Date().toLocaleDateString("en-GB")}
         </p>
       </div>
 
       <PatientTable
-        data={patients ?? []}
+        data={patientsWithBalance}
         total={count ?? 0}
         page={page}
         pageSize={PAGE_SIZE}

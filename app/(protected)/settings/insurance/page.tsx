@@ -10,6 +10,7 @@ import {
   softDeleteInsurance,
   restoreInsurance,
   permanentDeleteInsurance,
+  emptyInsuranceTrash,
 } from "@/actions/settings";
 import { SettingsTrashSection, type TrashItem } from "@/components/settings/settings-trash-section";
 
@@ -112,6 +113,7 @@ export default async function InsuranceSettingsPage() {
         entityLabel="provider"
         onRestore={restoreInsurance}
         onPermanentDelete={permanentDeleteInsurance}
+        onEmptyTrash={emptyInsuranceTrash}
       />
     </div>
   );

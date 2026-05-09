@@ -580,6 +580,39 @@ export async function permanentDeleteAppointment(id: string): Promise<ActionResu
   return { success: true };
 }
 
+export async function emptyAppointmentsTrash(): Promise<ActionResult> {
+  const user = await requireRole(["admin", "receptionist"]);
+  const supabase = await createClient();
+
+  const { data: trashedAppointments, error: selectError } = await supabase
+    .from("appointments")
+    .select("id")
+    .eq("clinic_id", user.clinicId)
+    .not("deleted_at", "is", null);
+
+  if (selectError) return { error: selectError.message };
+
+  const ids = (trashedAppointments ?? []).map((appointment) => appointment.id);
+  if (ids.length === 0) return { success: true };
+
+  for (const id of ids) {
+    const cascaded = await deleteAppointmentDependents(id, user.clinicId);
+    if (cascaded.error) return cascaded;
+  }
+
+  const { error } = await supabase
+    .from("appointments")
+    .delete()
+    .eq("clinic_id", user.clinicId)
+    .in("id", ids)
+    .not("deleted_at", "is", null);
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/appointments");
+  return { success: true };
+}
+
 export async function cancelAppointment(
   id: string,
   reason: string,

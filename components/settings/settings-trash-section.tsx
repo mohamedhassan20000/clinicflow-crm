@@ -29,6 +29,7 @@ interface SettingsTrashSectionProps {
   entityLabel: string;
   onRestore: (id: string) => Promise<{ error?: string; success?: boolean }>;
   onPermanentDelete?: (id: string) => Promise<{ error?: string; success?: boolean }>;
+  onEmptyTrash?: () => Promise<{ error?: string; success?: boolean }>;
 }
 
 function daysLeft(deletedAt: string): number {
@@ -145,11 +146,84 @@ function PermanentDeleteButton({
   );
 }
 
+function EmptyTrashButton({
+  count,
+  entityLabel,
+  onEmptyTrash,
+}: {
+  count: number;
+  entityLabel: string;
+  onEmptyTrash: () => Promise<{ error?: string; success?: boolean }>;
+}) {
+  const [isPending, start] = useTransition();
+  const router = useRouter();
+  const pendingRef = useRef(false);
+
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 gap-1.5 border-destructive/30 px-2 text-xs text-destructive hover:text-destructive"
+          disabled={isPending}
+        >
+          {isPending ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Trash2 className="h-3.5 w-3.5" />
+          )}
+          Empty trash
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Empty settings recycle bin?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This will permanently delete {count} {entityLabel}
+            {count !== 1 ? "s" : ""} already in the recycle bin. Active
+            records will not be affected.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            disabled={isPending}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            onClick={() =>
+              start(async () => {
+                if (pendingRef.current) return;
+                pendingRef.current = true;
+                try {
+                  const res = await onEmptyTrash();
+                  if (res.error) toast.error(res.error);
+                  else {
+                    toast.success("Recycle bin emptied.");
+                    router.refresh();
+                  }
+                } finally {
+                  pendingRef.current = false;
+                }
+              })
+            }
+          >
+            {isPending ? (
+              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+            ) : null}
+            Empty trash
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 export function SettingsTrashSection({
   items,
   entityLabel,
   onRestore,
   onPermanentDelete,
+  onEmptyTrash,
 }: SettingsTrashSectionProps) {
   if (items.length === 0) return null;
 
@@ -164,6 +238,13 @@ export function SettingsTrashSection({
           {items.length} {entityLabel}
           {items.length !== 1 ? "s" : ""}
         </span>
+        {onEmptyTrash && (
+          <EmptyTrashButton
+            count={items.length}
+            entityLabel={entityLabel}
+            onEmptyTrash={onEmptyTrash}
+          />
+        )}
       </div>
       <p className="px-4 py-2 text-xs text-muted-foreground">
         Items are permanently deleted after 30 days. Restore to bring them back.

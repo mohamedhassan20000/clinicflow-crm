@@ -14,6 +14,7 @@ import {
   type AppointmentTrashItem,
 } from "@/components/appointments/appointments-recycle-bin";
 import {
+  emptyAppointmentsTrash,
   permanentDeleteAppointment,
   restoreAppointment,
 } from "@/actions/appointments";
@@ -270,6 +271,7 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
           items={trashItems}
           onRestore={restoreAppointment}
           onPermanentDelete={permanentDeleteAppointment}
+          onEmptyTrash={emptyAppointmentsTrash}
         />
       )}
     </div>

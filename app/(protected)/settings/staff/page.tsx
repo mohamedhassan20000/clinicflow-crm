@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { StaffByDepartment } from "@/components/settings/staff-by-department";
 import { AddStaffDialog } from "@/components/settings/add-staff-dialog";
 import { SettingsTrashSection, type TrashItem } from "@/components/settings/settings-trash-section";
-import { restoreStaff, deleteStaff } from "@/actions/settings";
+import { restoreStaff, deleteStaff, emptyStaffTrash } from "@/actions/settings";
 import { isPrimaryClinicAdmin } from "@/lib/primary-admin";
 
 export const metadata: Metadata = { title: "Staff" };
@@ -80,6 +80,7 @@ export default async function StaffSettingsPage() {
         entityLabel="staff member"
         onRestore={restoreStaff}
         onPermanentDelete={deleteStaff}
+        onEmptyTrash={emptyStaffTrash}
       />
     </div>
   );

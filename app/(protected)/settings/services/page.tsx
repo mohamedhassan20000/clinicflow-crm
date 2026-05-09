@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { AddServiceDialog } from "@/components/settings/add-service-dialog";
 import { ServiceRowActions } from "@/components/settings/service-row-actions";
 import { SettingsTrashSection, type TrashItem } from "@/components/settings/settings-trash-section";
-import { restoreService, deleteService } from "@/actions/settings";
+import { restoreService, deleteService, emptyServicesTrash } from "@/actions/settings";
 
 export const metadata: Metadata = { title: "Services" };
 
@@ -165,6 +165,7 @@ export default async function ServicesSettingsPage() {
         entityLabel="service"
         onRestore={restoreService}
         onPermanentDelete={deleteService}
+        onEmptyTrash={emptyServicesTrash}
       />
     </div>
   );

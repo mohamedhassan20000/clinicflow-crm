@@ -328,6 +328,50 @@ export async function resetStaffPassword(
   return { success: true };
 }
 
+export async function emptyStaffTrash(): Promise<ActionResult> {
+  const user = await requireRole(["admin", "manager"]);
+  const supabase = await createClient();
+
+  const { data: targets, error: selectError } = await supabase
+    .from("profiles")
+    .select("id, role")
+    .eq("clinic_id", user.clinicId)
+    .not("deleted_at", "is", null);
+
+  if (selectError) return { error: selectError.message };
+
+  const staff = targets ?? [];
+  if (staff.some((target) => target.id === user.id)) {
+    return { error: "You cannot permanently delete your own account." };
+  }
+  if (
+    user.role !== "admin" &&
+    staff.some((target) => target.role === "admin")
+  ) {
+    return { error: "Only admins can empty trash containing admin users." };
+  }
+  if (staff.length === 0) return { success: true };
+
+  const adminClient = createAdminClient();
+  for (const target of staff) {
+    const { error } = await adminClient.auth.admin.deleteUser(target.id);
+    if (error) return { error: error.message };
+  }
+
+  await supabase
+    .from("profiles")
+    .delete()
+    .eq("clinic_id", user.clinicId)
+    .in(
+      "id",
+      staff.map((target) => target.id),
+    )
+    .not("deleted_at", "is", null);
+
+  revalidatePath("/settings/staff");
+  return { success: true };
+}
+
 // ── Departments ──────────────────────────────────────────────────────────────
 
 export async function createDepartment(
@@ -450,6 +494,20 @@ export async function permanentDeleteDepartment(deptId: string): Promise<ActionR
   return { success: true };
 }
 
+export async function emptyDepartmentsTrash(): Promise<ActionResult> {
+  const user = await requireRole(["admin", "manager"]);
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("departments")
+    .delete()
+    .eq("clinic_id", user.clinicId)
+    .not("deleted_at", "is", null);
+
+  if (error) return { error: error.message };
+  revalidatePath("/settings/departments");
+  return { success: true };
+}
+
 // ── Insurance ────────────────────────────────────────────────────────────────
 
 export async function createInsurance(
@@ -565,6 +623,20 @@ export async function permanentDeleteInsurance(insuranceId: string): Promise<Act
     .eq("id", insuranceId)
     .eq("clinic_id", user.clinicId)
     .not("deleted_at", "is", null);
+  if (error) return { error: error.message };
+  revalidatePath("/settings/insurance");
+  return { success: true };
+}
+
+export async function emptyInsuranceTrash(): Promise<ActionResult> {
+  const user = await requireRole(["admin", "manager"]);
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("insurance_providers")
+    .delete()
+    .eq("clinic_id", user.clinicId)
+    .not("deleted_at", "is", null);
+
   if (error) return { error: error.message };
   revalidatePath("/settings/insurance");
   return { success: true };
@@ -740,10 +812,25 @@ export async function deleteService(serviceId: string): Promise<ActionResult> {
     .from("services")
     .delete()
     .eq("id", serviceId)
-    .eq("clinic_id", user.clinicId);
+    .eq("clinic_id", user.clinicId)
+    .not("deleted_at", "is", null);
 
   if (error) return { error: error.message };
 
+  revalidatePath("/settings/services");
+  return { success: true };
+}
+
+export async function emptyServicesTrash(): Promise<ActionResult> {
+  const user = await requireRole(["admin", "manager"]);
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("services")
+    .delete()
+    .eq("clinic_id", user.clinicId)
+    .not("deleted_at", "is", null);
+
+  if (error) return { error: error.message };
   revalidatePath("/settings/services");
   return { success: true };
 }

@@ -8,6 +8,7 @@ import {
   softDeleteDepartment,
   restoreDepartment,
   permanentDeleteDepartment,
+  emptyDepartmentsTrash,
 } from "@/actions/settings";
 import { DepartmentActions } from "@/components/settings/department-actions";
 import { AddDepartmentDialog } from "@/components/settings/add-department-dialog";
@@ -120,6 +121,7 @@ export default async function DepartmentsSettingsPage() {
         entityLabel="department"
         onRestore={restoreDepartment}
         onPermanentDelete={permanentDeleteDepartment}
+        onEmptyTrash={emptyDepartmentsTrash}
       />
     </div>
   );

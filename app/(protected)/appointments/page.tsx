@@ -167,7 +167,7 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
   let query = supabase
     .from("appointments")
     .select(
-      "id, scheduled_at, status, insurance_provider_id, patients(full_name), profiles!doctor_id(full_name), departments(name, color)",
+      "id, scheduled_at, status, insurance_provider_id, notes, patients(full_name), profiles!doctor_id(full_name), departments(name, color)",
     )
     .eq("clinic_id", user.clinicId)
     .is("deleted_at", null)

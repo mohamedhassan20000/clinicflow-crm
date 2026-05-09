@@ -7,7 +7,7 @@ import type { Tables } from "@/types/database";
 
 type Appointment = Pick<
   Tables<"appointments">,
-  "id" | "scheduled_at" | "status" | "insurance_provider_id"
+  "id" | "scheduled_at" | "status" | "insurance_provider_id" | "notes"
 > & {
   patients: { full_name: string } | null;
   profiles: { full_name: string } | null;
@@ -175,7 +175,7 @@ export function MonthCalendar({ appointments, monthStart, canEdit }: Props) {
                           backgroundColor: `color-mix(in oklab, ${color} 14%, transparent)`,
                           color,
                         }}
-                        title={`${time} · ${a.patients?.full_name ?? ""}`}
+                        title={`${time} · ${a.patients?.full_name ?? ""}${a.notes ? ` · ${a.notes}` : ""}`}
                       >
                         <span className="font-semibold tabular-nums">
                           {time}
@@ -183,6 +183,9 @@ export function MonthCalendar({ appointments, monthStart, canEdit }: Props) {
                         <span className="ml-1 text-foreground/80">
                           {a.patients?.full_name ?? "—"}
                         </span>
+                        {a.notes && (
+                          <span className="ml-1 text-muted-foreground">•</span>
+                        )}
                       </div>
                     );
                   })}

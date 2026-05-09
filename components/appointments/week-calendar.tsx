@@ -12,7 +12,7 @@ import type { Tables } from "@/types/database";
 
 type Appointment = Pick<
   Tables<"appointments">,
-  "id" | "scheduled_at" | "status" | "insurance_provider_id"
+  "id" | "scheduled_at" | "status" | "insurance_provider_id" | "notes"
 > & {
   patients: { full_name: string } | null;
   profiles: { full_name: string } | null;
@@ -250,6 +250,11 @@ function AppointmentCard({
       <div className="text-muted-foreground/70 truncate">
         {appt.profiles?.full_name ?? "—"}
       </div>
+      {appt.notes && (
+        <p className="line-clamp-2 rounded bg-background/50 px-1.5 py-1 text-[10px] leading-snug text-muted-foreground">
+          {appt.notes}
+        </p>
+      )}
       <StatusBadge status={appt.status} />
       {canEdit && (
         <div className="pt-0.5">

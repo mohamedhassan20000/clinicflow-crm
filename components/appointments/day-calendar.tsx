@@ -12,7 +12,7 @@ import type { Tables } from "@/types/database";
 
 type Appointment = Pick<
   Tables<"appointments">,
-  "id" | "scheduled_at" | "status" | "insurance_provider_id"
+  "id" | "scheduled_at" | "status" | "insurance_provider_id" | "notes"
 > & {
   patients: { full_name: string } | null;
   profiles: { full_name: string } | null;
@@ -168,6 +168,11 @@ function DayRow({ appt, canEdit }: { appt: Appointment; canEdit: boolean }) {
         <div className="text-xs text-muted-foreground">
           Dr. {appt.profiles?.full_name ?? "Unassigned"}
         </div>
+        {appt.notes && (
+          <p className="line-clamp-2 max-w-2xl rounded bg-muted/40 px-2 py-1 text-xs leading-snug text-muted-foreground">
+            {appt.notes}
+          </p>
+        )}
       </div>
       <div className="flex items-center gap-2 shrink-0">
         <StatusBadge status={appt.status} />

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Check, ChevronsUpDown, Loader2, CalendarPlus } from "lucide-react";
@@ -49,6 +49,7 @@ type Patient = Pick<
   | "full_name"
   | "phone"
   | "department_id"
+  | "assigned_doctor_id"
   | "national_id"
   | "file_number"
 >;
@@ -127,6 +128,9 @@ export function AppointmentForm({
   const [state, formAction, isPending] = useActionState(action, null);
   const [patientOpen, setPatientOpen] = useState(false);
   const [selectedDept, setSelectedDept] = useState<string | null>(null);
+  const departmentChangedRef = useRef(false);
+  const doctorChangedRef = useRef(false);
+  const insuranceChangedRef = useRef(false);
 
   const form = useForm<AppointmentFormValues, unknown, AppointmentFormValues>({
     resolver: zodResolver(appointmentSchema) as never,
@@ -141,15 +145,35 @@ export function AppointmentForm({
     },
   });
 
+  function applyPatientDefaults(patient: Patient) {
+    if (!departmentChangedRef.current) {
+      form.setValue("department_id", patient.department_id ?? null, {
+        shouldDirty: true,
+      });
+      setSelectedDept(patient.department_id ?? null);
+    }
+
+    if (!doctorChangedRef.current) {
+      form.setValue("doctor_id", patient.assigned_doctor_id ?? "", {
+        shouldDirty: true,
+      });
+    }
+
+    if (!insuranceChangedRef.current) {
+      form.setValue("insurance_provider_id", null, {
+        shouldDirty: true,
+      });
+    }
+  }
+
   // When the page is opened with ?patient_id=… (e.g. "Book for this patient"
-  // from the patient file), preselect the patient's home department.
+  // from the patient file), preselect the patient's appointment context.
   useEffect(() => {
     if (!defaultPatientId) return;
     const p = patients.find((x) => x.id === defaultPatientId);
-    if (!p?.department_id) return;
+    if (!p) return;
     queueMicrotask(() => {
-      form.setValue("department_id", p.department_id);
-      setSelectedDept(p.department_id);
+      applyPatientDefaults(p);
     });
     // Run once on mount; patients list is stable for the lifetime of the page.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -229,18 +253,7 @@ export function AppointmentForm({
                             onSelect={() => {
                               field.onChange(p.id);
                               setPatientOpen(false);
-                              // Auto-fill the appointment department from the
-                              // patient's home department, and reset the doctor
-                              // pick because the doctor list is dept-filtered.
-                              if (p.department_id) {
-                                form.setValue("department_id", p.department_id, {
-                                  shouldDirty: true,
-                                });
-                                setSelectedDept(p.department_id);
-                                form.setValue("doctor_id", "", {
-                                  shouldDirty: true,
-                                });
-                              }
+                              applyPatientDefaults(p);
                             }}
                           >
                             <Check
@@ -290,9 +303,10 @@ export function AppointmentForm({
                 <Select
                   value={field.value ?? undefined}
                   onValueChange={(v) => {
+                    departmentChangedRef.current = true;
                     field.onChange(v);
                     setSelectedDept(v);
-                    form.setValue("doctor_id", "");
+                    if (!doctorChangedRef.current) form.setValue("doctor_id", "");
                   }}
                   disabled={isPending}
                 >
@@ -323,7 +337,10 @@ export function AppointmentForm({
                 <FormLabel>Doctor</FormLabel>
                 <Select
                   value={field.value}
-                  onValueChange={field.onChange}
+                  onValueChange={(value) => {
+                    doctorChangedRef.current = true;
+                    field.onChange(value);
+                  }}
                   disabled={isPending}
                 >
                   <FormControl>
@@ -469,7 +486,10 @@ export function AppointmentForm({
                 <FormLabel>Insurance</FormLabel>
                 <Select
                   value={field.value ?? "__none__"}
-                  onValueChange={(v) => field.onChange(v === "__none__" ? null : v)}
+                  onValueChange={(v) => {
+                    insuranceChangedRef.current = true;
+                    field.onChange(v === "__none__" ? null : v);
+                  }}
                   disabled={isPending}
                 >
                   <FormControl>

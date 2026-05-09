@@ -26,7 +26,7 @@ export function ViewSwitcher({ current }: { current: CalendarView }) {
   }
 
   return (
-    <div className="inline-flex items-center rounded-lg border border-border/60 bg-card p-0.5 text-xs font-medium shadow-sm">
+    <div className="inline-flex max-w-full shrink-0 items-center overflow-x-auto rounded-lg border border-border/60 bg-card p-0.5 text-xs font-medium shadow-sm">
       {VIEWS.map((v) => {
         const active = current === v.value;
         return (

@@ -79,14 +79,14 @@ export function MonthCalendar({ appointments, monthStart, canEdit }: Props) {
   return (
     <div className="space-y-4">
       {/* Nav */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <Button asChild variant="outline" size="sm" className="h-8 w-8 p-0">
             <Link href={`/appointments?view=month&month=${fmtMonth(prevMonth)}`} aria-label="Previous month">
               <ChevronLeft className="h-4 w-4" />
             </Link>
           </Button>
-          <span className="text-sm font-medium">
+          <span className="min-w-0 text-sm font-medium">
             {monthStart.toLocaleDateString("en-GB", {
               month: "long",
               year: "numeric",
@@ -100,7 +100,7 @@ export function MonthCalendar({ appointments, monthStart, canEdit }: Props) {
         </div>
 
         {canEdit && (
-          <Button asChild size="sm" className="gap-1.5">
+          <Button asChild size="sm" className="shrink-0 gap-1.5">
             <Link href="/appointments/new">
               <CalendarPlus className="h-4 w-4" />
               New appointment
@@ -109,95 +109,99 @@ export function MonthCalendar({ appointments, monthStart, canEdit }: Props) {
         )}
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-border/50">
-        <div className="grid grid-cols-7 border-b border-border/50 bg-muted/30 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-          {DAY_NAMES.map((d) => (
-            <div key={d} className="px-2 py-2 text-center">
-              {d}
-            </div>
-          ))}
-        </div>
+      <div className="overflow-x-auto rounded-xl border border-border/50">
+        <div className="min-w-[860px]">
+          <div className="grid grid-cols-7 border-b border-border/50 bg-muted/30 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            {DAY_NAMES.map((d) => (
+              <div key={d} className="px-2 py-2 text-center">
+                {d}
+              </div>
+            ))}
+          </div>
 
-        <div className="grid grid-cols-7 auto-rows-[minmax(110px,_1fr)]">
-          {visible.map((day, i) => {
-            const inMonth = day.getMonth() === monthStart.getMonth();
-            const isToday = isSameDay(day, today);
-            const dayAppts = appointments
-              .filter((a) => isSameDay(new Date(a.scheduled_at), day))
-              .sort(
-                (a, b) =>
-                  new Date(a.scheduled_at).getTime() -
-                  new Date(b.scheduled_at).getTime(),
-              );
+          <div className="grid auto-rows-[minmax(110px,_1fr)] grid-cols-7">
+            {visible.map((day, i) => {
+              const inMonth = day.getMonth() === monthStart.getMonth();
+              const isToday = isSameDay(day, today);
+              const dayAppts = appointments
+                .filter((a) => isSameDay(new Date(a.scheduled_at), day))
+                .sort(
+                  (a, b) =>
+                    new Date(a.scheduled_at).getTime() -
+                    new Date(b.scheduled_at).getTime(),
+                );
 
-            return (
-              <Link
-                key={i}
-                href={`/appointments?view=day&date=${fmtDate(day)}`}
-                className={`group border-b border-r border-border/40 p-1.5 transition-colors hover:bg-muted/30 ${
-                  i % 7 === 6 ? "border-r-0" : ""
-                } ${!inMonth ? "bg-muted/10 text-muted-foreground/50" : ""}`}
-              >
-                <div className="mb-1 flex items-center justify-between">
-                  <span
-                    className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${
-                      isToday
-                        ? "bg-primary text-primary-foreground"
-                        : inMonth
-                          ? "text-foreground"
-                          : ""
-                    }`}
-                  >
-                    {day.getDate()}
-                  </span>
-                  {dayAppts.length > 0 && (
-                    <span className="text-[10px] text-muted-foreground">
-                      {dayAppts.length}
+              return (
+                <Link
+                  key={i}
+                  href={`/appointments?view=day&date=${fmtDate(day)}`}
+                  className={`group border-b border-r border-border/40 p-1.5 transition-colors hover:bg-muted/30 ${
+                    i % 7 === 6 ? "border-r-0" : ""
+                  } ${!inMonth ? "bg-muted/10 text-muted-foreground/50" : ""}`}
+                >
+                  <div className="mb-1 flex items-center justify-between">
+                    <span
+                      className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${
+                        isToday
+                          ? "bg-primary text-primary-foreground"
+                          : inMonth
+                            ? "text-foreground"
+                            : ""
+                      }`}
+                    >
+                      {day.getDate()}
                     </span>
-                  )}
-                </div>
-                <div className="space-y-0.5">
-                  {dayAppts.slice(0, 3).map((a) => {
-                    const color = a.departments?.color ?? "#64748b";
-                    const time = new Date(a.scheduled_at).toLocaleTimeString(
-                      "en-GB",
-                      {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                        timeZone: "Europe/Istanbul",
-                      },
-                    );
-                    return (
-                      <div
-                        key={a.id}
-                        className="truncate rounded px-1 py-0.5 text-[10px]"
-                        style={{
-                          backgroundColor: `color-mix(in oklab, ${color} 14%, transparent)`,
-                          color,
-                        }}
-                        title={`${time} · ${a.patients?.full_name ?? ""}${a.notes ? ` · ${a.notes}` : ""}`}
-                      >
-                        <span className="font-semibold tabular-nums">
-                          {time}
-                        </span>
-                        <span className="ml-1 text-foreground/80">
-                          {a.patients?.full_name ?? "—"}
-                        </span>
-                        {a.notes && (
-                          <span className="ml-1 text-muted-foreground">•</span>
-                        )}
+                    {dayAppts.length > 0 && (
+                      <span className="text-[10px] text-muted-foreground">
+                        {dayAppts.length}
+                      </span>
+                    )}
+                  </div>
+                  <div className="space-y-0.5">
+                    {dayAppts.slice(0, 3).map((a) => {
+                      const color = a.departments?.color ?? "#64748b";
+                      const time = new Date(a.scheduled_at).toLocaleTimeString(
+                        "en-GB",
+                        {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                          timeZone: "Europe/Istanbul",
+                        },
+                      );
+                      return (
+                        <div
+                          key={a.id}
+                          className="truncate rounded px-1 py-0.5 text-[10px]"
+                          style={{
+                            backgroundColor: `color-mix(in oklab, ${color} 14%, transparent)`,
+                            color,
+                          }}
+                          title={`${time} · ${a.patients?.full_name ?? ""}${a.notes ? ` · ${a.notes}` : ""}`}
+                        >
+                          <span className="font-semibold tabular-nums">
+                            {time}
+                          </span>
+                          <span className="ml-1 text-foreground/80">
+                            {a.patients?.full_name ?? "—"}
+                          </span>
+                          {a.notes && (
+                            <span className="ml-1 text-muted-foreground">
+                              •
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                    {dayAppts.length > 3 && (
+                      <div className="px-1 text-[10px] text-muted-foreground">
+                        +{dayAppts.length - 3} more
                       </div>
-                    );
-                  })}
-                  {dayAppts.length > 3 && (
-                    <div className="px-1 text-[10px] text-muted-foreground">
-                      +{dayAppts.length - 3} more
-                    </div>
-                  )}
-                </div>
-              </Link>
-            );
-          })}
+                    )}
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>

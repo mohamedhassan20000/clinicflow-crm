@@ -62,14 +62,14 @@ export function WeekCalendar({
   return (
     <div className="space-y-4">
       {/* Nav */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <Button asChild variant="outline" size="sm" className="h-8 w-8 p-0">
             <Link href={`/appointments?week=${fmt(prevWeek)}`} aria-label="Previous week">
               <ChevronLeft className="h-4 w-4" />
             </Link>
           </Button>
-          <span className="text-sm font-medium">
+          <span className="min-w-0 text-sm font-medium">
             {weekStart.toLocaleDateString("en-GB", {
               day: "numeric",
               month: "short",
@@ -89,7 +89,7 @@ export function WeekCalendar({
         </div>
 
         {canEdit && (
-          <Button asChild size="sm" className="gap-1.5">
+          <Button asChild size="sm" className="shrink-0 gap-1.5">
             <Link href="/appointments/new">
               <CalendarPlus className="h-4 w-4" />
               New appointment
@@ -99,53 +99,55 @@ export function WeekCalendar({
       </div>
 
       {/* 7-column grid */}
-      <div className="grid grid-cols-7 gap-2 overflow-x-auto">
-        {days.map((day, i) => {
-          const isToday = isSameDay(day, today);
-          const dayAppts = appointments
-            .filter((a) => isSameDay(new Date(a.scheduled_at), day))
-            .sort(
-              (a, b) =>
-                new Date(a.scheduled_at).getTime() -
-                new Date(b.scheduled_at).getTime(),
-            );
+      <div className="overflow-x-auto rounded-xl border border-border/40 bg-card/40 p-2">
+        <div className="grid min-w-[980px] grid-cols-7 gap-2">
+          {days.map((day, i) => {
+            const isToday = isSameDay(day, today);
+            const dayAppts = appointments
+              .filter((a) => isSameDay(new Date(a.scheduled_at), day))
+              .sort(
+                (a, b) =>
+                  new Date(a.scheduled_at).getTime() -
+                  new Date(b.scheduled_at).getTime(),
+              );
 
-          return (
-            <div key={i} className="min-w-[130px]">
-              {/* Day header */}
-              <div
-                className={`mb-2 rounded-lg px-2 py-1.5 text-center ${
-                  isToday
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted/40 text-muted-foreground"
-                }`}
-              >
-                <p className="text-xs font-medium">{DAY_NAMES[i]}</p>
-                <p
-                  className={`text-lg font-semibold leading-none mt-0.5 ${isToday ? "" : "text-foreground"}`}
+            return (
+              <div key={i} className="min-w-[130px]">
+                {/* Day header */}
+                <div
+                  className={`mb-2 rounded-lg px-2 py-1.5 text-center ${
+                    isToday
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted/40 text-muted-foreground"
+                  }`}
                 >
-                  {day.getDate()}
-                </p>
-              </div>
-
-              {/* Appointments */}
-              <div className="space-y-1.5">
-                {dayAppts.length === 0 && (
-                  <p className="px-1 text-xs text-muted-foreground/40 text-center py-2">
-                    —
+                  <p className="text-xs font-medium">{DAY_NAMES[i]}</p>
+                  <p
+                    className={`text-lg font-semibold leading-none mt-0.5 ${isToday ? "" : "text-foreground"}`}
+                  >
+                    {day.getDate()}
                   </p>
-                )}
-                {dayAppts.map((appt) => (
-                  <AppointmentCard
-                    key={appt.id}
-                    appt={appt}
-                    canEdit={canEdit}
-                  />
-                ))}
+                </div>
+
+                {/* Appointments */}
+                <div className="space-y-1.5">
+                  {dayAppts.length === 0 && (
+                    <p className="px-1 text-xs text-muted-foreground/40 text-center py-2">
+                      —
+                    </p>
+                  )}
+                  {dayAppts.map((appt) => (
+                    <AppointmentCard
+                      key={appt.id}
+                      appt={appt}
+                      canEdit={canEdit}
+                    />
+                  ))}
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -209,7 +211,7 @@ function AppointmentCard({
 
   return (
     <div
-      className="group relative rounded-lg border p-2 pl-2.5 text-xs space-y-1 transition-colors hover:brightness-[1.02]"
+      className="group relative space-y-1 rounded-lg border p-2 pl-2.5 text-xs transition-colors hover:brightness-[1.02]"
       style={{
         borderColor: `color-mix(in oklab, ${deptColor} 35%, transparent)`,
         backgroundColor: `color-mix(in oklab, ${deptColor} 8%, var(--card))`,
@@ -235,10 +237,10 @@ function AppointmentCard({
           </button>
         )}
       </div>
-      <div className="flex items-center justify-between text-muted-foreground">
+      <div className="flex min-w-0 items-center justify-between gap-2 text-muted-foreground">
         <span>{time}</span>
         <span
-          className="rounded-sm px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider"
+          className="max-w-[90px] truncate rounded-sm px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider"
           style={{
             backgroundColor: `color-mix(in oklab, ${deptColor} 18%, transparent)`,
             color: deptColor,

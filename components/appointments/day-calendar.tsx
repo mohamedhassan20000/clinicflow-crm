@@ -50,14 +50,14 @@ export function DayCalendar({ appointments, date, canEdit }: Props) {
   return (
     <div className="space-y-4">
       {/* Nav */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <Button asChild variant="outline" size="sm" className="h-8 w-8 p-0">
             <Link href={`/appointments?view=day&date=${fmt(prev)}`} aria-label="Previous day">
               <ChevronLeft className="h-4 w-4" />
             </Link>
           </Button>
-          <span className="text-sm font-medium">
+          <span className="min-w-0 text-sm font-medium">
             {date.toLocaleDateString("en-GB", {
               weekday: "long",
               day: "numeric",
@@ -73,7 +73,7 @@ export function DayCalendar({ appointments, date, canEdit }: Props) {
         </div>
 
         {canEdit && (
-          <Button asChild size="sm" className="gap-1.5">
+          <Button asChild size="sm" className="shrink-0 gap-1.5">
             <Link href="/appointments/new">
               <CalendarPlus className="h-4 w-4" />
               New appointment
@@ -87,7 +87,7 @@ export function DayCalendar({ appointments, date, canEdit }: Props) {
           No appointments scheduled for this day.
         </div>
       ) : (
-        <div className="rounded-xl border border-border/50 bg-card divide-y divide-border/40">
+        <div className="divide-y divide-border/40 rounded-xl border border-border/50 bg-card">
           {sorted.map((a) => (
             <DayRow key={a.id} appt={a} canEdit={canEdit} />
           ))}
@@ -137,12 +137,12 @@ function DayRow({ appt, canEdit }: { appt: Appointment; canEdit: boolean }) {
 
   return (
     <div
-      className="flex flex-wrap items-center gap-4 px-4 py-3"
+      className="flex flex-wrap items-start gap-3 px-3 py-3 sm:gap-4 sm:px-4"
       style={{
         backgroundColor: `color-mix(in oklab, ${deptColor} 4%, transparent)`,
       }}
     >
-      <div className="flex min-w-[70px] flex-col">
+      <div className="flex min-w-[58px] flex-col sm:min-w-[70px]">
         <span className="font-mono text-base font-semibold tabular-nums">
           {time}
         </span>
@@ -152,9 +152,11 @@ function DayRow({ appt, canEdit }: { appt: Appointment; canEdit: boolean }) {
         className="h-10 w-1 shrink-0 rounded-full"
         style={{ backgroundColor: deptColor }}
       />
-      <div className="min-w-0 flex-1 space-y-0.5">
-        <div className="flex items-center gap-2">
-          <span className="font-medium text-foreground">{patientName}</span>
+      <div className="min-w-0 flex-[1_1_220px] space-y-0.5">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <span className="min-w-0 truncate font-medium text-foreground">
+            {patientName}
+          </span>
           <span
             className="rounded-sm px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
             style={{
@@ -174,7 +176,7 @@ function DayRow({ appt, canEdit }: { appt: Appointment; canEdit: boolean }) {
           </p>
         )}
       </div>
-      <div className="flex items-center gap-2 shrink-0">
+      <div className="ml-auto flex w-full shrink-0 flex-wrap items-center justify-start gap-2 sm:w-auto sm:justify-end">
         <StatusBadge status={appt.status} />
         {canEdit && (
           <>

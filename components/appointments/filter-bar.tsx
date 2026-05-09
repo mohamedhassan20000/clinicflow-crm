@@ -91,7 +91,7 @@ export function AppointmentsFilterBar({ doctors, departments, hideDoctorFilter =
     .length;
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex max-w-full flex-wrap items-center gap-2">
       <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
         <Filter className="h-3.5 w-3.5" />
         Filter
@@ -208,7 +208,7 @@ function FilterChip({
           size="sm"
           variant="outline"
           className={cn(
-            "h-7 gap-1.5 px-2 text-xs font-medium",
+            "h-7 max-w-full gap-1.5 px-2 text-xs font-medium",
             active
               ? "border-primary/40 bg-primary/10 text-primary hover:bg-primary/15"
               : "text-muted-foreground",

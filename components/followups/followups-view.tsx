@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import type { ComponentType, ReactNode } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -21,6 +22,11 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -160,10 +166,8 @@ export function FollowupsView({
   const router = useRouter();
   const params = useSearchParams();
   const [, startTransition] = useTransition();
-  const [q, setQ] = useState(activeQuery);
   const [activeRow, setActiveRow] = useState<PendingRow | null>(null);
   const [editRow, setEditRow] = useState<DoneRow | null>(null);
-  const initialQRef = useRef(activeQuery);
 
   // Per-table pagination: each Awaiting group + the Completed table keeps its
   // own page index in local state. Reset to 1 whenever filters change.
@@ -189,29 +193,6 @@ export function FollowupsView({
   function setDonePage(key: string, n: number) {
     setDonePages((prev) => ({ ...prev, [key]: Math.max(1, n) }));
   }
-
-  // Debounce live search input → push the URL change after 300ms of no typing.
-  useEffect(() => {
-    const trimmed = q.trim();
-    if (trimmed === activeQuery) return;
-    const handle = setTimeout(() => {
-      const p = new URLSearchParams(params?.toString() ?? "");
-      if (trimmed) p.set("q", trimmed);
-      else p.delete("q");
-      startTransition(() => router.push(`/followups?${p.toString()}`));
-    }, 300);
-    return () => clearTimeout(handle);
-    // intentionally exclude params/router/startTransition — only care about q + activeQuery
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, activeQuery]);
-
-  // When the URL clears the query elsewhere (e.g. Clear filters), re-sync the input.
-  useEffect(() => {
-    if (activeQuery !== initialQRef.current) {
-      queueMicrotask(() => setQ(activeQuery));
-      initialQRef.current = activeQuery;
-    }
-  }, [activeQuery]);
 
   function update(next: Record<string, string | null>) {
     const p = new URLSearchParams(params?.toString() ?? "");
@@ -269,6 +250,7 @@ export function FollowupsView({
     scope === "day" || scope === "yesterday"
       ? fmtDate(range.start)
       : `${fmtDate(range.start)} → ${fmtDate(range.end)}`;
+  const dept = departments.find((d) => d.id === activeDept);
 
   return (
     <div className="space-y-6">
@@ -371,45 +353,62 @@ export function FollowupsView({
           Filter
         </span>
         {!readOnly && (
-          <Select
-            value={activeDept ?? ""}
-            onValueChange={(v) => update({ dept: v || null })}
+          <FilterChip
+            icon={Users}
+            label="Department"
+            value={dept?.name}
+            active={!!activeDept}
           >
-            <SelectTrigger
-              className={cn(
-                "h-8 w-[180px] gap-1.5 px-2 text-xs",
-                activeDept &&
-                  "border-primary/40 bg-primary/10 text-primary",
-              )}
+            <Select
+              value={activeDept ?? ""}
+              onValueChange={(v) => update({ dept: v || null })}
             >
-              <Users className="h-3.5 w-3.5" />
-              <SelectValue placeholder="All departments" />
-            </SelectTrigger>
-            <SelectContent>
-              {departments.map((d) => (
-                <SelectItem key={d.id} value={d.id}>
-                  <span className="inline-flex items-center gap-2">
-                    <span
-                      aria-hidden
-                      className="h-2 w-2 rounded-full"
-                      style={{ backgroundColor: d.color }}
-                    />
-                    {d.name}
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+              <SelectTrigger className="h-8 text-sm">
+                <SelectValue placeholder="Select department" />
+              </SelectTrigger>
+              <SelectContent>
+                {departments.map((d) => (
+                  <SelectItem key={d.id} value={d.id}>
+                    <span className="inline-flex items-center gap-2">
+                      <span
+                        aria-hidden
+                        className="h-2 w-2 rounded-full"
+                        style={{ backgroundColor: d.color }}
+                      />
+                      {d.name}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {activeDept && (
+              <div className="mt-2 flex justify-end">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => update({ dept: null })}
+                >
+                  Clear
+                </Button>
+              </div>
+            )}
+          </FilterChip>
         )}
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Name, phone, file # or national ID…"
-            className="h-8 w-[260px] pl-7 text-xs"
+        <FilterChip
+          icon={Search}
+          label="Search"
+          value={activeQuery}
+          active={activeQuery.trim().length > 0}
+        >
+          <TextFilter
+            value={activeQuery}
+            placeholder="Name, phone, file # or national ID..."
+            onApply={(value) => update({ q: value || null })}
+            onClear={() => update({ q: null })}
           />
-        </div>
+        </FilterChip>
         {(activeDept || activeQuery) && (
           <Button
             variant="ghost"
@@ -418,7 +417,7 @@ export function FollowupsView({
             onClick={clearFilters}
           >
             <X className="h-3.5 w-3.5" />
-            Clear
+            Clear all
           </Button>
         )}
       </div>
@@ -983,6 +982,95 @@ export function FollowupsView({
         </>
       )}
     </div>
+  );
+}
+
+function FilterChip({
+  icon: Icon,
+  label,
+  value,
+  active,
+  children,
+}: {
+  icon: ComponentType<{ className?: string }>;
+  label: string;
+  value?: string | null;
+  active?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          size="sm"
+          variant="outline"
+          className={cn(
+            "h-7 gap-1.5 px-2 text-xs",
+            active
+              ? "border-primary/40 bg-primary/10 text-primary hover:bg-primary/15"
+              : "text-muted-foreground",
+          )}
+        >
+          <Icon className="h-3.5 w-3.5" />
+          {label}
+          {value && (
+            <span className="max-w-[120px] truncate font-semibold">
+              : {value}
+            </span>
+          )}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-64 p-3" align="start">
+        {children}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function TextFilter({
+  value,
+  placeholder,
+  onApply,
+  onClear,
+}: {
+  value: string;
+  placeholder: string;
+  onApply: (value: string) => void;
+  onClear: () => void;
+}) {
+  const [draft, setDraft] = useState(value);
+
+  return (
+    <form
+      className="space-y-2"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onApply(draft.trim());
+      }}
+    >
+      <Input
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        placeholder={placeholder}
+        className="h-8 text-sm"
+      />
+      <div className="flex justify-end gap-2">
+        {value && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={onClear}
+          >
+            Clear
+          </Button>
+        )}
+        <Button type="submit" size="sm" className="h-7 text-xs">
+          Apply
+        </Button>
+      </div>
+    </form>
   );
 }
 

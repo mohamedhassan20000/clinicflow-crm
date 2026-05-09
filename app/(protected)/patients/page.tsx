@@ -92,14 +92,13 @@ export default async function PatientsPage({ searchParams }: PageProps) {
         </div>
       </div>
 
-      {!isDoctor && (
-        <div className="print:hidden">
-          <PatientsFilterBar
-            doctors={doctors ?? []}
-            departments={departments ?? []}
-          />
-        </div>
-      )}
+      <div className="print:hidden">
+        <PatientsFilterBar
+          doctors={doctors ?? []}
+          departments={departments ?? []}
+          showScopeFilters={!isDoctor}
+        />
+      </div>
 
       {/* Print-only header */}
       <div className="hidden print:block print:mb-4">

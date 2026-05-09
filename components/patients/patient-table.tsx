@@ -1,18 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useQueryState } from "nuqs";
-import { useMemo, useTransition } from "react";
-import {
-  Search,
-  UserPlus,
-  ChevronLeft,
-  ChevronRight,
-  Users,
-} from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useMemo } from "react";
+import { UserPlus, ChevronLeft, ChevronRight, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 type Patient = {
@@ -46,10 +38,17 @@ export function PatientTable({
   pageSize,
   canCreate,
 }: PatientTableProps) {
-  const [search, setSearch] = useQueryState("q", { defaultValue: "" });
-  const [, startTransition] = useTransition();
+  const params = useSearchParams();
+  const search = params.get("q") ?? "";
   const totalPages = Math.ceil(total / pageSize);
-  const isSearching = (search ?? "").trim().length > 0;
+  const isSearching = search.trim().length > 0;
+
+  function pageHref(nextPage: number) {
+    const next = new URLSearchParams(params.toString());
+    if (nextPage <= 1) next.delete("page");
+    else next.set("page", String(nextPage));
+    return `?${next.toString()}`;
+  }
 
   // Group patients by department for the default browse view.
   const groups = useMemo(() => {
@@ -86,27 +85,16 @@ export function PatientTable({
   return (
     <div className="space-y-4">
       {/* Toolbar */}
-      <div className="flex items-center justify-between gap-3 print:hidden">
-        <div className="relative max-w-xs flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search by name, phone, file #, national ID…"
-            value={search}
-            onChange={(e) =>
-              startTransition(() => void setSearch(e.target.value || null))
-            }
-            className="h-9 pl-9"
-          />
-        </div>
-        {canCreate && (
+      {canCreate && (
+        <div className="flex items-center justify-end gap-3 print:hidden">
           <Button asChild size="sm" className="h-9 gap-1.5">
             <Link href="/patients/new">
               <UserPlus className="h-4 w-4" />
               New patient
             </Link>
           </Button>
-        )}
-      </div>
+        </div>
+      )}
 
       {data.length === 0 ? (
         <div className="rounded-xl border border-border/50 bg-card px-4 py-12 text-center text-sm text-muted-foreground">
@@ -151,7 +139,7 @@ export function PatientTable({
               className={`h-8 w-8 p-0 ${page <= 1 ? "pointer-events-none opacity-40" : ""}`}
             >
               <Link
-                href={`?q=${search}&page=${page - 1}`}
+                href={pageHref(page - 1)}
                 aria-disabled={page <= 1}
                 aria-label="Previous page"
               >
@@ -168,7 +156,7 @@ export function PatientTable({
               className={`h-8 w-8 p-0 ${page >= totalPages ? "pointer-events-none opacity-40" : ""}`}
             >
               <Link
-                href={`?q=${search}&page=${page + 1}`}
+                href={pageHref(page + 1)}
                 aria-disabled={page >= totalPages}
                 aria-label="Next page"
               >

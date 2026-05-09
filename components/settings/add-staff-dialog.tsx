@@ -202,8 +202,8 @@ export function AddStaffDialog({
                     {created?.full_name} created
                   </SheetTitle>
                   <p className="text-xs text-muted-foreground">
-                    Upload their documents below — you can also do this later from
-                    the staff profile.
+                    Add their profile avatar and documents below — you can also
+                    do this later from the staff profile.
                   </p>
                 </div>
               </div>
@@ -267,8 +267,17 @@ export function AddStaffDialog({
                 </div>
               ) : (
                 <div className="space-y-8">
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      Profile avatar
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      This photo appears beside the staff member&apos;s name and is
+                      stored separately from staff documents.
+                    </p>
+                  </div>
                   <DocSection
-                    title="Profile photo"
+                    title="Avatar photo"
                     icon={<User className="h-4 w-4" />}
                     hint="JPEG, PNG, or WebP · max 2 MB"
                     file={files?.photo ?? null}
@@ -279,6 +288,12 @@ export function AddStaffDialog({
                   />
 
                   <Separator />
+
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      Staff documents
+                    </p>
+                  </div>
 
                   <DocSection
                     title="Employment contract"

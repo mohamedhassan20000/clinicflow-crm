@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2, UserPlus, Save } from "lucide-react";
 import { toast } from "sonner";
@@ -33,6 +33,11 @@ import type { ActionResult } from "@/actions/settings";
 import type { Tables } from "@/types/database";
 
 type Department = Pick<Tables<"departments">, "id" | "name">;
+type StaffRole = "admin" | "doctor" | "receptionist" | "manager";
+
+function usesDepartment(role: StaffRole) {
+  return role !== "admin" && role !== "manager";
+}
 
 // ── Create staff form ────────────────────────────────────────────────────────
 
@@ -72,6 +77,14 @@ export function CreateStaffForm({
       phone: "",
     },
   });
+  const selectedRole = useWatch({ control: form.control, name: "role" });
+  const showDepartment = usesDepartment(selectedRole);
+
+  useEffect(() => {
+    if (!showDepartment) {
+      form.setValue("department_id", null, { shouldValidate: true });
+    }
+  }, [form, showDepartment]);
 
   useEffect(() => {
     if (state?.success) {
@@ -106,7 +119,9 @@ export function CreateStaffForm({
     fd.set("email", values.email);
     fd.set("temporary_password", values.temporary_password);
     fd.set("role", values.role);
-    if (values.department_id) fd.set("department_id", values.department_id);
+    if (usesDepartment(values.role) && values.department_id) {
+      fd.set("department_id", values.department_id);
+    }
     if (values.phone) fd.set("phone", values.phone);
     formAction(fd);
   }
@@ -198,35 +213,37 @@ export function CreateStaffForm({
               </FormItem>
             )}
           />
-          <FormField
-            control={form.control}
-            name="department_id"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Department (optional)</FormLabel>
-                <Select
-                  value={field.value ?? "__none__"}
-                  onValueChange={(v) => field.onChange(v === "__none__" ? null : v)}
-                  disabled={isPending}
-                >
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="None" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="__none__">None</SelectItem>
-                    {departments.map((d) => (
-                      <SelectItem key={d.id} value={d.id}>
-                        {d.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          {showDepartment && (
+            <FormField
+              control={form.control}
+              name="department_id"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Department (optional)</FormLabel>
+                  <Select
+                    value={field.value ?? "__none__"}
+                    onValueChange={(v) => field.onChange(v === "__none__" ? null : v)}
+                    disabled={isPending}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="None" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="__none__">None</SelectItem>
+                      {departments.map((d) => (
+                        <SelectItem key={d.id} value={d.id}>
+                          {d.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
           <FormField
             control={form.control}
             name="phone"
@@ -284,6 +301,14 @@ export function EditStaffForm({
     resolver: zodResolver(updateStaffSchema),
     defaultValues,
   });
+  const selectedRole = useWatch({ control: form.control, name: "role" });
+  const showDepartment = usesDepartment(selectedRole);
+
+  useEffect(() => {
+    if (!showDepartment) {
+      form.setValue("department_id", null, { shouldValidate: true });
+    }
+  }, [form, showDepartment]);
 
   useEffect(() => {
     if (state?.success) {
@@ -302,7 +327,9 @@ export function EditStaffForm({
     const fd = new FormData();
     fd.set("full_name", fullName);
     fd.set("role", values.role);
-    if (values.department_id) fd.set("department_id", values.department_id);
+    if (usesDepartment(values.role) && values.department_id) {
+      fd.set("department_id", values.department_id);
+    }
     if (values.phone) fd.set("phone", values.phone);
     fd.set("is_active", String(values.is_active));
     formAction(fd);
@@ -358,35 +385,37 @@ export function EditStaffForm({
               </FormItem>
             )}
           />
-          <FormField
-            control={form.control}
-            name="department_id"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Department</FormLabel>
-                <Select
-                  value={field.value ?? "__none__"}
-                  onValueChange={(v) => field.onChange(v === "__none__" ? null : v)}
-                  disabled={isPending}
-                >
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="None" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="__none__">None</SelectItem>
-                    {departments.map((d) => (
-                      <SelectItem key={d.id} value={d.id}>
-                        {d.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          {showDepartment && (
+            <FormField
+              control={form.control}
+              name="department_id"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Department</FormLabel>
+                  <Select
+                    value={field.value ?? "__none__"}
+                    onValueChange={(v) => field.onChange(v === "__none__" ? null : v)}
+                    disabled={isPending}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="None" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="__none__">None</SelectItem>
+                      {departments.map((d) => (
+                        <SelectItem key={d.id} value={d.id}>
+                          {d.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
           <FormField
             control={form.control}
             name="phone"

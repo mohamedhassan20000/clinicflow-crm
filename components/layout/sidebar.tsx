@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { signOut } from "@/actions/auth";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { getRolePages, type PageSlug } from "@/lib/page-permissions";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 interface NavEntry {
   href: string;
@@ -26,6 +27,7 @@ interface NavEntry {
 interface SidebarProps {
   role: string;
   fullName: string;
+  avatarUrl?: string | null;
   theme: "light" | "dark";
   visiblePages?: PageSlug[];
 }
@@ -79,8 +81,20 @@ function NavLink({ href, label, icon: Icon }: NavEntry) {
   );
 }
 
-export function Sidebar({ role, fullName, theme, visiblePages }: SidebarProps) {
+export function Sidebar({
+  role,
+  fullName,
+  avatarUrl,
+  theme,
+  visiblePages,
+}: SidebarProps) {
   const nav = buildNav(role, visiblePages);
+  const initials = fullName
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join("") || "?";
 
   return (
     <aside className="flex h-full flex-col">
@@ -107,9 +121,12 @@ export function Sidebar({ role, fullName, theme, visiblePages }: SidebarProps) {
             className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-1 transition-colors hover:bg-accent/5"
             title="My profile"
           >
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
-              {fullName.charAt(0).toUpperCase()}
-            </div>
+            <Avatar size="sm" className="h-7 w-7">
+              {avatarUrl && <AvatarImage src={avatarUrl} alt={fullName} />}
+              <AvatarFallback className="bg-primary/10 text-[11px] font-semibold text-primary">
+                {initials}
+              </AvatarFallback>
+            </Avatar>
             <div className="min-w-0 flex-1">
               <p className="truncate text-xs font-medium">{fullName}</p>
               <p className="text-[10px] capitalize text-muted-foreground">

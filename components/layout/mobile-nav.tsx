@@ -10,11 +10,18 @@ import type { PageSlug } from "@/lib/page-permissions";
 interface MobileNavProps {
   role: string;
   fullName: string;
+  avatarUrl?: string | null;
   theme: "light" | "dark";
   visiblePages?: PageSlug[];
 }
 
-export function MobileNav({ role, fullName, theme, visiblePages }: MobileNavProps) {
+export function MobileNav({
+  role,
+  fullName,
+  avatarUrl,
+  theme,
+  visiblePages,
+}: MobileNavProps) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -36,6 +43,7 @@ export function MobileNav({ role, fullName, theme, visiblePages }: MobileNavProp
             <Sidebar
               role={role}
               fullName={fullName}
+              avatarUrl={avatarUrl}
               theme={theme}
               visiblePages={visiblePages}
             />

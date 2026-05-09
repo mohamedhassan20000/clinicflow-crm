@@ -54,7 +54,7 @@ export function StaffByDepartment({
     <div className="space-y-6">
       {groups.management.length > 0 && (
         <DepartmentSection
-          name="Management"
+          name="Management / Administration"
           color={MANAGEMENT_COLOR}
           count={groups.management.length}
           subtitle="Admin and manager accounts"

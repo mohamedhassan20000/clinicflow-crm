@@ -9,6 +9,7 @@ export type AuthedUser = {
   email: string;
   role: UserRole;
   fullName: string;
+  avatarUrl: string | null;
   clinicId: string;
   departmentId: string | null;
   mustChangePassword: boolean;
@@ -22,7 +23,7 @@ export async function getAuthedUser(): Promise<AuthedUser | null> {
   const { data: profile } = await supabase
     .from("profiles")
     .select(
-      "role, full_name, clinic_id, department_id, must_change_password, is_active, is_deleted, deleted_at",
+      "role, full_name, avatar_url, clinic_id, department_id, must_change_password, is_active, is_deleted, deleted_at",
     )
     .eq("id", user.id)
     .single();
@@ -35,6 +36,7 @@ export async function getAuthedUser(): Promise<AuthedUser | null> {
     email: user.email ?? "",
     role: profile.role as UserRole,
     fullName: profile.full_name,
+    avatarUrl: profile.avatar_url ?? null,
     clinicId: profile.clinic_id,
     departmentId: profile.department_id ?? null,
     mustChangePassword: profile.must_change_password,

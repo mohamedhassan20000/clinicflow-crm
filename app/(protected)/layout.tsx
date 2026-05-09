@@ -27,6 +27,7 @@ export default async function ProtectedLayout({
         <Sidebar
           role={user.role}
           fullName={user.fullName}
+          avatarUrl={user.avatarUrl}
           theme={theme}
           visiblePages={visiblePages}
         />
@@ -39,6 +40,7 @@ export default async function ProtectedLayout({
           <MobileNav
             role={user.role}
             fullName={user.fullName}
+            avatarUrl={user.avatarUrl}
             theme={theme}
             visiblePages={visiblePages}
           />

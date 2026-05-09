@@ -158,7 +158,9 @@ export function StaffProfileSheet({ staff, open, onOpenChange }: Props) {
                 {staff.full_name}
               </SheetTitle>
               <p className="mt-0.5 text-sm text-muted-foreground">
-                {staff.departments?.name ?? "No department"}
+                {staff.role === "admin" || staff.role === "manager"
+                  ? "Management / Administration"
+                  : staff.departments?.name ?? "No department"}
               </p>
               <div className="mt-1.5 flex flex-wrap gap-1.5">
                 <span
@@ -178,6 +180,12 @@ export function StaffProfileSheet({ staff, open, onOpenChange }: Props) {
 
         {/* ── Tabs ── */}
         <Tabs defaultValue="profile" className="flex flex-1 flex-col overflow-hidden">
+          {/* Hidden inputs */}
+          <input ref={photoRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" />
+          <input ref={contractRef} type="file" accept=".pdf,.doc,.docx,image/jpeg,image/png" className="hidden" />
+          <input ref={certRef} type="file" accept=".pdf,.doc,.docx,image/jpeg,image/png" className="hidden" />
+          <input ref={otherRef} type="file" accept=".pdf,.doc,.docx,image/jpeg,image/png" className="hidden" />
+
           <TabsList className="mx-8 mt-4 w-fit">
             <TabsTrigger value="profile">Profile</TabsTrigger>
             <TabsTrigger value="documents">Documents</TabsTrigger>
@@ -193,8 +201,16 @@ export function StaffProfileSheet({ staff, open, onOpenChange }: Props) {
               <InfoRow icon={<User className="h-4 w-4" />} label="Role" value={ROLE_LABELS[staff.role] ?? staff.role} />
               <InfoRow
                 icon={<User className="h-4 w-4" />}
-                label="Department"
-                value={staff.departments?.name ?? "—"}
+                label={
+                  staff.role === "admin" || staff.role === "manager"
+                    ? "Group"
+                    : "Department"
+                }
+                value={
+                  staff.role === "admin" || staff.role === "manager"
+                    ? "Management / Administration"
+                    : staff.departments?.name ?? "—"
+                }
               />
               {staff.phone && (
                 <InfoRow icon={<Phone className="h-4 w-4" />} label="Phone" value={staff.phone} />
@@ -222,6 +238,24 @@ export function StaffProfileSheet({ staff, open, onOpenChange }: Props) {
                   </Badge>
                 }
               />
+              <Separator />
+              {loadingFiles ? (
+                <div className="flex items-center gap-2 rounded-lg border border-border/50 px-4 py-3 text-xs text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Loading profile avatar...
+                </div>
+              ) : (
+                <SingleFileSection
+                  title="Profile avatar"
+                  icon={<User className="h-4 w-4" />}
+                  hint="Shown beside this staff member name. JPEG, PNG, or WebP · max 2 MB"
+                  file={files?.photo ?? null}
+                  isPending={isPending}
+                  onUpload={() => triggerUpload(photoRef, uploadStaffPhoto)}
+                  onDelete={handleDelete}
+                />
+              )}
+              <Separator />
               {staff.must_change_password && (
                 <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-xs text-amber-700">
                   This staff member must change their password on next login.
@@ -235,31 +269,12 @@ export function StaffProfileSheet({ staff, open, onOpenChange }: Props) {
             value="documents"
             className="flex-1 overflow-y-auto px-8 py-5"
           >
-            {/* Hidden inputs */}
-            <input ref={photoRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" />
-            <input ref={contractRef} type="file" accept=".pdf,.doc,.docx,image/jpeg,image/png" className="hidden" />
-            <input ref={certRef} type="file" accept=".pdf,.doc,.docx,image/jpeg,image/png" className="hidden" />
-            <input ref={otherRef} type="file" accept=".pdf,.doc,.docx,image/jpeg,image/png" className="hidden" />
-
             {loadingFiles ? (
               <div className="flex justify-center py-16">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
             ) : (
               <div className="space-y-8">
-                {/* Photo */}
-                <SingleFileSection
-                  title="Profile photo"
-                  icon={<User className="h-4 w-4" />}
-                  hint="JPEG, PNG, or WebP · max 2 MB"
-                  file={files?.photo ?? null}
-                  isPending={isPending}
-                  onUpload={() => triggerUpload(photoRef, uploadStaffPhoto)}
-                  onDelete={handleDelete}
-                />
-
-                <Separator />
-
                 {/* Contract */}
                 <SingleFileSection
                   title="Employment contract"

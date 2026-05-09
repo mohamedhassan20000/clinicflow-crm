@@ -43,6 +43,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { EditStaffForm } from "@/components/settings/staff-form";
 import { StaffProfileSheet } from "@/components/settings/staff-profile-sheet";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   updateStaff,
   resetStaffPassword,
@@ -76,6 +77,17 @@ const ROLE_VARIANTS: Record<string, "default" | "secondary" | "outline"> = {
   receptionist: "secondary",
   manager: "outline",
 };
+
+function initials(name: string) {
+  return (
+    name
+      .split(" ")
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part.charAt(0).toUpperCase())
+      .join("") || "?"
+  );
+}
 
 interface StaffTableProps {
   staff: StaffMember[];
@@ -230,10 +242,24 @@ export function StaffTable({ staff, departments, currentUserId }: StaffTableProp
                 onClick={() => setProfileTarget(s)}
               >
                 <td className="px-4 py-3">
-                  <p className="font-medium">{s.full_name}</p>
-                  {s.phone && (
-                    <p className="text-xs text-muted-foreground">{s.phone}</p>
-                  )}
+                  <div className="flex min-w-0 items-center gap-3">
+                    <Avatar className="h-9 w-9">
+                      {s.avatar_url && (
+                        <AvatarImage src={s.avatar_url} alt={s.full_name} />
+                      )}
+                      <AvatarFallback className="text-xs font-semibold">
+                        {initials(s.full_name)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0">
+                      <p className="truncate font-medium">{s.full_name}</p>
+                      {s.phone && (
+                        <p className="truncate text-xs text-muted-foreground">
+                          {s.phone}
+                        </p>
+                      )}
+                    </div>
+                  </div>
                 </td>
                 <td className="hidden px-4 py-3 text-muted-foreground sm:table-cell">
                   {s.departments?.name ?? <span className="text-muted-foreground/50">—</span>}

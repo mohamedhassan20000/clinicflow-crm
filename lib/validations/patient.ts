@@ -1,6 +1,5 @@
 import { z } from "zod";
-
-const TR_PHONE_REGEX = /^(\+90|0)?\s?(\(?\d{3}\)?)\s?\d{3}\s?\d{2}\s?\d{2}$/;
+import { normalizePatientPhone } from "@/lib/patient-phone";
 
 const optionalUuid = z.string().uuid().optional().nullable();
 
@@ -26,7 +25,10 @@ export const patientSchema = z.object({
   phone: z
     .string()
     .min(1, "Phone is required")
-    .regex(TR_PHONE_REGEX, "Enter a valid Turkish phone number"),
+    .refine((value) => normalizePatientPhone(value) !== null, {
+      message: "Enter a valid phone number",
+    })
+    .transform((value) => normalizePatientPhone(value)!),
   email: z.string().min(1, "Email is required").email("Enter a valid email"),
   blood_type: z
     .enum(["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"])

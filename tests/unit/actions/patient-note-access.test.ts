@@ -92,6 +92,64 @@ describe("patient action permissions", () => {
     expect(mocks.state.redirect).toHaveBeenCalledWith(`/patients/${PATIENT_ID}`);
   });
 
+  it("normalizes Turkish patient phones before insert", async () => {
+    const { createPatient, mocks } = await loadPatientsActions();
+    mocks.state.tableResults["patients.select"] = [
+      { data: [], error: null },
+      { data: { id: PATIENT_ID }, error: null },
+    ];
+
+    await createPatient(null, patientForm({ phone: "0555 123 45 67" }));
+
+    expect(mocks.state.queryLog).toContainEqual(
+      expect.objectContaining({
+        table: "patients",
+        operation: "insert",
+        args: [
+          expect.objectContaining({
+            phone: "+905551234567",
+          }),
+        ],
+      }),
+    );
+  });
+
+  it("accepts international patient phones before update", async () => {
+    const { updatePatient, mocks } = await loadPatientsActions();
+    mocks.state.tableResults["patients.update"] = { data: null, error: null };
+
+    await updatePatient(PATIENT_ID, null, patientForm({ phone: "+1 415 555 2671" }));
+
+    expect(mocks.state.queryLog).toContainEqual(
+      expect.objectContaining({
+        table: "patients",
+        operation: "update",
+        args: [
+          expect.objectContaining({
+            phone: "+14155552671",
+          }),
+        ],
+      }),
+    );
+  });
+
+  it("rejects obviously invalid patient phones before patient write", async () => {
+    const { createPatient, mocks } = await loadPatientsActions();
+
+    const result = await createPatient(null, patientForm({ phone: "123" }));
+
+    expect(result).toEqual({
+      fieldErrors: {
+        phone: ["Enter a valid phone number"],
+      },
+    });
+    expect(
+      mocks.state.queryLog.some(
+        (entry) => entry.table === "patients" && entry.operation === "insert",
+      ),
+    ).toBe(false);
+  });
+
   it("updates patients only through admin/receptionist authorization", async () => {
     const { updatePatient, mocks } = await loadPatientsActions();
     mocks.state.authedUser.role = "admin";

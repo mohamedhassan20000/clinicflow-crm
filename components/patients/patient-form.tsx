@@ -6,6 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PatientPhoneInput } from "@/components/patients/patient-phone-input";
 import {
   Form,
   FormControl,
@@ -289,12 +290,7 @@ export function PatientForm({
               <FormItem>
                 <FormLabel>Phone number</FormLabel>
                 <FormControl>
-                  <Input
-                    {...field}
-                    type="tel"
-                    placeholder="05XX XXX XX XX"
-                    disabled={isPending}
-                  />
+                  <PatientPhoneInput {...field} value={field.value ?? ""} disabled={isPending} />
                 </FormControl>
                 <FormMessage />
               </FormItem>

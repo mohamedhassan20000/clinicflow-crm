@@ -730,6 +730,76 @@ export type Database = {
           },
         ]
       }
+      patient_documents: {
+        Row: {
+          category: Database["public"]["Enums"]["patient_document_category"]
+          clinic_id: string
+          created_at: string
+          deleted_at: string | null
+          file_name: string
+          id: string
+          label: string | null
+          mime_type: string
+          patient_id: string
+          size_bytes: number
+          storage_path: string
+          updated_at: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          category: Database["public"]["Enums"]["patient_document_category"]
+          clinic_id: string
+          created_at?: string
+          deleted_at?: string | null
+          file_name: string
+          id?: string
+          label?: string | null
+          mime_type: string
+          patient_id: string
+          size_bytes: number
+          storage_path: string
+          updated_at?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          category?: Database["public"]["Enums"]["patient_document_category"]
+          clinic_id?: string
+          created_at?: string
+          deleted_at?: string | null
+          file_name?: string
+          id?: string
+          label?: string | null
+          mime_type?: string
+          patient_id?: string
+          size_bytes?: number
+          storage_path?: string
+          updated_at?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "patient_documents_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patient_documents_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patient_documents_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       patients: {
         Row: {
           assigned_doctor_id: string | null
@@ -1166,6 +1236,7 @@ export type Database = {
         | "no_show"
       blood_type: "A+" | "A-" | "B+" | "B-" | "AB+" | "AB-" | "O+" | "O-"
       follow_up_outcome: "all_fine" | "has_problem" | "no_response"
+      patient_document_category: "national_id" | "insurance" | "other"
       payment_method:
         | "cash"
         | "credit_card"
@@ -1312,6 +1383,7 @@ export const Constants = {
       ],
       blood_type: ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"],
       follow_up_outcome: ["all_fine", "has_problem", "no_response"],
+      patient_document_category: ["national_id", "insurance", "other"],
       payment_method: [
         "cash",
         "credit_card",
@@ -1323,4 +1395,3 @@ export const Constants = {
     },
   },
 } as const
-

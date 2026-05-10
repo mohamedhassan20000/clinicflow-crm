@@ -13,6 +13,7 @@ import {
   Trash2,
   Wallet2,
   Clock3,
+  Receipt,
 } from "lucide-react";
 import {
   Dialog,
@@ -58,6 +59,9 @@ export interface BillingPayload {
   secondary_amount: number;
   deposit_amount: number;
   payment_note: string | null;
+  previous_settlement_amount?: number;
+  previous_payment_method?: PaymentMethod | null;
+  previous_note?: string | null;
 }
 
 export interface ServiceOption {
@@ -89,6 +93,8 @@ interface BillingDialogProps {
   services: ServiceOption[];
   /** Patient's available account balance (un-spent deposits) */
   accountBalance: number;
+  /** Existing unpaid balance from earlier appointments, excluding this invoice */
+  previousOutstandingBalance?: number;
   patientName?: string;
   /** True while the billing context is being fetched from the server */
   loadingContext?: boolean;
@@ -123,6 +129,7 @@ export function BillingDialog({
   hasInsurance,
   services,
   accountBalance,
+  previousOutstandingBalance = 0,
   patientName,
   loadingContext,
   insuranceProviderName,
@@ -143,6 +150,9 @@ export function BillingDialog({
   const [secondaryAmount, setSecondaryAmount] = useState<string>("");
   const [note, setNote] = useState("");
   const [deferAll, setDeferAll] = useState(false);
+  const [previousSettlement, setPreviousSettlement] = useState("");
+  const [previousMethod, setPreviousMethod] = useState<PaymentMethod | null>(null);
+  const [previousNote, setPreviousNote] = useState("");
 
   const totalN = useMemo(
     () =>
@@ -170,12 +180,33 @@ export function BillingDialog({
 
   const collected = paidN + insuranceN + secondaryN + depositN;
   const remaining = Math.max(0, Number((totalN - collected).toFixed(2)));
+  const previousBalanceN = Math.max(0, Number(previousOutstandingBalance) || 0);
+  const previousRaw =
+    previousSettlement.trim() === "" ? 0 : Number(previousSettlement);
+  const previousInputInvalid =
+    previousSettlement.trim() !== "" &&
+    (!Number.isFinite(previousRaw) || previousRaw < 0);
+  const previousSettlementN = previousInputInvalid
+    ? 0
+    : Number(Math.max(0, previousRaw).toFixed(2));
+  const previousAboveBalance = previousSettlementN > previousBalanceN + 0.001;
+  const previousMethodMissing = previousSettlementN > 0 && !previousMethod;
+  const previousRemaining = Math.max(
+    0,
+    Number((previousBalanceN - Math.min(previousSettlementN, previousBalanceN)).toFixed(2)),
+  );
+  const totalCollectedToday = Number(
+    (collected + (previousAboveBalance ? 0 : previousSettlementN)).toFixed(2),
+  );
 
   const canSubmit =
     lines.length > 0 &&
     totalN > 0 &&
     collected <= totalN + 0.001 &&
     (!showSplit || secondaryMethod !== method) &&
+    !previousInputInvalid &&
+    !previousAboveBalance &&
+    !previousMethodMissing &&
     !isPending;
 
   function reset() {
@@ -190,6 +221,9 @@ export function BillingDialog({
     setSecondaryAmount("");
     setNote("");
     setDeferAll(false);
+    setPreviousSettlement("");
+    setPreviousMethod(null);
+    setPreviousNote("");
   }
 
   function applyPayload(payload: BillingPayload) {
@@ -213,6 +247,13 @@ export function BillingDialog({
     );
     setNote(payload.payment_note ?? "");
     setDeferAll(false);
+    setPreviousSettlement(
+      payload.previous_settlement_amount
+        ? String(payload.previous_settlement_amount)
+        : "",
+    );
+    setPreviousMethod(payload.previous_payment_method ?? null);
+    setPreviousNote(payload.previous_note ?? "");
   }
 
   // Reset when dialog re-opens (so we don't keep stale state across appointments)
@@ -284,6 +325,13 @@ export function BillingDialog({
       secondary_amount: showSplit ? Number(secondaryN.toFixed(2)) : 0,
       deposit_amount: Number(depositN.toFixed(2)),
       payment_note: note.trim() || null,
+      ...(previousSettlementN > 0 && previousMethod
+        ? {
+            previous_settlement_amount: previousSettlementN,
+            previous_payment_method: previousMethod,
+            previous_note: previousNote.trim() || null,
+          }
+        : {}),
     };
     onConfirm(payload);
   }
@@ -788,6 +836,153 @@ export function BillingDialog({
             </p>
           )}
 
+          {previousBalanceN > 0 && (
+            <section className="space-y-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="space-y-1">
+                  <Label
+                    htmlFor="previous-settlement"
+                    className="flex items-center gap-1.5 text-xs"
+                  >
+                    <Receipt className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                    Previous outstanding balance
+                  </Label>
+                  <p className="text-[11px] text-muted-foreground">
+                    Optional payment toward older unpaid appointments. This is
+                    recorded separately from today&apos;s invoice.
+                  </p>
+                </div>
+                <span className="text-[11px] text-muted-foreground">
+                  Previous balance:{" "}
+                  <span className="font-semibold tabular-nums text-amber-700 dark:text-amber-400">
+                    {fmtTRY(previousBalanceN)}
+                  </span>
+                </span>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+                <div className="space-y-1.5">
+                  <Label htmlFor="previous-settlement" className="text-xs">
+                    Settle now (₺)
+                  </Label>
+                  <Input
+                    id="previous-settlement"
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    max={previousBalanceN}
+                    step="0.01"
+                    placeholder="0.00"
+                    value={previousSettlement}
+                    disabled={isPending}
+                    onChange={(event) => setPreviousSettlement(event.target.value)}
+                    className="h-9 text-sm"
+                    aria-invalid={previousInputInvalid || previousAboveBalance}
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={isPending}
+                  onClick={() => setPreviousSettlement(previousBalanceN.toFixed(2))}
+                >
+                  Use full balance
+                </Button>
+              </div>
+
+              {(previousInputInvalid || previousAboveBalance) && (
+                <p className="text-[11px] text-destructive">
+                  {previousInputInvalid
+                    ? "Enter a positive amount or leave this blank."
+                    : "Amount cannot exceed the previous balance."}
+                </p>
+              )}
+
+              <div className="space-y-1.5">
+                <Label className="text-xs">Previous balance payment method</Label>
+                <div className="grid grid-cols-5 gap-1.5">
+                  {METHODS.map(({ value, label, icon: Icon }) => {
+                    const active = previousMethod === value;
+                    return (
+                      <button
+                        key={value}
+                        type="button"
+                        disabled={isPending}
+                        onClick={() => setPreviousMethod(value)}
+                        className={cn(
+                          "flex flex-col items-center gap-1 rounded-lg border px-1 py-2 text-[10px] font-medium transition-all",
+                          active
+                            ? "border-amber-500 bg-amber-500/10 text-foreground ring-2 ring-amber-500/20"
+                            : "border-border/60 bg-card text-muted-foreground hover:border-amber-500/50 hover:bg-amber-500/5",
+                        )}
+                      >
+                        <Icon
+                          className={cn(
+                            "h-4 w-4",
+                            active && "text-amber-600 dark:text-amber-400",
+                          )}
+                        />
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+                {previousMethodMissing && (
+                  <p className="text-[11px] text-destructive">
+                    Select a payment method for previous balance.
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="previous-note" className="text-xs">
+                  Previous balance note (optional)
+                </Label>
+                <Textarea
+                  id="previous-note"
+                  rows={2}
+                  placeholder="Receipt number, context, etc."
+                  value={previousNote}
+                  disabled={isPending}
+                  onChange={(event) => setPreviousNote(event.target.value)}
+                  className="resize-none text-sm"
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-border/50 bg-border/40">
+                <SummaryCell label="Previous balance" amount={previousBalanceN} />
+                <SummaryCell
+                  label="Settled now"
+                  amount={previousAboveBalance ? 0 : previousSettlementN}
+                  accent={
+                    previousSettlementN > 0 && !previousAboveBalance
+                      ? "text-emerald-600 dark:text-emerald-400"
+                      : "text-muted-foreground"
+                  }
+                />
+                <SummaryCell
+                  label="Remaining previous balance"
+                  amount={previousRemaining}
+                  accent={
+                    previousRemaining > 0
+                      ? "text-amber-600 dark:text-amber-400"
+                      : "text-muted-foreground"
+                  }
+                />
+              </div>
+
+              <div className="flex items-center justify-between gap-2 rounded-md border border-border/50 bg-card px-3 py-2 text-xs">
+                <span className="font-medium text-muted-foreground">
+                  Total collected today
+                </span>
+                <span className="font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
+                  {fmtTRY(totalCollectedToday)}
+                </span>
+              </div>
+            </section>
+          )}
+
           <div className="space-y-1.5">
             <Label htmlFor="bill-note" className="text-xs">
               Billing note (optional)
@@ -827,5 +1022,31 @@ export function BillingDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function SummaryCell({
+  label,
+  amount,
+  accent,
+}: {
+  label: string;
+  amount: number;
+  accent?: string;
+}) {
+  return (
+    <div className="bg-card px-3 py-2">
+      <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+        {label}
+      </p>
+      <p
+        className={cn(
+          "mt-0.5 text-sm font-semibold tabular-nums",
+          accent,
+        )}
+      >
+        {fmtTRY(amount)}
+      </p>
+    </div>
   );
 }

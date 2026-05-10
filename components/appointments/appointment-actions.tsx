@@ -370,6 +370,7 @@ export function AppointmentActions({
         insuranceProviderName={ctx?.insuranceProviderName ?? null}
         services={ctx?.services ?? []}
         accountBalance={ctx?.accountBalance ?? 0}
+        previousOutstandingBalance={ctx?.previousOutstandingBalance ?? 0}
         patientName={ctx?.patientName}
         departmentName={ctx?.departmentName ?? null}
         departmentColor={ctx?.departmentColor ?? null}

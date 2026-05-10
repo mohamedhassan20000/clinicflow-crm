@@ -15,6 +15,8 @@ import { AppointmentPaymentRow } from "@/components/patients/appointment-payment
 import { SettleOutstandingDialog } from "@/components/patients/settle-outstanding-dialog";
 import { AddDepositDialog } from "@/components/patients/add-deposit-dialog";
 import { PatientAvatarControls } from "@/components/patients/patient-avatar-controls";
+import { PatientDocumentsSection } from "@/components/patients/patient-documents-section";
+import { listPatientDocuments, type PatientDocumentsData } from "@/actions/patient-documents";
 
 export const metadata: Metadata = { title: "Patient" };
 
@@ -40,6 +42,8 @@ export default async function PatientDetailPage({ params }: PageProps) {
 
   const isDoctor = user.role === "doctor";
   const isAdmin = user.role === "admin";
+  const canViewDocuments =
+    (isAdmin || user.role === "receptionist") && !patient.is_deleted;
   const doctorCanAccessPatient =
     patient.assigned_doctor_id === user.id ||
     (!!user.departmentId && patient.department_id === user.departmentId);
@@ -167,6 +171,15 @@ export default async function PatientDetailPage({ params }: PageProps) {
   }
 
   const canEdit = !isDoctor && user.role !== "manager" && !patient.is_deleted;
+  let patientDocuments: PatientDocumentsData | null = null;
+  if (canViewDocuments) {
+    const result = await listPatientDocuments(id);
+    patientDocuments = result.data ?? {
+      nationalId: null,
+      insurance: null,
+      other: [],
+    };
+  }
   const age =
     new Date().getFullYear() - new Date(patient.date_of_birth).getFullYear();
 
@@ -392,6 +405,13 @@ export default async function PatientDetailPage({ params }: PageProps) {
               </div>
             )}
           </div>}
+
+          {canViewDocuments && patientDocuments && (
+            <PatientDocumentsSection
+              patientId={id}
+              initialDocuments={patientDocuments}
+            />
+          )}
 
           {/* Appointments */}
           <div className="space-y-3">

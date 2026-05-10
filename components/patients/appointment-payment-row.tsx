@@ -12,6 +12,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatDoctorName } from "@/lib/format-doctor";
 
 const PAYMENT_META: Record<
   string,
@@ -129,7 +130,9 @@ export function AppointmentPaymentRow({
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <span className="truncate">
-              Dr. {a.profiles?.full_name ?? "Unassigned"}
+              {a.profiles?.full_name
+                ? formatDoctorName(a.profiles.full_name)
+                : "Unassigned"}
             </span>
             {a.departments?.name && (
               <span

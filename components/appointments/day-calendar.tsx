@@ -9,6 +9,7 @@ import { StatusBadge } from "@/components/appointments/status-badge";
 import { AppointmentActions } from "@/components/appointments/appointment-actions";
 import { softDeleteAppointment, restoreAppointment } from "@/actions/appointments";
 import type { Tables } from "@/types/database";
+import { formatDoctorName } from "@/lib/format-doctor";
 
 type Appointment = Pick<
   Tables<"appointments">,
@@ -168,7 +169,9 @@ function DayRow({ appt, canEdit }: { appt: Appointment; canEdit: boolean }) {
           </span>
         </div>
         <div className="text-xs text-muted-foreground">
-          Dr. {appt.profiles?.full_name ?? "Unassigned"}
+          {appt.profiles?.full_name
+            ? formatDoctorName(appt.profiles.full_name)
+            : "Unassigned"}
         </div>
         {appt.notes && (
           <p className="line-clamp-2 max-w-2xl rounded bg-muted/40 px-2 py-1 text-xs leading-snug text-muted-foreground">

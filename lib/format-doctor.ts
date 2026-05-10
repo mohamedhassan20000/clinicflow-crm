@@ -1,7 +1,8 @@
 export function formatDoctorName(name: string | null | undefined) {
   if (!name) return "—";
   const trimmed = name.trim();
-  return /^dr\.?\s/i.test(trimmed) ? trimmed : `Dr. ${trimmed}`;
+  const withoutTitle = trimmed.replace(/^(?:dr\.?\s*)+/i, "").trim();
+  return withoutTitle ? `Dr. ${withoutTitle}` : "Dr.";
 }
 
 export function formatDoctorFirstName(name: string | null | undefined) {

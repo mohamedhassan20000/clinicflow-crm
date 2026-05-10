@@ -112,6 +112,11 @@ function isValidDocumentPath(
   return documentPathPattern(clinicId, patientId, category, documentId).test(path);
 }
 
+function isMissingStorageObject(error: { message?: string; statusCode?: string } | null | undefined) {
+  const message = error?.message?.toLowerCase() ?? "";
+  return error?.statusCode === "404" || message.includes("not found");
+}
+
 function toDocumentItem(row: PatientDocumentRow): PatientDocumentItem {
   return {
     id: row.id,
@@ -359,16 +364,6 @@ export async function deletePatientDocument(
     return { error: "Stored document path is not valid for this patient." };
   }
 
-  const { error: storageError } = await supabase.storage
-    .from(BUCKET)
-    .remove([document.storage_path]);
-
-  if (storageError) {
-    return {
-      error: storageError.message || "Failed to remove document file.",
-    };
-  }
-
   const { error: updateError } = await supabase
     .from("patient_documents")
     .update({ deleted_at: new Date().toISOString() })
@@ -378,6 +373,17 @@ export async function deletePatientDocument(
     .is("deleted_at", null);
 
   if (updateError) return { error: "Failed to delete document record." };
+
+  const { error: storageError } = await supabase.storage
+    .from(BUCKET)
+    .remove([document.storage_path]);
+
+  if (storageError && !isMissingStorageObject(storageError)) {
+    revalidatePath(`/patients/${patientId}`);
+    const result = await listActiveDocuments(supabase, patientId, user.clinicId);
+    if (result.error) return { ok: true };
+    return { ok: true, data: groupDocuments(result.rows) };
+  }
 
   revalidatePath(`/patients/${patientId}`);
 

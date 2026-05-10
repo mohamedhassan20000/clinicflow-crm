@@ -195,10 +195,8 @@ export function PatientScopeFilterBar({
       )}
 
       <FilterChip filterKey="file" active={!!active.file} value={active.file}>
-        <TextFilter
-          placeholder="CF-0001"
+        <FileNumberFilter
           current={active.file}
-          uppercase
           onApply={(value) => apply("file", value)}
         />
       </FilterChip>
@@ -289,6 +287,58 @@ function FilterChip({
   );
 }
 
+function FileNumberFilter({
+  current,
+  onApply,
+}: {
+  current: string | null;
+  onApply: (value: string | null) => void;
+}) {
+  const [val, setVal] = useState(fileNumberDigits(current));
+  return (
+    <form
+      className="space-y-2"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onApply(normalizeFileNumberFilter(val));
+      }}
+    >
+      <div className="flex overflow-hidden rounded-md border border-input bg-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-1">
+        <span className="inline-flex h-8 items-center border-r border-border bg-muted/60 px-2 font-mono text-sm font-medium text-muted-foreground">
+          CF-
+        </span>
+        <Input
+          value={val}
+          onChange={(event) => setVal(event.target.value.replace(/\D/g, ""))}
+          placeholder="0001"
+          inputMode="numeric"
+          className="h-8 rounded-none border-0 font-mono text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
+          autoFocus
+        />
+      </div>
+      <div className="flex justify-end gap-2">
+        {current && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={() => {
+              setVal("");
+              onApply(null);
+            }}
+          >
+            Clear
+          </Button>
+        )}
+        <Button type="submit" size="sm" className="h-7 text-xs">
+          Apply
+        </Button>
+      </div>
+    </form>
+  );
+}
+
 function TextFilter({
   placeholder,
   current,
@@ -339,6 +389,16 @@ function TextFilter({
       </div>
     </form>
   );
+}
+
+function fileNumberDigits(value: string | null) {
+  return value?.replace(/^CF-/i, "").replace(/\D/g, "") ?? "";
+}
+
+function normalizeFileNumberFilter(value: string) {
+  const digits = value.replace(/\D/g, "");
+  if (!digits) return null;
+  return `CF-${digits.length <= 4 ? digits.padStart(4, "0") : digits}`;
 }
 
 function DoctorFilter({

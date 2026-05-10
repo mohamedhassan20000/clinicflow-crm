@@ -12,6 +12,7 @@ import { StatusBadge } from "@/components/appointments/status-badge";
 import { RevenueWidget, type RevenueWidgetProps } from "@/components/dashboard/revenue-widget";
 import { AnalyticsSection, type AnalyticsSectionProps } from "@/components/dashboard/analytics-section";
 import type { Tables } from "@/types/database";
+import { formatDoctorName } from "@/lib/format-doctor";
 
 type Appointment = Tables<"appointments"> & {
   patients: { full_name: string } | null;
@@ -141,7 +142,7 @@ export function AdminDashboard({
                       {appt.patients?.full_name ?? "Unknown"}
                     </p>
                     <p className="truncate text-xs text-muted-foreground">
-                      Dr. {appt.profiles?.full_name ?? "—"}
+                      {formatDoctorName(appt.profiles?.full_name)}
                     </p>
                   </div>
                   <StatusBadge status={appt.status} />
@@ -194,7 +195,7 @@ export function AdminDashboard({
                       {appt.patients?.full_name ?? "Unknown"}
                     </p>
                     <p className="truncate text-xs text-muted-foreground">
-                      Dr. {appt.profiles?.full_name ?? "—"}
+                      {formatDoctorName(appt.profiles?.full_name)}
                     </p>
                   </div>
                   <StatusBadge status={appt.status} />

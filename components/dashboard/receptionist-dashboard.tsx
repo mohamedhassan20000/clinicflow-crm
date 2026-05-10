@@ -13,6 +13,7 @@ import { KpiCard } from "@/components/dashboard/kpi-card";
 import { StatusBadge } from "@/components/appointments/status-badge";
 import { AppointmentActions } from "@/components/appointments/appointment-actions";
 import type { Tables } from "@/types/database";
+import { formatDoctorName } from "@/lib/format-doctor";
 
 type Appointment = Tables<"appointments"> & {
   patients: { full_name: string } | null;
@@ -119,7 +120,7 @@ export function ReceptionistDashboard({
                 </span>
                 <span className="font-medium">{appt.patients?.full_name}</span>
                 <span className="text-muted-foreground text-xs">
-                  → Dr. {appt.profiles?.full_name}
+                  → {formatDoctorName(appt.profiles?.full_name)}
                 </span>
                 <div className="ml-auto">
                   <StatusBadge status={appt.status} />
@@ -167,7 +168,7 @@ export function ReceptionistDashboard({
                       {appt.patients?.full_name ?? "Unknown"}
                     </p>
                     <p className="truncate text-xs text-muted-foreground">
-                      Dr. {appt.profiles?.full_name ?? "—"}
+                      {formatDoctorName(appt.profiles?.full_name)}
                     </p>
                   </div>
                   <div className="flex items-center gap-1.5">
@@ -212,8 +213,8 @@ export function ReceptionistDashboard({
                       {appt.patients?.full_name ?? "Unknown"}
                     </p>
                     <p className="truncate text-xs text-muted-foreground">
-                      {formatTime(appt.scheduled_at)} · Dr.{" "}
-                      {appt.profiles?.full_name ?? "—"}
+                      {formatTime(appt.scheduled_at)} ·{" "}
+                      {formatDoctorName(appt.profiles?.full_name)}
                     </p>
                   </div>
                   <AppointmentActions

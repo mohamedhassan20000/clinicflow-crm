@@ -21,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { RecordFollowupDialog } from "@/components/followups/record-dialog";
 import { PatientScopeFilterBar } from "@/components/shared/patient-scope-filter-bar";
+import { formatDoctorName } from "@/lib/format-doctor";
 
 type Scope = "day" | "yesterday" | "week" | "month";
 
@@ -476,7 +477,7 @@ export function FollowupsView({
                             <td className="px-4 py-3 text-xs">
                               <span className="inline-flex items-center gap-1.5 text-muted-foreground">
                                 <Stethoscope className="h-3 w-3" />
-                                Dr. {a.profiles?.full_name ?? "—"}
+                                {formatDoctorName(a.profiles?.full_name)}
                               </span>
                             </td>
                             <td className="px-4 py-3 text-right print:hidden">
@@ -754,7 +755,7 @@ export function FollowupsView({
                               <td className="px-4 py-3 text-xs">
                                 {d.appointment?.profiles?.full_name ? (
                                   <span className="text-muted-foreground">
-                                    Dr. {d.appointment.profiles.full_name}
+                                    {formatDoctorName(d.appointment.profiles.full_name)}
                                   </span>
                                 ) : (
                                   <span className="text-muted-foreground/40">

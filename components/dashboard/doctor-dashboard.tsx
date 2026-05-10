@@ -26,6 +26,7 @@ import {
 } from "recharts";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { fetchDoctorDashboardStats, type DoctorDashboardStats } from "@/actions/doctor-dashboard";
+import { formatDoctorName } from "@/lib/format-doctor";
 
 const INPUT_CLS =
   "h-8 rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground [color-scheme:light] dark:[color-scheme:dark] focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 disabled:opacity-50";
@@ -156,7 +157,7 @@ export function DoctorDashboard({
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">My Dashboard</h1>
           <p className="text-sm text-muted-foreground">
-            Welcome back, Dr. {fullName} · {departmentName}
+            Welcome back, {formatDoctorName(fullName)} · {departmentName}
           </p>
         </div>
       </div>

@@ -413,7 +413,7 @@ describe("patient document actions", () => {
     expect(mocks.state.storageRemove).not.toHaveBeenCalled();
   });
 
-  it("removes storage then soft-deletes the document row on delete", async () => {
+  it("soft-deletes the document row then removes storage on delete", async () => {
     const { deletePatientDocument, mocks } = await loadPatientDocumentActions();
     mocks.state.tableResults["patients.select"] = {
       data: patientRow(),
@@ -482,14 +482,62 @@ describe("patient document actions", () => {
     expect(mocks.state.storageFrom).not.toHaveBeenCalled();
   });
 
-  it("does not soft-delete the document row when storage removal fails", async () => {
+  it("still soft-deletes the document row when storage object is already missing", async () => {
     const { deletePatientDocument, mocks } = await loadPatientDocumentActions();
     mocks.state.tableResults["patients.select"] = {
       data: patientRow(),
       error: null,
     };
-    mocks.state.tableResults["patient_documents.select"] = {
-      data: documentRow(),
+    mocks.state.tableResults["patient_documents.select"] = [
+      {
+        data: documentRow(),
+        error: null,
+      },
+      {
+        data: [],
+        error: null,
+      },
+    ];
+    mocks.state.tableResults["patient_documents.update"] = {
+      data: null,
+      error: null,
+    };
+    mocks.state.storageRemove.mockResolvedValue({
+      data: null,
+      error: { message: "Object not found", statusCode: "404" },
+    });
+
+    const result = await deletePatientDocument(PATIENT_ID, DOCUMENT_ID);
+
+    expect(result.ok).toBe(true);
+    expect(mocks.state.queryLog).toContainEqual(
+      expect.objectContaining({
+        table: "patient_documents",
+        operation: "update",
+        args: [expect.objectContaining({ deleted_at: expect.any(String) })],
+      }),
+    );
+    expect(mocks.state.storageRemove).toHaveBeenCalledWith([DOCUMENT_PATH]);
+  });
+
+  it("keeps delete successful when storage cleanup fails after the row is soft-deleted", async () => {
+    const { deletePatientDocument, mocks } = await loadPatientDocumentActions();
+    mocks.state.tableResults["patients.select"] = {
+      data: patientRow(),
+      error: null,
+    };
+    mocks.state.tableResults["patient_documents.select"] = [
+      {
+        data: documentRow(),
+        error: null,
+      },
+      {
+        data: [],
+        error: null,
+      },
+    ];
+    mocks.state.tableResults["patient_documents.update"] = {
+      data: null,
       error: null,
     };
     mocks.state.storageRemove.mockResolvedValue({
@@ -499,16 +547,15 @@ describe("patient document actions", () => {
 
     const result = await deletePatientDocument(PATIENT_ID, DOCUMENT_ID);
 
-    expect(result).toEqual({ error: "storage remove failed" });
-    expect(
-      mocks.state.queryLog.some(
-        (entry) =>
-          entry.table === "patient_documents" && entry.operation === "update",
-      ),
-    ).toBe(false);
+    expect(result.ok).toBe(true);
+    expect(result.data).toEqual({
+      nationalId: null,
+      insurance: null,
+      other: [],
+    });
   });
 
-  it("returns a record error after storage is removed when DB soft-delete fails", async () => {
+  it("returns a record error before storage is removed when DB soft-delete fails", async () => {
     const { deletePatientDocument, mocks } = await loadPatientDocumentActions();
     mocks.state.tableResults["patients.select"] = {
       data: patientRow(),
@@ -526,7 +573,7 @@ describe("patient document actions", () => {
     const result = await deletePatientDocument(PATIENT_ID, DOCUMENT_ID);
 
     expect(result).toEqual({ error: "Failed to delete document record." });
-    expect(mocks.state.storageRemove).toHaveBeenCalledWith([DOCUMENT_PATH]);
+    expect(mocks.state.storageRemove).not.toHaveBeenCalled();
   });
 
   it("generates short-lived signed URLs only after document ownership validation", async () => {

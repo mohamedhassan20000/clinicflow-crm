@@ -25,6 +25,7 @@ import {
 import { patientSchema, type PatientFormValues } from "@/lib/validations/patient";
 import type { ActionResult } from "@/actions/patients";
 import type { Tables } from "@/types/database";
+import { formatDoctorName } from "@/lib/format-doctor";
 
 const BLOOD_TYPES = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"] as const;
 
@@ -243,7 +244,7 @@ export function PatientForm({
                     <SelectItem value="__none__">Unassigned</SelectItem>
                     {filteredDoctors.map((d) => (
                       <SelectItem key={d.id} value={d.id}>
-                        Dr. {d.full_name}
+                        {formatDoctorName(d.full_name)}
                       </SelectItem>
                     ))}
                   </SelectContent>

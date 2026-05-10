@@ -31,6 +31,7 @@ import {
 } from "@/lib/validations/settings";
 import type { ActionResult } from "@/actions/settings";
 import type { Tables } from "@/types/database";
+import { formatDoctorName } from "@/lib/format-doctor";
 
 type Department = Pick<Tables<"departments">, "id" | "name">;
 type StaffRole = "admin" | "doctor" | "receptionist" | "manager";
@@ -108,10 +109,9 @@ export function CreateStaffForm({
   }, [state, form, router, onSuccess, onCreated, departments]);
 
   function onSubmit(values: CreateStaffValues) {
-    // Auto-prefix "Dr. " when role is doctor (unless already present)
     const fullName =
-      values.role === "doctor" && !/^dr\.?\s/i.test(values.full_name.trim())
-        ? `Dr. ${values.full_name.trim()}`
+      values.role === "doctor"
+        ? formatDoctorName(values.full_name)
         : values.full_name.trim();
 
     const fd = new FormData();
@@ -320,8 +320,8 @@ export function EditStaffForm({
 
   function onSubmit(values: UpdateStaffValues) {
     const fullName =
-      values.role === "doctor" && !/^dr\.?\s/i.test(values.full_name.trim())
-        ? `Dr. ${values.full_name.trim()}`
+      values.role === "doctor"
+        ? formatDoctorName(values.full_name)
         : values.full_name.trim();
 
     const fd = new FormData();

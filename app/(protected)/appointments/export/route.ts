@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
+import { formatDoctorName } from "@/lib/format-doctor";
 
 export async function GET() {
   const user = await requireRole(["admin", "manager"]);
@@ -48,7 +49,7 @@ export async function GET() {
         cell(patient?.full_name),
         cell(patient?.phone),
         cell(patient?.date_of_birth),
-        cell(doctor?.full_name),
+        cell(doctor?.full_name ? formatDoctorName(doctor.full_name) : null),
         cell(dept?.name),
         cell(insurance?.name),
         a.duration_minutes,

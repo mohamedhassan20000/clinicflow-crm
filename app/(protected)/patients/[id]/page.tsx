@@ -623,7 +623,7 @@ function SimpleApptRow({
           })}
         </p>
         <p className="text-xs text-muted-foreground">
-          Dr. {a.profiles?.full_name ?? "—"}
+          {formatDoctorName(a.profiles?.full_name)}
           {dept?.name && (
             <>
               {" · "}

@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { formatDoctorName } from "@/lib/format-doctor";
 
 type PaymentMethod =
   | "cash"
@@ -608,8 +609,8 @@ export function RevenueReport({
                   <SettlementTxnRow key={s.id} row={s} />
                 ))}
               </tbody>
-              <tbody className="bg-muted/30 font-semibold">
-                <tr className="border-t-2 border-border/60">
+              <tbody className="bg-muted/30 font-semibold print:bg-transparent">
+                <tr className="border-t-2 border-border/60 print:border-black print:[&>td]:border-t-2 print:[&>td]:border-black">
                   <td
                     className="px-4 py-3 text-xs uppercase tracking-wider text-muted-foreground"
                     colSpan={4}
@@ -700,7 +701,7 @@ function SettlementTxnRow({ row }: { row: SettlementRow }) {
               )}
               {appt.profiles?.full_name && (
                 <span className="text-xs font-medium">
-                  Dr. {appt.profiles.full_name}
+                  {formatDoctorName(appt.profiles.full_name)}
                 </span>
               )}
             </div>
@@ -772,7 +773,7 @@ function TxnRow({ row, hidden }: { row: RevenueRow; hidden?: boolean }) {
         {row.patients?.full_name ?? "Unknown"}
       </td>
       <td className="px-4 py-2.5">
-        <div className="text-xs">Dr. {row.profiles?.full_name ?? "—"}</div>
+        <div className="text-xs">{formatDoctorName(row.profiles?.full_name)}</div>
         {row.departments?.name && (
           <span
             className="mt-0.5 inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider"

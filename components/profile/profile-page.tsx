@@ -9,6 +9,7 @@ import {
   KeyRound,
   Loader2,
   Save,
+  Trash2,
   Upload,
   User,
 } from "lucide-react";
@@ -18,6 +19,7 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import {
   changeMyPassword,
+  removeAvatar,
   updateProfile,
   uploadAvatar,
 } from "@/actions/profile";
@@ -66,8 +68,14 @@ function initials(name: string) {
 function ProfileCard({ profile }: { profile: ProfileData }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [avatarRemoved, setAvatarRemoved] = useState(false);
   const [state, formAction, isPending] = useActionState(uploadAvatar, null);
+  const [removeState, removeAction, isRemoving] = useActionState(
+    removeAvatar,
+    null,
+  );
   const handledRef = useRef(state);
+  const removeHandledRef = useRef(removeState);
 
   useEffect(() => {
     if (!state || handledRef.current === state) return;
@@ -75,9 +83,25 @@ function ProfileCard({ profile }: { profile: ProfileData }) {
     if (state.error) toast.error(state.error);
     else if (state.ok) {
       toast.success("Profile photo updated.");
-      queueMicrotask(() => setPreviewUrl(null));
+      queueMicrotask(() => {
+        setAvatarRemoved(false);
+        setPreviewUrl(null);
+      });
     }
   }, [state]);
+
+  useEffect(() => {
+    if (!removeState || removeHandledRef.current === removeState) return;
+    removeHandledRef.current = removeState;
+    if (removeState.error) toast.error(removeState.error);
+    else if (removeState.ok) {
+      toast.success("Profile photo removed.");
+      queueMicrotask(() => {
+        setPreviewUrl(null);
+        setAvatarRemoved(true);
+      });
+    }
+  }, [removeState]);
 
   function onPick(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.currentTarget.files?.[0];
@@ -87,7 +111,8 @@ function ProfileCard({ profile }: { profile: ProfileData }) {
     e.currentTarget.form?.requestSubmit();
   }
 
-  const avatar = previewUrl ?? profile.avatar_url;
+  const avatar = previewUrl ?? (avatarRemoved ? null : profile.avatar_url);
+  const avatarActionPending = isPending || isRemoving;
 
   return (
     <div className="space-y-4 rounded-xl border border-border/50 bg-card p-5">
@@ -105,13 +130,13 @@ function ProfileCard({ profile }: { profile: ProfileData }) {
                 alt={profile.full_name}
                 className={cn(
                   "h-full w-full object-cover",
-                  isPending && "opacity-60",
+                  avatarActionPending && "opacity-60",
                 )}
               />
             ) : (
               <span>{initials(profile.full_name) || "?"}</span>
             )}
-            {isPending && (
+            {avatarActionPending && (
               <span className="absolute inset-0 flex items-center justify-center bg-background/40">
                 <Loader2 className="h-6 w-6 animate-spin text-primary" />
               </span>
@@ -120,7 +145,7 @@ function ProfileCard({ profile }: { profile: ProfileData }) {
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
-            disabled={isPending}
+            disabled={avatarActionPending}
             className="absolute bottom-1 right-1 inline-flex h-9 w-9 items-center justify-center rounded-full border-2 border-background bg-primary text-primary-foreground shadow-md transition-transform hover:scale-105 active:scale-95 disabled:opacity-60"
             aria-label="Change profile photo"
           >
@@ -135,21 +160,41 @@ function ProfileCard({ profile }: { profile: ProfileData }) {
           className="hidden"
           onChange={onPick}
         />
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="gap-1.5"
-          disabled={isPending}
-          onClick={() => fileRef.current?.click()}
-        >
-          <Upload className="h-3.5 w-3.5" />
-          {isPending ? "Uploading…" : "Upload new photo"}
-        </Button>
+        <div className="flex flex-wrap justify-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            disabled={avatarActionPending}
+            onClick={() => fileRef.current?.click()}
+          >
+            <Upload className="h-3.5 w-3.5" />
+            {isPending ? "Uploading…" : "Upload new photo"}
+          </Button>
+        </div>
         <p className="text-center text-[11px] text-muted-foreground">
           JPEG / PNG / WebP / GIF · up to 5 MB
         </p>
       </form>
+      {avatar && (
+        <form action={removeAction} className="flex justify-center">
+          <Button
+            type="submit"
+            variant="ghost"
+            size="sm"
+            className="gap-1.5 text-muted-foreground hover:text-destructive"
+            disabled={avatarActionPending}
+          >
+            {isRemoving ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Trash2 className="h-3.5 w-3.5" />
+            )}
+            Remove photo
+          </Button>
+        </form>
+      )}
 
       <div className="space-y-2 border-t border-border/40 pt-4 text-sm">
         <div>

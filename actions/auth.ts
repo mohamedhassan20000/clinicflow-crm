@@ -75,6 +75,11 @@ export async function signIn(
     return { error: "Your account is inactive. Contact your administrator." };
   }
 
+  await supabase
+    .from("profiles")
+    .update({ last_login_at: new Date().toISOString() })
+    .eq("id", data.user.id);
+
   // Client will navigate after awaiting — ensures fresh session cookies
   // are fully committed before middleware runs on the next request.
   return {

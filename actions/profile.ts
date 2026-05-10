@@ -47,6 +47,22 @@ const ALLOWED_AVATAR_MIME = new Set([
 ]);
 const MAX_AVATAR_BYTES = 5 * 1024 * 1024; // 5 MB
 
+function avatarObjectKey(url: string | null | undefined) {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    const marker = "/avatars/";
+    const markerIndex = parsed.pathname.indexOf(marker);
+    if (markerIndex === -1) return null;
+    return decodeURIComponent(parsed.pathname.slice(markerIndex + marker.length));
+  } catch {
+    const marker = "/avatars/";
+    const markerIndex = url.indexOf(marker);
+    if (markerIndex === -1) return null;
+    return url.slice(markerIndex + marker.length);
+  }
+}
+
 export async function updateProfile(
   _prev: ActionResult | null,
   formData: FormData,
@@ -146,6 +162,41 @@ export async function uploadAvatar(
 
   revalidatePath("/profile");
   revalidatePath("/dashboard");
+  return { ok: true };
+}
+
+export async function removeAvatar(
+  _prev?: ActionResult | null,
+): Promise<ActionResult> {
+  void _prev;
+  const user = await requireUser();
+  const supabase = await createClient();
+
+  const { data: prev } = await supabase
+    .from("profiles")
+    .select("avatar_url")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({ avatar_url: null })
+    .eq("id", user.id);
+
+  if (error) return { error: error.message || "Failed to remove profile photo." };
+
+  const previousKey = avatarObjectKey(prev?.avatar_url);
+  if (previousKey) {
+    try {
+      await supabase.storage.from("avatars").remove([previousKey]);
+    } catch {
+      // Best-effort cleanup: the profile is already cleared.
+    }
+  }
+
+  revalidatePath("/profile");
+  revalidatePath("/dashboard");
+  revalidatePath("/", "layout");
   return { ok: true };
 }
 

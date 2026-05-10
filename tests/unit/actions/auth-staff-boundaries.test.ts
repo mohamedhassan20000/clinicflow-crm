@@ -163,6 +163,41 @@ describe("auth and RBAC boundaries", () => {
       operation: "select",
       args: ["eq", "id", "fresh-login-user"],
     });
+    expect(mocks.state.queryLog).toContainEqual(
+      expect.objectContaining({
+        table: "profiles",
+        operation: "update",
+        args: [expect.objectContaining({ last_login_at: expect.any(String) })],
+      }),
+    );
+  });
+
+  it("does not block login if last-login tracking fails", async () => {
+    const { signIn, mocks } = await loadAuthActions();
+    mocks.state.authSignInWithPassword.mockResolvedValue({
+      data: {
+        user: {
+          id: "fresh-login-user",
+          email: "manager@example.com",
+        },
+      },
+      error: null,
+    });
+    mocks.state.tableResults["profiles.select"] = {
+      data: profile({ must_change_password: true }),
+      error: null,
+    };
+    mocks.state.tableResults["profiles.update"] = {
+      data: null,
+      error: { message: "last login denied" },
+    };
+    const form = new FormData();
+    form.set("email", "manager@example.com");
+    form.set("password", "TempPass123");
+
+    const result = await signIn(form);
+
+    expect(result).toEqual({ ok: true, redirectTo: "/change-password" });
   });
 
   it("clears forced password changes through the secure RPC helper", async () => {

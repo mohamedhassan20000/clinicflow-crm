@@ -30,7 +30,6 @@ import {
   uploadStaffCertificate,
   uploadStaffContract,
   uploadStaffOtherDoc,
-  uploadStaffPhoto,
   type StaffFile,
   type StaffFiles,
 } from "@/actions/staff-files";
@@ -63,6 +62,18 @@ function fmt(iso: string | null | undefined) {
   });
 }
 
+function fmtDateTime(iso: string | null | undefined) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
 interface Props {
   staff: StaffMember | null;
   open: boolean;
@@ -73,7 +84,6 @@ export function StaffProfileSheet({ staff, open, onOpenChange }: Props) {
   const [files, setFiles] = useState<StaffFiles | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  const photoRef = useRef<HTMLInputElement>(null);
   const contractRef = useRef<HTMLInputElement>(null);
   const certRef = useRef<HTMLInputElement>(null);
   const otherRef = useRef<HTMLInputElement>(null);
@@ -181,7 +191,6 @@ export function StaffProfileSheet({ staff, open, onOpenChange }: Props) {
         {/* ── Tabs ── */}
         <Tabs defaultValue="profile" className="flex flex-1 flex-col overflow-hidden">
           {/* Hidden inputs */}
-          <input ref={photoRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" />
           <input ref={contractRef} type="file" accept=".pdf,.doc,.docx,image/jpeg,image/png" className="hidden" />
           <input ref={certRef} type="file" accept=".pdf,.doc,.docx,image/jpeg,image/png" className="hidden" />
           <input ref={otherRef} type="file" accept=".pdf,.doc,.docx,image/jpeg,image/png" className="hidden" />
@@ -224,7 +233,7 @@ export function StaffProfileSheet({ staff, open, onOpenChange }: Props) {
               <InfoRow
                 icon={<Clock className="h-4 w-4" />}
                 label="Last login"
-                value={fmt(staff.last_login_at)}
+                value={fmtDateTime(staff.last_login_at)}
               />
               <InfoRow
                 icon={<User className="h-4 w-4" />}
@@ -238,24 +247,6 @@ export function StaffProfileSheet({ staff, open, onOpenChange }: Props) {
                   </Badge>
                 }
               />
-              <Separator />
-              {loadingFiles ? (
-                <div className="flex items-center gap-2 rounded-lg border border-border/50 px-4 py-3 text-xs text-muted-foreground">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  Loading profile avatar...
-                </div>
-              ) : (
-                <SingleFileSection
-                  title="Profile avatar"
-                  icon={<User className="h-4 w-4" />}
-                  hint="Shown beside this staff member name. JPEG, PNG, or WebP · max 2 MB"
-                  file={files?.photo ?? null}
-                  isPending={isPending}
-                  onUpload={() => triggerUpload(photoRef, uploadStaffPhoto)}
-                  onDelete={handleDelete}
-                />
-              )}
-              <Separator />
               {staff.must_change_password && (
                 <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-xs text-amber-700">
                   This staff member must change their password on next login.

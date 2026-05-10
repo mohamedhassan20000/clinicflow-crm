@@ -85,6 +85,10 @@ interface PageProps {
     dept?: string;
     doctor?: string;
     q?: string;
+    name?: string;
+    file?: string;
+    nat?: string;
+    phone?: string;
   }>;
 }
 
@@ -98,21 +102,32 @@ export default async function RevenuePage({ searchParams }: PageProps) {
   const filterDept = sp.dept?.trim() || null;
   const filterDoctor = sp.doctor?.trim() || null;
   const filterPatientQ = sp.q?.trim() || "";
+  const filterName = sp.name?.trim() || "";
+  const filterFile = sp.file?.trim() || "";
+  const filterNat = sp.nat?.trim() || "";
+  const filterPhone = sp.phone?.trim() || "";
 
   const supabase = await createClient();
 
   // Resolve patient search → list of matching patient IDs (so we can scope
   // appointments + settlements with a single .in() filter).
   let patientIdFilter: string[] | null = null;
-  if (filterPatientQ) {
-    const { data: matches } = await supabase
+  if (filterPatientQ || filterName || filterFile || filterNat || filterPhone) {
+    let patientQuery = supabase
       .from("patients")
       .select("id")
       .eq("clinic_id", user.clinicId)
-      .or(
-        `full_name.ilike.%${filterPatientQ}%,file_number.ilike.%${filterPatientQ}%,national_id.ilike.%${filterPatientQ}%`,
-      )
       .limit(500);
+    if (filterPatientQ) {
+      patientQuery = patientQuery.or(
+        `full_name.ilike.%${filterPatientQ}%,phone.ilike.%${filterPatientQ}%,file_number.ilike.%${filterPatientQ}%,national_id.ilike.%${filterPatientQ}%`,
+      );
+    }
+    if (filterName) patientQuery = patientQuery.ilike("full_name", `%${filterName}%`);
+    if (filterFile) patientQuery = patientQuery.ilike("file_number", `%${filterFile}%`);
+    if (filterNat) patientQuery = patientQuery.ilike("national_id", `%${filterNat}%`);
+    if (filterPhone) patientQuery = patientQuery.ilike("phone", `%${filterPhone}%`);
+    const { data: matches } = await patientQuery;
     patientIdFilter = (matches ?? []).map((m) => m.id);
     // No matching patients → force empty result instead of an unfiltered query.
     if (patientIdFilter.length === 0) patientIdFilter = ["__none__"];
@@ -200,21 +215,20 @@ export default async function RevenuePage({ searchParams }: PageProps) {
             Revenue &amp; Transactions
           </h1>
         </div>
-        <div className="flex items-center gap-2">
-          <PrintSettlementsButton
-            disabled={(settlements ?? []).length === 0}
-          />
-          <PrintButton />
-        </div>
       </div>
 
       <div className="print:hidden">
         <RevenueFilters
           departments={departments ?? []}
           doctors={doctors ?? []}
-          activeDept={filterDept}
-          activeDoctor={filterDoctor}
-          activePatientQuery={filterPatientQ}
+          actions={
+            <>
+              <PrintSettlementsButton
+                disabled={(settlements ?? []).length === 0}
+              />
+              <PrintButton />
+            </>
+          }
         />
       </div>
 
@@ -237,4 +251,3 @@ export default async function RevenuePage({ searchParams }: PageProps) {
     </div>
   );
 }
-

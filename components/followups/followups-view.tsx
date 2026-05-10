@@ -2,40 +2,25 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import type { ComponentType, ReactNode } from "react";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import {
   ChevronLeft,
   ChevronRight,
   CalendarDays,
   CheckCircle2,
-  Filter,
   Phone,
   PhoneOff,
   Pencil,
   Printer,
-  Search,
   Stethoscope,
-  Users,
   X,
   AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { RecordFollowupDialog } from "@/components/followups/record-dialog";
+import { PatientScopeFilterBar } from "@/components/shared/patient-scope-filter-bar";
 
 type Scope = "day" | "yesterday" | "week" | "month";
 
@@ -103,9 +88,11 @@ interface Props {
   pending: PendingRow[];
   done: DoneRow[];
   departments: Department[];
+  doctors: { id: string; full_name: string }[];
   scope: Scope;
   dateInput: string;
   activeDept: string | null;
+  hideScopeFilters?: boolean;
   activeOutcome: OutcomeFilter;
   activeQuery: string;
   range: { start: string; end: string };
@@ -155,9 +142,11 @@ export function FollowupsView({
   pending,
   done,
   departments,
+  doctors,
   scope,
   dateInput,
   activeDept,
+  hideScopeFilters = false,
   activeOutcome,
   activeQuery,
   range,
@@ -203,13 +192,6 @@ export function FollowupsView({
     startTransition(() => router.push(`/followups?${p.toString()}`));
   }
 
-  function clearFilters() {
-    const p = new URLSearchParams(params?.toString() ?? "");
-    p.delete("dept");
-    p.delete("q");
-    startTransition(() => router.push(`/followups?${p.toString()}`));
-  }
-
   // Group pending by department.
   const pendingGroups = useMemo(() => {
     const map = new Map<
@@ -250,8 +232,6 @@ export function FollowupsView({
     scope === "day" || scope === "yesterday"
       ? fmtDate(range.start)
       : `${fmtDate(range.start)} → ${fmtDate(range.end)}`;
-  const dept = departments.find((d) => d.id === activeDept);
-
   return (
     <div className="space-y-6">
       <div className="print:hidden flex flex-wrap items-center justify-between gap-3">
@@ -267,15 +247,6 @@ export function FollowupsView({
             Patient follow-ups
           </h1>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 gap-1.5"
-          onClick={() => window.print()}
-        >
-          <Printer className="h-3.5 w-3.5" />
-          Print
-        </Button>
       </div>
 
       {/* Print-only header */}
@@ -347,80 +318,17 @@ export function FollowupsView({
       )}
 
       {/* Search + filter row — independent of the period toggle */}
-      <div className="flex flex-wrap items-center gap-2 print:hidden">
-        <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-          <Filter className="h-3.5 w-3.5" />
-          Filter
-        </span>
-        {!readOnly && (
-          <FilterChip
-            icon={Users}
-            label="Department"
-            value={dept?.name}
-            active={!!activeDept}
-          >
-            <Select
-              value={activeDept ?? ""}
-              onValueChange={(v) => update({ dept: v || null })}
-            >
-              <SelectTrigger className="h-8 text-sm">
-                <SelectValue placeholder="Select department" />
-              </SelectTrigger>
-              <SelectContent>
-                {departments.map((d) => (
-                  <SelectItem key={d.id} value={d.id}>
-                    <span className="inline-flex items-center gap-2">
-                      <span
-                        aria-hidden
-                        className="h-2 w-2 rounded-full"
-                        style={{ backgroundColor: d.color }}
-                      />
-                      {d.name}
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {activeDept && (
-              <div className="mt-2 flex justify-end">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 text-xs"
-                  onClick={() => update({ dept: null })}
-                >
-                  Clear
-                </Button>
-              </div>
-            )}
-          </FilterChip>
-        )}
-        <FilterChip
-          icon={Search}
-          label="Search"
-          value={activeQuery}
-          active={activeQuery.trim().length > 0}
-        >
-          <TextFilter
-            value={activeQuery}
-            placeholder="Name, phone, file # or national ID..."
-            onApply={(value) => update({ q: value || null })}
-            onClear={() => update({ q: null })}
-          />
-        </FilterChip>
-        {(activeDept || activeQuery) && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 gap-1 px-2 text-xs text-muted-foreground"
-            onClick={clearFilters}
-          >
-            <X className="h-3.5 w-3.5" />
-            Clear all
-          </Button>
-        )}
-      </div>
+      <PatientScopeFilterBar
+        basePath="/followups"
+        doctors={doctors}
+        departments={departments}
+        hideDoctorFilter={readOnly || hideScopeFilters}
+        hideDeptFilter={readOnly || hideScopeFilters}
+        className="print:hidden"
+        fallbackParams={{ name: ["q"] }}
+        clearExtraParams={["q"]}
+        actions={<FollowupsPrintButton />}
+      />
 
       {/* Summary strip */}
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border/50 bg-border/40 sm:grid-cols-4">
@@ -985,92 +893,17 @@ export function FollowupsView({
   );
 }
 
-function FilterChip({
-  icon: Icon,
-  label,
-  value,
-  active,
-  children,
-}: {
-  icon: ComponentType<{ className?: string }>;
-  label: string;
-  value?: string | null;
-  active?: boolean;
-  children: ReactNode;
-}) {
+function FollowupsPrintButton() {
   return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button
-          size="sm"
-          variant="outline"
-          className={cn(
-            "h-7 gap-1.5 px-2 text-xs",
-            active
-              ? "border-primary/40 bg-primary/10 text-primary hover:bg-primary/15"
-              : "text-muted-foreground",
-          )}
-        >
-          <Icon className="h-3.5 w-3.5" />
-          {label}
-          {value && (
-            <span className="max-w-[120px] truncate font-semibold">
-              : {value}
-            </span>
-          )}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-64 p-3" align="start">
-        {children}
-      </PopoverContent>
-    </Popover>
-  );
-}
-
-function TextFilter({
-  value,
-  placeholder,
-  onApply,
-  onClear,
-}: {
-  value: string;
-  placeholder: string;
-  onApply: (value: string) => void;
-  onClear: () => void;
-}) {
-  const [draft, setDraft] = useState(value);
-
-  return (
-    <form
-      className="space-y-2"
-      onSubmit={(event) => {
-        event.preventDefault();
-        onApply(draft.trim());
-      }}
+    <Button
+      variant="outline"
+      size="sm"
+      className="h-7 gap-1.5 px-2 text-xs"
+      onClick={() => window.print()}
     >
-      <Input
-        value={draft}
-        onChange={(event) => setDraft(event.target.value)}
-        placeholder={placeholder}
-        className="h-8 text-sm"
-      />
-      <div className="flex justify-end gap-2">
-        {value && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-7 text-xs"
-            onClick={onClear}
-          >
-            Clear
-          </Button>
-        )}
-        <Button type="submit" size="sm" className="h-7 text-xs">
-          Apply
-        </Button>
-      </div>
-    </form>
+      <Printer className="h-3.5 w-3.5" />
+      Print
+    </Button>
   );
 }
 

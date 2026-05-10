@@ -12,6 +12,10 @@ const PAGE_SIZE = 20;
 interface PageProps {
   searchParams: Promise<{
     q?: string;
+    name?: string;
+    file?: string;
+    nat?: string;
+    phone?: string;
     page?: string;
     dept?: string;
     doctor?: string;
@@ -22,7 +26,16 @@ export default async function PatientsPage({ searchParams }: PageProps) {
   const user = await requireUser();
   const isDoctor = user.role === "doctor";
 
-  const { q = "", page: pageStr = "1", dept, doctor } = await searchParams;
+  const {
+    q = "",
+    name = "",
+    file = "",
+    nat = "",
+    phone = "",
+    page: pageStr = "1",
+    dept,
+    doctor,
+  } = await searchParams;
   const page = Math.max(1, parseInt(pageStr, 10) || 1);
   const from = (page - 1) * PAGE_SIZE;
 
@@ -45,6 +58,10 @@ export default async function PatientsPage({ searchParams }: PageProps) {
       `full_name.ilike.%${term}%,phone.ilike.%${term}%,file_number.ilike.%${term}%,national_id.ilike.%${term}%`,
     );
   }
+  if (name.trim()) query = query.ilike("full_name", `%${name.trim()}%`);
+  if (file.trim()) query = query.ilike("file_number", `%${file.trim()}%`);
+  if (nat.trim()) query = query.ilike("national_id", `%${nat.trim()}%`);
+  if (phone.trim()) query = query.ilike("phone", `%${phone.trim()}%`);
 
   // Doctors are always scoped to their own department
   if (isDoctor && user.departmentId) {

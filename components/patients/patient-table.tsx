@@ -52,7 +52,13 @@ export function PatientTable({
   canCreate,
 }: PatientTableProps) {
   const params = useSearchParams();
-  const search = params.get("q") ?? "";
+  const search =
+    params.get("name") ??
+    params.get("q") ??
+    params.get("file") ??
+    params.get("nat") ??
+    params.get("phone") ??
+    "";
   const totalPages = Math.ceil(total / pageSize);
   const isSearching = search.trim().length > 0;
 

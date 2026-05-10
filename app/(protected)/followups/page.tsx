@@ -13,7 +13,12 @@ interface PageProps {
     scope?: string;
     date?: string;
     q?: string;
+    name?: string;
+    file?: string;
+    nat?: string;
+    phone?: string;
     dept?: string;
+    doctor?: string;
     outcome?: string;
   }>;
 }
@@ -68,8 +73,13 @@ export default async function FollowupsPage({ searchParams }: PageProps) {
   const dateStr = sp.date ?? "";
   const range = resolveRange(scope, dateStr);
   const q = sp.q?.trim() ?? "";
+  const name = sp.name?.trim() ?? "";
+  const file = sp.file?.trim() ?? "";
+  const nat = sp.nat?.trim() ?? "";
+  const phone = sp.phone?.trim() ?? "";
   // Doctors are always scoped to their own department
   const filterDept = isDoctor ? (user.departmentId ?? null) : (sp.dept?.trim() || null);
+  const filterDoctor = isDoctor ? null : (sp.doctor?.trim() || null);
   const filterOutcome = (() => {
     const v = sp.outcome?.trim();
     if (v === "all_fine" || v === "has_problem" || v === "no_response") return v;
@@ -80,15 +90,22 @@ export default async function FollowupsPage({ searchParams }: PageProps) {
 
   // Patient search → resolve to IDs first so we can scope downstream queries.
   let patientIdFilter: string[] | null = null;
-  if (q) {
-    const { data: matches } = await supabase
+  if (q || name || file || nat || phone) {
+    let patientQuery = supabase
       .from("patients")
       .select("id")
       .eq("clinic_id", user.clinicId)
-      .or(
-        `full_name.ilike.%${q}%,phone.ilike.%${q}%,file_number.ilike.%${q}%,national_id.ilike.%${q}%`,
-      )
       .limit(500);
+    if (q) {
+      patientQuery = patientQuery.or(
+        `full_name.ilike.%${q}%,phone.ilike.%${q}%,file_number.ilike.%${q}%,national_id.ilike.%${q}%`,
+      );
+    }
+    if (name) patientQuery = patientQuery.ilike("full_name", `%${name}%`);
+    if (file) patientQuery = patientQuery.ilike("file_number", `%${file}%`);
+    if (nat) patientQuery = patientQuery.ilike("national_id", `%${nat}%`);
+    if (phone) patientQuery = patientQuery.ilike("phone", `%${phone}%`);
+    const { data: matches } = await patientQuery;
     patientIdFilter = (matches ?? []).map((m) => m.id);
     if (patientIdFilter.length === 0) patientIdFilter = ["__none__"];
   }
@@ -110,6 +127,7 @@ export default async function FollowupsPage({ searchParams }: PageProps) {
     .limit(500);
 
   if (filterDept) pendingQ = pendingQ.eq("department_id", filterDept);
+  if (filterDoctor) pendingQ = pendingQ.eq("doctor_id", filterDoctor);
   if (patientIdFilter) pendingQ = pendingQ.in("patient_id", patientIdFilter);
 
   // Done: follow_ups inside the window, with their appointment + patient context.
@@ -126,7 +144,7 @@ export default async function FollowupsPage({ searchParams }: PageProps) {
 
   if (patientIdFilter) doneQ = doneQ.in("patient_id", patientIdFilter);
 
-  const [{ data: pendingRaw }, { data: done }, { data: departments }] =
+  const [{ data: pendingRaw }, { data: done }, { data: departments }, { data: doctors }] =
     await Promise.all([
       pendingQ,
       doneQ,
@@ -136,6 +154,15 @@ export default async function FollowupsPage({ searchParams }: PageProps) {
         .eq("clinic_id", user.clinicId)
         .eq("is_active", true)
         .order("name"),
+      isDoctor
+        ? Promise.resolve({ data: [] })
+        : supabase
+            .from("profiles")
+            .select("id, full_name")
+            .eq("clinic_id", user.clinicId)
+            .eq("role", "doctor")
+            .eq("is_active", true)
+            .order("full_name"),
     ]);
 
   // Drop appointments that already have a follow-up.
@@ -153,6 +180,7 @@ export default async function FollowupsPage({ searchParams }: PageProps) {
   const doneFiltered = (done ?? [])
     .filter((d) => {
       if (filterDept && d.appointment?.department_id !== filterDept) return false;
+      if (filterDoctor && d.appointment?.doctor_id !== filterDoctor) return false;
       if (filterOutcome && d.outcome !== filterOutcome) return false;
       return true;
     })
@@ -173,11 +201,13 @@ export default async function FollowupsPage({ searchParams }: PageProps) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       done={doneFiltered as any}
       departments={departments ?? []}
+      doctors={doctors ?? []}
       scope={scope}
       dateInput={dateStr || ""}
       activeDept={filterDept}
+      hideScopeFilters={isDoctor}
       activeOutcome={filterOutcome}
-      activeQuery={q}
+      activeQuery={name || q || file || nat || phone}
       range={{
         start: range.start.toISOString(),
         end: range.end.toISOString(),

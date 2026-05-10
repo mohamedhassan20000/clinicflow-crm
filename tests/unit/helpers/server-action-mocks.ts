@@ -132,6 +132,11 @@ export function createServerActionMocks() {
       return this;
     }
 
+    ilike(...args: unknown[]) {
+      this.logFilter("ilike", args);
+      return this;
+    }
+
     or(...args: unknown[]) {
       this.logFilter("or", args);
       return this;

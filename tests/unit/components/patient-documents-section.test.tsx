@@ -111,6 +111,28 @@ describe("PatientDocumentsSection", () => {
     expect(screen.getByText("4 files")).toBeInTheDocument();
   });
 
+  it("explains that fixed-slot documents must be deleted before replacement", () => {
+    renderSection();
+
+    expect(
+      screen.getAllByText("Delete this document before uploading a replacement."),
+    ).toHaveLength(2);
+  });
+
+  it("shows a generic inline load error without document details", () => {
+    render(
+      <PatientDocumentsSection
+        patientId={PATIENT_ID}
+        initialDocuments={{ nationalId: null, insurance: null, other: [] }}
+        hasLoadError
+      />,
+    );
+
+    expect(
+      screen.getByText("Could not load patient documents. Refresh the page and try again."),
+    ).toBeInTheDocument();
+  });
+
   it("does not request signed URLs on render and only requests one on View click", async () => {
     const user = userEvent.setup();
     renderSection();
@@ -216,7 +238,7 @@ describe("PatientDocumentsSection", () => {
     });
     expect(screen.queryByText("national-id.pdf")).not.toBeInTheDocument();
     expect(
-      screen.getByText("No national id document uploaded yet."),
+      screen.getByText("No national ID document uploaded yet."),
     ).toBeInTheDocument();
   });
 
@@ -234,7 +256,7 @@ describe("PatientDocumentsSection", () => {
       expect(uploadPatientDocument).toHaveBeenCalled();
     });
     expect(
-      screen.getByText("No national id document uploaded yet."),
+      screen.getByText("No national ID document uploaded yet."),
     ).toBeInTheDocument();
   });
 

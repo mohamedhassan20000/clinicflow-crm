@@ -5,10 +5,15 @@ import { createServerActionMocks } from "../helpers/server-action-mocks";
 const PATIENT_ID = "22222222-2222-4222-8222-222222222222";
 const CLINIC_ID = "clinic-1";
 
+type ListPatientDocumentsResult = {
+  data?: { nationalId: null; insurance: null; other: never[] };
+  error?: string;
+};
+
 async function loadPatientPage() {
   vi.resetModules();
   const mocks = createServerActionMocks();
-  const listPatientDocuments = vi.fn(async () => ({
+  const listPatientDocuments = vi.fn(async (): Promise<ListPatientDocumentsResult> => ({
     data: { nationalId: null, insurance: null, other: [] },
   }));
 
@@ -32,7 +37,16 @@ async function loadPatientPage() {
     listPatientDocuments,
   }));
   vi.doMock("@/components/patients/patient-documents-section", () => ({
-    PatientDocumentsSection: () => <section>Documents section</section>,
+    PatientDocumentsSection: ({
+      hasLoadError,
+    }: {
+      hasLoadError?: boolean;
+    }) => (
+      <section>
+        Documents section
+        {hasLoadError && <span>Documents load error</span>}
+      </section>
+    ),
   }));
 
   const page = await import("@/app/(protected)/patients/[id]/page");
@@ -119,6 +133,24 @@ describe("patient documents page gating", () => {
 
     expect(screen.getByText("Documents section")).toBeInTheDocument();
     expect(listPatientDocuments).toHaveBeenCalledWith(PATIENT_ID);
+  });
+
+  it("shows a documents load error for allowed roles when listing fails", async () => {
+    const { page, mocks, listPatientDocuments } = await loadPatientPage();
+    mocks.state.authedUser.role = "admin";
+    listPatientDocuments.mockResolvedValueOnce({
+      error: "Internal failure details",
+    });
+    seedPatientPageData(mocks);
+
+    const jsx = await page.default({
+      params: Promise.resolve({ id: PATIENT_ID }),
+    });
+    render(jsx);
+
+    expect(screen.getByText("Documents section")).toBeInTheDocument();
+    expect(screen.getByText("Documents load error")).toBeInTheDocument();
+    expect(screen.queryByText("Internal failure details")).not.toBeInTheDocument();
   });
 
   it("does not render or load documents for deleted patients", async () => {

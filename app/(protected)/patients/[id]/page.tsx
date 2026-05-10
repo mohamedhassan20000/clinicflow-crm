@@ -172,8 +172,10 @@ export default async function PatientDetailPage({ params }: PageProps) {
 
   const canEdit = !isDoctor && user.role !== "manager" && !patient.is_deleted;
   let patientDocuments: PatientDocumentsData | null = null;
+  let patientDocumentsLoadFailed = false;
   if (canViewDocuments) {
     const result = await listPatientDocuments(id);
+    patientDocumentsLoadFailed = Boolean(result.error);
     patientDocuments = result.data ?? {
       nationalId: null,
       insurance: null,
@@ -410,6 +412,7 @@ export default async function PatientDetailPage({ params }: PageProps) {
             <PatientDocumentsSection
               patientId={id}
               initialDocuments={patientDocuments}
+              hasLoadError={patientDocumentsLoadFailed}
             />
           )}
 

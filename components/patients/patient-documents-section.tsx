@@ -8,6 +8,7 @@ import {
   type RefObject,
 } from "react";
 import {
+  AlertCircle,
   Eye,
   FileText,
   Loader2,
@@ -42,6 +43,7 @@ type DocumentCategory = "national_id" | "insurance" | "other";
 interface PatientDocumentsSectionProps {
   patientId: string;
   initialDocuments: PatientDocumentsData;
+  hasLoadError?: boolean;
 }
 
 const ACCEPTED_DOCUMENTS = "application/pdf,image/jpeg,image/png,image/webp";
@@ -74,9 +76,14 @@ function formatDate(value: string) {
   });
 }
 
+function formatEmptySlotTitle(title: string) {
+  return title === "National ID" ? "national ID" : title.toLowerCase();
+}
+
 export function PatientDocumentsSection({
   patientId,
   initialDocuments,
+  hasLoadError = false,
 }: PatientDocumentsSectionProps) {
   const [documents, setDocuments] = useState(initialDocuments);
   const [pendingKey, setPendingKey] = useState<string | null>(null);
@@ -160,6 +167,12 @@ export function PatientDocumentsSection({
       </div>
 
       <div className="overflow-hidden rounded-xl border border-border/50 bg-card">
+        {hasLoadError && (
+          <div className="flex items-start gap-2 border-b border-border/30 bg-destructive/5 px-4 py-3 text-xs text-destructive">
+            <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <p>Could not load patient documents. Refresh the page and try again.</p>
+          </div>
+        )}
         <div className="divide-y divide-border/30">
           <DocumentSlot
             title="National ID"
@@ -306,18 +319,23 @@ function DocumentSlot({
       </div>
 
       {document ? (
-        <div className="mt-3 rounded-lg border border-border/40">
-          <DocumentRow
-            document={document}
-            isPending={isPending}
-            pendingKey={pendingKey}
-            onView={onView}
-            onDelete={onDelete}
-          />
-        </div>
+        <>
+          <div className="mt-3 rounded-lg border border-border/40">
+            <DocumentRow
+              document={document}
+              isPending={isPending}
+              pendingKey={pendingKey}
+              onView={onView}
+              onDelete={onDelete}
+            />
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Delete this document before uploading a replacement.
+          </p>
+        </>
       ) : (
         <div className="mt-3 rounded-lg border border-dashed border-border/60 px-4 py-5 text-center text-sm text-muted-foreground">
-          No {title.toLowerCase()} document uploaded yet.
+          No {formatEmptySlotTitle(title)} document uploaded yet.
         </div>
       )}
     </div>
@@ -361,6 +379,7 @@ function DocumentRow({
           variant="outline"
           size="sm"
           className="gap-1.5"
+          aria-label={`View ${document.fileName}`}
           disabled={isPending}
           onClick={() => onView(document)}
         >
@@ -401,6 +420,7 @@ function DeleteDocumentDialog({
           variant="outline"
           size="sm"
           className="gap-1.5 text-destructive hover:text-destructive"
+          aria-label={`Delete ${document.fileName}`}
           disabled={disabled}
         >
           <Trash2 className="h-3.5 w-3.5" />

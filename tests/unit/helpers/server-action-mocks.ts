@@ -107,6 +107,11 @@ export function createServerActionMocks() {
       return this;
     }
 
+    neq(...args: unknown[]) {
+      this.logFilter("neq", args);
+      return this;
+    }
+
     gt(...args: unknown[]) {
       this.logFilter("gt", args);
       return this;

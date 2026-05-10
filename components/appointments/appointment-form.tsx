@@ -50,6 +50,7 @@ type Patient = Pick<
   | "phone"
   | "department_id"
   | "assigned_doctor_id"
+  | "insurance_provider_id"
   | "national_id"
   | "file_number"
 >;
@@ -160,7 +161,7 @@ export function AppointmentForm({
     }
 
     if (!insuranceChangedRef.current) {
-      form.setValue("insurance_provider_id", null, {
+      form.setValue("insurance_provider_id", patient.insurance_provider_id ?? null, {
         shouldDirty: true,
       });
     }

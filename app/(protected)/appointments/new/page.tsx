@@ -22,7 +22,7 @@ export default async function NewAppointmentPage({ searchParams }: PageProps) {
       supabase
         .from("patients")
         .select(
-          "id, full_name, phone, department_id, assigned_doctor_id, national_id, file_number",
+          "id, full_name, phone, department_id, assigned_doctor_id, insurance_provider_id, national_id, file_number",
         )
         .eq("clinic_id", user.clinicId)
         .eq("is_deleted", false)

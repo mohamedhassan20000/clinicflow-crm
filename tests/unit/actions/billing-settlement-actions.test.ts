@@ -380,8 +380,11 @@ describe("billing and settlement server actions", () => {
 
   it("undoes invoice completion through the billing undo RPC", async () => {
     const { undoInvoiceCompletion, mocks } = await loadActions();
-    mocks.state.tableResults["appointments.select"] = {
-      data: { patient_id: PATIENT_ID },
+    mocks.state.tableResults["appointments.select"] = [
+      { data: { patient_id: PATIENT_ID }, error: null },
+    ];
+    mocks.state.tableResults["outstanding_settlements.select"] = {
+      data: [],
       error: null,
     };
 
@@ -395,6 +398,32 @@ describe("billing and settlement server actions", () => {
     expect(mocks.state.revalidatePath).toHaveBeenCalledWith("/appointments");
     expect(mocks.state.revalidatePath).toHaveBeenCalledWith(
       `/patients/${PATIENT_ID}`,
+    );
+  });
+
+  it("undoes invoice completion through the previous settlement undo RPC when provenance exists", async () => {
+    const { undoInvoiceCompletion, mocks } = await loadActions();
+    mocks.state.tableResults["appointments.select"] = [
+      { data: { patient_id: PATIENT_ID }, error: null },
+    ];
+    mocks.state.tableResults["outstanding_settlements.select"] = {
+      data: [{ id: "settlement-1" }],
+      error: null,
+    };
+
+    const result = await undoInvoiceCompletion(APPOINTMENT_ID, "confirmed");
+
+    expect(result).toEqual({});
+    expect(mocks.state.rpc).toHaveBeenCalledWith(
+      "undo_appointment_billing_with_previous_settlement",
+      {
+        p_appointment_id: APPOINTMENT_ID,
+        p_target_status: "confirmed",
+      },
+    );
+    expect(mocks.state.rpc).not.toHaveBeenCalledWith(
+      "undo_appointment_billing",
+      expect.anything(),
     );
   });
 

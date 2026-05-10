@@ -1254,6 +1254,13 @@ export type Database = {
         Args: { p_appointment_id: string; p_target_status: string }
         Returns: undefined
       }
+      undo_appointment_billing_with_previous_settlement: {
+        Args: { p_appointment_id: string; p_target_status: string }
+        Returns: {
+          affected_prior_appointment_ids: string[]
+          reversed_amount: number
+        }[]
+      }
     }
     Enums: {
       appointment_status:

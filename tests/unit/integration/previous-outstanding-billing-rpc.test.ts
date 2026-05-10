@@ -209,6 +209,13 @@ async function completeWithPrevious(previousAmount: number) {
   });
 }
 
+async function undoWithPrevious(targetStatus: "pending" | "confirmed" = "confirmed") {
+  return adminClient.rpc("undo_appointment_billing_with_previous_settlement", {
+    p_appointment_id: ids.currentAppointment,
+    p_target_status: targetStatus,
+  });
+}
+
 beforeAll(async () => {
   const { error } = await service.from("clinics").select("id").limit(1);
   if (error) {
@@ -364,5 +371,100 @@ describe("complete_appointment_billing_with_previous_settlement", () => {
         note: "Paid with current invoice",
       },
     ]);
+  });
+
+  it("undo restores prior balances and removes provenance settlement rows", async () => {
+    const complete = await completeWithPrevious(60);
+    expect(complete.error).toBeNull();
+
+    const { data, error } = await undoWithPrevious();
+
+    expect(error).toBeNull();
+    expect(data?.[0]).toMatchObject({
+      reversed_amount: 60,
+    });
+    expect(data?.[0]?.affected_prior_appointment_ids).toEqual(
+      expect.arrayContaining([ids.oldAppointment1, ids.oldAppointment2]),
+    );
+
+    const [{ data: prior }, { data: current }, { data: settlements }] =
+      await Promise.all([
+        service
+          .from("appointments")
+          .select("id, outstanding_amount")
+          .in("id", [ids.oldAppointment1, ids.oldAppointment2])
+          .order("scheduled_at", { ascending: true }),
+        service
+          .from("appointments")
+          .select("status, total_amount, paid_amount, outstanding_amount")
+          .eq("id", ids.currentAppointment)
+          .single(),
+        service
+          .from("outstanding_settlements")
+          .select("id")
+          .eq("source_appointment_id", ids.currentAppointment),
+      ]);
+
+    expect(prior).toEqual([
+      { id: ids.oldAppointment1, outstanding_amount: 30 },
+      { id: ids.oldAppointment2, outstanding_amount: 50 },
+    ]);
+    expect(current).toMatchObject({
+      status: "confirmed",
+      total_amount: null,
+      paid_amount: null,
+      outstanding_amount: null,
+    });
+    expect(settlements).toEqual([]);
+  });
+
+  it("completion plus previous settlement plus undo leaves no understated prior balance", async () => {
+    const complete = await completeWithPrevious(80);
+    expect(complete.error).toBeNull();
+
+    const undo = await undoWithPrevious("pending");
+    expect(undo.error).toBeNull();
+
+    const { data: prior } = await service
+      .from("appointments")
+      .select("id, outstanding_amount")
+      .in("id", [ids.oldAppointment1, ids.oldAppointment2])
+      .order("scheduled_at", { ascending: true });
+
+    expect(prior).toEqual([
+      { id: ids.oldAppointment1, outstanding_amount: 30 },
+      { id: ids.oldAppointment2, outstanding_amount: 50 },
+    ]);
+  });
+
+  it("second undo fails cleanly without changing restored balances", async () => {
+    const complete = await completeWithPrevious(60);
+    expect(complete.error).toBeNull();
+    const firstUndo = await undoWithPrevious();
+    expect(firstUndo.error).toBeNull();
+
+    const secondUndo = await undoWithPrevious();
+
+    expect(secondUndo.error?.message).toContain(
+      "Only completed appointments can have billing undone",
+    );
+
+    const [{ data: prior }, { data: settlements }] = await Promise.all([
+      service
+        .from("appointments")
+        .select("id, outstanding_amount")
+        .in("id", [ids.oldAppointment1, ids.oldAppointment2])
+        .order("scheduled_at", { ascending: true }),
+      service
+        .from("outstanding_settlements")
+        .select("id")
+        .eq("source_appointment_id", ids.currentAppointment),
+    ]);
+
+    expect(prior).toEqual([
+      { id: ids.oldAppointment1, outstanding_amount: 30 },
+      { id: ids.oldAppointment2, outstanding_amount: 50 },
+    ]);
+    expect(settlements).toEqual([]);
   });
 });

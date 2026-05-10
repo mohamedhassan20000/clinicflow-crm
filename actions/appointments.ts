@@ -570,7 +570,21 @@ export async function undoInvoiceCompletion(
 
   if (!appt) return { error: "Appointment not found." };
 
-  const { error } = await supabase.rpc("undo_appointment_billing", {
+  const { data: provenanceRows, error: provenanceError } = await supabase
+    .from("outstanding_settlements")
+    .select("id")
+    .eq("clinic_id", user.clinicId)
+    .eq("source_appointment_id", id)
+    .limit(1);
+
+  if (provenanceError) return { error: provenanceError.message };
+
+  const undoRpc =
+    (provenanceRows?.length ?? 0) > 0
+      ? "undo_appointment_billing_with_previous_settlement"
+      : "undo_appointment_billing";
+
+  const { error } = await supabase.rpc(undoRpc, {
     p_appointment_id: id,
     p_target_status: targetStatus,
   });

@@ -41,6 +41,7 @@ export function createServerActionMocks() {
     storageFrom: vi.fn(),
     storageUpload: vi.fn(),
     storageRemove: vi.fn(),
+    storageList: vi.fn(),
     storageCreateSignedUrl: vi.fn(),
     storageCreateSignedUrls: vi.fn(),
     revalidatePath: vi.fn(),
@@ -53,7 +54,12 @@ export function createServerActionMocks() {
     }[],
     storageLog: [] as {
       bucket: string;
-      operation: "upload" | "remove" | "createSignedUrl" | "createSignedUrls";
+      operation:
+        | "upload"
+        | "remove"
+        | "list"
+        | "createSignedUrl"
+        | "createSignedUrls";
       args: unknown[];
     }[],
   };
@@ -221,6 +227,7 @@ export function createServerActionMocks() {
     state.storageFrom.mockReset();
     state.storageUpload.mockReset();
     state.storageRemove.mockReset();
+    state.storageList.mockReset();
     state.storageCreateSignedUrl.mockReset();
     state.storageCreateSignedUrls.mockReset();
     state.revalidatePath.mockReset();
@@ -259,6 +266,7 @@ export function createServerActionMocks() {
     state.adminDeleteUser.mockResolvedValue({ data: {}, error: null });
     state.storageUpload.mockResolvedValue({ data: { path: "path" }, error: null });
     state.storageRemove.mockResolvedValue({ data: null, error: null });
+    state.storageList.mockResolvedValue({ data: [], error: null });
     state.storageCreateSignedUrl.mockImplementation((path: string) =>
       Promise.resolve({
         data: { signedUrl: `https://signed.local/${path}` },
@@ -282,6 +290,10 @@ export function createServerActionMocks() {
       remove: (...args: unknown[]) => {
         state.storageLog.push({ bucket, operation: "remove", args });
         return state.storageRemove(...args);
+      },
+      list: (...args: unknown[]) => {
+        state.storageLog.push({ bucket, operation: "list", args });
+        return state.storageList(...args);
       },
       createSignedUrl: (...args: unknown[]) => {
         state.storageLog.push({ bucket, operation: "createSignedUrl", args });

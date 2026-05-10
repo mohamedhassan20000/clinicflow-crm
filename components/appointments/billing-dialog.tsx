@@ -95,6 +95,7 @@ interface BillingDialogProps {
   accountBalance: number;
   /** Existing unpaid balance from earlier appointments, excluding this invoice */
   previousOutstandingBalance?: number;
+  previousOutstandingAction?: React.ReactNode;
   patientName?: string;
   /** True while the billing context is being fetched from the server */
   loadingContext?: boolean;
@@ -130,6 +131,7 @@ export function BillingDialog({
   services,
   accountBalance,
   previousOutstandingBalance = 0,
+  previousOutstandingAction,
   patientName,
   loadingContext,
   insuranceProviderName,
@@ -859,6 +861,15 @@ export function BillingDialog({
                   </span>
                 </span>
               </div>
+              {previousOutstandingAction && (
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-500/20 bg-card/70 px-3 py-2">
+                  <p className="text-[11px] text-muted-foreground">
+                    Prefer not to include it on this invoice? Record it as a
+                    separate outstanding-balance payment.
+                  </p>
+                  {previousOutstandingAction}
+                </div>
+              )}
 
               <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
                 <div className="space-y-1.5">

@@ -19,6 +19,7 @@ import {
 } from "@/components/appointments/billing-dialog";
 import { CancelAppointmentDialog } from "@/components/appointments/cancel-dialog";
 import { NoShowDialog } from "@/components/appointments/noshow-dialog";
+import { SettleOutstandingDialog } from "@/components/patients/settle-outstanding-dialog";
 
 type Status = Database["public"]["Enums"]["appointment_status"];
 type RestorableStatus = Extract<Status, "pending" | "confirmed">;
@@ -371,6 +372,16 @@ export function AppointmentActions({
         services={ctx?.services ?? []}
         accountBalance={ctx?.accountBalance ?? 0}
         previousOutstandingBalance={ctx?.previousOutstandingBalance ?? 0}
+        previousOutstandingAction={
+          ctx && ctx.previousOutstandingBalance > 0 ? (
+            <SettleOutstandingDialog
+              patientId={ctx.patientId}
+              outstanding={ctx.previousOutstandingBalance}
+              patientName={ctx.patientName}
+              triggerLabel="Pay separately"
+            />
+          ) : null
+        }
         patientName={ctx?.patientName}
         departmentName={ctx?.departmentName ?? null}
         departmentColor={ctx?.departmentColor ?? null}

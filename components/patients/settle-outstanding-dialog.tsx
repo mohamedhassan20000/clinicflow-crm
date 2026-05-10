@@ -59,12 +59,14 @@ interface Props {
   patientId: string;
   outstanding: number;
   patientName: string;
+  triggerLabel?: string;
 }
 
 export function SettleOutstandingDialog({
   patientId,
   outstanding,
   patientName,
+  triggerLabel = "Settle outstanding",
 }: Props) {
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState<string>("");
@@ -121,7 +123,7 @@ export function SettleOutstandingDialog({
         }}
       >
         <Wallet className="h-3.5 w-3.5" />
-        Settle outstanding
+        {triggerLabel}
       </Button>
 
       <Dialog

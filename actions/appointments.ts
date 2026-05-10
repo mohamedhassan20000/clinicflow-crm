@@ -657,6 +657,7 @@ export async function cancelAppointment(
 }
 
 export interface BillingContext {
+  patientId: string;
   patientName: string;
   hasInsurance: boolean;
   insuranceProviderName: string | null;
@@ -749,6 +750,7 @@ export async function getBillingContext(
   return {
     data: {
       patientName: appt.patients?.full_name ?? "",
+      patientId: appt.patient_id,
       hasInsurance: Boolean(appt.insurance_provider_id) && !isSelfPay,
       insuranceProviderName: isSelfPay ? null : providerName,
       accountBalance: balance,

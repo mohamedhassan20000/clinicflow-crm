@@ -28,10 +28,12 @@ function renderDialog({
   previousOutstandingBalance = 0,
   initialPayload = basePayload,
   onConfirm,
+  previousOutstandingAction,
 }: {
   previousOutstandingBalance?: number;
   initialPayload?: BillingPayload | null;
   onConfirm?: (payload: BillingPayload) => void;
+  previousOutstandingAction?: React.ReactNode;
 } = {}) {
   const confirm = vi.fn(onConfirm);
   render(
@@ -42,6 +44,7 @@ function renderDialog({
       services={[]}
       accountBalance={0}
       previousOutstandingBalance={previousOutstandingBalance}
+      previousOutstandingAction={previousOutstandingAction}
       initialPayload={initialPayload}
       draftKey={1}
     />,
@@ -80,6 +83,22 @@ describe("BillingDialog previous outstanding balance", () => {
       section.getByText(
         "Optional payment toward older unpaid appointments. This is recorded separately from today's invoice.",
       ),
+    ).toBeInTheDocument();
+  });
+
+  it("renders a separate previous balance payment action", async () => {
+    renderDialog({
+      previousOutstandingBalance: 125,
+      previousOutstandingAction: <button type="button">Pay separately</button>,
+    });
+    await waitForInvoicePayload();
+
+    const section = previousSection();
+    expect(
+      section.getByText(/separate outstanding-balance payment/i),
+    ).toBeInTheDocument();
+    expect(
+      section.getByRole("button", { name: "Pay separately" }),
     ).toBeInTheDocument();
   });
 

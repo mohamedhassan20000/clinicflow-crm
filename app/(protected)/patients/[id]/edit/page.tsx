@@ -18,29 +18,40 @@ export default async function EditPatientPage({ params }: PageProps) {
   const user = await requireRole(["admin", "receptionist"]);
   const supabase = await createClient();
 
-  const [{ data: patient }, { data: departments }, { data: doctors }] =
-    await Promise.all([
-      supabase
-        .from("patients")
-        .select("*")
-        .eq("id", id)
-        .eq("clinic_id", user.clinicId)
-        .eq("is_deleted", false)
-        .single(),
-      supabase
-        .from("departments")
-        .select("id, name, color")
-        .eq("clinic_id", user.clinicId)
-        .eq("is_active", true)
-        .order("name"),
-      supabase
-        .from("profiles")
-        .select("id, full_name, department_id")
-        .eq("clinic_id", user.clinicId)
-        .eq("role", "doctor")
-        .eq("is_active", true)
-        .order("full_name"),
-    ]);
+  const [
+    { data: patient },
+    { data: departments },
+    { data: doctors },
+    { data: insuranceProviders },
+  ] = await Promise.all([
+    supabase
+      .from("patients")
+      .select("*")
+      .eq("id", id)
+      .eq("clinic_id", user.clinicId)
+      .eq("is_deleted", false)
+      .single(),
+    supabase
+      .from("departments")
+      .select("id, name, color")
+      .eq("clinic_id", user.clinicId)
+      .eq("is_active", true)
+      .order("name"),
+    supabase
+      .from("profiles")
+      .select("id, full_name, department_id")
+      .eq("clinic_id", user.clinicId)
+      .eq("role", "doctor")
+      .eq("is_active", true)
+      .order("full_name"),
+    supabase
+      .from("insurance_providers")
+      .select("id, name")
+      .eq("clinic_id", user.clinicId)
+      .eq("is_active", true)
+      .is("deleted_at", null)
+      .order("name"),
+  ]);
 
   if (!patient) notFound();
 
@@ -70,6 +81,7 @@ export default async function EditPatientPage({ params }: PageProps) {
           action={action}
           departments={departments ?? []}
           doctors={doctors ?? []}
+          insuranceProviders={insuranceProviders ?? []}
           patient={patient}
           defaultValues={{
             full_name: patient.full_name,
@@ -80,6 +92,7 @@ export default async function EditPatientPage({ params }: PageProps) {
             blood_type: patient.blood_type,
             department_id: patient.department_id,
             assigned_doctor_id: patient.assigned_doctor_id,
+            insurance_provider_id: patient.insurance_provider_id,
           }}
         />
       </div>

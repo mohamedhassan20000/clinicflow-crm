@@ -28,7 +28,7 @@ export default async function PatientDetailPage({ params }: PageProps) {
   const { data: patient } = await supabase
     .from("patients")
     .select(
-      "*, departments(id, name, color), assigned_doctor:profiles!assigned_doctor_id(id, full_name)",
+      "*, departments(id, name, color), assigned_doctor:profiles!assigned_doctor_id(id, full_name), insurance_providers(name)",
     )
     .eq("id", id)
     .eq("clinic_id", user.clinicId)
@@ -162,6 +162,7 @@ export default async function PatientDetailPage({ params }: PageProps) {
 
   const doctorName = patient.assigned_doctor?.full_name ?? null;
   const deptInfo = patient.departments;
+  const insuranceProviderName = patient.insurance_providers?.name ?? null;
 
   return (
     <div className="space-y-6">
@@ -271,6 +272,16 @@ export default async function PatientDetailPage({ params }: PageProps) {
                     `Dr. ${doctorName}`
                   ) : (
                     <span className="text-muted-foreground/60">Unassigned</span>
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">Insurance</dt>
+                <dd className="font-medium">
+                  {insuranceProviderName ?? (
+                    <span className="text-muted-foreground/60">
+                      No insurance
+                    </span>
                   )}
                 </dd>
               </div>

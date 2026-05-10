@@ -11,7 +11,11 @@ export const metadata: Metadata = { title: "New Patient" };
 export default async function NewPatientPage() {
   const user = await requireRole(["admin", "receptionist"]);
   const supabase = await createClient();
-  const [{ data: departments }, { data: doctors }] = await Promise.all([
+  const [
+    { data: departments },
+    { data: doctors },
+    { data: insuranceProviders },
+  ] = await Promise.all([
     supabase
       .from("departments")
       .select("id, name, color")
@@ -25,6 +29,13 @@ export default async function NewPatientPage() {
       .eq("role", "doctor")
       .eq("is_active", true)
       .order("full_name"),
+    supabase
+      .from("insurance_providers")
+      .select("id, name")
+      .eq("clinic_id", user.clinicId)
+      .eq("is_active", true)
+      .is("deleted_at", null)
+      .order("name"),
   ]);
 
   return (
@@ -51,6 +62,7 @@ export default async function NewPatientPage() {
           action={createPatient}
           departments={departments ?? []}
           doctors={doctors ?? []}
+          insuranceProviders={insuranceProviders ?? []}
         />
       </div>
     </div>

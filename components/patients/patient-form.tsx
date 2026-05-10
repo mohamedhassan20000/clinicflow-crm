@@ -39,12 +39,18 @@ interface Doctor {
   department_id: string | null;
 }
 
+interface InsuranceProvider {
+  id: string;
+  name: string;
+}
+
 interface PatientFormProps {
   action: (prev: ActionResult | null, fd: FormData) => Promise<ActionResult>;
   defaultValues?: Partial<PatientFormValues>;
   patient?: Tables<"patients">;
   departments?: Department[];
   doctors?: Doctor[];
+  insuranceProviders?: InsuranceProvider[];
 }
 
 export function PatientForm({
@@ -52,6 +58,7 @@ export function PatientForm({
   defaultValues,
   departments = [],
   doctors = [],
+  insuranceProviders = [],
   patient,
 }: PatientFormProps) {
   const [state, formAction, isPending] = useActionState(action, null);
@@ -67,6 +74,7 @@ export function PatientForm({
       blood_type: null,
       department_id: null,
       assigned_doctor_id: null,
+      insurance_provider_id: null,
       ...defaultValues,
     },
   });
@@ -235,6 +243,36 @@ export function PatientForm({
                     {filteredDoctors.map((d) => (
                       <SelectItem key={d.id} value={d.id}>
                         Dr. {d.full_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="insurance_provider_id"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Insurance</FormLabel>
+                <Select
+                  value={field.value ?? "__none__"}
+                  onValueChange={(v) => field.onChange(v === "__none__" ? null : v)}
+                  disabled={isPending}
+                >
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select insurance" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="__none__">No insurance</SelectItem>
+                    {insuranceProviders.map((provider) => (
+                      <SelectItem key={provider.id} value={provider.id}>
+                        {provider.name}
                       </SelectItem>
                     ))}
                   </SelectContent>

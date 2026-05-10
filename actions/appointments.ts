@@ -338,7 +338,7 @@ export async function updateAppointmentStatus(
     if (collected > total + 0.001) {
       return { error: "Collected amount exceeds invoice total." };
     }
-    const { error } = await supabase.rpc("complete_appointment_billing", {
+    const baseBillingArgs = {
       p_appointment_id: id,
       p_line_items: billing.line_items,
       p_paid_amount: Number(billing.paid_amount.toFixed(2)),
@@ -349,7 +349,22 @@ export async function updateAppointmentStatus(
         billing.secondary_payment_method ?? undefined,
       p_deposit_amount: Number(billing.deposit_amount.toFixed(2)),
       p_payment_note: billing.payment_note ?? undefined,
-    });
+    };
+
+    const previousSettlementAmount = billing.previous_settlement_amount;
+    const { error } =
+      previousSettlementAmount > 0
+        ? await supabase.rpc(
+            "complete_appointment_billing_with_previous_settlement",
+            {
+              ...baseBillingArgs,
+              p_previous_settlement_amount: previousSettlementAmount,
+              p_previous_payment_method:
+                billing.previous_payment_method ?? undefined,
+              p_previous_note: billing.previous_note ?? undefined,
+            },
+          )
+        : await supabase.rpc("complete_appointment_billing", baseBillingArgs);
 
     if (error) return { error: error.message };
     revalidatePath("/appointments");
@@ -632,6 +647,7 @@ export interface BillingContext {
   hasInsurance: boolean;
   insuranceProviderName: string | null;
   accountBalance: number;
+  previousOutstandingBalance: number;
   departmentId: string | null;
   departmentName: string | null;
   departmentColor: string | null;
@@ -660,9 +676,21 @@ export async function getBillingContext(
 
   if (apptError || !appt) return { error: "Appointment not found." };
 
-  const balance = await getPatientAccountBalance(
-    appt.patient_id,
-    user.clinicId,
+  const [balance, { data: previousOutstandingRows }] = await Promise.all([
+    getPatientAccountBalance(appt.patient_id, user.clinicId),
+    supabase
+      .from("appointments")
+      .select("outstanding_amount")
+      .eq("clinic_id", user.clinicId)
+      .eq("patient_id", appt.patient_id)
+      .neq("id", appointmentId)
+      .is("deleted_at", null)
+      .gt("outstanding_amount", 0),
+  ]);
+  const previousOutstandingBalance = Number(
+    (previousOutstandingRows ?? [])
+      .reduce((sum, row) => sum + Number(row.outstanding_amount ?? 0), 0)
+      .toFixed(2),
   );
 
   let services: BillingContext["services"] = [];
@@ -710,6 +738,7 @@ export async function getBillingContext(
       hasInsurance: Boolean(appt.insurance_provider_id) && !isSelfPay,
       insuranceProviderName: isSelfPay ? null : providerName,
       accountBalance: balance,
+      previousOutstandingBalance,
       departmentId: appt.department_id,
       departmentName: appt.departments?.name ?? null,
       departmentColor: appt.departments?.color ?? null,

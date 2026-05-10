@@ -46,6 +46,13 @@ export const billingSchema = z
     secondary_amount: z.number().nonnegative().default(0),
     deposit_amount: z.number().nonnegative().default(0),
     payment_note: z.string().max(500).nullable().optional(),
+    previous_settlement_amount: z.number().default(0),
+    previous_payment_method: paymentMethodSchema.nullable().optional(),
+    previous_note: z
+      .string()
+      .max(500, "Previous note must be 500 characters or less.")
+      .nullable()
+      .optional(),
   })
   .refine(
     (v) => {
@@ -56,9 +63,41 @@ export const billingSchema = z
       path: ["secondary_payment_method"],
       message: "Secondary method must differ from primary.",
     },
+  )
+  .superRefine((v, ctx) => {
+    if (v.previous_settlement_amount < 0) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["previous_settlement_amount"],
+        message: "Previous settlement amount cannot be negative.",
+      });
+    }
+    if (v.previous_settlement_amount > 0 && !v.previous_payment_method) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["previous_payment_method"],
+        message: "Select a payment method for previous balance.",
+      });
+    }
+  })
+  .transform((v) => ({
+    ...v,
+    previous_settlement_amount: Number(
+      v.previous_settlement_amount.toFixed(2),
+    ),
+    previous_note: v.previous_note?.trim() || null,
+    previous_payment_method:
+      v.previous_settlement_amount > 0 ? v.previous_payment_method : null,
+  }))
+  .refine(
+    (v) => v.previous_settlement_amount <= 0 || !!v.previous_payment_method,
+    {
+      path: ["previous_payment_method"],
+      message: "Select a payment method for previous balance.",
+    },
   );
 
-export type BillingValues = z.infer<typeof billingSchema>;
+export type BillingValues = z.input<typeof billingSchema>;
 
 export const depositSchema = z.object({
   patient_id: z.string().uuid(),

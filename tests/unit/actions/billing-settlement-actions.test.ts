@@ -101,6 +101,181 @@ describe("billing and settlement server actions", () => {
     );
   });
 
+  it("keeps zero previous settlement on the existing billing RPC", async () => {
+    const { updateAppointmentStatus, mocks } = await loadActions();
+    mocks.state.tableResults["appointments.select"] = {
+      data: { status: "confirmed", patient_id: PATIENT_ID },
+      error: null,
+    };
+
+    const result = await updateAppointmentStatus(
+      APPOINTMENT_ID,
+      "completed",
+      billingPayload({
+        previous_settlement_amount: 0,
+        previous_payment_method: null,
+      }) as never,
+    );
+
+    expect(result).toEqual({});
+    expect(mocks.state.rpc).toHaveBeenCalledTimes(1);
+    expect(mocks.state.rpc).toHaveBeenCalledWith("complete_appointment_billing", {
+      p_appointment_id: APPOINTMENT_ID,
+      p_line_items: [{ name: "Consultation", price: 100, quantity: 1 }],
+      p_paid_amount: 100,
+      p_payment_method: "cash",
+      p_insurance_amount: 0,
+      p_secondary_amount: 0,
+      p_secondary_payment_method: undefined,
+      p_deposit_amount: 0,
+      p_payment_note: undefined,
+    });
+  });
+
+  it("uses the previous outstanding billing RPC when previous settlement is positive", async () => {
+    const { updateAppointmentStatus, mocks } = await loadActions();
+    mocks.state.tableResults["appointments.select"] = {
+      data: { status: "confirmed", patient_id: PATIENT_ID },
+      error: null,
+    };
+
+    const result = await updateAppointmentStatus(
+      APPOINTMENT_ID,
+      "completed",
+      billingPayload({
+        previous_settlement_amount: 25,
+        previous_payment_method: "cash",
+        previous_note: "Old balance on this receipt",
+      }) as never,
+    );
+
+    expect(result).toEqual({});
+    expect(mocks.state.rpc).toHaveBeenCalledTimes(1);
+    expect(mocks.state.rpc).toHaveBeenCalledWith(
+      "complete_appointment_billing_with_previous_settlement",
+      {
+        p_appointment_id: APPOINTMENT_ID,
+        p_line_items: [{ name: "Consultation", price: 100, quantity: 1 }],
+        p_paid_amount: 100,
+        p_payment_method: "cash",
+        p_insurance_amount: 0,
+        p_secondary_amount: 0,
+        p_secondary_payment_method: undefined,
+        p_deposit_amount: 0,
+        p_payment_note: undefined,
+        p_previous_settlement_amount: 25,
+        p_previous_payment_method: "cash",
+        p_previous_note: "Old balance on this receipt",
+      },
+    );
+  });
+
+  it("keeps previous settlement separate from service line items", async () => {
+    const { updateAppointmentStatus, mocks } = await loadActions();
+    mocks.state.tableResults["appointments.select"] = {
+      data: { status: "confirmed", patient_id: PATIENT_ID },
+      error: null,
+    };
+
+    await updateAppointmentStatus(
+      APPOINTMENT_ID,
+      "completed",
+      billingPayload({
+        previous_settlement_amount: 25,
+        previous_payment_method: "cash",
+      }) as never,
+    );
+
+    const [, args] = mocks.state.rpc.mock.calls[0];
+    expect(args).toMatchObject({
+      p_line_items: [{ name: "Consultation", price: 100, quantity: 1 }],
+      p_previous_settlement_amount: 25,
+    });
+  });
+
+  it("rejects negative previous settlement before calling the billing RPC", async () => {
+    const { updateAppointmentStatus, mocks } = await loadActions();
+    mocks.state.tableResults["appointments.select"] = {
+      data: { status: "confirmed", patient_id: PATIENT_ID },
+      error: null,
+    };
+
+    const result = await updateAppointmentStatus(
+      APPOINTMENT_ID,
+      "completed",
+      billingPayload({ previous_settlement_amount: -1 }) as never,
+    );
+
+    expect(result.error).toBe("Previous settlement amount cannot be negative.");
+    expect(mocks.state.rpc).not.toHaveBeenCalled();
+  });
+
+  it("requires a previous payment method before calling the previous settlement RPC", async () => {
+    const { updateAppointmentStatus, mocks } = await loadActions();
+    mocks.state.tableResults["appointments.select"] = {
+      data: { status: "confirmed", patient_id: PATIENT_ID },
+      error: null,
+    };
+
+    const result = await updateAppointmentStatus(
+      APPOINTMENT_ID,
+      "completed",
+      billingPayload({
+        previous_settlement_amount: 25,
+        previous_payment_method: null,
+      }) as never,
+    );
+
+    expect(result.error).toBe("Select a payment method for previous balance.");
+    expect(mocks.state.rpc).not.toHaveBeenCalled();
+  });
+
+  it("rejects overly long previous settlement notes before calling the billing RPC", async () => {
+    const { updateAppointmentStatus, mocks } = await loadActions();
+    mocks.state.tableResults["appointments.select"] = {
+      data: { status: "confirmed", patient_id: PATIENT_ID },
+      error: null,
+    };
+
+    const result = await updateAppointmentStatus(
+      APPOINTMENT_ID,
+      "completed",
+      billingPayload({
+        previous_settlement_amount: 25,
+        previous_payment_method: "cash",
+        previous_note: "x".repeat(501),
+      }) as never,
+    );
+
+    expect(result.error).toBe("Previous note must be 500 characters or less.");
+    expect(mocks.state.rpc).not.toHaveBeenCalled();
+  });
+
+  it("returns previous settlement RPC errors cleanly", async () => {
+    const { updateAppointmentStatus, mocks } = await loadActions();
+    mocks.state.tableResults["appointments.select"] = {
+      data: { status: "confirmed", patient_id: PATIENT_ID },
+      error: null,
+    };
+    mocks.state.rpcResults.complete_appointment_billing_with_previous_settlement = {
+      data: null,
+      error: { message: "Previous settlement exceeds previous outstanding balance" },
+    };
+
+    const result = await updateAppointmentStatus(
+      APPOINTMENT_ID,
+      "completed",
+      billingPayload({
+        previous_settlement_amount: 25,
+        previous_payment_method: "cash",
+      }) as never,
+    );
+
+    expect(result).toEqual({
+      error: "Previous settlement exceeds previous outstanding balance",
+    });
+  });
+
   it("rejects overpayment before calling the billing RPC", async () => {
     const { updateAppointmentStatus, mocks } = await loadActions();
     mocks.state.tableResults["appointments.select"] = {
@@ -157,6 +332,50 @@ describe("billing and settlement server actions", () => {
     );
 
     expect(result).toEqual({ error: "Appointment was already completed" });
+  });
+
+  it("returns previous outstanding balance in billing context", async () => {
+    const { getBillingContext, mocks } = await loadActions();
+    mocks.state.tableResults["appointments.select"] = [
+      {
+        data: {
+          id: APPOINTMENT_ID,
+          patient_id: PATIENT_ID,
+          department_id: "dept-1",
+          insurance_provider_id: null,
+          patients: { full_name: "Billing Patient" },
+          departments: { name: "General", color: "#0891b2" },
+          insurance_providers: null,
+        },
+        error: null,
+      },
+      {
+        data: [{ outstanding_amount: 20 }, { outstanding_amount: 30.5 }],
+        error: null,
+      },
+      { data: [{ deposit_amount: 0 }], error: null },
+    ];
+    mocks.state.tableResults["patient_deposits.select"] = {
+      data: [],
+      error: null,
+    };
+    mocks.state.tableResults["services.select"] = {
+      data: [],
+      error: null,
+    };
+
+    const result = await getBillingContext(APPOINTMENT_ID);
+
+    expect(result.data?.previousOutstandingBalance).toBe(50.5);
+    expect(mocks.state.queryLog).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          table: "appointments",
+          operation: "select",
+          args: ["neq", "id", APPOINTMENT_ID],
+        }),
+      ]),
+    );
   });
 
   it("undoes invoice completion through the billing undo RPC", async () => {

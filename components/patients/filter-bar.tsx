@@ -19,23 +19,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { formatDoctorFirstName, formatDoctorName } from "@/lib/format-doctor";
 
 interface Props {
   doctors: { id: string; full_name: string }[];
   departments: { id: string; name: string; color: string }[];
   showScopeFilters?: boolean;
-}
-
-function formatDoctorName(name: string | null | undefined) {
-  if (!name) return "—";
-  return /^dr\.?\s/i.test(name.trim()) ? name.trim() : `Dr. ${name.trim()}`;
-}
-
-function formatDoctorFirstName(name: string | null | undefined) {
-  const formatted = formatDoctorName(name);
-  if (formatted === "—") return formatted;
-  const withoutTitle = formatted.replace(/^dr\.?\s+/i, "");
-  return `Dr. ${withoutTitle.split(" ")[0]}`;
 }
 
 export function PatientsFilterBar({

@@ -382,4 +382,24 @@
   body:not(.print-settlements-only) [data-print-section="settlements"] {
     display: none !important;
   }
+
+  body.patient-profile-print {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  body.patient-profile-print [data-patient-profile-print-hide] {
+    display: none !important;
+  }
+
+  body.patient-profile-print [data-patient-profile-print-root] {
+    display: block !important;
+    max-width: none !important;
+    width: 100% !important;
+  }
+
+  body.patient-profile-print [data-patient-profile-print-root] img {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
 }

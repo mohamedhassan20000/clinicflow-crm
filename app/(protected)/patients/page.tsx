@@ -3,15 +3,11 @@ import { requireUser } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
 import { PatientTable } from "@/components/patients/patient-table";
 import { PatientsFilterBar } from "@/components/patients/filter-bar";
+import { formatDoctorName } from "@/lib/format-doctor";
 
 export const metadata: Metadata = { title: "Patients" };
 
 const PAGE_SIZE = 20;
-
-function formatDoctorName(name: string | null | undefined) {
-  if (!name) return "—";
-  return /^dr\.?\s/i.test(name.trim()) ? name.trim() : `Dr. ${name.trim()}`;
-}
 
 interface PageProps {
   searchParams: Promise<{

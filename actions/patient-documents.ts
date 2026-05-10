@@ -359,6 +359,16 @@ export async function deletePatientDocument(
     return { error: "Stored document path is not valid for this patient." };
   }
 
+  const { error: storageError } = await supabase.storage
+    .from(BUCKET)
+    .remove([document.storage_path]);
+
+  if (storageError) {
+    return {
+      error: storageError.message || "Failed to remove document file.",
+    };
+  }
+
   const { error: updateError } = await supabase
     .from("patient_documents")
     .update({ deleted_at: new Date().toISOString() })
@@ -367,9 +377,7 @@ export async function deletePatientDocument(
     .eq("clinic_id", user.clinicId)
     .is("deleted_at", null);
 
-  if (updateError) return { error: "Failed to delete document." };
-
-  await supabase.storage.from(BUCKET).remove([document.storage_path]);
+  if (updateError) return { error: "Failed to delete document record." };
 
   revalidatePath(`/patients/${patientId}`);
 

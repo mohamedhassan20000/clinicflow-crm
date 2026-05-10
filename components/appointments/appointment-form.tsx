@@ -428,7 +428,7 @@ export function AppointmentForm({
                         <SelectValue placeholder="Select time" />
                       </SelectTrigger>
                     </FormControl>
-                    <SelectContent>
+                    <SelectContent position="popper" align="start">
                       {TIME_SLOTS.map((t) => {
                         const disabled =
                           selectedDate < now.date ||

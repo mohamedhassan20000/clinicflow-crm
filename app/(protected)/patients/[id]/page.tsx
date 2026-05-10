@@ -9,14 +9,16 @@ import { MedicalNotesList } from "@/components/patients/medical-notes-list";
 import { NoteComposer } from "@/components/patients/note-composer";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { DeletePatientButton } from "@/components/patients/delete-patient-button";
 import { AppointmentPaymentRow } from "@/components/patients/appointment-payment-row";
 import { SettleOutstandingDialog } from "@/components/patients/settle-outstanding-dialog";
 import { AddDepositDialog } from "@/components/patients/add-deposit-dialog";
 import { PatientAvatarControls } from "@/components/patients/patient-avatar-controls";
 import { PatientDocumentsSection } from "@/components/patients/patient-documents-section";
+import { PatientAvatarPreview } from "@/components/patients/patient-avatar-preview";
+import { PatientProfilePrintButton } from "@/components/patients/patient-profile-print-button";
 import { listPatientDocuments, type PatientDocumentsData } from "@/actions/patient-documents";
+import { formatDoctorName } from "@/lib/format-doctor";
 
 export const metadata: Metadata = { title: "Patient" };
 
@@ -196,9 +198,9 @@ export default async function PatientDetailPage({ params }: PageProps) {
     .join("");
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-patient-profile-print-root>
       {/* Breadcrumb */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 print:hidden" data-patient-profile-print-hide>
         <Link
           href="/patients"
           className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
@@ -211,17 +213,11 @@ export default async function PatientDetailPage({ params }: PageProps) {
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex min-w-0 items-start gap-3">
-          <Avatar className="h-14 w-14 print:hidden">
-            {avatarUrl && (
-              <AvatarImage
-                src={avatarUrl}
-                alt={`${patient.full_name} avatar`}
-              />
-            )}
-            <AvatarFallback className="bg-primary/10 text-base font-semibold text-primary">
-              {initials || "?"}
-            </AvatarFallback>
-          </Avatar>
+          <PatientAvatarPreview
+            avatarUrl={avatarUrl}
+            fullName={patient.full_name}
+            initials={initials}
+          />
           <div className="min-w-0 space-y-1">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-2xl font-semibold tracking-tight">
@@ -255,8 +251,10 @@ export default async function PatientDetailPage({ params }: PageProps) {
           </div>
         </div>
 
-        {canEdit && (
-          <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 print:hidden" data-patient-profile-print-hide>
+          <PatientProfilePrintButton />
+          {canEdit && (
+            <>
             <Button asChild variant="outline" size="sm" className="gap-1.5">
               <Link href={`/patients/${id}/edit`}>
                 <Pencil className="h-3.5 w-3.5" />
@@ -266,8 +264,9 @@ export default async function PatientDetailPage({ params }: PageProps) {
             {isAdmin && !patient.is_deleted && (
               <DeletePatientButton patientId={id} />
             )}
-          </div>
-        )}
+            </>
+          )}
+        </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -288,6 +287,12 @@ export default async function PatientDetailPage({ params }: PageProps) {
                 <dt className="text-xs text-muted-foreground">National ID</dt>
                 <dd className="font-mono font-medium">
                   {patient.national_id ?? "—"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">Birth date</dt>
+                <dd className="font-medium">
+                  {new Date(patient.date_of_birth).toLocaleDateString("en-GB")}
                 </dd>
               </div>
               <div>
@@ -319,7 +324,7 @@ export default async function PatientDetailPage({ params }: PageProps) {
                 <dt className="text-xs text-muted-foreground">Treating doctor</dt>
                 <dd className="font-medium">
                   {doctorName ? (
-                    `Dr. ${doctorName}`
+                    formatDoctorName(doctorName)
                   ) : (
                     <span className="text-muted-foreground/60">Unassigned</span>
                   )}
@@ -346,7 +351,7 @@ export default async function PatientDetailPage({ params }: PageProps) {
         </div>
 
         {/* Right column */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="lg:col-span-2 space-y-6" data-patient-profile-print-hide>
           {/* Billing summary strip — hidden for doctors */}
           {!isDoctor && <div className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">

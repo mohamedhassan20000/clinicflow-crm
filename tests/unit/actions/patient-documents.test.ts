@@ -413,7 +413,7 @@ describe("patient document actions", () => {
     expect(mocks.state.storageRemove).not.toHaveBeenCalled();
   });
 
-  it("soft-deletes then removes storage best-effort on delete", async () => {
+  it("removes storage then soft-deletes the document row on delete", async () => {
     const { deletePatientDocument, mocks } = await loadPatientDocumentActions();
     mocks.state.tableResults["patients.select"] = {
       data: patientRow(),
@@ -437,18 +437,18 @@ describe("patient document actions", () => {
     const result = await deletePatientDocument(PATIENT_ID, DOCUMENT_ID);
 
     expect(result.ok).toBe(true);
-    expect(mocks.state.queryLog).toContainEqual(
-      expect.objectContaining({
-        table: "patient_documents",
-        operation: "update",
-        args: [expect.objectContaining({ deleted_at: expect.any(String) })],
-      }),
-    );
     expect(mocks.state.storageLog).toContainEqual(
       expect.objectContaining({
         bucket: "patient-assets",
         operation: "remove",
         args: [[DOCUMENT_PATH]],
+      }),
+    );
+    expect(mocks.state.queryLog).toContainEqual(
+      expect.objectContaining({
+        table: "patient_documents",
+        operation: "update",
+        args: [expect.objectContaining({ deleted_at: expect.any(String) })],
       }),
     );
   });
@@ -482,7 +482,33 @@ describe("patient document actions", () => {
     expect(mocks.state.storageFrom).not.toHaveBeenCalled();
   });
 
-  it("does not remove storage when DB soft-delete fails", async () => {
+  it("does not soft-delete the document row when storage removal fails", async () => {
+    const { deletePatientDocument, mocks } = await loadPatientDocumentActions();
+    mocks.state.tableResults["patients.select"] = {
+      data: patientRow(),
+      error: null,
+    };
+    mocks.state.tableResults["patient_documents.select"] = {
+      data: documentRow(),
+      error: null,
+    };
+    mocks.state.storageRemove.mockResolvedValue({
+      data: null,
+      error: { message: "storage remove failed" },
+    });
+
+    const result = await deletePatientDocument(PATIENT_ID, DOCUMENT_ID);
+
+    expect(result).toEqual({ error: "storage remove failed" });
+    expect(
+      mocks.state.queryLog.some(
+        (entry) =>
+          entry.table === "patient_documents" && entry.operation === "update",
+      ),
+    ).toBe(false);
+  });
+
+  it("returns a record error after storage is removed when DB soft-delete fails", async () => {
     const { deletePatientDocument, mocks } = await loadPatientDocumentActions();
     mocks.state.tableResults["patients.select"] = {
       data: patientRow(),
@@ -499,8 +525,8 @@ describe("patient document actions", () => {
 
     const result = await deletePatientDocument(PATIENT_ID, DOCUMENT_ID);
 
-    expect(result).toEqual({ error: "Failed to delete document." });
-    expect(mocks.state.storageRemove).not.toHaveBeenCalled();
+    expect(result).toEqual({ error: "Failed to delete document record." });
+    expect(mocks.state.storageRemove).toHaveBeenCalledWith([DOCUMENT_PATH]);
   });
 
   it("generates short-lived signed URLs only after document ownership validation", async () => {

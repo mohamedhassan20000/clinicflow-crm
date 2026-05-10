@@ -86,4 +86,16 @@ describe("appointment form patient context autofill", () => {
 
     expectSelectedInsurance("Manual Insurance");
   });
+
+  it("positions the time dropdown with popper alignment under its field", async () => {
+    const user = userEvent.setup();
+    renderAppointmentForm();
+
+    await user.click(screen.getByRole("combobox", { name: /time/i }));
+
+    const listbox = await screen.findByRole("listbox");
+    expect(
+      listbox.closest("[data-slot='select-content']"),
+    ).toHaveAttribute("data-align-trigger", "false");
+  });
 });

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
+import { formatDoctorName } from "@/lib/format-doctor";
 type Patient = {
   id: string;
   file_number: string | null;
@@ -33,11 +34,6 @@ interface PatientTableProps {
 
 const UNASSIGNED_COLOR = "#94a3b8"; // slate-400
 const UNASSIGNED_KEY = "__unassigned__";
-
-function formatDoctorName(name: string | null | undefined) {
-  if (!name) return "—";
-  return /^dr\.?\s/i.test(name.trim()) ? name.trim() : `Dr. ${name.trim()}`;
-}
 
 function initials(name: string) {
   return name

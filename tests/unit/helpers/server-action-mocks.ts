@@ -38,12 +38,22 @@ export function createServerActionMocks() {
     adminCreateUser: vi.fn(),
     adminUpdateUserById: vi.fn(),
     adminDeleteUser: vi.fn(),
+    storageFrom: vi.fn(),
+    storageUpload: vi.fn(),
+    storageRemove: vi.fn(),
+    storageCreateSignedUrl: vi.fn(),
+    storageCreateSignedUrls: vi.fn(),
     revalidatePath: vi.fn(),
     redirect: vi.fn(),
     requireRole: vi.fn(),
     queryLog: [] as {
       table: string;
       operation: "select" | "insert" | "update" | "delete";
+      args: unknown[];
+    }[],
+    storageLog: [] as {
+      bucket: string;
+      operation: "upload" | "remove" | "createSignedUrl" | "createSignedUrls";
       args: unknown[];
     }[],
   };
@@ -84,6 +94,11 @@ export function createServerActionMocks() {
 
     is(...args: unknown[]) {
       this.logFilter("is", args);
+      return this;
+    }
+
+    in(...args: unknown[]) {
+      this.logFilter("in", args);
       return this;
     }
 
@@ -183,6 +198,7 @@ export function createServerActionMocks() {
     state.rpcResults = {};
     state.tableResults = {};
     state.queryLog = [];
+    state.storageLog = [];
     state.rpc.mockReset();
     state.from.mockReset();
     state.authSignInWithPassword.mockReset();
@@ -192,6 +208,11 @@ export function createServerActionMocks() {
     state.adminCreateUser.mockReset();
     state.adminUpdateUserById.mockReset();
     state.adminDeleteUser.mockReset();
+    state.storageFrom.mockReset();
+    state.storageUpload.mockReset();
+    state.storageRemove.mockReset();
+    state.storageCreateSignedUrl.mockReset();
+    state.storageCreateSignedUrls.mockReset();
     state.revalidatePath.mockReset();
     state.redirect.mockReset();
     state.requireRole.mockReset();
@@ -226,12 +247,50 @@ export function createServerActionMocks() {
     });
     state.adminUpdateUserById.mockResolvedValue({ data: {}, error: null });
     state.adminDeleteUser.mockResolvedValue({ data: {}, error: null });
+    state.storageUpload.mockResolvedValue({ data: { path: "path" }, error: null });
+    state.storageRemove.mockResolvedValue({ data: null, error: null });
+    state.storageCreateSignedUrl.mockImplementation((path: string) =>
+      Promise.resolve({
+        data: { signedUrl: `https://signed.local/${path}` },
+        error: null,
+      }),
+    );
+    state.storageCreateSignedUrls.mockImplementation((paths: string[]) =>
+      Promise.resolve({
+        data: paths.map((path) => ({
+          path,
+          signedUrl: `https://signed.local/${path}`,
+        })),
+        error: null,
+      }),
+    );
+    state.storageFrom.mockImplementation((bucket: string) => ({
+      upload: (...args: unknown[]) => {
+        state.storageLog.push({ bucket, operation: "upload", args });
+        return state.storageUpload(...args);
+      },
+      remove: (...args: unknown[]) => {
+        state.storageLog.push({ bucket, operation: "remove", args });
+        return state.storageRemove(...args);
+      },
+      createSignedUrl: (...args: unknown[]) => {
+        state.storageLog.push({ bucket, operation: "createSignedUrl", args });
+        return state.storageCreateSignedUrl(...args);
+      },
+      createSignedUrls: (...args: unknown[]) => {
+        state.storageLog.push({ bucket, operation: "createSignedUrls", args });
+        return state.storageCreateSignedUrls(...args);
+      },
+    }));
   }
 
   function client() {
     return {
       from: state.from,
       rpc: state.rpc,
+      storage: {
+        from: state.storageFrom,
+      },
       auth: {
         signInWithPassword: state.authSignInWithPassword,
         getUser: state.authGetUser,

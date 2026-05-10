@@ -74,6 +74,42 @@ function canMutateMedicalNote(
   return note.created_by === user.id;
 }
 
+function nullableFormValue(formData: FormData, key: string) {
+  const value = formData.get(key);
+  return value && value !== "none" ? value : null;
+}
+
+async function validatePatientInsuranceProvider(
+  insuranceProviderId: string | null | undefined,
+  clinicId: string,
+): Promise<ActionResult | null> {
+  if (!insuranceProviderId) return null;
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("insurance_providers")
+    .select("id")
+    .eq("id", insuranceProviderId)
+    .eq("clinic_id", clinicId)
+    .eq("is_active", true)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (error) {
+    return { error: "Failed to validate insurance provider. Please try again." };
+  }
+
+  if (!data) {
+    return {
+      fieldErrors: {
+        insurance_provider_id: ["Select an active insurance provider."],
+      },
+    };
+  }
+
+  return null;
+}
+
 export async function createPatient(
   _prev: ActionResult | null,
   formData: FormData,
@@ -86,15 +122,22 @@ export async function createPatient(
     date_of_birth: formData.get("date_of_birth"),
     phone: formData.get("phone"),
     email: formData.get("email"),
-    blood_type: formData.get("blood_type") || null,
-    department_id: formData.get("department_id") || null,
-    assigned_doctor_id: formData.get("assigned_doctor_id") || null,
+    blood_type: nullableFormValue(formData, "blood_type"),
+    department_id: nullableFormValue(formData, "department_id"),
+    assigned_doctor_id: nullableFormValue(formData, "assigned_doctor_id"),
+    insurance_provider_id: nullableFormValue(formData, "insurance_provider_id"),
   };
 
   const parsed = patientSchema.safeParse(raw);
   if (!parsed.success) {
     return { fieldErrors: parsed.error.flatten().fieldErrors };
   }
+
+  const insuranceError = await validatePatientInsuranceProvider(
+    parsed.data.insurance_provider_id,
+    user.clinicId,
+  );
+  if (insuranceError) return insuranceError;
 
   const supabase = await createClient();
 
@@ -164,15 +207,22 @@ export async function updatePatient(
     date_of_birth: formData.get("date_of_birth"),
     phone: formData.get("phone"),
     email: formData.get("email"),
-    blood_type: formData.get("blood_type") || null,
-    department_id: formData.get("department_id") || null,
-    assigned_doctor_id: formData.get("assigned_doctor_id") || null,
+    blood_type: nullableFormValue(formData, "blood_type"),
+    department_id: nullableFormValue(formData, "department_id"),
+    assigned_doctor_id: nullableFormValue(formData, "assigned_doctor_id"),
+    insurance_provider_id: nullableFormValue(formData, "insurance_provider_id"),
   };
 
   const parsed = patientSchema.safeParse(raw);
   if (!parsed.success) {
     return { fieldErrors: parsed.error.flatten().fieldErrors };
   }
+
+  const insuranceError = await validatePatientInsuranceProvider(
+    parsed.data.insurance_provider_id,
+    user.clinicId,
+  );
+  if (insuranceError) return insuranceError;
 
   const supabase = await createClient();
   const { error } = await supabase

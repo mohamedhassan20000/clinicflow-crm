@@ -2,6 +2,8 @@ import { z } from "zod";
 
 const TR_PHONE_REGEX = /^(\+90|0)?\s?(\(?\d{3}\)?)\s?\d{3}\s?\d{2}\s?\d{2}$/;
 
+const optionalUuid = z.string().uuid().optional().nullable();
+
 export const patientSchema = z.object({
   full_name: z
     .string()
@@ -30,8 +32,9 @@ export const patientSchema = z.object({
     .enum(["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"])
     .optional()
     .nullable(),
-  department_id: z.string().uuid().optional().nullable(),
-  assigned_doctor_id: z.string().uuid().optional().nullable(),
+  department_id: optionalUuid,
+  assigned_doctor_id: optionalUuid,
+  insurance_provider_id: optionalUuid,
 });
 
 export type PatientFormValues = z.infer<typeof patientSchema>;

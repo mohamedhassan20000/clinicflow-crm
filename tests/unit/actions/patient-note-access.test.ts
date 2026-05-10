@@ -6,6 +6,7 @@ const NOTE_ID = "44444444-4444-4444-8444-444444444444";
 const DOCTOR_ID = "55555555-5555-4555-8555-555555555555";
 const OTHER_DOCTOR_ID = "66666666-6666-4666-8666-666666666666";
 const DEPARTMENT_ID = "77777777-7777-4777-8777-777777777777";
+const INSURANCE_PROVIDER_ID = "88888888-8888-4888-8888-888888888888";
 
 function patientForm(overrides: Record<string, string> = {}) {
   const form = new FormData();
@@ -106,6 +107,82 @@ describe("patient action permissions", () => {
       `/patients/${PATIENT_ID}`,
     );
     expect(mocks.state.redirect).toHaveBeenCalledWith(`/patients/${PATIENT_ID}`);
+  });
+
+  it("saves an active same-clinic insurance provider when creating a patient", async () => {
+    const { createPatient, mocks } = await loadPatientsActions();
+    mocks.state.tableResults["insurance_providers.select"] = {
+      data: { id: INSURANCE_PROVIDER_ID },
+      error: null,
+    };
+    mocks.state.tableResults["patients.select"] = [
+      { data: [], error: null },
+      { data: { id: PATIENT_ID }, error: null },
+    ];
+
+    await createPatient(
+      null,
+      patientForm({ insurance_provider_id: INSURANCE_PROVIDER_ID }),
+    );
+
+    expect(mocks.state.queryLog).toContainEqual(
+      expect.objectContaining({
+        table: "patients",
+        operation: "insert",
+        args: [
+          expect.objectContaining({
+            insurance_provider_id: INSURANCE_PROVIDER_ID,
+          }),
+        ],
+      }),
+    );
+  });
+
+  it("rejects inactive or cross-clinic insurance providers before patient write", async () => {
+    const { createPatient, mocks } = await loadPatientsActions();
+    mocks.state.tableResults["insurance_providers.select"] = {
+      data: null,
+      error: null,
+    };
+
+    const result = await createPatient(
+      null,
+      patientForm({ insurance_provider_id: INSURANCE_PROVIDER_ID }),
+    );
+
+    expect(result).toEqual({
+      fieldErrors: {
+        insurance_provider_id: ["Select an active insurance provider."],
+      },
+    });
+    expect(
+      mocks.state.queryLog.some(
+        (entry) => entry.table === "patients" && entry.operation === "insert",
+      ),
+    ).toBe(false);
+  });
+
+  it("stores explicit no-insurance selections as null", async () => {
+    const { updatePatient, mocks } = await loadPatientsActions();
+    mocks.state.tableResults["patients.update"] = { data: null, error: null };
+
+    await updatePatient(
+      PATIENT_ID,
+      null,
+      patientForm({ insurance_provider_id: "none" }),
+    );
+
+    expect(mocks.state.queryLog).toContainEqual(
+      expect.objectContaining({
+        table: "patients",
+        operation: "update",
+        args: [
+          expect.objectContaining({
+            insurance_provider_id: null,
+          }),
+        ],
+      }),
+    );
   });
 
   it("does not continue patient creation when role authorization fails", async () => {

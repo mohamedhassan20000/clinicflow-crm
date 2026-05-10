@@ -733,6 +733,7 @@ export type Database = {
       patients: {
         Row: {
           assigned_doctor_id: string | null
+          avatar_path: string | null
           blood_type: Database["public"]["Enums"]["blood_type"] | null
           clinic_id: string
           created_at: string
@@ -743,6 +744,7 @@ export type Database = {
           file_number: string
           full_name: string
           id: string
+          insurance_provider_id: string | null
           is_deleted: boolean
           national_id: string
           phone: string
@@ -751,6 +753,7 @@ export type Database = {
         }
         Insert: {
           assigned_doctor_id?: string | null
+          avatar_path?: string | null
           blood_type?: Database["public"]["Enums"]["blood_type"] | null
           clinic_id: string
           created_at?: string
@@ -761,6 +764,7 @@ export type Database = {
           file_number: string
           full_name: string
           id?: string
+          insurance_provider_id?: string | null
           is_deleted?: boolean
           national_id: string
           phone: string
@@ -769,6 +773,7 @@ export type Database = {
         }
         Update: {
           assigned_doctor_id?: string | null
+          avatar_path?: string | null
           blood_type?: Database["public"]["Enums"]["blood_type"] | null
           clinic_id?: string
           created_at?: string
@@ -779,6 +784,7 @@ export type Database = {
           file_number?: string
           full_name?: string
           id?: string
+          insurance_provider_id?: string | null
           is_deleted?: boolean
           national_id?: string
           phone?: string
@@ -812,6 +818,13 @@ export type Database = {
             columns: ["department_id"]
             isOneToOne: false
             referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patients_insurance_provider_id_fkey"
+            columns: ["insurance_provider_id"]
+            isOneToOne: false
+            referencedRelation: "insurance_providers"
             referencedColumns: ["id"]
           },
           {

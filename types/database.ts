@@ -619,6 +619,7 @@ export type Database = {
           patient_id: string
           payment_method: string
           settled_at: string
+          source_appointment_id: string | null
         }
         Insert: {
           amount: number
@@ -631,6 +632,7 @@ export type Database = {
           patient_id: string
           payment_method: string
           settled_at?: string
+          source_appointment_id?: string | null
         }
         Update: {
           amount?: number
@@ -643,6 +645,7 @@ export type Database = {
           patient_id?: string
           payment_method?: string
           settled_at?: string
+          source_appointment_id?: string | null
         }
         Relationships: [
           {
@@ -1207,6 +1210,31 @@ export type Database = {
           p_secondary_payment_method?: string
         }
         Returns: undefined
+      }
+      complete_appointment_billing_with_previous_settlement: {
+        Args: {
+          p_appointment_id: string
+          p_deposit_amount?: number
+          p_insurance_amount?: number
+          p_line_items: Json
+          p_paid_amount: number
+          p_payment_method: string
+          p_payment_note?: string
+          p_previous_note?: string
+          p_previous_payment_method?: string
+          p_previous_settlement_amount?: number
+          p_secondary_amount?: number
+          p_secondary_payment_method?: string
+        }
+        Returns: {
+          affected_prior_appointment_ids: string[]
+          current_collected: number
+          current_outstanding: number
+          current_total: number
+          previous_outstanding_after: number
+          previous_outstanding_before: number
+          previous_settled_now: number
+        }[]
       }
       settle_patient_outstanding: {
         Args: {

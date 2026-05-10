@@ -17,6 +17,7 @@ import { PatientAvatarControls } from "@/components/patients/patient-avatar-cont
 import { PatientDocumentsSection } from "@/components/patients/patient-documents-section";
 import { PatientAvatarPreview } from "@/components/patients/patient-avatar-preview";
 import { PatientProfilePrintButton } from "@/components/patients/patient-profile-print-button";
+import { PatientProfilePrintDocument } from "@/components/patients/patient-profile-print-document";
 import { listPatientDocuments, type PatientDocumentsData } from "@/actions/patient-documents";
 import { formatDoctorName } from "@/lib/format-doctor";
 
@@ -196,9 +197,40 @@ export default async function PatientDetailPage({ params }: PageProps) {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase())
     .join("");
+  const printAppointments = (appointments ?? []).map((a) => ({
+    id: String(a.id),
+    scheduledAt: String(a.scheduled_at),
+    status: String(a.status),
+    departmentName: a.departments?.name ?? null,
+    doctorName: a.profiles?.full_name ?? null,
+    totalAmount: a.total_amount === null ? null : Number(a.total_amount ?? 0),
+    outstandingAmount:
+      a.outstanding_amount === null ? null : Number(a.outstanding_amount ?? 0),
+  }));
 
   return (
     <div className="space-y-6" data-patient-profile-print-root>
+      <PatientProfilePrintDocument
+        avatarUrl={avatarUrl}
+        fullName={patient.full_name}
+        initials={initials}
+        fileNumber={patient.file_number}
+        nationalId={patient.national_id}
+        phone={patient.phone}
+        email={patient.email}
+        dateOfBirth={patient.date_of_birth}
+        age={age}
+        bloodType={patient.blood_type}
+        departmentName={deptInfo?.name ?? null}
+        treatingDoctorName={doctorName}
+        insuranceName={insuranceProviderName}
+        registrationDate={patient.created_at}
+        billingTotals={{ ...billingTotals, accountBalance }}
+        canViewBilling={!isDoctor}
+        appointments={printAppointments}
+        generatedAt={new Date()}
+      />
+
       {/* Breadcrumb */}
       <div className="flex items-center gap-3 print:hidden" data-patient-profile-print-hide>
         <Link
@@ -211,7 +243,10 @@ export default async function PatientDetailPage({ params }: PageProps) {
       </div>
 
       {/* Header */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <div
+        className="flex flex-wrap items-start justify-between gap-4"
+        data-patient-profile-print-hide
+      >
         <div className="flex min-w-0 items-start gap-3">
           <PatientAvatarPreview
             avatarUrl={avatarUrl}
@@ -269,7 +304,7 @@ export default async function PatientDetailPage({ params }: PageProps) {
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid gap-6 lg:grid-cols-3" data-patient-profile-print-hide>
         {/* Profile card */}
         <div className="lg:col-span-1 space-y-4">
           <div className="rounded-xl border border-border/50 bg-card p-5 space-y-4">

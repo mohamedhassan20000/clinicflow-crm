@@ -275,6 +275,10 @@
     size: A4 landscape;
     margin: 10mm;
   }
+  @page patient-profile {
+    size: A4 portrait;
+    margin: 14mm;
+  }
   html, body {
     background: #fff !important;
     color: #000 !important;
@@ -398,7 +402,29 @@
     width: 100% !important;
   }
 
+  body.patient-profile-print [data-patient-profile-print-document] {
+    display: block !important;
+    page: patient-profile;
+    width: 100% !important;
+    max-width: 180mm !important;
+    margin: 0 auto !important;
+    background: #fff !important;
+    color: #000 !important;
+    box-shadow: none !important;
+  }
+
+  body.patient-profile-print [data-patient-profile-print-document] * {
+    color: #000 !important;
+    border-color: #000 !important;
+    box-shadow: none !important;
+  }
+
   body.patient-profile-print [data-patient-profile-print-root] img {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  body.patient-profile-print [data-patient-profile-print-photo] {
     print-color-adjust: exact;
     -webkit-print-color-adjust: exact;
   }

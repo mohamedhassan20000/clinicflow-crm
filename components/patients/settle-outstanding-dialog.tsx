@@ -114,6 +114,7 @@ export function SettleOutstandingDialog({
   return (
     <>
       <Button
+        type="button"
         size="sm"
         variant="outline"
         className="h-8 gap-1.5 border-amber-500/40 bg-amber-500/10 text-amber-700 hover:bg-amber-500/15 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-300"

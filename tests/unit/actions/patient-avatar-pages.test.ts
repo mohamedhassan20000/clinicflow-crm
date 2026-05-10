@@ -81,8 +81,8 @@ describe("patient avatar signed URL loading", () => {
     expect(mocks.state.storageLog).toEqual([
       {
         bucket: "patient-assets",
-        operation: "createSignedUrl",
-        args: [AVATAR_PATH, 60 * 60],
+        operation: "createSignedUrls",
+        args: [[AVATAR_PATH], 60 * 60],
       },
     ]);
   });

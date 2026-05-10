@@ -98,16 +98,25 @@ export default async function PatientsPage({ searchParams }: PageProps) {
   const visiblePatients = patients ?? [];
   const outstandingPatientIds = new Set<string>();
   const avatarUrls = new Map<string, string>();
+  const avatarPaths = visiblePatients
+    .map((patient) => patient.avatar_path)
+    .filter((path): path is string => Boolean(path));
 
-  await Promise.all(
-    visiblePatients.map(async (patient) => {
-      if (!patient.avatar_path) return;
-      const { data } = await supabase.storage
-        .from("patient-assets")
-        .createSignedUrl(patient.avatar_path, 60 * 60);
-      if (data?.signedUrl) avatarUrls.set(patient.id, data.signedUrl);
-    }),
-  );
+  if (avatarPaths.length > 0) {
+    const { data } = await supabase.storage
+      .from("patient-assets")
+      .createSignedUrls(avatarPaths, 60 * 60);
+    const signedUrls = new Map(
+      (data ?? [])
+        .filter((item) => item.path && item.signedUrl)
+        .map((item) => [item.path, item.signedUrl] as const),
+    );
+    for (const patient of visiblePatients) {
+      if (!patient.avatar_path) continue;
+      const signedUrl = signedUrls.get(patient.avatar_path);
+      if (signedUrl) avatarUrls.set(patient.id, signedUrl);
+    }
+  }
 
   if (!isDoctor && visiblePatients.length > 0) {
     const { data: outstandingRows } = await supabase

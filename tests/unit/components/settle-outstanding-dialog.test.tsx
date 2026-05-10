@@ -23,7 +23,10 @@ describe("SettleOutstandingDialog", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: /pay separately/i }));
+    const trigger = screen.getByRole("button", { name: /pay separately/i });
+    expect(trigger).toHaveAttribute("type", "button");
+
+    await user.click(trigger);
 
     expect(
       screen.getByRole("heading", { name: /settle outstanding balance/i }),

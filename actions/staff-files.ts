@@ -71,58 +71,76 @@ export async function listStaffFiles(
       }),
     ]);
 
-  async function signedUrl(path: string): Promise<string> {
-    const { data } = await supabase.storage
-      .from(BUCKET)
-      .createSignedUrl(path, 3600);
-    return data?.signedUrl ?? "";
-  }
-
   const flat = rootFiles ?? [];
   const photoEntry = flat.find((f) => f.name.startsWith("photo."));
   const contractEntry = flat.find((f) => f.name.startsWith("contract."));
 
-  const [photo, contract] = await Promise.all([
-    photoEntry
-      ? (async (): Promise<StaffFile> => ({
+  const photoPath = photoEntry ? `${base}/${photoEntry.name}` : null;
+  const contractPath = contractEntry ? `${base}/${contractEntry.name}` : null;
+  const certificatePaths = (certFiles ?? []).map(
+    (f) => `${base}/certificates/${f.name}`,
+  );
+  const otherPaths = (otherFiles ?? []).map((f) => `${base}/other/${f.name}`);
+  const paths = [
+    photoPath,
+    contractPath,
+    ...certificatePaths,
+    ...otherPaths,
+  ].filter((path): path is string => Boolean(path));
+  const signedUrls = new Map<string, string>();
+
+  if (paths.length > 0) {
+    const { data } = await supabase.storage
+      .from(BUCKET)
+      .createSignedUrls(paths, 3600);
+    for (const item of data ?? []) {
+      if (item.path && item.signedUrl) signedUrls.set(item.path, item.signedUrl);
+    }
+  }
+
+  const photo: StaffFile | null =
+    photoEntry && photoPath
+      ? {
           name: photoEntry.name,
-          path: `${base}/${photoEntry.name}`,
+          path: photoPath,
           size: photoEntry.metadata?.size ?? 0,
           createdAt: photoEntry.created_at ?? "",
-          url: await signedUrl(`${base}/${photoEntry.name}`),
-        }))()
-      : Promise.resolve(null),
-    contractEntry
-      ? (async (): Promise<StaffFile> => ({
+          url: signedUrls.get(photoPath) ?? "",
+        }
+      : null;
+
+  const contract: StaffFile | null =
+    contractEntry && contractPath
+      ? {
           name: contractEntry.name,
-          path: `${base}/${contractEntry.name}`,
+          path: contractPath,
           size: contractEntry.metadata?.size ?? 0,
           createdAt: contractEntry.created_at ?? "",
-          url: await signedUrl(`${base}/${contractEntry.name}`),
-        }))()
-      : Promise.resolve(null),
-  ]);
+          url: signedUrls.get(contractPath) ?? "",
+        }
+      : null;
 
-  const [certificates, other] = await Promise.all([
-    Promise.all(
-      (certFiles ?? []).map(async (f) => ({
-        name: f.name,
-        path: `${base}/certificates/${f.name}`,
-        size: f.metadata?.size ?? 0,
-        createdAt: f.created_at ?? "",
-        url: await signedUrl(`${base}/certificates/${f.name}`),
-      })),
-    ),
-    Promise.all(
-      (otherFiles ?? []).map(async (f) => ({
-        name: f.name,
-        path: `${base}/other/${f.name}`,
-        size: f.metadata?.size ?? 0,
-        createdAt: f.created_at ?? "",
-        url: await signedUrl(`${base}/other/${f.name}`),
-      })),
-    ),
-  ]);
+  const certificates = (certFiles ?? []).map((f) => {
+    const path = `${base}/certificates/${f.name}`;
+    return {
+      name: f.name,
+      path,
+      size: f.metadata?.size ?? 0,
+      createdAt: f.created_at ?? "",
+      url: signedUrls.get(path) ?? "",
+    };
+  });
+
+  const other = (otherFiles ?? []).map((f) => {
+    const path = `${base}/other/${f.name}`;
+    return {
+      name: f.name,
+      path,
+      size: f.metadata?.size ?? 0,
+      createdAt: f.created_at ?? "",
+      url: signedUrls.get(path) ?? "",
+    };
+  });
 
   return { data: { photo, contract, certificates, other } };
 }

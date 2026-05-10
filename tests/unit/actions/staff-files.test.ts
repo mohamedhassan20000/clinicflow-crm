@@ -93,4 +93,67 @@ describe("staff file uploads", () => {
     expect(result).toEqual({ error: "Document must be PDF, Word, JPEG, or PNG." });
     expect(mocks.state.storageFrom).not.toHaveBeenCalled();
   });
+
+  it("batches signed URL generation when listing staff files", async () => {
+    const { listStaffFiles, mocks } = await loadStaffFileActions();
+    mocks.state.tableResults["profiles.select"] = {
+      data: { id: STAFF_ID },
+      error: null,
+    };
+    mocks.state.storageList
+      .mockResolvedValueOnce({
+        data: [
+          {
+            name: "photo.webp",
+            metadata: { size: 123 },
+            created_at: "2026-05-01T00:00:00Z",
+          },
+          {
+            name: "contract.pdf",
+            metadata: { size: 456 },
+            created_at: "2026-05-02T00:00:00Z",
+          },
+        ],
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: [
+          {
+            name: "license.pdf",
+            metadata: { size: 789 },
+            created_at: "2026-05-03T00:00:00Z",
+          },
+        ],
+        error: null,
+      })
+      .mockResolvedValueOnce({ data: [], error: null });
+
+    const result = await listStaffFiles(STAFF_ID);
+
+    expect(result.error).toBeUndefined();
+    expect(mocks.state.storageCreateSignedUrl).not.toHaveBeenCalled();
+    expect(mocks.state.storageLog).toContainEqual(
+      expect.objectContaining({
+        bucket: "clinic-assets",
+        operation: "createSignedUrls",
+        args: [
+          [
+            `staff/clinic-1/${STAFF_ID}/photo.webp`,
+            `staff/clinic-1/${STAFF_ID}/contract.pdf`,
+            `staff/clinic-1/${STAFF_ID}/certificates/license.pdf`,
+          ],
+          3600,
+        ],
+      }),
+    );
+    expect(result.data?.photo?.url).toBe(
+      `https://signed.local/staff/clinic-1/${STAFF_ID}/photo.webp`,
+    );
+    expect(result.data?.contract?.url).toBe(
+      `https://signed.local/staff/clinic-1/${STAFF_ID}/contract.pdf`,
+    );
+    expect(result.data?.certificates[0]?.url).toBe(
+      `https://signed.local/staff/clinic-1/${STAFF_ID}/certificates/license.pdf`,
+    );
+  });
 });

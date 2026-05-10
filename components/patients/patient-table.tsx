@@ -6,6 +6,7 @@ import { useMemo } from "react";
 import { UserPlus, ChevronLeft, ChevronRight, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 type Patient = {
   id: string;
@@ -16,6 +17,7 @@ type Patient = {
   blood_type: string | null;
   department_id: string | null;
   assigned_doctor_id: string | null;
+  avatar_url?: string | null;
   has_outstanding_balance?: boolean;
   departments?: { id: string; name: string; color: string } | null;
   assigned_doctor?: { id: string; full_name: string } | null;
@@ -35,6 +37,15 @@ const UNASSIGNED_KEY = "__unassigned__";
 function formatDoctorName(name: string | null | undefined) {
   if (!name) return "—";
   return /^dr\.?\s/i.test(name.trim()) ? name.trim() : `Dr. ${name.trim()}`;
+}
+
+function initials(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
 }
 
 export function PatientTable({
@@ -328,12 +339,20 @@ function PatientRow({
       </td>
       <td className="max-w-0 px-4 py-3">
         <div className="flex min-w-0 items-center gap-2">
-          <span
-            data-patient-name-dot
-            aria-hidden
-            className="h-2 w-2 shrink-0 rounded-full ring-2 ring-background print:hidden"
-            style={{ backgroundColor: accentColor }}
-          />
+          <Avatar className="h-8 w-8 print:hidden">
+            {patient.avatar_url && (
+              <AvatarImage
+                src={patient.avatar_url}
+                alt={`${patient.full_name} avatar`}
+              />
+            )}
+            <AvatarFallback
+              className="text-[11px] font-semibold text-white"
+              style={{ backgroundColor: accentColor }}
+            >
+              {initials(patient.full_name) || "?"}
+            </AvatarFallback>
+          </Avatar>
           <span className="truncate font-medium text-foreground">
             {patient.full_name}
           </span>

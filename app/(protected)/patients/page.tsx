@@ -35,7 +35,7 @@ export default async function PatientsPage({ searchParams }: PageProps) {
   let query = supabase
     .from("patients")
     .select(
-      "id, file_number, full_name, national_id, phone, blood_type, department_id, assigned_doctor_id, departments(id, name, color), assigned_doctor:profiles!assigned_doctor_id(id, full_name)",
+      "id, file_number, full_name, national_id, phone, blood_type, department_id, assigned_doctor_id, avatar_path, departments(id, name, color), assigned_doctor:profiles!assigned_doctor_id(id, full_name)",
       { count: "exact" },
     )
     .eq("clinic_id", user.clinicId)
@@ -84,6 +84,17 @@ export default async function PatientsPage({ searchParams }: PageProps) {
   const activeDoctor = isDoctor ? null : (doctors?.find((d) => d.id === doctor) ?? null);
   const visiblePatients = patients ?? [];
   const outstandingPatientIds = new Set<string>();
+  const avatarUrls = new Map<string, string>();
+
+  await Promise.all(
+    visiblePatients.map(async (patient) => {
+      if (!patient.avatar_path) return;
+      const { data } = await supabase.storage
+        .from("patient-assets")
+        .createSignedUrl(patient.avatar_path, 60 * 60);
+      if (data?.signedUrl) avatarUrls.set(patient.id, data.signedUrl);
+    }),
+  );
 
   if (!isDoctor && visiblePatients.length > 0) {
     const { data: outstandingRows } = await supabase
@@ -104,6 +115,7 @@ export default async function PatientsPage({ searchParams }: PageProps) {
 
   const patientsWithBalance = visiblePatients.map((patient) => ({
     ...patient,
+    avatar_url: avatarUrls.get(patient.id) ?? null,
     has_outstanding_balance: outstandingPatientIds.has(patient.id),
   }));
 

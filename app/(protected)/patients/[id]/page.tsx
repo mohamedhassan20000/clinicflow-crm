@@ -9,10 +9,12 @@ import { MedicalNotesList } from "@/components/patients/medical-notes-list";
 import { NoteComposer } from "@/components/patients/note-composer";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { DeletePatientButton } from "@/components/patients/delete-patient-button";
 import { AppointmentPaymentRow } from "@/components/patients/appointment-payment-row";
 import { SettleOutstandingDialog } from "@/components/patients/settle-outstanding-dialog";
 import { AddDepositDialog } from "@/components/patients/add-deposit-dialog";
+import { PatientAvatarControls } from "@/components/patients/patient-avatar-controls";
 
 export const metadata: Metadata = { title: "Patient" };
 
@@ -43,6 +45,14 @@ export default async function PatientDetailPage({ params }: PageProps) {
     (!!user.departmentId && patient.department_id === user.departmentId);
 
   if (isDoctor && !doctorCanAccessPatient) notFound();
+
+  let avatarUrl: string | null = null;
+  if (patient.avatar_path) {
+    const { data } = await supabase.storage
+      .from("patient-assets")
+      .createSignedUrl(patient.avatar_path, 60 * 60);
+    avatarUrl = data?.signedUrl ?? null;
+  }
 
   const [
     { data: notes },
@@ -163,6 +173,12 @@ export default async function PatientDetailPage({ params }: PageProps) {
   const doctorName = patient.assigned_doctor?.full_name ?? null;
   const deptInfo = patient.departments;
   const insuranceProviderName = patient.insurance_providers?.name ?? null;
+  const initials = patient.full_name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
 
   return (
     <div className="space-y-6">
@@ -179,30 +195,49 @@ export default async function PatientDetailPage({ params }: PageProps) {
 
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="space-y-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-semibold tracking-tight">
-              {patient.full_name}
-            </h1>
-            {patient.file_number && (
-              <Badge
-                variant="secondary"
-                className="font-mono text-[11px] tracking-wider"
-              >
-                {patient.file_number}
-              </Badge>
+        <div className="flex min-w-0 items-start gap-3">
+          <Avatar className="h-14 w-14 print:hidden">
+            {avatarUrl && (
+              <AvatarImage
+                src={avatarUrl}
+                alt={`${patient.full_name} avatar`}
+              />
             )}
-            {patient.is_deleted && (
-              <Badge variant="destructive" className="text-xs">
-                Deleted
-              </Badge>
+            <AvatarFallback className="bg-primary/10 text-base font-semibold text-primary">
+              {initials || "?"}
+            </AvatarFallback>
+          </Avatar>
+          <div className="min-w-0 space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-2xl font-semibold tracking-tight">
+                {patient.full_name}
+              </h1>
+              {patient.file_number && (
+                <Badge
+                  variant="secondary"
+                  className="font-mono text-[11px] tracking-wider"
+                >
+                  {patient.file_number}
+                </Badge>
+              )}
+              {patient.is_deleted && (
+                <Badge variant="destructive" className="text-xs">
+                  Deleted
+                </Badge>
+              )}
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {age} years old ·{" "}
+              {new Date(patient.date_of_birth).toLocaleDateString("en-GB")}
+              {patient.blood_type && ` · ${patient.blood_type}`}
+            </p>
+            {canEdit && (
+              <PatientAvatarControls
+                patientId={id}
+                hasAvatar={Boolean(patient.avatar_path)}
+              />
             )}
           </div>
-          <p className="text-sm text-muted-foreground">
-            {age} years old ·{" "}
-            {new Date(patient.date_of_birth).toLocaleDateString("en-GB")}
-            {patient.blood_type && ` · ${patient.blood_type}`}
-          </p>
         </div>
 
         {canEdit && (

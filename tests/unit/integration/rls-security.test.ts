@@ -12,7 +12,12 @@ const LOCAL_SUPABASE_SECRET_KEY =
   "sb_secret_N7UND0UgjKTVK-Uodkm0Hg_xSvEMPvz";
 
 type DbClient = SupabaseClient<Database>;
-type TestUserKey = "admin" | "manager" | "doctor" | "otherDoctor";
+type TestUserKey =
+  | "admin"
+  | "receptionist"
+  | "manager"
+  | "doctor"
+  | "otherDoctor";
 
 const ids = {
   clinic: "10000000-0000-4000-8000-000000000001",
@@ -33,12 +38,18 @@ const ids = {
   authoredNote: "50000000-0000-4000-8000-000000000005",
   deposit: "60000000-0000-4000-8000-000000000001",
   settlement: "70000000-0000-4000-8000-000000000001",
+  patientDocument: "80000000-0000-4000-8000-000000000001",
+  softDeletedDocument: "80000000-0000-4000-8000-000000000002",
+  otherClinicDocument: "80000000-0000-4000-8000-000000000003",
+  receptionistDocument: "80000000-0000-4000-8000-000000000004",
+  duplicateNationalDocument: "80000000-0000-4000-8000-000000000005",
 } as const;
 
 const suffix = `rls-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 const password = "RlsTest12345";
 const emails: Record<TestUserKey, string> = {
   admin: `${suffix}-admin@example.com`,
+  receptionist: `${suffix}-receptionist@example.com`,
   manager: `${suffix}-manager@example.com`,
   doctor: `${suffix}-doctor@example.com`,
   otherDoctor: `${suffix}-other-doctor@example.com`,
@@ -57,6 +68,18 @@ const service = createClient<Database>(
     },
   },
 );
+
+const storagePaths = {
+  patientDocument: `documents/${ids.clinic}/${ids.allowedPatient}/national_id/${ids.patientDocument}.pdf`,
+  softDeletedDocument: `documents/${ids.clinic}/${ids.allowedPatient}/other/${ids.softDeletedDocument}.pdf`,
+  otherClinicDocument: `documents/${ids.otherClinic}/${ids.otherClinicPatient}/other/${ids.otherClinicDocument}.pdf`,
+  malformedDocument: `documents/${ids.clinic}/${ids.allowedPatient}/other/not-a-uuid.pdf`,
+  avatar: `avatars/${ids.clinic}/${ids.allowedPatient}/avatar.webp`,
+};
+
+function staffStoragePath() {
+  return `staff/${ids.clinic}/${userIds.doctor}/photo.png`;
+}
 
 function client() {
   return createClient<Database>(
@@ -95,7 +118,23 @@ async function signInUser(key: TestUserKey) {
 }
 
 async function cleanupSeedData() {
+  await Promise.all([
+    service.storage.from("patient-assets").remove([
+      storagePaths.patientDocument,
+      storagePaths.softDeletedDocument,
+      storagePaths.otherClinicDocument,
+      storagePaths.malformedDocument,
+      storagePaths.avatar,
+    ]),
+    userIds.doctor
+      ? service.storage.from("clinic-assets").remove([staffStoragePath()])
+      : Promise.resolve({ data: null, error: null }),
+  ]);
   await service.from("user_page_permissions").delete().eq("clinic_id", ids.clinic);
+  await service.from("patient_documents").delete().in("clinic_id", [
+    ids.clinic,
+    ids.otherClinic,
+  ]);
   await service.from("medical_notes").delete().in("id", [
     ids.allowedNote,
     ids.deptNote,
@@ -147,6 +186,12 @@ async function seedRlsData() {
       clinic_id: ids.clinic,
       full_name: "RLS Admin",
       role: "admin",
+    },
+    {
+      id: userIds.receptionist,
+      clinic_id: ids.clinic,
+      full_name: "RLS Receptionist",
+      role: "receptionist",
     },
     {
       id: userIds.manager,
@@ -222,6 +267,80 @@ async function seedRlsData() {
       file_number: `${suffix}-O`,
       assigned_doctor_id: userIds.otherDoctor,
     },
+  ]);
+  await service.from("patient_documents").insert([
+    {
+      id: ids.patientDocument,
+      clinic_id: ids.clinic,
+      patient_id: ids.allowedPatient,
+      category: "national_id",
+      file_name: "patient-document.pdf",
+      mime_type: "application/pdf",
+      size_bytes: 3,
+      storage_path: storagePaths.patientDocument,
+      uploaded_by: userIds.admin,
+    },
+    {
+      id: ids.softDeletedDocument,
+      clinic_id: ids.clinic,
+      patient_id: ids.allowedPatient,
+      category: "other",
+      file_name: "soft-deleted.pdf",
+      mime_type: "application/pdf",
+      size_bytes: 3,
+      storage_path: storagePaths.softDeletedDocument,
+      uploaded_by: userIds.admin,
+      deleted_at: "2026-05-10T00:00:00.000Z",
+    },
+    {
+      id: ids.otherClinicDocument,
+      clinic_id: ids.otherClinic,
+      patient_id: ids.otherClinicPatient,
+      category: "other",
+      file_name: "other-clinic.pdf",
+      mime_type: "application/pdf",
+      size_bytes: 3,
+      storage_path: storagePaths.otherClinicDocument,
+      uploaded_by: userIds.admin,
+    },
+  ]);
+  await Promise.all([
+    service.storage
+      .from("patient-assets")
+      .upload(storagePaths.patientDocument, new Uint8Array([1, 2, 3]), {
+        contentType: "application/pdf",
+        upsert: true,
+      }),
+    service.storage
+      .from("patient-assets")
+      .upload(storagePaths.softDeletedDocument, new Uint8Array([1, 2, 3]), {
+        contentType: "application/pdf",
+        upsert: true,
+      }),
+    service.storage
+      .from("patient-assets")
+      .upload(storagePaths.otherClinicDocument, new Uint8Array([1, 2, 3]), {
+        contentType: "application/pdf",
+        upsert: true,
+      }),
+    service.storage
+      .from("patient-assets")
+      .upload(storagePaths.malformedDocument, new Uint8Array([1, 2, 3]), {
+        contentType: "application/pdf",
+        upsert: true,
+      }),
+    service.storage
+      .from("patient-assets")
+      .upload(storagePaths.avatar, new Uint8Array([1, 2, 3]), {
+        contentType: "image/webp",
+        upsert: true,
+      }),
+    service.storage
+      .from("clinic-assets")
+      .upload(staffStoragePath(), new Uint8Array([1, 2, 3]), {
+        contentType: "image/png",
+        upsert: true,
+      }),
   ]);
   await service.from("appointments").insert([
     {
@@ -478,5 +597,155 @@ describe("RLS security integration", () => {
     expect(otherUpdate.error).toBeNull();
     expect(otherUpdate.count).toBe(0);
     expect(otherNote?.note).toBe("Allowed patient note");
+  });
+
+  it("scopes patient document table reads to admin and receptionist only", async () => {
+    const idsToRead = [
+      ids.patientDocument,
+      ids.softDeletedDocument,
+      ids.otherClinicDocument,
+    ];
+    const [adminDocs, receptionistDocs, managerDocs, doctorDocs] =
+      await Promise.all([
+        clients.admin.from("patient_documents").select("id").in("id", idsToRead),
+        clients.receptionist
+          .from("patient_documents")
+          .select("id")
+          .in("id", idsToRead),
+        clients.manager.from("patient_documents").select("id").in("id", idsToRead),
+        clients.doctor.from("patient_documents").select("id").in("id", idsToRead),
+      ]);
+
+    expect(adminDocs.error).toBeNull();
+    expect(adminDocs.data).toEqual([{ id: ids.patientDocument }]);
+    expect(receptionistDocs.error).toBeNull();
+    expect(receptionistDocs.data).toEqual([{ id: ids.patientDocument }]);
+    expect(managerDocs.error).toBeNull();
+    expect(managerDocs.data).toEqual([]);
+    expect(doctorDocs.error).toBeNull();
+    expect(doctorDocs.data).toEqual([]);
+  });
+
+  it("allows receptionist inserts and denies patient document writes for manager and doctor", async () => {
+    const receptionistInsert = await clients.receptionist
+      .from("patient_documents")
+      .insert({
+        id: ids.receptionistDocument,
+        clinic_id: ids.clinic,
+        patient_id: ids.allowedPatient,
+        category: "other",
+        file_name: "receptionist.pdf",
+        mime_type: "application/pdf",
+        size_bytes: 3,
+        storage_path: `documents/${ids.clinic}/${ids.allowedPatient}/other/${ids.receptionistDocument}.pdf`,
+        uploaded_by: userIds.receptionist,
+      });
+    const managerInsert = await clients.manager.from("patient_documents").insert({
+      id: "80000000-0000-4000-8000-000000000101",
+      clinic_id: ids.clinic,
+      patient_id: ids.allowedPatient,
+      category: "other",
+      file_name: "manager.pdf",
+      mime_type: "application/pdf",
+      size_bytes: 3,
+      storage_path: `documents/${ids.clinic}/${ids.allowedPatient}/other/80000000-0000-4000-8000-000000000101.pdf`,
+      uploaded_by: userIds.manager,
+    });
+    const doctorUpdate = await clients.doctor
+      .from("patient_documents")
+      .update({ deleted_at: "2026-05-10T00:00:00.000Z" }, { count: "exact" })
+      .eq("id", ids.patientDocument);
+
+    expect(receptionistInsert.error).toBeNull();
+    expect(managerInsert.error).not.toBeNull();
+    expect(doctorUpdate.error).toBeNull();
+    expect(doctorUpdate.count).toBe(0);
+  });
+
+  it("enforces patient document immutability and single-slot uniqueness", async () => {
+    const immutableUpdate = await clients.admin
+      .from("patient_documents")
+      .update({ storage_path: storagePaths.softDeletedDocument })
+      .eq("id", ids.patientDocument);
+    const duplicateNationalId = await clients.admin
+      .from("patient_documents")
+      .insert({
+        id: ids.duplicateNationalDocument,
+        clinic_id: ids.clinic,
+        patient_id: ids.allowedPatient,
+        category: "national_id",
+        file_name: "duplicate.pdf",
+        mime_type: "application/pdf",
+        size_bytes: 3,
+        storage_path: `documents/${ids.clinic}/${ids.allowedPatient}/national_id/${ids.duplicateNationalDocument}.pdf`,
+        uploaded_by: userIds.admin,
+      });
+
+    expect(immutableUpdate.error).not.toBeNull();
+    expect(duplicateNationalId.error).not.toBeNull();
+  });
+
+  it("scopes patient document storage to allowed roles, clinic, active rows, and valid paths", async () => {
+    const [
+      adminSigned,
+      receptionistSigned,
+      managerSigned,
+      doctorSigned,
+      crossClinicSigned,
+      softDeletedSigned,
+      malformedSigned,
+    ] = await Promise.all([
+      clients.admin.storage
+        .from("patient-assets")
+        .createSignedUrl(storagePaths.patientDocument, 60),
+      clients.receptionist.storage
+        .from("patient-assets")
+        .createSignedUrl(storagePaths.patientDocument, 60),
+      clients.manager.storage
+        .from("patient-assets")
+        .createSignedUrl(storagePaths.patientDocument, 60),
+      clients.doctor.storage
+        .from("patient-assets")
+        .createSignedUrl(storagePaths.patientDocument, 60),
+      clients.admin.storage
+        .from("patient-assets")
+        .createSignedUrl(storagePaths.otherClinicDocument, 60),
+      clients.admin.storage
+        .from("patient-assets")
+        .createSignedUrl(storagePaths.softDeletedDocument, 60),
+      clients.admin.storage
+        .from("patient-assets")
+        .createSignedUrl(storagePaths.malformedDocument, 60),
+    ]);
+
+    expect(adminSigned.error).toBeNull();
+    expect(adminSigned.data?.signedUrl).toBeTruthy();
+    expect(receptionistSigned.error).toBeNull();
+    expect(receptionistSigned.data?.signedUrl).toBeTruthy();
+    expect(managerSigned.error).not.toBeNull();
+    expect(doctorSigned.error).not.toBeNull();
+    expect(crossClinicSigned.error).not.toBeNull();
+    expect(softDeletedSigned.error).not.toBeNull();
+    expect(malformedSigned.error).not.toBeNull();
+  });
+
+  it("keeps patient avatar and staff storage policies working separately", async () => {
+    const [doctorAvatar, managerStaffFile, doctorStaffFile] = await Promise.all([
+      clients.doctor.storage
+        .from("patient-assets")
+        .createSignedUrl(storagePaths.avatar, 60),
+      clients.manager.storage
+        .from("clinic-assets")
+        .createSignedUrl(staffStoragePath(), 60),
+      clients.doctor.storage
+        .from("clinic-assets")
+        .createSignedUrl(staffStoragePath(), 60),
+    ]);
+
+    expect(doctorAvatar.error).toBeNull();
+    expect(doctorAvatar.data?.signedUrl).toBeTruthy();
+    expect(managerStaffFile.error).toBeNull();
+    expect(managerStaffFile.data?.signedUrl).toBeTruthy();
+    expect(doctorStaffFile.error).not.toBeNull();
   });
 });

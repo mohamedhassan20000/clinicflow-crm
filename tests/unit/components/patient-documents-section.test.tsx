@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { toast } from "sonner";
 import { PatientDocumentsSection } from "@/components/patients/patient-documents-section";
 import {
   deletePatientDocument,
@@ -196,5 +197,104 @@ describe("PatientDocumentsSection", () => {
         "national-doc",
       );
     });
+  });
+
+  it("shows upload errors and keeps local state unchanged", async () => {
+    vi.mocked(uploadPatientDocument).mockResolvedValue({
+      error: "Upload failed.",
+    });
+    renderSection({ ...baseDocuments, nationalId: null });
+
+    fireEvent.change(screen.getByLabelText("Upload National ID document"), {
+      target: {
+        files: [new File(["id"], "id.pdf", { type: "application/pdf" })],
+      },
+    });
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith("Upload failed.");
+    });
+    expect(screen.queryByText("national-id.pdf")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("No national id document uploaded yet."),
+    ).toBeInTheDocument();
+  });
+
+  it("does not update local state after upload when no data is returned", async () => {
+    vi.mocked(uploadPatientDocument).mockResolvedValue({ ok: true });
+    renderSection({ ...baseDocuments, nationalId: null });
+
+    fireEvent.change(screen.getByLabelText("Upload National ID document"), {
+      target: {
+        files: [new File(["id"], "id.pdf", { type: "application/pdf" })],
+      },
+    });
+
+    await waitFor(() => {
+      expect(uploadPatientDocument).toHaveBeenCalled();
+    });
+    expect(
+      screen.getByText("No national id document uploaded yet."),
+    ).toBeInTheDocument();
+  });
+
+  it("shows view errors without opening a window", async () => {
+    const user = userEvent.setup();
+    vi.mocked(getPatientDocumentSignedUrl).mockResolvedValue({
+      error: "Link failed.",
+    });
+    renderSection();
+
+    await user.click(screen.getAllByRole("button", { name: /view/i })[0]);
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith("Link failed.");
+    });
+    expect(window.open).not.toHaveBeenCalled();
+  });
+
+  it("shows delete errors and keeps local state unchanged", async () => {
+    const user = userEvent.setup();
+    vi.mocked(deletePatientDocument).mockResolvedValue({
+      error: "Delete failed.",
+    });
+    renderSection();
+
+    await user.click(screen.getAllByRole("button", { name: /delete/i })[0]);
+    const dialog = screen.getByRole("alertdialog");
+    await user.click(within(dialog).getByRole("button", { name: /^delete$/i }));
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith("Delete failed.");
+    });
+    expect(screen.getByText("national-id.pdf")).toBeInTheDocument();
+  });
+
+  it("does not update local state after delete when no data is returned", async () => {
+    const user = userEvent.setup();
+    vi.mocked(deletePatientDocument).mockResolvedValue({ ok: true });
+    renderSection();
+
+    await user.click(screen.getAllByRole("button", { name: /delete/i })[0]);
+    const dialog = screen.getByRole("alertdialog");
+    await user.click(within(dialog).getByRole("button", { name: /^delete$/i }));
+
+    await waitFor(() => {
+      expect(deletePatientDocument).toHaveBeenCalled();
+    });
+    expect(screen.getByText("national-id.pdf")).toBeInTheDocument();
+  });
+
+  it("restricts file inputs to PDF and supported image types", () => {
+    renderSection({ ...baseDocuments, nationalId: null });
+
+    expect(screen.getByLabelText("Upload National ID document")).toHaveAttribute(
+      "accept",
+      "application/pdf,image/jpeg,image/png,image/webp",
+    );
+    expect(screen.getByLabelText("Upload other document")).toHaveAttribute(
+      "accept",
+      "application/pdf,image/jpeg,image/png,image/webp",
+    );
   });
 });

@@ -15,6 +15,17 @@ function documentForm(fileType = "application/pdf", name = "national id.pdf") {
   return form;
 }
 
+function oversizedDocumentForm() {
+  const form = new FormData();
+  form.set(
+    "file",
+    new File([new Uint8Array(10 * 1024 * 1024 + 1)], "large.pdf", {
+      type: "application/pdf",
+    }),
+  );
+  return form;
+}
+
 function patientRow() {
   return { id: PATIENT_ID };
 }
@@ -162,6 +173,45 @@ describe("patient document actions", () => {
     expect(DOCUMENT_PATH).not.toContain("private national id");
   });
 
+  it("uses the MIME-derived extension instead of the original filename extension", async () => {
+    const { uploadPatientDocument, mocks } = await loadPatientDocumentActions();
+    mocks.state.tableResults["patients.select"] = {
+      data: patientRow(),
+      error: null,
+    };
+    mocks.state.tableResults["patient_documents.insert"] = {
+      data: null,
+      error: null,
+    };
+    mocks.state.tableResults["patient_documents.select"] = {
+      data: [],
+      error: null,
+    };
+
+    const result = await uploadPatientDocument(
+      PATIENT_ID,
+      "other",
+      documentForm("application/pdf", "scan.jpg"),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(mocks.state.queryLog).toContainEqual(
+      expect.objectContaining({
+        table: "patient_documents",
+        operation: "insert",
+        args: [
+          expect.objectContaining({
+            file_name: "scan.jpg",
+            mime_type: "application/pdf",
+            storage_path: expect.stringMatching(
+              new RegExp(`^documents/${CLINIC_ID}/${PATIENT_ID}/other/[0-9a-f-]{36}\\.pdf$`),
+            ),
+          }),
+        ],
+      }),
+    );
+  });
+
   it("soft-deletes the inserted row if storage upload fails", async () => {
     const { uploadPatientDocument, mocks } = await loadPatientDocumentActions();
     mocks.state.tableResults["patients.select"] = {
@@ -230,6 +280,89 @@ describe("patient document actions", () => {
     ).rejects.toThrow("redirected");
 
     expect(mocks.state.from).not.toHaveBeenCalled();
+    expect(mocks.state.storageFrom).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid categories before patient, DB, or storage access", async () => {
+    const { uploadPatientDocument, mocks } = await loadPatientDocumentActions();
+
+    const result = await uploadPatientDocument(
+      PATIENT_ID,
+      "passport" as never,
+      documentForm(),
+    );
+
+    expect(result).toEqual({ error: "Select a valid document category." });
+    expect(mocks.state.from).not.toHaveBeenCalled();
+    expect(mocks.state.storageFrom).not.toHaveBeenCalled();
+  });
+
+  it("rejects missing files before document DB or storage writes", async () => {
+    const { uploadPatientDocument, mocks } = await loadPatientDocumentActions();
+    mocks.state.tableResults["patients.select"] = {
+      data: patientRow(),
+      error: null,
+    };
+
+    const result = await uploadPatientDocument(
+      PATIENT_ID,
+      "other",
+      new FormData(),
+    );
+
+    expect(result).toEqual({ error: "Pick a document to upload." });
+    expect(
+      mocks.state.queryLog.some(
+        (entry) =>
+          entry.table === "patient_documents" && entry.operation === "insert",
+      ),
+    ).toBe(false);
+    expect(mocks.state.storageFrom).not.toHaveBeenCalled();
+  });
+
+  it("rejects oversized files before document DB or storage writes", async () => {
+    const { uploadPatientDocument, mocks } = await loadPatientDocumentActions();
+    mocks.state.tableResults["patients.select"] = {
+      data: patientRow(),
+      error: null,
+    };
+
+    const result = await uploadPatientDocument(
+      PATIENT_ID,
+      "other",
+      oversizedDocumentForm(),
+    );
+
+    expect(result).toEqual({ error: "Document must be under 10 MB." });
+    expect(
+      mocks.state.queryLog.some(
+        (entry) =>
+          entry.table === "patient_documents" && entry.operation === "insert",
+      ),
+    ).toBe(false);
+    expect(mocks.state.storageFrom).not.toHaveBeenCalled();
+  });
+
+  it("returns patient not found before document DB or storage writes", async () => {
+    const { uploadPatientDocument, mocks } = await loadPatientDocumentActions();
+    mocks.state.tableResults["patients.select"] = {
+      data: null,
+      error: { message: "not found" },
+    };
+
+    const result = await uploadPatientDocument(
+      PATIENT_ID,
+      "other",
+      documentForm(),
+    );
+
+    expect(result).toEqual({ error: "Patient not found." });
+    expect(
+      mocks.state.queryLog.some(
+        (entry) =>
+          entry.table === "patient_documents" && entry.operation === "insert",
+      ),
+    ).toBe(false);
     expect(mocks.state.storageFrom).not.toHaveBeenCalled();
   });
 
@@ -320,6 +453,56 @@ describe("patient document actions", () => {
     );
   });
 
+  it("blocks unauthorized delete before DB or storage access", async () => {
+    const { deletePatientDocument, mocks } = await loadPatientDocumentActions();
+    mocks.state.requireRole.mockRejectedValue(new Error("redirected"));
+
+    await expect(deletePatientDocument(PATIENT_ID, DOCUMENT_ID)).rejects.toThrow(
+      "redirected",
+    );
+
+    expect(mocks.state.from).not.toHaveBeenCalled();
+    expect(mocks.state.storageFrom).not.toHaveBeenCalled();
+  });
+
+  it("returns document not found for missing or deleted documents before storage access", async () => {
+    const { deletePatientDocument, mocks } = await loadPatientDocumentActions();
+    mocks.state.tableResults["patients.select"] = {
+      data: patientRow(),
+      error: null,
+    };
+    mocks.state.tableResults["patient_documents.select"] = {
+      data: null,
+      error: { message: "not found" },
+    };
+
+    const result = await deletePatientDocument(PATIENT_ID, DOCUMENT_ID);
+
+    expect(result).toEqual({ error: "Document not found." });
+    expect(mocks.state.storageFrom).not.toHaveBeenCalled();
+  });
+
+  it("does not remove storage when DB soft-delete fails", async () => {
+    const { deletePatientDocument, mocks } = await loadPatientDocumentActions();
+    mocks.state.tableResults["patients.select"] = {
+      data: patientRow(),
+      error: null,
+    };
+    mocks.state.tableResults["patient_documents.select"] = {
+      data: documentRow(),
+      error: null,
+    };
+    mocks.state.tableResults["patient_documents.update"] = {
+      data: null,
+      error: { message: "update failed" },
+    };
+
+    const result = await deletePatientDocument(PATIENT_ID, DOCUMENT_ID);
+
+    expect(result).toEqual({ error: "Failed to delete document." });
+    expect(mocks.state.storageRemove).not.toHaveBeenCalled();
+  });
+
   it("generates short-lived signed URLs only after document ownership validation", async () => {
     const { getPatientDocumentSignedUrl, mocks } =
       await loadPatientDocumentActions();
@@ -344,5 +527,58 @@ describe("patient document actions", () => {
         args: [DOCUMENT_PATH, 10 * 60],
       },
     ]);
+  });
+
+  it("blocks unauthorized signed URL generation before DB or storage access", async () => {
+    const { getPatientDocumentSignedUrl, mocks } =
+      await loadPatientDocumentActions();
+    mocks.state.requireRole.mockRejectedValue(new Error("redirected"));
+
+    await expect(
+      getPatientDocumentSignedUrl(PATIENT_ID, DOCUMENT_ID),
+    ).rejects.toThrow("redirected");
+
+    expect(mocks.state.from).not.toHaveBeenCalled();
+    expect(mocks.state.storageFrom).not.toHaveBeenCalled();
+  });
+
+  it("does not sign missing or deleted documents", async () => {
+    const { getPatientDocumentSignedUrl, mocks } =
+      await loadPatientDocumentActions();
+    mocks.state.tableResults["patients.select"] = {
+      data: patientRow(),
+      error: null,
+    };
+    mocks.state.tableResults["patient_documents.select"] = {
+      data: null,
+      error: { message: "not found" },
+    };
+
+    const result = await getPatientDocumentSignedUrl(PATIENT_ID, DOCUMENT_ID);
+
+    expect(result).toEqual({ error: "Document not found." });
+    expect(mocks.state.storageFrom).not.toHaveBeenCalled();
+  });
+
+  it("does not sign malformed document paths", async () => {
+    const { getPatientDocumentSignedUrl, mocks } =
+      await loadPatientDocumentActions();
+    mocks.state.tableResults["patients.select"] = {
+      data: patientRow(),
+      error: null,
+    };
+    mocks.state.tableResults["patient_documents.select"] = {
+      data: documentRow({
+        storage_path: `documents/${CLINIC_ID}/${PATIENT_ID}/other/not-a-uuid.pdf`,
+      }),
+      error: null,
+    };
+
+    const result = await getPatientDocumentSignedUrl(PATIENT_ID, DOCUMENT_ID);
+
+    expect(result).toEqual({
+      error: "Stored document path is not valid for this patient.",
+    });
+    expect(mocks.state.storageFrom).not.toHaveBeenCalled();
   });
 });

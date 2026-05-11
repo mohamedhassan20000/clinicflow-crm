@@ -72,6 +72,7 @@ export function ClinicForm({ defaultValues, logoUrl: initialLogoUrl, readOnly = 
       if (result.error) {
         toast.error(result.error);
       } else if (result.url) {
+        setLogoLoadError(false);
         setLogoUrl(result.url);
         toast.success("Logo updated.");
       }
@@ -142,7 +143,7 @@ export function ClinicForm({ defaultValues, logoUrl: initialLogoUrl, readOnly = 
                 ) : (
                   <Upload className="h-4 w-4" />
                 )}
-                Upload logo
+                {logoUploading ? "Uploading…" : "Upload logo"}
               </Button>
               {logoUrl && (
                 <Button
@@ -151,7 +152,7 @@ export function ClinicForm({ defaultValues, logoUrl: initialLogoUrl, readOnly = 
                   size="sm"
                   className="gap-2 text-destructive hover:text-destructive"
                   disabled={logoUploading}
-                  onClick={() => setLogoUrl(null)}
+                  onClick={() => { setLogoUrl(null); setLogoLoadError(false); }}
                 >
                   <X className="h-4 w-4" />
                   Remove

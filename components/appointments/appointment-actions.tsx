@@ -54,6 +54,7 @@ export function AppointmentActions({
   const pendingActionRef = useRef<PendingAction | null>(null);
   const [invoiceDraft, setInvoiceDraft] = useState<BillingPayload | null>(null);
   const [invoiceDraftKey, setInvoiceDraftKey] = useState(0);
+  const [isUndoing, setIsUndoing] = useState(false);
 
   const effectiveStatus = optimisticStatus ?? currentStatus;
   const isTerminal = TERMINAL.includes(effectiveStatus);
@@ -127,7 +128,11 @@ export function AppointmentActions({
     // effect would cancel the in-flight fetch and leave the dialog stuck.
   }, [billingOpen, appointmentId, ctx]);
 
-  if (isTerminal) return null;
+  // isUndoing hides the component immediately when Undo fires, so the user
+  // never sees disabled buttons during the server round-trip — exactly how
+  // Cancel/No-show Undo works (those leave optimisticStatus at a terminal
+  // value, which already returns null here).
+  if (isTerminal || isUndoing) return null;
 
   // targetStatus and fallbackStatus are both passed by the caller's closure,
   // so this function never reads from any mutable ref for its core logic.
@@ -137,15 +142,24 @@ export function AppointmentActions({
       toast.error("This appointment cannot be restored to its previous status.");
       return;
     }
-    setActionPending("undo");
-    setOptimisticStatus(targetStatus);
+    // Guard via ref only — no state update so no disabled-button flash.
+    pendingActionRef.current = "undo";
+    // Hide the component immediately (mirrors the isTerminal path used by
+    // Cancel/No-show, where the card disappears while the server runs).
+    setIsUndoing(true);
     undoAppointmentStatus(appointmentId, targetStatus as RestorableStatus).then((res) => {
       if (res.error) {
         toast.error(res.error);
+        // Restore the previous confirmed/pending view on failure.
         setOptimisticStatus(fallbackStatus);
+        setIsUndoing(false);
+      } else {
+        // Optimistically show the restored status; RSC refresh will confirm it.
+        setOptimisticStatus(targetStatus);
+        setIsUndoing(false);
       }
     }).finally(() => {
-      setActionPending(null);
+      pendingActionRef.current = null;
     });
   }
 

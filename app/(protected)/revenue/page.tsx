@@ -14,6 +14,8 @@ import {
 export const metadata: Metadata = { title: "Revenue transactions" };
 
 type PresetKey = "today" | "week" | "this_month" | "last_month" | "last_year" | "custom";
+const REVENUE_PAGE_SIZE = 50;
+const SETTLEMENT_DETAIL_LIMIT = 50;
 
 // ─── date helpers (Europe/Istanbul) ─────────────────────────────────────────
 function toIstanbul(date: Date): Date {
@@ -89,7 +91,71 @@ interface PageProps {
     file?: string;
     nat?: string;
     phone?: string;
+    page?: string;
   }>;
+}
+
+type RevenueSummary = {
+  totalAmount: number;
+  primaryTotal: number;
+  secondaryTotal: number;
+  insuranceTotal: number;
+  depositTotal: number;
+  outstandingTotal: number;
+  settlementsTotal: number;
+  grossTotal: number;
+  transactionCount: number;
+  settlementCount: number;
+  methodBreakdown: { method: string; amount: number }[];
+};
+
+const EMPTY_REVENUE_SUMMARY: RevenueSummary = {
+  totalAmount: 0,
+  primaryTotal: 0,
+  secondaryTotal: 0,
+  insuranceTotal: 0,
+  depositTotal: 0,
+  outstandingTotal: 0,
+  settlementsTotal: 0,
+  grossTotal: 0,
+  transactionCount: 0,
+  settlementCount: 0,
+  methodBreakdown: [],
+};
+
+function toNumber(value: unknown) {
+  const n = Number(value ?? 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function normalizeRevenueSummary(value: unknown): RevenueSummary {
+  if (!value || typeof value !== "object") return EMPTY_REVENUE_SUMMARY;
+  const raw = value as Record<string, unknown>;
+  const methodBreakdown = Array.isArray(raw.methodBreakdown)
+    ? raw.methodBreakdown
+        .map((entry) => {
+          if (!entry || typeof entry !== "object") return null;
+          const row = entry as Record<string, unknown>;
+          const method = typeof row.method === "string" ? row.method : null;
+          if (!method) return null;
+          return { method, amount: toNumber(row.amount) };
+        })
+        .filter((entry): entry is { method: string; amount: number } => Boolean(entry))
+    : [];
+
+  return {
+    totalAmount: toNumber(raw.totalAmount),
+    primaryTotal: toNumber(raw.primaryTotal),
+    secondaryTotal: toNumber(raw.secondaryTotal),
+    insuranceTotal: toNumber(raw.insuranceTotal),
+    depositTotal: toNumber(raw.depositTotal),
+    outstandingTotal: toNumber(raw.outstandingTotal),
+    settlementsTotal: toNumber(raw.settlementsTotal),
+    grossTotal: toNumber(raw.grossTotal),
+    transactionCount: toNumber(raw.transactionCount),
+    settlementCount: toNumber(raw.settlementCount),
+    methodBreakdown,
+  };
 }
 
 export default async function RevenuePage({ searchParams }: PageProps) {
@@ -106,6 +172,8 @@ export default async function RevenuePage({ searchParams }: PageProps) {
   const filterFile = sp.file?.trim() || "";
   const filterNat = sp.nat?.trim() || "";
   const filterPhone = sp.phone?.trim() || "";
+  const currentPage = Math.max(1, Number.parseInt(sp.page ?? "1", 10) || 1);
+  const rowFrom = (currentPage - 1) * REVENUE_PAGE_SIZE;
 
   const supabase = await createClient();
 
@@ -129,9 +197,16 @@ export default async function RevenuePage({ searchParams }: PageProps) {
     if (filterPhone) patientQuery = patientQuery.ilike("phone", `%${filterPhone}%`);
     const { data: matches } = await patientQuery;
     patientIdFilter = (matches ?? []).map((m) => m.id);
-    // No matching patients → force empty result instead of an unfiltered query.
-    if (patientIdFilter.length === 0) patientIdFilter = ["__none__"];
   }
+  const hasNoPatientMatches = patientIdFilter !== null && patientIdFilter.length === 0;
+
+  const summaryPromise = supabase.rpc("get_revenue_summary" as never, {
+    p_start: range.start.toISOString(),
+    p_end: range.end.toISOString(),
+    p_department_id: filterDept,
+    p_doctor_id: filterDoctor,
+    p_patient_ids: patientIdFilter,
+  } as never);
 
   let rowsQuery = supabase
     .from("appointments")
@@ -142,37 +217,45 @@ export default async function RevenuePage({ searchParams }: PageProps) {
     .eq("status", "completed")
     .gte("paid_at", range.start.toISOString())
     .lte("paid_at", range.end.toISOString())
-    .order("paid_at", { ascending: false });
+    .order("paid_at", { ascending: false })
+    .range(rowFrom, rowFrom + REVENUE_PAGE_SIZE - 1);
 
   if (filterDept) rowsQuery = rowsQuery.eq("department_id", filterDept);
   if (filterDoctor) rowsQuery = rowsQuery.eq("doctor_id", filterDoctor);
   if (patientIdFilter) rowsQuery = rowsQuery.in("patient_id", patientIdFilter);
 
+  const settlementAppointmentJoin =
+    filterDept || filterDoctor
+      ? "appointment:appointments!inner(id, scheduled_at, department_id, total_amount, outstanding_amount, doctor_id, profiles!doctor_id(full_name), departments(name, color))"
+      : "appointment:appointments!appointment_id(id, scheduled_at, department_id, total_amount, outstanding_amount, doctor_id, profiles!doctor_id(full_name), departments(name, color))";
   let settlementsQuery = supabase
     .from("outstanding_settlements")
     .select(
-      "id, appointment_id, settled_at, amount, payment_method, note, patient:patients(full_name), appointment:appointments(id, scheduled_at, department_id, total_amount, outstanding_amount, doctor_id, profiles!doctor_id(full_name), departments(name, color))",
+      `id, appointment_id, settled_at, amount, payment_method, note, patient:patients(full_name), ${settlementAppointmentJoin}`,
     )
     .eq("clinic_id", user.clinicId)
     .gte("settled_at", range.start.toISOString())
     .lte("settled_at", range.end.toISOString())
-    .order("settled_at", { ascending: false });
+    .order("settled_at", { ascending: false })
+    .limit(SETTLEMENT_DETAIL_LIMIT);
 
   if (patientIdFilter)
     settlementsQuery = settlementsQuery.in("patient_id", patientIdFilter);
+  if (filterDept) settlementsQuery = settlementsQuery.eq("appointment.department_id", filterDept);
+  if (filterDoctor) settlementsQuery = settlementsQuery.eq("appointment.doctor_id", filterDoctor);
 
-  const [{ data: rows }, { data: settlementsRaw }] = await Promise.all([
-    rowsQuery,
-    settlementsQuery,
-  ]);
+  const [{ data: summaryRaw }, rowsResult, settlementsResult] =
+    hasNoPatientMatches
+      ? await Promise.all([
+          summaryPromise,
+          Promise.resolve({ data: [] }),
+          Promise.resolve({ data: [] }),
+        ])
+      : await Promise.all([summaryPromise, rowsQuery, settlementsQuery]);
 
-  // Department / doctor filters must apply to the JOINED appointment, so do it
-  // in JS (PostgREST doesn't expose nested column filters on the foreign row).
-  const settlements = (settlementsRaw ?? []).filter((s) => {
-    if (filterDept && s.appointment?.department_id !== filterDept) return false;
-    if (filterDoctor && s.appointment?.doctor_id !== filterDoctor) return false;
-    return true;
-  });
+  const summary = normalizeRevenueSummary(summaryRaw);
+  const rows = rowsResult.data ?? [];
+  const settlements = settlementsResult.data ?? [];
 
   const [{ data: departments }, { data: doctors }] = await Promise.all([
     supabase
@@ -237,6 +320,10 @@ export default async function RevenuePage({ searchParams }: PageProps) {
         rows={(rows ?? []) as any}
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         settlements={(settlements ?? []) as any}
+        summary={summary}
+        page={currentPage}
+        pageSize={REVENUE_PAGE_SIZE}
+        settlementDetailLimit={SETTLEMENT_DETAIL_LIMIT}
         range={{
           start: range.start.toISOString(),
           end: range.end.toISOString(),

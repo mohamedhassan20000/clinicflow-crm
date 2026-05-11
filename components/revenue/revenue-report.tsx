@@ -65,6 +65,20 @@ export interface SettlementRow {
   } | null;
 }
 
+export interface RevenueSummary {
+  totalAmount: number;
+  primaryTotal: number;
+  secondaryTotal: number;
+  insuranceTotal: number;
+  depositTotal: number;
+  outstandingTotal: number;
+  settlementsTotal: number;
+  grossTotal: number;
+  transactionCount: number;
+  settlementCount: number;
+  methodBreakdown: { method: string; amount: number }[];
+}
+
 const METHOD_META: Record<
   PaymentMethod,
   { label: string; icon: ComponentType<{ className?: string }> }
@@ -121,6 +135,10 @@ function presetLabel(preset: string) {
 interface Props {
   rows: RevenueRow[];
   settlements?: SettlementRow[];
+  summary: RevenueSummary;
+  page: number;
+  pageSize: number;
+  settlementDetailLimit: number;
   range: { start: string; end: string };
   preset: string;
   fromInput: string;
@@ -133,6 +151,10 @@ interface Props {
 export function RevenueReport({
   rows,
   settlements = [],
+  summary,
+  page,
+  pageSize,
+  settlementDetailLimit,
   range,
   preset,
   fromInput,
@@ -155,10 +177,7 @@ export function RevenueReport({
   }
 
   // ── pagination ────────────────────────────────────────────────────────
-  const PAGE_SIZE = 10;
-  const pageRaw = Number(searchParams?.get("page") ?? "1");
-  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
-  const page = Math.min(Math.max(1, Number.isFinite(pageRaw) ? pageRaw : 1), totalPages);
+  const totalPages = Math.max(1, Math.ceil(summary.transactionCount / pageSize));
   function gotoPage(p: number) {
     const next = Math.min(Math.max(1, p), totalPages);
     const params = new URLSearchParams(searchParams?.toString() ?? "");
@@ -168,46 +187,21 @@ export function RevenueReport({
   }
 
   // ── totals ────────────────────────────────────────────────────────────
-  const primaryTotal = rows.reduce((s, r) => s + (r.paid_amount ?? 0), 0);
-  const secondaryTotal = rows.reduce((s, r) => s + (r.secondary_amount ?? 0), 0);
-  const insuranceTotal = rows.reduce((s, r) => s + (r.insurance_amount ?? 0), 0);
-  const depositTotal = rows.reduce((s, r) => s + (r.deposit_amount ?? 0), 0);
-  const settlementsTotal = settlements.reduce((s, r) => s + (r.amount ?? 0), 0);
-  const outstandingTotal = rows.reduce(
-    (s, r) => s + (r.outstanding_amount ?? 0),
-    0,
-  );
-  const grossTotal =
-    primaryTotal +
-    secondaryTotal +
-    insuranceTotal +
-    depositTotal +
-    settlementsTotal;
-
-  // Method breakdown
-  const methodMap = new Map<PaymentMethod, number>();
-  for (const r of rows) {
-    if (r.payment_method && r.paid_amount)
-      methodMap.set(
-        r.payment_method,
-        (methodMap.get(r.payment_method) ?? 0) + r.paid_amount,
-      );
-    if (r.secondary_payment_method && r.secondary_amount)
-      methodMap.set(
-        r.secondary_payment_method,
-        (methodMap.get(r.secondary_payment_method) ?? 0) + r.secondary_amount,
-      );
-  }
-  for (const s of settlements) {
-    if (s.payment_method && s.amount)
-      methodMap.set(
-        s.payment_method,
-        (methodMap.get(s.payment_method) ?? 0) + s.amount,
-      );
-  }
-  const methodBreakdown = Array.from(methodMap.entries())
-    .map(([m, v]) => ({ method: m, amount: v }))
-    .sort((a, b) => b.amount - a.amount);
+  const primaryTotal = summary.primaryTotal;
+  const secondaryTotal = summary.secondaryTotal;
+  const insuranceTotal = summary.insuranceTotal;
+  const depositTotal = summary.depositTotal;
+  const settlementsTotal = summary.settlementsTotal;
+  const outstandingTotal = summary.outstandingTotal;
+  const grossTotal = summary.grossTotal;
+  const methodBreakdown = summary.methodBreakdown
+    .filter((item): item is { method: PaymentMethod; amount: number } =>
+      item.method in METHOD_META,
+    );
+  const showingFrom =
+    summary.transactionCount === 0 ? 0 : (page - 1) * pageSize + 1;
+  const showingTo = Math.min(page * pageSize, summary.transactionCount);
+  const settlementOverflow = summary.settlementCount > settlements.length;
 
   return (
     <div className="space-y-6">
@@ -317,13 +311,13 @@ export function RevenueReport({
           </div>
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Receipt className="h-4 w-4" />
-            {rows.length + settlements.length} transaction
-            {rows.length + settlements.length !== 1 ? "s" : ""}
-            {settlements.length > 0 && (
+            {summary.transactionCount + summary.settlementCount} transaction
+            {summary.transactionCount + summary.settlementCount !== 1 ? "s" : ""}
+            {summary.settlementCount > 0 && (
               <span className="text-xs">
-                ({rows.length} session{rows.length !== 1 ? "s" : ""} ·{" "}
-                {settlements.length} settlement
-                {settlements.length !== 1 ? "s" : ""})
+                ({summary.transactionCount} session{summary.transactionCount !== 1 ? "s" : ""} ·{" "}
+                {summary.settlementCount} settlement
+                {summary.settlementCount !== 1 ? "s" : ""})
               </span>
             )}
           </div>
@@ -434,24 +428,17 @@ export function RevenueReport({
                   </td>
                 </tr>
               ) : (
-                // Render every row so print captures the full table; rows
-                // outside the current page are hidden on screen but become
-                // visible again under @media print.
-                rows.map((r, i) => {
-                  const onPage =
-                    i >= (page - 1) * PAGE_SIZE && i < page * PAGE_SIZE;
-                  return <TxnRow key={r.id} row={r} hidden={!onPage} />;
-                })
+                rows.map((r) => <TxnRow key={r.id} row={r} />)
               )}
             </tbody>
-            {rows.length > 0 && (
+            {summary.transactionCount > 0 && (
               <tbody className="bg-muted/30 font-semibold print:break-inside-avoid">
                 <tr className="border-t-2 border-border/60 print:border-gray-300">
                   <td className="px-4 py-3 text-xs uppercase tracking-wider text-muted-foreground" colSpan={3}>
                     Totals
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums">
-                    {fmtTRY(rows.reduce((s, r) => s + (r.total_amount ?? 0), 0))}
+                    {fmtTRY(summary.totalAmount)}
                   </td>
                   <td className="px-4 py-3 text-left tabular-nums">
                     {fmtTRY(primaryTotal)}
@@ -475,17 +462,16 @@ export function RevenueReport({
         </div>
 
         {/* Pagination — appears when there are more than one page of rows */}
-        {totalPages > 1 && (
+        {summary.transactionCount > pageSize && (
           <div className="flex items-center justify-between border-t border-border/50 bg-card px-4 py-3 text-xs text-muted-foreground print:hidden">
             <span>
               Showing{" "}
               <span className="font-medium text-foreground tabular-nums">
-                {(page - 1) * PAGE_SIZE + 1}–
-                {Math.min(page * PAGE_SIZE, rows.length)}
+                {showingFrom}–{showingTo}
               </span>{" "}
               of{" "}
               <span className="font-medium text-foreground tabular-nums">
-                {rows.length}
+                {summary.transactionCount}
               </span>{" "}
               transactions
             </span>
@@ -515,6 +501,14 @@ export function RevenueReport({
                 <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
+          </div>
+        )}
+
+        {summary.transactionCount > rows.length && (
+          <div className="hidden border-t border-border/50 px-4 py-2 text-[10px] text-muted-foreground print:block">
+            Printed rows are limited to the current screen page: {showingFrom}–
+            {showingTo} of {summary.transactionCount} matching session
+            transactions.
           </div>
         )}
 
@@ -572,8 +566,8 @@ export function RevenueReport({
             </div>
             <div className="flex items-center gap-4 text-sm">
               <span className="text-muted-foreground">
-                {settlements.length} payment
-                {settlements.length !== 1 ? "s" : ""}
+                {summary.settlementCount} payment
+                {summary.settlementCount !== 1 ? "s" : ""}
               </span>
               <span>
                 <span className="text-muted-foreground">Total settled: </span>
@@ -630,6 +624,13 @@ export function RevenueReport({
             Settlement payments are amounts collected against outstanding
             balances from prior sessions.
           </div>
+          {settlementOverflow && (
+            <div className="border-t border-border/50 px-4 py-2 text-xs text-muted-foreground print:text-[10px]">
+              Showing first {Math.min(settlementDetailLimit, settlements.length)} of{" "}
+              {summary.settlementCount} settlement payments. Totals include all
+              matching settlements.
+            </div>
+          )}
         </div>
       )}
     </div>

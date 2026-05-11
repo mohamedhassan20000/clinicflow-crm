@@ -23,6 +23,28 @@ function errorMessage(error: unknown) {
   return String(error);
 }
 
+type SupabaseErrorDetails = {
+  code?: string;
+  message?: string;
+  details?: string;
+  hint?: string;
+};
+
+function logSupabaseError(
+  context: string,
+  error: SupabaseErrorDetails | null | undefined,
+  metadata: Record<string, string | null | undefined>,
+) {
+  if (!error) return;
+  console.error(context, {
+    code: error.code,
+    message: error.message,
+    details: error.details,
+    hint: error.hint,
+    ...metadata,
+  });
+}
+
 const changePasswordSchema = z
   .object({
     password: z
@@ -75,10 +97,14 @@ export async function signIn(
     return { error: "Your account is inactive. Contact your administrator." };
   }
 
-  await supabase
-    .from("profiles")
-    .update({ last_login_at: new Date().toISOString() })
-    .eq("id", data.user.id);
+  const { error: lastLoginError } = await supabase.rpc(
+    "record_own_last_login" as never,
+  );
+  if (lastLoginError) {
+    logSupabaseError("last_login_update_failed", lastLoginError, {
+      userId: data.user.id,
+    });
+  }
 
   // Client will navigate after awaiting — ensures fresh session cookies
   // are fully committed before middleware runs on the next request.

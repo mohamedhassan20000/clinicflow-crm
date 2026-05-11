@@ -163,17 +163,20 @@ describe("auth and RBAC boundaries", () => {
       operation: "select",
       args: ["eq", "id", "fresh-login-user"],
     });
-    expect(mocks.state.queryLog).toContainEqual(
+    expect(mocks.state.rpc).toHaveBeenCalledWith("record_own_last_login");
+    expect(mocks.state.queryLog).not.toContainEqual(
       expect.objectContaining({
         table: "profiles",
         operation: "update",
-        args: [expect.objectContaining({ last_login_at: expect.any(String) })],
       }),
     );
   });
 
   it("does not block login if last-login tracking fails", async () => {
     const { signIn, mocks } = await loadAuthActions();
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
     mocks.state.authSignInWithPassword.mockResolvedValue({
       data: {
         user: {
@@ -187,9 +190,14 @@ describe("auth and RBAC boundaries", () => {
       data: profile({ must_change_password: true }),
       error: null,
     };
-    mocks.state.tableResults["profiles.update"] = {
+    mocks.state.rpcResults.record_own_last_login = {
       data: null,
-      error: { message: "last login denied" },
+      error: {
+        code: "42501",
+        message: "last login denied",
+        details: "policy mismatch",
+        hint: "check rpc",
+      },
     };
     const form = new FormData();
     form.set("email", "manager@example.com");
@@ -198,6 +206,16 @@ describe("auth and RBAC boundaries", () => {
     const result = await signIn(form);
 
     expect(result).toEqual({ ok: true, redirectTo: "/change-password" });
+    expect(consoleError).toHaveBeenCalledWith(
+      "last_login_update_failed",
+      expect.objectContaining({
+        code: "42501",
+        message: "last login denied",
+        details: "policy mismatch",
+        hint: "check rpc",
+        userId: "fresh-login-user",
+      }),
+    );
   });
 
   it("clears forced password changes through the secure RPC helper", async () => {

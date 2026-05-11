@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Check, ChevronsUpDown, Loader2, CalendarPlus } from "lucide-react";
@@ -55,12 +55,16 @@ type Patient = Pick<
   | "file_number"
 >;
 type Doctor = Pick<Tables<"profiles">, "id" | "full_name" | "department_id">;
+type PatientDoctorRelation = Doctor | Doctor[] | null;
 type Department = Pick<Tables<"departments">, "id" | "name">;
 type InsuranceProvider = Pick<Tables<"insurance_providers">, "id" | "name">;
+type PatientWithDoctor = Patient & {
+  assigned_doctor?: PatientDoctorRelation;
+};
 
 interface AppointmentFormProps {
   action: (prev: ActionResult | null, fd: FormData) => Promise<ActionResult>;
-  patients: Patient[];
+  patients: PatientWithDoctor[];
   doctors: Doctor[];
   departments: Department[];
   insuranceProviders: InsuranceProvider[];
@@ -118,6 +122,12 @@ function isPastClinicSlot(value: string): boolean {
   return timeToMinutes(time) <= now.minutes;
 }
 
+function getAssignedDoctor(patient: PatientWithDoctor | undefined): Doctor | null {
+  const relation = patient?.assigned_doctor;
+  if (!relation) return null;
+  return Array.isArray(relation) ? (relation[0] ?? null) : relation;
+}
+
 export function AppointmentForm({
   action,
   patients,
@@ -130,6 +140,7 @@ export function AppointmentForm({
   const [patientOpen, setPatientOpen] = useState(false);
   const departmentChangedRef = useRef(false);
   const doctorChangedRef = useRef(false);
+  const doctorInteractedRef = useRef(false);
   const insuranceChangedRef = useRef(false);
 
   const form = useForm<AppointmentFormValues, unknown, AppointmentFormValues>({
@@ -149,18 +160,21 @@ export function AppointmentForm({
     if (!departmentChangedRef.current) {
       form.setValue("department_id", patient.department_id ?? null, {
         shouldDirty: true,
+        shouldValidate: true,
       });
     }
 
     if (!doctorChangedRef.current) {
       form.setValue("doctor_id", patient.assigned_doctor_id ?? "", {
         shouldDirty: true,
+        shouldValidate: true,
       });
     }
 
     if (!insuranceChangedRef.current) {
       form.setValue("insurance_provider_id", patient.insurance_provider_id ?? null, {
         shouldDirty: true,
+        shouldValidate: true,
       });
     }
   }
@@ -178,11 +192,38 @@ export function AppointmentForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const activeDept =
-    useWatch({ control: form.control, name: "department_id" }) ?? null;
-  const filteredDoctors = activeDept
-    ? doctors.filter((d) => d.department_id === activeDept)
-    : doctors;
+  const selectedPatientId = useWatch({ control: form.control, name: "patient_id" });
+  const selectedDoctorId = useWatch({ control: form.control, name: "doctor_id" });
+  const activeDept = useWatch({ control: form.control, name: "department_id" }) ?? null;
+  const selectedPatientDoctor = getAssignedDoctor(
+    patients.find((p) => p.id === selectedPatientId),
+  );
+  const filteredDoctors = useMemo(() => {
+    const base = activeDept
+      ? doctors.filter((d) => d.department_id === activeDept)
+      : doctors;
+    const selectedDoctor =
+      doctors.find((d) => d.id === selectedDoctorId) ??
+      selectedPatientDoctor ??
+      null;
+
+    if (!selectedDoctor || base.some((d) => d.id === selectedDoctor.id)) {
+      return base;
+    }
+    return [...base, selectedDoctor];
+  }, [activeDept, doctors, selectedDoctorId, selectedPatientDoctor]);
+
+  useEffect(() => {
+    if (!selectedPatientId || doctorChangedRef.current) return;
+    const patient = patients.find((p) => p.id === selectedPatientId);
+    if (!patient) return;
+    const doctorId = patient.assigned_doctor_id ?? "";
+    if (form.getValues("doctor_id") === doctorId) return;
+    form.setValue("doctor_id", doctorId, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+  }, [form, patients, selectedPatientId]);
 
   function onSubmit(values: AppointmentFormValues) {
     if (isPastClinicSlot(values.scheduled_at)) {
@@ -337,13 +378,22 @@ export function AppointmentForm({
                 <Select
                   value={field.value}
                   onValueChange={(value) => {
-                    doctorChangedRef.current = true;
+                    if (doctorInteractedRef.current) {
+                      doctorChangedRef.current = true;
+                    }
                     field.onChange(value);
                   }}
                   disabled={isPending}
                 >
                   <FormControl>
-                    <SelectTrigger>
+                    <SelectTrigger
+                      onPointerDown={() => {
+                        doctorInteractedRef.current = true;
+                      }}
+                      onKeyDown={() => {
+                        doctorInteractedRef.current = true;
+                      }}
+                    >
                       <SelectValue placeholder="Select doctor" />
                     </SelectTrigger>
                   </FormControl>

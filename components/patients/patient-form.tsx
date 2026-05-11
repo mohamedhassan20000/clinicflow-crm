@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { startTransition, useActionState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2, Save } from "lucide-react";
@@ -91,7 +91,7 @@ export function PatientForm({
     Object.entries(values).forEach(([k, v]) => {
       if (v != null) fd.set(k, String(v));
     });
-    formAction(fd);
+    startTransition(() => formAction(fd));
   }
 
   return (

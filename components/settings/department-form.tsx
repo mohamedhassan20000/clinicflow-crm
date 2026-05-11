@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
+import { startTransition, useActionState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2, Save } from "lucide-react";
@@ -60,7 +60,7 @@ export function DepartmentForm({
     fd.set("name", values.name);
     fd.set("color", values.color);
     if (values.description) fd.set("description", values.description);
-    formAction(fd);
+    startTransition(() => formAction(fd));
   }
 
   const currentColor = form.watch("color");

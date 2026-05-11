@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState, useTransition } from "react";
+import { startTransition, useActionState, useEffect, useRef, useState, useTransition } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2, Maximize2, Save, Upload, X } from "lucide-react";
@@ -58,7 +58,7 @@ export function ClinicForm({ defaultValues, logoUrl: initialLogoUrl, readOnly = 
     fd.set("name", values.name);
     if (values.phone) fd.set("phone", values.phone);
     if (values.address) fd.set("address", values.address);
-    formAction(fd);
+    startTransition(() => formAction(fd));
   }
 
   function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {

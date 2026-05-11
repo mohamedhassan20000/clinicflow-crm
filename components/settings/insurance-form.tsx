@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
+import { startTransition, useActionState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2, Save } from "lucide-react";
@@ -53,7 +53,7 @@ export function InsuranceForm({
     const fd = new FormData();
     fd.set("name", values.name);
     if (values.code) fd.set("code", values.code);
-    formAction(fd);
+    startTransition(() => formAction(fd));
   }
 
   return (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
+import { startTransition, useActionState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -123,7 +123,7 @@ export function CreateStaffForm({
       fd.set("department_id", values.department_id);
     }
     if (values.phone) fd.set("phone", values.phone);
-    formAction(fd);
+    startTransition(() => formAction(fd));
   }
 
   return (
@@ -332,7 +332,7 @@ export function EditStaffForm({
     }
     if (values.phone) fd.set("phone", values.phone);
     fd.set("is_active", String(values.is_active));
-    formAction(fd);
+    startTransition(() => formAction(fd));
   }
 
   return (

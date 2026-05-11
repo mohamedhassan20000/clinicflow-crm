@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -32,7 +32,7 @@ type PendingAction =
 
 const TERMINAL: Status[] = ["completed", "cancelled", "no_show"];
 
-export function AppointmentActions({
+function AppointmentActionsInner({
   appointmentId,
   currentStatus,
 }: {
@@ -60,39 +60,6 @@ export function AppointmentActions({
   const isTerminal = TERMINAL.includes(effectiveStatus);
   const hasPendingAction = pendingAction !== null;
 
-  function setActionPending(action: PendingAction | null) {
-    pendingActionRef.current = action;
-    setPendingAction(action);
-  }
-
-  function resetCancelState() {
-    setCancelOpen(false);
-    setIsCancelling(false);
-    if (pendingActionRef.current === "cancel") setActionPending(null);
-  }
-
-  function resetNoShowState() {
-    setNoShowOpen(false);
-    setIsNoShow(false);
-    if (pendingActionRef.current === "no_show") setActionPending(null);
-  }
-
-  function resetBillingState() {
-    setBillingOpen(false);
-    setLoadingCtx(false);
-    setIsCompleting(false);
-    if (pendingActionRef.current === "complete") setActionPending(null);
-  }
-
-  // targetStatus is passed in from the closure, never read from a ref.
-  function reopenInvoiceDraft(payload: BillingPayload, targetStatus: Status) {
-    setInvoiceDraft(payload);
-    setInvoiceDraftKey((key) => key + 1);
-    setOptimisticStatus(targetStatus);
-    setBillingOpen(true);
-  }
-
-  // Lazy-load services + balance the moment the dialog opens.
   useEffect(() => {
     if (!billingOpen) return;
     if (ctx) return;
@@ -124,43 +91,65 @@ export function AppointmentActions({
     return () => {
       active = false;
     };
-    // Intentionally do NOT depend on loadingCtx — its state change inside this
-    // effect would cancel the in-flight fetch and leave the dialog stuck.
   }, [billingOpen, appointmentId, ctx]);
 
-  // isUndoing hides the component immediately when Undo fires, so the user
-  // never sees disabled buttons during the server round-trip — exactly how
-  // Cancel/No-show Undo works (those leave optimisticStatus at a terminal
-  // value, which already returns null here).
   if (isTerminal || isUndoing) return null;
 
-  // targetStatus and fallbackStatus are both passed by the caller's closure,
-  // so this function never reads from any mutable ref for its core logic.
+  function setActionPending(action: PendingAction | null) {
+    pendingActionRef.current = action;
+    setPendingAction(action);
+  }
+
+  function resetCancelState() {
+    setCancelOpen(false);
+    setIsCancelling(false);
+    if (pendingActionRef.current === "cancel") setActionPending(null);
+  }
+
+  function resetNoShowState() {
+    setNoShowOpen(false);
+    setIsNoShow(false);
+    if (pendingActionRef.current === "no_show") setActionPending(null);
+  }
+
+  function resetBillingState() {
+    setBillingOpen(false);
+    setLoadingCtx(false);
+    setIsCompleting(false);
+    if (pendingActionRef.current === "complete") setActionPending(null);
+  }
+
+  function reopenInvoiceDraft(payload: BillingPayload, targetStatus: Status) {
+    setInvoiceDraft(payload);
+    setInvoiceDraftKey((key) => key + 1);
+    setOptimisticStatus(targetStatus);
+    setBillingOpen(true);
+  }
+
   function doUndo(targetStatus: Status, fallbackStatus: Status) {
     if (pendingActionRef.current) return;
     if (targetStatus !== "pending" && targetStatus !== "confirmed") {
       toast.error("This appointment cannot be restored to its previous status.");
       return;
     }
-    // Guard via ref only — no state update so no disabled-button flash.
+
     pendingActionRef.current = "undo";
-    // Hide the component immediately (mirrors the isTerminal path used by
-    // Cancel/No-show, where the card disappears while the server runs).
     setIsUndoing(true);
-    undoAppointmentStatus(appointmentId, targetStatus as RestorableStatus).then((res) => {
-      if (res.error) {
-        toast.error(res.error);
-        // Restore the previous confirmed/pending view on failure.
-        setOptimisticStatus(fallbackStatus);
-        setIsUndoing(false);
-      } else {
-        // Optimistically show the restored status; RSC refresh will confirm it.
-        setOptimisticStatus(targetStatus);
-        setIsUndoing(false);
-      }
-    }).finally(() => {
-      pendingActionRef.current = null;
-    });
+
+    undoAppointmentStatus(appointmentId, targetStatus as RestorableStatus)
+      .then((res) => {
+        if (res.error) {
+          toast.error(res.error);
+          setOptimisticStatus(fallbackStatus);
+          setIsUndoing(false);
+        } else {
+          setOptimisticStatus(targetStatus);
+          setIsUndoing(false);
+        }
+      })
+      .finally(() => {
+        pendingActionRef.current = null;
+      });
   }
 
   function runStatus(newStatus: Status) {
@@ -168,24 +157,25 @@ export function AppointmentActions({
     const prevStatus = effectiveStatus;
     setActionPending(newStatus === "confirmed" ? "confirm" : null);
     setOptimisticStatus(newStatus);
-    updateAppointmentStatus(appointmentId, newStatus).then((result) => {
-      if (result.error) {
-        toast.error(result.error);
-        setOptimisticStatus(null);
-      } else {
-        toast.success(`Appointment ${newStatus}.`, {
-          duration: 10000,
-          action: {
-            label: "Undo",
-            // prevStatus is captured at call time in this closure, not read
-            // from a ref later, so RSC re-renders cannot stale it.
-            onClick: () => doUndo(prevStatus, newStatus),
-          },
-        });
-      }
-    }).finally(() => {
-      setActionPending(null);
-    });
+
+    updateAppointmentStatus(appointmentId, newStatus)
+      .then((result) => {
+        if (result.error) {
+          toast.error(result.error);
+          setOptimisticStatus(null);
+        } else {
+          toast.success(`Appointment ${newStatus}.`, {
+            duration: 10000,
+            action: {
+              label: "Undo",
+              onClick: () => doUndo(prevStatus, newStatus),
+            },
+          });
+        }
+      })
+      .finally(() => {
+        setActionPending(null);
+      });
   }
 
   function runCancel(reason: string) {
@@ -259,7 +249,6 @@ export function AppointmentActions({
           duration: 10000,
           action: {
             label: "Undo",
-            // undoTarget and prevStatus are both captured at call time.
             onClick: async () => {
               if (pendingActionRef.current) return;
               setActionPending("undo");
@@ -280,8 +269,6 @@ export function AppointmentActions({
     });
   }
 
-  // Pending → Confirm + Cancel (so reception can cancel without confirming).
-  // Confirmed → Complete + Cancel + No-show.
   const showConfirm = effectiveStatus === "pending";
   const showComplete = effectiveStatus === "confirmed";
   const showCancel =
@@ -398,3 +385,5 @@ export function AppointmentActions({
     </>
   );
 }
+
+export const AppointmentActions = memo(AppointmentActionsInner);

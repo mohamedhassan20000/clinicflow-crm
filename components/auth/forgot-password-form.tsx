@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useEffect } from "react";
+import { startTransition, useActionState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -44,7 +44,7 @@ export function ForgotPasswordForm() {
   function onSubmit(values: FormValues) {
     const fd = new FormData();
     fd.set("email", values.email);
-    formAction(fd);
+    startTransition(() => formAction(fd));
   }
 
   if (state?.ok) {

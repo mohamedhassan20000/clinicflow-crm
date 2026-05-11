@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Check, ChevronsUpDown, Loader2, CalendarPlus } from "lucide-react";
@@ -243,7 +243,7 @@ export function AppointmentForm({
     if (values.insurance_provider_id)
       fd.set("insurance_provider_id", values.insurance_provider_id);
     if (values.notes) fd.set("notes", values.notes);
-    formAction(fd);
+    startTransition(() => formAction(fd));
   }
 
   return (

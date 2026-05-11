@@ -167,6 +167,66 @@ describe("patient action permissions", () => {
     expect(mocks.state.redirect).toHaveBeenCalledWith(`/patients/${PATIENT_ID}`);
   });
 
+  it("soft-deletes patients through the scoped RPC without touching related records", async () => {
+    const { softDeletePatient, mocks } = await loadPatientsActions();
+    mocks.state.authedUser.role = "admin";
+    mocks.state.rpcResults.soft_delete_patient = { data: true, error: null };
+
+    await softDeletePatient(PATIENT_ID);
+
+    expect(mocks.state.requireRole).toHaveBeenCalledWith("admin");
+    expect(mocks.state.rpc).toHaveBeenCalledWith("soft_delete_patient", {
+      p_patient_id: PATIENT_ID,
+    });
+    expect(mocks.state.queryLog).toEqual([]);
+    expect(mocks.state.storageLog).toEqual([]);
+    expect(mocks.state.revalidatePath).toHaveBeenCalledWith("/patients");
+    expect(mocks.state.redirect).toHaveBeenCalledWith("/patients");
+  });
+
+  it("returns a clear error when the patient soft-delete RPC cannot find the row", async () => {
+    const { softDeletePatient, mocks } = await loadPatientsActions();
+    mocks.state.authedUser.role = "admin";
+    mocks.state.rpcResults.soft_delete_patient = { data: false, error: null };
+
+    const result = await softDeletePatient(PATIENT_ID);
+
+    expect(result).toEqual({ error: "Patient not found." });
+    expect(mocks.state.redirect).not.toHaveBeenCalled();
+  });
+
+  it("logs structured diagnostics when patient soft-delete RPC fails", async () => {
+    const { softDeletePatient, mocks } = await loadPatientsActions();
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    mocks.state.authedUser.role = "admin";
+    mocks.state.rpcResults.soft_delete_patient = {
+      data: null,
+      error: {
+        code: "42501",
+        message: "rls rejected",
+        details: "policy mismatch",
+        hint: "check patients update policy",
+      },
+    };
+
+    const result = await softDeletePatient(PATIENT_ID);
+
+    expect(result).toEqual({ error: "Failed to delete patient." });
+    expect(consoleError).toHaveBeenCalledWith(
+      "patient_soft_delete_failed",
+      expect.objectContaining({
+        code: "42501",
+        message: "rls rejected",
+        details: "policy mismatch",
+        hint: "check patients update policy",
+        patientId: PATIENT_ID,
+      }),
+    );
+    expect(mocks.state.redirect).not.toHaveBeenCalled();
+  });
+
   it("saves an active same-clinic insurance provider when creating a patient", async () => {
     const { createPatient, mocks } = await loadPatientsActions();
     mocks.state.tableResults["insurance_providers.select"] = {

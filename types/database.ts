@@ -1345,6 +1345,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      soft_delete_patient: {
+        Args: { p_patient_id: string }
+        Returns: boolean
+      }
       soft_delete_patient_document: {
         Args: { p_document_id: string; p_patient_id: string }
         Returns: boolean

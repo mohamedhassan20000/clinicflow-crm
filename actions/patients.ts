@@ -14,6 +14,28 @@ export type ActionResult = {
   success?: boolean;
 };
 
+type SupabaseErrorDetails = {
+  code?: string;
+  message?: string;
+  details?: string;
+  hint?: string;
+};
+
+function logSupabaseError(
+  context: string,
+  error: SupabaseErrorDetails | null | undefined,
+  metadata: Record<string, string | null | undefined>,
+) {
+  if (!error) return;
+  console.error(context, {
+    code: error.code,
+    message: error.message,
+    details: error.details,
+    hint: error.hint,
+    ...metadata,
+  });
+}
+
 async function getMedicalNoteForClinic(noteId: string, clinicId: string) {
   if (!noteId) return null;
 
@@ -246,14 +268,20 @@ export async function softDeletePatient(id: string): Promise<ActionResult> {
   const user = await requireRole("admin");
 
   const supabase = await createClient();
-  const { error } = await supabase
-    .from("patients")
-    .update({ is_deleted: true, updated_by: user.id })
-    .eq("id", id)
-    .eq("clinic_id", user.clinicId);
+  const { data, error } = await supabase.rpc("soft_delete_patient", {
+    p_patient_id: id,
+  });
 
   if (error) {
+    logSupabaseError("patient_soft_delete_failed", error, {
+      clinicId: user.clinicId,
+      patientId: id,
+    });
     return { error: "Failed to delete patient." };
+  }
+
+  if (data === false) {
+    return { error: "Patient not found." };
   }
 
   revalidatePath("/patients");

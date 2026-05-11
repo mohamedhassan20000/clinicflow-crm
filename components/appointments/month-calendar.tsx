@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, CalendarPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -47,12 +48,36 @@ function isSameDay(a: Date, b: Date) {
   );
 }
 
+function localDateKey(date: Date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 export function MonthCalendar({ appointments, monthStart, canEdit }: Props) {
   const today = new Date();
   const prevMonth = addMonths(monthStart, -1);
   const nextMonth = addMonths(monthStart, 1);
+  const appointmentsByDate = useMemo(() => {
+    const grouped = new Map<string, Appointment[]>();
+    const sorted = [...appointments].sort(
+      (a, b) =>
+        new Date(a.scheduled_at).getTime() -
+        new Date(b.scheduled_at).getTime(),
+    );
+
+    for (const appointment of sorted) {
+      const key = localDateKey(new Date(appointment.scheduled_at));
+      const dayAppointments = grouped.get(key) ?? [];
+      dayAppointments.push(appointment);
+      grouped.set(key, dayAppointments);
+    }
+
+    return grouped;
+  }, [appointments]);
 
   // Build grid: start from Monday on/before the 1st
   const firstDay = new Date(monthStart);
@@ -123,13 +148,7 @@ export function MonthCalendar({ appointments, monthStart, canEdit }: Props) {
             {visible.map((day, i) => {
               const inMonth = day.getMonth() === monthStart.getMonth();
               const isToday = isSameDay(day, today);
-              const dayAppts = appointments
-                .filter((a) => isSameDay(new Date(a.scheduled_at), day))
-                .sort(
-                  (a, b) =>
-                    new Date(a.scheduled_at).getTime() -
-                    new Date(b.scheduled_at).getTime(),
-                );
+              const dayAppts = appointmentsByDate.get(localDateKey(day)) ?? [];
 
               return (
                 <Link

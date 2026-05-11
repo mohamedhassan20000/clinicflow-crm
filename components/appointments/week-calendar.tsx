@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, CalendarPlus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -39,6 +39,13 @@ function isSameDay(a: Date, b: Date) {
   );
 }
 
+function localDateKey(date: Date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 export function WeekCalendar({
@@ -48,6 +55,23 @@ export function WeekCalendar({
 }: WeekCalendarProps) {
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
   const today = new Date();
+  const appointmentsByDate = useMemo(() => {
+    const grouped = new Map<string, Appointment[]>();
+    const sorted = [...appointments].sort(
+      (a, b) =>
+        new Date(a.scheduled_at).getTime() -
+        new Date(b.scheduled_at).getTime(),
+    );
+
+    for (const appointment of sorted) {
+      const key = localDateKey(new Date(appointment.scheduled_at));
+      const dayAppointments = grouped.get(key) ?? [];
+      dayAppointments.push(appointment);
+      grouped.set(key, dayAppointments);
+    }
+
+    return grouped;
+  }, [appointments]);
 
   const prevWeek = addDays(weekStart, -7);
   const nextWeek = addDays(weekStart, 7);
@@ -103,13 +127,7 @@ export function WeekCalendar({
         <div className="grid min-w-[980px] grid-cols-7 gap-2">
           {days.map((day, i) => {
             const isToday = isSameDay(day, today);
-            const dayAppts = appointments
-              .filter((a) => isSameDay(new Date(a.scheduled_at), day))
-              .sort(
-                (a, b) =>
-                  new Date(a.scheduled_at).getTime() -
-                  new Date(b.scheduled_at).getTime(),
-              );
+            const dayAppts = appointmentsByDate.get(localDateKey(day)) ?? [];
 
             return (
               <div key={i} className="min-w-[130px]">

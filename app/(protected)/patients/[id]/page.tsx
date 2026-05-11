@@ -35,7 +35,7 @@ export default async function PatientDetailPage({ params }: PageProps) {
   const { data: patient } = await supabase
     .from("patients")
     .select(
-      "*, departments(id, name, color), assigned_doctor:profiles!assigned_doctor_id(id, full_name), insurance_providers(name)",
+      "id, full_name, file_number, national_id, phone, email, date_of_birth, blood_type, created_at, is_deleted, avatar_path, assigned_doctor_id, department_id, departments(id, name, color), assigned_doctor:profiles!assigned_doctor_id(id, full_name), insurance_providers(name)",
     )
     .eq("id", id)
     .eq("clinic_id", user.clinicId)
@@ -68,7 +68,7 @@ export default async function PatientDetailPage({ params }: PageProps) {
   ] = await Promise.all([
     supabase
       .from("medical_notes")
-      .select("*, profiles!doctor_id(full_name)")
+      .select("id, patient_id, doctor_id, note, created_at, created_by, profiles!doctor_id(full_name)")
       .eq("patient_id", id)
       .order("created_at", { ascending: false }),
     supabase

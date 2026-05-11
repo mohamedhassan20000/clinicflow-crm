@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, CalendarPlus, Trash2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -43,9 +43,14 @@ export function DayCalendar({ appointments, date, canEdit }: Props) {
   const prev = addDays(date, -1);
   const next = addDays(date, 1);
 
-  const sorted = [...appointments].sort(
-    (a, b) =>
-      new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime(),
+  const sorted = useMemo(
+    () =>
+      [...appointments].sort(
+        (a, b) =>
+          new Date(a.scheduled_at).getTime() -
+          new Date(b.scheduled_at).getTime(),
+      ),
+    [appointments],
   );
 
   return (

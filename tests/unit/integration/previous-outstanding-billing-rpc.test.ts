@@ -4,12 +4,14 @@ import type { Database } from "@/types/database";
 
 const LOCAL_SUPABASE_URL =
   process.env.LOCAL_SUPABASE_URL ?? "http://127.0.0.1:54321";
-const LOCAL_SUPABASE_PUBLISHABLE_KEY =
-  process.env.LOCAL_SUPABASE_PUBLISHABLE_KEY ??
-  "sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH";
-const LOCAL_SUPABASE_SECRET_KEY =
-  process.env.LOCAL_SUPABASE_SECRET_KEY ??
-  "sb_secret_N7UND0UgjKTVK-Uodkm0Hg_xSvEMPvz";
+function requireTestEnv(name: string): string {
+  const v = process.env[name];
+  if (!v) throw new Error(`${name} must be set in .env.local before running integration tests.`);
+  return v;
+}
+
+const LOCAL_SUPABASE_PUBLISHABLE_KEY = requireTestEnv("LOCAL_SUPABASE_PUBLISHABLE_KEY");
+const LOCAL_SUPABASE_SECRET_KEY = requireTestEnv("LOCAL_SUPABASE_SECRET_KEY");
 
 type DbClient = SupabaseClient<Database>;
 

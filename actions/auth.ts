@@ -5,7 +5,6 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { z } from "zod";
 import { createClient as createSupabaseJs } from "@supabase/supabase-js";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 const signInSchema = z.object({
@@ -169,40 +168,6 @@ export async function changePassword(
       return {
         error:
           `Password updated, but the forced-password flag clear failed: ${rpcError.message}`,
-      };
-    }
-
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("must_change_password")
-      .eq("id", user.id)
-      .single();
-
-    const adminClient = createAdminClient();
-    const { data: adminProfile, error: adminProfileError } = await adminClient
-      .from("profiles")
-      .select("must_change_password")
-      .eq("id", user.id)
-      .single();
-
-    const profileMustChangePassword = profile?.must_change_password ?? null;
-    const adminProfileMustChangePassword =
-      adminProfile?.must_change_password ?? null;
-    const profileFlagCleared =
-      adminProfileMustChangePassword === false ||
-      (adminProfileMustChangePassword === null &&
-        profileMustChangePassword === false);
-
-    if (
-      profileError ||
-      adminProfileError ||
-      !profile ||
-      !adminProfile ||
-      !profileFlagCleared
-    ) {
-      return {
-        error:
-          `Password updated, but final verification still sees must_change_password=${adminProfileMustChangePassword ?? profileMustChangePassword ?? "unknown"}, error=${errorMessage(adminProfileError) ?? errorMessage(profileError) ?? "none"}.`,
       };
     }
 

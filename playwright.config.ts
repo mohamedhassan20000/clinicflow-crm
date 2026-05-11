@@ -4,12 +4,11 @@ const PORT = Number(process.env.PORT ?? 3000);
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:${PORT}`;
 const localSupabaseUrl =
   process.env.LOCAL_SUPABASE_URL ?? "http://127.0.0.1:54321";
-const localSupabaseAnonKey =
-  process.env.LOCAL_SUPABASE_PUBLISHABLE_KEY ??
-  "sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH";
-const localSupabaseServiceRoleKey =
-  process.env.LOCAL_SUPABASE_SECRET_KEY ??
-  "sb_secret_N7UND0UgjKTVK-Uodkm0Hg_xSvEMPvz";
+function requireLocalKey(name: string): string {
+  const v = process.env[name];
+  if (!v) throw new Error(`${name} must be set in .env.local for local E2E runs.`);
+  return v;
+}
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -35,8 +34,8 @@ export default defineConfig({
         env: {
           ...process.env,
           NEXT_PUBLIC_SUPABASE_URL: localSupabaseUrl,
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: localSupabaseAnonKey,
-          SUPABASE_SERVICE_ROLE_KEY: localSupabaseServiceRoleKey,
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: requireLocalKey("LOCAL_SUPABASE_PUBLISHABLE_KEY"),
+          SUPABASE_SERVICE_ROLE_KEY: requireLocalKey("LOCAL_SUPABASE_SECRET_KEY"),
         },
         url: baseURL,
         reuseExistingServer: !process.env.CI,

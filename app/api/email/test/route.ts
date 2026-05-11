@@ -7,6 +7,10 @@ import { DEFAULT_FROM, getResend } from "@/lib/email/resend";
 // without going through the password-reset flow. Remove once you've migrated
 // transactional emails to a real flow.
 export async function POST(request: NextRequest) {
+  if (process.env.NODE_ENV === "production") {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
   try {
     await requireRole(["admin"]);
   } catch {

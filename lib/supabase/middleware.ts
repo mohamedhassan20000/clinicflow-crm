@@ -185,8 +185,10 @@ export async function updateSession(request: NextRequest) {
           serializeVisibilityCookie(user.id, profile.role, visibleSlugs),
           {
             httpOnly: true,
+            secure: true,
             sameSite: "lax",
             path: "/",
+            maxAge: 60 * 60,
           },
         );
       }

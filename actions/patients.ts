@@ -350,7 +350,7 @@ export async function updateMedicalNote(
   const user = await requireRole(["admin", "doctor"]);
   const trimmed = note.trim();
   if (!trimmed) return { error: "Note is required." };
-  if (trimmed.length > 2000) return { error: "Note is too long." };
+  if (trimmed.length > 5000) return { error: "Note is too long." };
 
   let existing: Awaited<ReturnType<typeof getMedicalNoteForClinic>>;
   try {

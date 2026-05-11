@@ -5,6 +5,16 @@ import Link from "next/link";
 import { ChevronLeft, ChevronRight, CalendarPlus, Trash2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { StatusBadge } from "@/components/appointments/status-badge";
 import { AppointmentActions } from "@/components/appointments/appointment-actions";
 import { softDeleteAppointment, restoreAppointment } from "@/actions/appointments";
@@ -105,6 +115,7 @@ export function DayCalendar({ appointments, date, canEdit }: Props) {
 
 function DayRow({ appt, canEdit }: { appt: Appointment; canEdit: boolean }) {
   const [deleted, setDeleted] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [isDeleting, startDelete] = useTransition();
 
   const time = new Date(appt.scheduled_at).toLocaleTimeString("en-GB", {
@@ -125,7 +136,7 @@ function DayRow({ appt, canEdit }: { appt: Appointment; canEdit: boolean }) {
         toast.error(res.error);
       } else {
         setDeleted(true);
-        toast.success(`Appointment for ${patientName} deleted.`, {
+        toast.success(`Appointment for ${patientName} moved to trash.`, {
           duration: 10000,
           action: {
             label: "Undo",
@@ -193,20 +204,44 @@ function DayRow({ appt, canEdit }: { appt: Appointment; canEdit: boolean }) {
               currentStatus={appt.status}
               hasInsurance={Boolean(appt.insurance_provider_id)}
             />
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6 text-muted-foreground/50 hover:text-destructive"
-              onClick={handleDelete}
-              disabled={isDeleting}
-              title="Delete appointment"
-            >
-              {isDeleting ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Trash2 className="h-3.5 w-3.5" />
-              )}
-            </Button>
+            <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 text-muted-foreground/50 hover:text-destructive"
+                onClick={() => setConfirmOpen(true)}
+                disabled={isDeleting}
+                title="Move appointment to trash"
+              >
+                {isDeleting ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Trash2 className="h-3.5 w-3.5" />
+                )}
+              </Button>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Move appointment to trash?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    The appointment for <strong>{patientName}</strong> will be
+                    moved to the recycle bin and can be restored within 30 days.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    disabled={isDeleting}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setConfirmOpen(false);
+                      handleDelete();
+                    }}
+                  >
+                    Move to trash
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </>
         )}
       </div>

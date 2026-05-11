@@ -388,6 +388,28 @@ export async function updateAppointmentStatus(
 export async function softDeleteAppointment(id: string): Promise<ActionResult> {
   const user = await requireRole(["admin", "receptionist"]);
   const supabase = await createClient();
+
+  const { data: appt, error: fetchError } = await supabase
+    .from("appointments")
+    .select("status, paid_at, paid_amount, total_amount")
+    .eq("id", id)
+    .eq("clinic_id", user.clinicId)
+    .single();
+
+  if (fetchError || !appt) return { error: "Appointment not found." };
+
+  if (
+    appt.status === "completed" ||
+    appt.paid_at !== null ||
+    (appt.paid_amount !== null && appt.paid_amount > 0) ||
+    (appt.total_amount !== null && appt.total_amount > 0)
+  ) {
+    return {
+      error:
+        "Completed or charged appointments cannot be deleted. Please use the billing undo option immediately after charging if you need to correct the invoice.",
+    };
+  }
+
   const cascaded = await deleteAppointmentDependents(id, user.clinicId);
   if (cascaded.error) return cascaded;
   const { error } = await supabase
@@ -631,10 +653,34 @@ export async function emptyAppointmentsTrash(): Promise<ActionResult> {
   const ids = (trashedAppointments ?? []).map((appointment) => appointment.id);
   if (ids.length === 0) return { success: true };
 
-  for (const id of ids) {
-    const cascaded = await deleteAppointmentDependents(id, user.clinicId);
-    if (cascaded.error) return cascaded;
-  }
+  const adminClient = createAdminClient();
+
+  const { error: servicesError } = await adminClient
+    .from("appointment_services")
+    .delete()
+    .in("appointment_id", ids)
+    .eq("clinic_id", user.clinicId);
+  if (servicesError) return { error: servicesError.message };
+
+  const { error: feedbackError } = await adminClient
+    .from("feedback")
+    .delete()
+    .in("appointment_id", ids);
+  if (feedbackError) return { error: feedbackError.message };
+
+  const { error: followUpsError } = await adminClient
+    .from("follow_ups")
+    .delete()
+    .in("appointment_id", ids)
+    .eq("clinic_id", user.clinicId);
+  if (followUpsError) return { error: followUpsError.message };
+
+  const { error: settlementsError } = await adminClient
+    .from("outstanding_settlements")
+    .delete()
+    .in("appointment_id", ids)
+    .eq("clinic_id", user.clinicId);
+  if (settlementsError) return { error: settlementsError.message };
 
   const { error } = await supabase
     .from("appointments")

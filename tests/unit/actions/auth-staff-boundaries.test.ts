@@ -237,37 +237,7 @@ describe("auth and RBAC boundaries", () => {
     expect(mocks.state.rpc).toHaveBeenCalledWith(
       "clear_own_must_change_password",
     );
-    expect(mocks.state.queryLog).toContainEqual({
-      table: "profiles",
-      operation: "select",
-      args: ["eq", "id", "user-1"],
-    });
     expect(mocks.state.authSignOut).toHaveBeenCalled();
-  });
-
-  it("does not complete password change if the profile flag remains active", async () => {
-    const { changePassword, mocks } = await loadAuthActions();
-    mocks.state.tableResults["profiles.select"] = {
-      data: { must_change_password: true },
-      error: null,
-    };
-    const form = new FormData();
-    form.set("password", "NewPass123");
-    form.set("confirmPassword", "NewPass123");
-
-    const result = await changePassword(null, form);
-
-    expect(result.error).toMatch(
-      /final verification still sees must_change_password=true/,
-    );
-    expect(mocks.state.authUpdateUser).toHaveBeenCalledWith({
-      password: "NewPass123",
-    });
-    expect(mocks.state.rpc).toHaveBeenCalledWith(
-      "clear_own_must_change_password",
-    );
-    expect(mocks.state.authSignOut).not.toHaveBeenCalled();
-    expect(mocks.state.revalidatePath).not.toHaveBeenCalled();
   });
 
   it("returns the RPC error if the flag clear fails", async () => {

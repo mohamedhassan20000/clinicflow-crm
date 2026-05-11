@@ -5,6 +5,16 @@ import Link from "next/link";
 import { ChevronLeft, ChevronRight, CalendarPlus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { StatusBadge } from "@/components/appointments/status-badge";
 import { AppointmentActions } from "@/components/appointments/appointment-actions";
 import { softDeleteAppointment, restoreAppointment } from "@/actions/appointments";
@@ -179,6 +189,7 @@ function AppointmentCard({
   canEdit: boolean;
 }) {
   const [deleted, setDeleted] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [isDeleting, startDelete] = useTransition();
   const [isRestoring, setIsRestoring] = useState(false);
   const isRestoringRef = useRef(false);
@@ -203,7 +214,7 @@ function AppointmentCard({
         toast.error(res.error);
       } else {
         setDeleted(true);
-        toast.success(`Appointment for ${patientName} deleted.`, {
+        toast.success(`Appointment for ${patientName} moved to trash.`, {
           duration: 10000,
           action: {
             label: "Undo",
@@ -245,14 +256,38 @@ function AppointmentCard({
           {patientName}
         </div>
         {canEdit && (
-          <button
-            onClick={handleDelete}
-            disabled={isDeleting || isRestoring}
-            className="shrink-0 opacity-0 group-hover:opacity-100 text-muted-foreground/40 hover:text-destructive transition-opacity"
-            title="Delete appointment"
-          >
-            <Trash2 className="h-3 w-3" />
-          </button>
+          <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+            <button
+              onClick={() => setConfirmOpen(true)}
+              disabled={isDeleting || isRestoring}
+              className="shrink-0 opacity-0 group-hover:opacity-100 text-muted-foreground/40 hover:text-destructive transition-opacity"
+              title="Move appointment to trash"
+            >
+              <Trash2 className="h-3 w-3" />
+            </button>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Move appointment to trash?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  The appointment for <strong>{patientName}</strong> will be
+                  moved to the recycle bin and can be restored within 30 days.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  disabled={isDeleting}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setConfirmOpen(false);
+                    handleDelete();
+                  }}
+                >
+                  Move to trash
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         )}
       </div>
       <div className="flex min-w-0 items-center justify-between gap-2 text-muted-foreground">

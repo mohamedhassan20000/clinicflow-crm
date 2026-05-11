@@ -2,11 +2,21 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { FileText, Loader2, Pencil, Trash2 } from "lucide-react";
+import { FileText, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { Tables } from "@/types/database";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   deleteMedicalNote,
   restoreMedicalNote,
@@ -36,6 +46,7 @@ export function MedicalNotesList({
   const router = useRouter();
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [isPending, startTransition] = useTransition();
 
@@ -88,43 +99,9 @@ export function MedicalNotesList({
                 size="sm"
                 className="h-7 gap-1 px-2 text-xs text-destructive hover:text-destructive"
                 disabled={isPending}
-                onClick={() =>
-                  startTransition(async () => {
-                    const res = await deleteMedicalNote(note.id);
-                    if (res.error) {
-                      toast.error(res.error ?? "Failed to delete note.");
-                      return;
-                    }
-                    setHiddenIds((prev) => new Set(prev).add(note.id));
-                    toast.success("Medical note moved to trash.", {
-                      duration: 15000,
-                      action: {
-                        label: "Undo",
-                        onClick: async () => {
-                          const restore = await restoreMedicalNote(note.id);
-                          if (restore.error) {
-                            toast.error(restore.error);
-                            return;
-                          }
-                          setHiddenIds((prev) => {
-                            const next = new Set(prev);
-                            next.delete(note.id);
-                            return next;
-                          });
-                          toast.success("Medical note restored.");
-                          router.refresh();
-                        },
-                      },
-                    });
-                    router.refresh();
-                  })
-                }
+                onClick={() => setConfirmDeleteId(note.id)}
               >
-                {isPending ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Trash2 className="h-3.5 w-3.5" />
-                )}
+                <Trash2 className="h-3.5 w-3.5" />
                 Delete
               </Button>
             </div>
@@ -183,6 +160,64 @@ export function MedicalNotesList({
           />
         </div>
       ))}
+
+      <AlertDialog
+        open={confirmDeleteId !== null}
+        onOpenChange={(open) => { if (!open) setConfirmDeleteId(null); }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Move note to trash?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This medical note will be moved to trash. You can restore it using
+              the undo action that appears immediately after deletion.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isPending}
+              onClick={(e) => {
+                e.preventDefault();
+                const id = confirmDeleteId;
+                if (!id) return;
+                setConfirmDeleteId(null);
+                startTransition(async () => {
+                  const res = await deleteMedicalNote(id);
+                  if (res.error) {
+                    toast.error(res.error ?? "Failed to delete note.");
+                    return;
+                  }
+                  setHiddenIds((prev) => new Set(prev).add(id));
+                  toast.success("Medical note moved to trash.", {
+                    duration: 15000,
+                    action: {
+                      label: "Undo",
+                      onClick: async () => {
+                        const restore = await restoreMedicalNote(id);
+                        if (restore.error) {
+                          toast.error(restore.error);
+                          return;
+                        }
+                        setHiddenIds((prev) => {
+                          const next = new Set(prev);
+                          next.delete(id);
+                          return next;
+                        });
+                        toast.success("Medical note restored.");
+                        router.refresh();
+                      },
+                    },
+                  });
+                  router.refresh();
+                });
+              }}
+            >
+              Move to trash
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

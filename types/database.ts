@@ -1325,6 +1325,18 @@ export type Database = {
         }
         Returns: undefined
       }
+      soft_delete_medical_note_attachment: {
+        Args: {
+          p_attachment_id: string
+          p_note_id: string
+          p_patient_id: string
+        }
+        Returns: boolean
+      }
+      soft_delete_patient_document: {
+        Args: { p_document_id: string; p_patient_id: string }
+        Returns: boolean
+      }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
       undo_appointment_billing: {

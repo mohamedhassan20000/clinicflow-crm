@@ -2,7 +2,12 @@ import { vi } from "vitest";
 
 type QueryResult = {
   data?: unknown;
-  error?: { message?: string; code?: string } | null;
+  error?: {
+    message?: string;
+    code?: string;
+    details?: string;
+    hint?: string;
+  } | null;
   count?: number | null;
 };
 

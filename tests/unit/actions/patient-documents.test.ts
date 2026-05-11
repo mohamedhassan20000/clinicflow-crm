@@ -429,7 +429,7 @@ describe("patient document actions", () => {
         error: null,
       },
     ];
-    mocks.state.tableResults["patient_documents.update"] = {
+    mocks.state.rpcResults.soft_delete_patient_document = {
       data: null,
       error: null,
     };
@@ -438,12 +438,12 @@ describe("patient document actions", () => {
 
     expect(result.ok).toBe(true);
     expect(mocks.state.storageLog).toEqual([]);
-    expect(mocks.state.queryLog).toContainEqual(
-      expect.objectContaining({
-        table: "patient_documents",
-        operation: "update",
-        args: [expect.objectContaining({ deleted_at: expect.any(String) })],
-      }),
+    expect(mocks.state.rpc).toHaveBeenCalledWith(
+      "soft_delete_patient_document",
+      {
+        p_document_id: DOCUMENT_ID,
+        p_patient_id: PATIENT_ID,
+      },
     );
   });
 
@@ -499,25 +499,28 @@ describe("patient document actions", () => {
         error: null,
       },
     ];
-    mocks.state.tableResults["patient_documents.update"] = {
+    mocks.state.rpcResults.soft_delete_patient_document = {
       data: null,
       error: null,
     };
     const result = await deletePatientDocument(PATIENT_ID, DOCUMENT_ID);
 
     expect(result.ok).toBe(true);
-    expect(mocks.state.queryLog).toContainEqual(
-      expect.objectContaining({
-        table: "patient_documents",
-        operation: "update",
-        args: [expect.objectContaining({ deleted_at: expect.any(String) })],
-      }),
+    expect(mocks.state.rpc).toHaveBeenCalledWith(
+      "soft_delete_patient_document",
+      {
+        p_document_id: DOCUMENT_ID,
+        p_patient_id: PATIENT_ID,
+      },
     );
     expect(mocks.state.storageRemove).not.toHaveBeenCalled();
   });
 
-  it("keeps view state intact when DB soft-delete fails before any storage cleanup", async () => {
+  it("keeps view state intact and logs diagnostics when DB soft-delete RPC fails", async () => {
     const { deletePatientDocument, mocks } = await loadPatientDocumentActions();
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
     mocks.state.tableResults["patients.select"] = {
       data: patientRow(),
       error: null,
@@ -526,19 +529,36 @@ describe("patient document actions", () => {
       data: documentRow(),
       error: null,
     };
-    mocks.state.tableResults["patient_documents.update"] = {
+    mocks.state.rpcResults.soft_delete_patient_document = {
       data: null,
-      error: { message: "update failed" },
+      error: {
+        code: "42501",
+        message: "update failed",
+        details: "rls rejected",
+        hint: "check policy",
+      },
     };
 
     const result = await deletePatientDocument(PATIENT_ID, DOCUMENT_ID);
 
     expect(result).toEqual({ error: "Failed to delete document record." });
     expect(mocks.state.storageRemove).not.toHaveBeenCalled();
+    expect(consoleError).toHaveBeenCalledWith(
+      "patient_document_delete_failed",
+      expect.objectContaining({
+        code: "42501",
+        message: "update failed",
+        details: "rls rejected",
+        hint: "check policy",
+        patientId: PATIENT_ID,
+        documentId: DOCUMENT_ID,
+      }),
+    );
   });
 
   it("returns a record error before storage is removed when DB soft-delete fails", async () => {
     const { deletePatientDocument, mocks } = await loadPatientDocumentActions();
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
     mocks.state.tableResults["patients.select"] = {
       data: patientRow(),
       error: null,
@@ -547,7 +567,7 @@ describe("patient document actions", () => {
       data: documentRow(),
       error: null,
     };
-    mocks.state.tableResults["patient_documents.update"] = {
+    mocks.state.rpcResults.soft_delete_patient_document = {
       data: null,
       error: { message: "update failed" },
     };
@@ -663,5 +683,46 @@ describe("patient document actions", () => {
       error: "Stored document path is not valid for this patient.",
     });
     expect(mocks.state.storageFrom).not.toHaveBeenCalled();
+  });
+
+  it("returns a clear unavailable-file message and logs diagnostics when storage signing fails", async () => {
+    const { getPatientDocumentSignedUrl, mocks } =
+      await loadPatientDocumentActions();
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    mocks.state.tableResults["patients.select"] = {
+      data: patientRow(),
+      error: null,
+    };
+    mocks.state.tableResults["patient_documents.select"] = {
+      data: documentRow(),
+      error: null,
+    };
+    mocks.state.storageCreateSignedUrl.mockResolvedValue({
+      data: null,
+      error: {
+        code: "404",
+        message: "Object not found",
+        details: "missing storage object",
+        hint: "verify storage_path",
+      },
+    });
+
+    const result = await getPatientDocumentSignedUrl(PATIENT_ID, DOCUMENT_ID);
+
+    expect(result).toEqual({
+      error: "Document file is missing or unavailable.",
+    });
+    expect(consoleError).toHaveBeenCalledWith(
+      "patient_document_signed_url_failed",
+      expect.objectContaining({
+        code: "404",
+        message: "Object not found",
+        details: "missing storage object",
+        hint: "verify storage_path",
+        storagePath: DOCUMENT_PATH,
+      }),
+    );
   });
 });

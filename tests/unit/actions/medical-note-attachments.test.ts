@@ -234,7 +234,7 @@ describe("medical note attachment actions", () => {
       { data: attachmentRow(), error: null },
       { data: [], error: null },
     ];
-    mocks.state.tableResults["medical_note_attachments.update"] = {
+    mocks.state.rpcResults.soft_delete_medical_note_attachment = {
       data: null,
       error: null,
     };
@@ -246,12 +246,13 @@ describe("medical note attachment actions", () => {
     );
 
     expect(result.error).toBeUndefined();
-    expect(mocks.state.queryLog).toContainEqual(
-      expect.objectContaining({
-        table: "medical_note_attachments",
-        operation: "update",
-        args: [expect.objectContaining({ deleted_at: expect.any(String) })],
-      }),
+    expect(mocks.state.rpc).toHaveBeenCalledWith(
+      "soft_delete_medical_note_attachment",
+      {
+        p_attachment_id: ATTACHMENT_ID,
+        p_note_id: NOTE_ID,
+        p_patient_id: PATIENT_ID,
+      },
     );
     expect(mocks.state.storageLog).toEqual([]);
   });
@@ -266,7 +267,7 @@ describe("medical note attachment actions", () => {
       { data: attachmentRow(), error: null },
       { data: [], error: null },
     ];
-    mocks.state.tableResults["medical_note_attachments.update"] = {
+    mocks.state.rpcResults.soft_delete_medical_note_attachment = {
       data: null,
       error: null,
     };
@@ -278,11 +279,22 @@ describe("medical note attachment actions", () => {
 
     expect(result.error).toBeUndefined();
     expect(result.data).toEqual([]);
+    expect(mocks.state.rpc).toHaveBeenCalledWith(
+      "soft_delete_medical_note_attachment",
+      {
+        p_attachment_id: ATTACHMENT_ID,
+        p_note_id: NOTE_ID,
+        p_patient_id: PATIENT_ID,
+      },
+    );
     expect(mocks.state.storageLog).toEqual([]);
   });
 
-  it("does not remove storage if the DB soft-delete fails", async () => {
+  it("does not remove storage and logs diagnostics if the DB soft-delete RPC fails", async () => {
     const { deleteMedicalNoteAttachment, mocks } = await loadAttachmentActions();
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
     mocks.state.tableResults["medical_notes.select"] = {
       data: noteRow(),
       error: null,
@@ -291,9 +303,14 @@ describe("medical note attachment actions", () => {
       data: attachmentRow(),
       error: null,
     };
-    mocks.state.tableResults["medical_note_attachments.update"] = {
+    mocks.state.rpcResults.soft_delete_medical_note_attachment = {
       data: null,
-      error: { message: "update failed" },
+      error: {
+        code: "42501",
+        message: "update failed",
+        details: "rls rejected",
+        hint: "check note ownership",
+      },
     };
 
     const result = await deleteMedicalNoteAttachment(
@@ -304,6 +321,18 @@ describe("medical note attachment actions", () => {
 
     expect(result).toEqual({ error: "Failed to delete attachment record." });
     expect(mocks.state.storageLog).toEqual([]);
+    expect(consoleError).toHaveBeenCalledWith(
+      "medical_note_attachment_delete_failed",
+      expect.objectContaining({
+        code: "42501",
+        message: "update failed",
+        details: "rls rejected",
+        hint: "check note ownership",
+        patientId: PATIENT_ID,
+        noteId: NOTE_ID,
+        attachmentId: ATTACHMENT_ID,
+      }),
+    );
   });
 
   it("treats repeated attachment delete attempts as idempotent", async () => {
@@ -355,6 +384,51 @@ describe("medical note attachment actions", () => {
         table: "medical_note_attachments",
         operation: "update",
         args: [expect.objectContaining({ deleted_at: null })],
+      }),
+    );
+  });
+
+  it("returns a clear unavailable-file message and logs diagnostics when attachment signing fails", async () => {
+    const { getMedicalNoteAttachmentSignedUrl, mocks } =
+      await loadAttachmentActions();
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    mocks.state.tableResults["medical_notes.select"] = {
+      data: noteRow(),
+      error: null,
+    };
+    mocks.state.tableResults["medical_note_attachments.select"] = {
+      data: attachmentRow(),
+      error: null,
+    };
+    mocks.state.storageCreateSignedUrl.mockResolvedValue({
+      data: null,
+      error: {
+        code: "404",
+        message: "Object not found",
+        details: "missing storage object",
+        hint: "verify storage_path",
+      },
+    });
+
+    const result = await getMedicalNoteAttachmentSignedUrl(
+      PATIENT_ID,
+      NOTE_ID,
+      ATTACHMENT_ID,
+    );
+
+    expect(result).toEqual({
+      error: "Attachment file is missing or unavailable.",
+    });
+    expect(consoleError).toHaveBeenCalledWith(
+      "medical_note_attachment_signed_url_failed",
+      expect.objectContaining({
+        code: "404",
+        message: "Object not found",
+        details: "missing storage object",
+        hint: "verify storage_path",
+        storagePath: STORAGE_PATH,
       }),
     );
   });

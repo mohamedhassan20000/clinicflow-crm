@@ -40,6 +40,13 @@ type MedicalNoteAttachmentRow = {
   uploaded_by_profile?: { full_name: string | null } | null;
 };
 
+type SupabaseErrorDetails = {
+  code?: string;
+  message?: string;
+  details?: string;
+  hint?: string;
+};
+
 export type MedicalNoteAttachmentItem = {
   id: string;
   fileName: string;
@@ -139,6 +146,21 @@ function toAttachmentItem(
     uploadedById: row.uploaded_by,
     uploadedByName: row.uploaded_by_profile?.full_name ?? null,
   };
+}
+
+function logSupabaseError(
+  context: string,
+  error: SupabaseErrorDetails | null | undefined,
+  metadata: Record<string, string | null | undefined>,
+) {
+  if (!error) return;
+  console.error(context, {
+    code: error.code,
+    message: error.message,
+    details: error.details,
+    hint: error.hint,
+    ...metadata,
+  });
 }
 
 async function getAccessibleNote(
@@ -306,7 +328,16 @@ export async function getMedicalNoteAttachmentSignedUrl(
     .createSignedUrl(attachment.storage_path, SIGNED_URL_TTL_SECONDS);
 
   if (error || !data?.signedUrl) {
-    return { error: "Failed to create attachment link." };
+    logSupabaseError("medical_note_attachment_signed_url_failed", error ?? {
+      message: "Storage did not return a signed URL.",
+    }, {
+      clinicId: user.clinicId,
+      patientId,
+      noteId,
+      attachmentId,
+      storagePath: attachment.storage_path,
+    });
+    return { error: "Attachment file is missing or unavailable." };
   }
 
   return { data: { url: data.signedUrl } };
@@ -344,16 +375,24 @@ export async function deleteMedicalNoteAttachment(
     return { error: "Stored attachment path is not valid for this note." };
   }
 
-  const { error: updateError } = await supabase
-    .from("medical_note_attachments")
-    .update({ deleted_at: new Date().toISOString() })
-    .eq("id", attachmentId)
-    .eq("clinic_id", user.clinicId)
-    .eq("patient_id", patientId)
-    .eq("note_id", noteId)
-    .is("deleted_at", null);
+  const { error: deleteError } = await supabase.rpc(
+    "soft_delete_medical_note_attachment",
+    {
+      p_attachment_id: attachmentId,
+      p_note_id: noteId,
+      p_patient_id: patientId,
+    },
+  );
 
-  if (updateError) return { error: "Failed to delete attachment record." };
+  if (deleteError) {
+    logSupabaseError("medical_note_attachment_delete_failed", deleteError, {
+      clinicId: user.clinicId,
+      patientId,
+      noteId,
+      attachmentId,
+    });
+    return { error: "Failed to delete attachment record." };
+  }
 
   revalidatePath(`/patients/${patientId}`);
   return listMedicalNoteAttachments(patientId, noteId);

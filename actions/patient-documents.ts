@@ -36,6 +36,13 @@ type ActivePatient = {
   id: string;
 };
 
+type SupabaseErrorDetails = {
+  code?: string;
+  message?: string;
+  details?: string;
+  hint?: string;
+};
+
 export type PatientDocumentItem = {
   id: string;
   category: PatientDocumentCategory;
@@ -140,6 +147,21 @@ function groupDocuments(rows: PatientDocumentRow[]): PatientDocumentsData {
   }
 
   return grouped;
+}
+
+function logSupabaseError(
+  context: string,
+  error: SupabaseErrorDetails | null | undefined,
+  metadata: Record<string, string | null | undefined>,
+) {
+  if (!error) return;
+  console.error(context, {
+    code: error.code,
+    message: error.message,
+    details: error.details,
+    hint: error.hint,
+    ...metadata,
+  });
 }
 
 function duplicateSingleSlotMessage(category: PatientDocumentCategory) {
@@ -363,15 +385,22 @@ export async function deletePatientDocument(
     return { error: "Stored document path is not valid for this patient." };
   }
 
-  const { error: updateError } = await supabase
-    .from("patient_documents")
-    .update({ deleted_at: new Date().toISOString() })
-    .eq("id", documentId)
-    .eq("patient_id", patientId)
-    .eq("clinic_id", user.clinicId)
-    .is("deleted_at", null);
+  const { error: deleteError } = await supabase.rpc(
+    "soft_delete_patient_document",
+    {
+      p_document_id: documentId,
+      p_patient_id: patientId,
+    },
+  );
 
-  if (updateError) return { error: "Failed to delete document record." };
+  if (deleteError) {
+    logSupabaseError("patient_document_delete_failed", deleteError, {
+      clinicId: user.clinicId,
+      patientId,
+      documentId,
+    });
+    return { error: "Failed to delete document record." };
+  }
 
   revalidatePath(`/patients/${patientId}`);
 
@@ -442,7 +471,15 @@ export async function getPatientDocumentSignedUrl(
     .createSignedUrl(document.storage_path, SIGNED_URL_TTL_SECONDS);
 
   if (error || !data?.signedUrl) {
-    return { error: "Failed to create document link." };
+    logSupabaseError("patient_document_signed_url_failed", error ?? {
+      message: "Storage did not return a signed URL.",
+    }, {
+      clinicId: user.clinicId,
+      patientId,
+      documentId,
+      storagePath: document.storage_path,
+    });
+    return { error: "Document file is missing or unavailable." };
   }
 
   return { data: { url: data.signedUrl } };

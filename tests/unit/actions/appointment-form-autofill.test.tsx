@@ -4,10 +4,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppointmentForm } from "@/components/appointments/appointment-form";
 
 const PATIENT_ID = "22222222-2222-4222-8222-222222222222";
+const SECOND_PATIENT_ID = "99999999-9999-4999-8999-999999999999";
 const PATIENT_WITHOUT_DOCTOR_ID = "88888888-8888-4888-8888-888888888888";
 const DEPARTMENT_ID = "33333333-3333-4333-8333-333333333333";
 const DOCTOR_ID = "44444444-4444-4444-8444-444444444444";
 const MANUAL_DOCTOR_ID = "77777777-7777-4777-8777-777777777777";
+const SECOND_PATIENT_DOCTOR_ID = "11111111-1111-4111-8111-111111111111";
 const PATIENT_INSURANCE_ID = "55555555-5555-4555-8555-555555555555";
 const MANUAL_INSURANCE_ID = "66666666-6666-4666-8666-666666666666";
 
@@ -29,6 +31,21 @@ function renderAppointmentForm() {
             id: DOCTOR_ID,
             full_name: "Doctor One",
             department_id: null,
+          },
+        },
+        {
+          id: SECOND_PATIENT_ID,
+          full_name: "Second Patient",
+          phone: "0555 222 33 44",
+          department_id: DEPARTMENT_ID,
+          assigned_doctor_id: SECOND_PATIENT_DOCTOR_ID,
+          insurance_provider_id: PATIENT_INSURANCE_ID,
+          national_id: "DEF456",
+          file_number: "CF-0003",
+          assigned_doctor: {
+            id: SECOND_PATIENT_DOCTOR_ID,
+            full_name: "Doctor Three",
+            department_id: DEPARTMENT_ID,
           },
         },
         {
@@ -54,6 +71,11 @@ function renderAppointmentForm() {
           full_name: "Doctor Two",
           department_id: DEPARTMENT_ID,
         },
+        {
+          id: SECOND_PATIENT_DOCTOR_ID,
+          full_name: "Doctor Three",
+          department_id: DEPARTMENT_ID,
+        },
       ]}
       departments={[{ id: DEPARTMENT_ID, name: "Cardiology" }]}
       insuranceProviders={[
@@ -66,12 +88,19 @@ function renderAppointmentForm() {
 
 async function selectPatient(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole("combobox", { name: /patient/i }));
-  await user.click(await screen.findByText("Insured Patient"));
+  await user.click(await screen.findByTestId(`patient-option-${PATIENT_ID}`));
 }
 
 async function selectPatientWithoutDoctor(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole("combobox", { name: /patient/i }));
-  await user.click(await screen.findByText("No Doctor Patient"));
+  await user.click(
+    await screen.findByTestId(`patient-option-${PATIENT_WITHOUT_DOCTOR_ID}`),
+  );
+}
+
+async function selectSecondPatient(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole("combobox", { name: /patient/i }));
+  await user.click(await screen.findByTestId(`patient-option-${SECOND_PATIENT_ID}`));
 }
 
 async function selectInsurance(
@@ -143,10 +172,32 @@ describe("appointment form patient context autofill", () => {
     const user = userEvent.setup();
     renderAppointmentForm();
 
+    await selectPatient(user);
+    await selectDoctor(user, "Doctor Two");
+
+    expectSelectedValue("Doctor Two");
+  });
+
+  it("resets the manual doctor guard when selecting a different patient", async () => {
+    const user = userEvent.setup();
+    renderAppointmentForm();
+
+    await selectPatient(user);
+    await selectDoctor(user, "Doctor Two");
+    await selectSecondPatient(user);
+
+    await waitForSelectedValue("Doctor Three");
+  });
+
+  it("reselecting the same patient restores that patient's default doctor", async () => {
+    const user = userEvent.setup();
+    renderAppointmentForm();
+
+    await selectPatient(user);
     await selectDoctor(user, "Doctor Two");
     await selectPatient(user);
 
-    expectSelectedValue("Doctor Two");
+    await waitForSelectedValue("Doctor One");
   });
 
   it("does not set a doctor for patients without a treating doctor", async () => {

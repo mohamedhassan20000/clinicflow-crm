@@ -262,7 +262,18 @@ export function AppointmentForm({
           render={({ field }) => (
             <FormItem className="flex flex-col">
               <FormLabel>Patient</FormLabel>
-              <Popover open={patientOpen} onOpenChange={setPatientOpen}>
+              <Popover
+                open={patientOpen}
+                onOpenChange={(open) => {
+                  setPatientOpen(open);
+                  if (!open || !doctorChangedRef.current) return;
+                  const patient = patients.find((p) => p.id === field.value);
+                  if (!patient) return;
+                  doctorChangedRef.current = false;
+                  doctorInteractedRef.current = false;
+                  applyPatientDefaults(patient);
+                }}
+              >
                 <PopoverTrigger asChild>
                   <FormControl>
                     <Button
@@ -290,8 +301,18 @@ export function AppointmentForm({
                         {patients.map((p) => (
                           <CommandItem
                             key={p.id}
+                            data-testid={`patient-option-${p.id}`}
                             value={`${p.full_name} ${p.phone} ${p.file_number ?? ""} ${p.national_id ?? ""}`}
+                            onClick={() => {
+                              doctorChangedRef.current = false;
+                              doctorInteractedRef.current = false;
+                              field.onChange(p.id);
+                              setPatientOpen(false);
+                              applyPatientDefaults(p);
+                            }}
                             onSelect={() => {
+                              doctorChangedRef.current = false;
+                              doctorInteractedRef.current = false;
                               field.onChange(p.id);
                               setPatientOpen(false);
                               applyPatientDefaults(p);

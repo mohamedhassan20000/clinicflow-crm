@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { StaffProfileSheet } from "@/components/settings/staff-profile-sheet";
 
@@ -35,29 +35,20 @@ const staffFixture = {
 const staff = staffFixture as never;
 
 describe("StaffProfileSheet", () => {
-  it("does not render the profile avatar upload section and shows last login", async () => {
+  it("does not render profile avatar upload or last login details", () => {
     render(
       <StaffProfileSheet staff={staff} open onOpenChange={vi.fn()} />,
     );
 
     expect(screen.getAllByText("Sara Emad").length).toBeGreaterThan(0);
+    expect(screen.getByText("Role")).toBeInTheDocument();
+    expect(screen.getAllByText("Cardiology").length).toBeGreaterThan(0);
+    expect(screen.getByText("Joined")).toBeInTheDocument();
+    expect(screen.getByText("Account status")).toBeInTheDocument();
     expect(screen.queryByText("Profile avatar")).not.toBeInTheDocument();
     expect(screen.queryByText(/Loading profile avatar/i)).not.toBeInTheDocument();
-
-    await waitFor(() => {
-      expect(screen.getByText(/11 May 2026/)).toBeInTheDocument();
-    });
-  });
-
-  it("shows a clear fallback when staff has never logged in", async () => {
-    render(
-      <StaffProfileSheet
-        staff={{ ...staffFixture, last_login_at: null } as never}
-        open
-        onOpenChange={vi.fn()}
-      />,
-    );
-
-    expect(screen.getByText("Never logged in")).toBeInTheDocument();
+    expect(screen.queryByText("Last login")).not.toBeInTheDocument();
+    expect(screen.queryByText("Never logged in")).not.toBeInTheDocument();
+    expect(screen.queryByText(/11 May 2026/)).not.toBeInTheDocument();
   });
 });

@@ -4,7 +4,6 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import {
   CalendarDays,
-  Clock,
   FileText,
   FolderOpen,
   GraduationCap,
@@ -59,18 +58,6 @@ function fmt(iso: string | null | undefined) {
     day: "2-digit",
     month: "short",
     year: "numeric",
-  });
-}
-
-function fmtDateTime(iso: string | null | undefined) {
-  if (!iso) return "Never logged in";
-  return new Date(iso).toLocaleString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
   });
 }
 
@@ -229,11 +216,6 @@ export function StaffProfileSheet({ staff, open, onOpenChange }: Props) {
                 icon={<CalendarDays className="h-4 w-4" />}
                 label="Joined"
                 value={fmt(staff.created_at)}
-              />
-              <InfoRow
-                icon={<Clock className="h-4 w-4" />}
-                label="Last login"
-                value={fmtDateTime(staff.last_login_at)}
               />
               <InfoRow
                 icon={<User className="h-4 w-4" />}

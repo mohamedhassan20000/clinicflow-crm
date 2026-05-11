@@ -54,7 +54,6 @@ export function AppointmentActions({
   const pendingActionRef = useRef<PendingAction | null>(null);
   const [invoiceDraft, setInvoiceDraft] = useState<BillingPayload | null>(null);
   const [invoiceDraftKey, setInvoiceDraftKey] = useState(0);
-  const undoStatusRef = useRef<Status | null>(null);
 
   const effectiveStatus = optimisticStatus ?? currentStatus;
   const isTerminal = TERMINAL.includes(effectiveStatus);
@@ -84,10 +83,11 @@ export function AppointmentActions({
     if (pendingActionRef.current === "complete") setActionPending(null);
   }
 
-  function reopenInvoiceDraft(payload: BillingPayload) {
+  // targetStatus is passed in from the closure, never read from a ref.
+  function reopenInvoiceDraft(payload: BillingPayload, targetStatus: Status) {
     setInvoiceDraft(payload);
     setInvoiceDraftKey((key) => key + 1);
-    setOptimisticStatus(undoStatusRef.current ?? "confirmed");
+    setOptimisticStatus(targetStatus);
     setBillingOpen(true);
   }
 
@@ -129,20 +129,17 @@ export function AppointmentActions({
 
   if (isTerminal) return null;
 
-  function doUndo(fallbackStatus: Status) {
+  // targetStatus and fallbackStatus are both passed by the caller's closure,
+  // so this function never reads from any mutable ref for its core logic.
+  function doUndo(targetStatus: Status, fallbackStatus: Status) {
     if (pendingActionRef.current) return;
-    const prevStatus = undoStatusRef.current;
-    if (!prevStatus) {
-      toast.error("No previous appointment status was captured.");
-      return;
-    }
-    if (prevStatus !== "pending" && prevStatus !== "confirmed") {
+    if (targetStatus !== "pending" && targetStatus !== "confirmed") {
       toast.error("This appointment cannot be restored to its previous status.");
       return;
     }
     setActionPending("undo");
-    setOptimisticStatus(prevStatus);
-    undoAppointmentStatus(appointmentId, prevStatus as RestorableStatus).then((res) => {
+    setOptimisticStatus(targetStatus);
+    undoAppointmentStatus(appointmentId, targetStatus as RestorableStatus).then((res) => {
       if (res.error) {
         toast.error(res.error);
         setOptimisticStatus(fallbackStatus);
@@ -155,7 +152,6 @@ export function AppointmentActions({
   function runStatus(newStatus: Status) {
     if (pendingActionRef.current) return;
     const prevStatus = effectiveStatus;
-    undoStatusRef.current = prevStatus;
     setActionPending(newStatus === "confirmed" ? "confirm" : null);
     setOptimisticStatus(newStatus);
     updateAppointmentStatus(appointmentId, newStatus).then((result) => {
@@ -167,7 +163,9 @@ export function AppointmentActions({
           duration: 10000,
           action: {
             label: "Undo",
-            onClick: () => doUndo(newStatus),
+            // prevStatus is captured at call time in this closure, not read
+            // from a ref later, so RSC re-renders cannot stale it.
+            onClick: () => doUndo(prevStatus, newStatus),
           },
         });
       }
@@ -179,7 +177,6 @@ export function AppointmentActions({
   function runCancel(reason: string) {
     if (pendingActionRef.current) return;
     const prevStatus = effectiveStatus;
-    undoStatusRef.current = prevStatus;
     setActionPending("cancel");
     setIsCancelling(true);
     updateAppointmentStatus(appointmentId, "cancelled", null, reason).then((result) => {
@@ -194,7 +191,7 @@ export function AppointmentActions({
           duration: 10000,
           action: {
             label: "Undo",
-            onClick: () => doUndo("cancelled"),
+            onClick: () => doUndo(prevStatus, "cancelled"),
           },
         });
       }
@@ -204,7 +201,6 @@ export function AppointmentActions({
   function runNoShow(reason: string) {
     if (pendingActionRef.current) return;
     const prevStatus = effectiveStatus;
-    undoStatusRef.current = prevStatus;
     setActionPending("no_show");
     setIsNoShow(true);
     setOptimisticStatus("no_show");
@@ -220,7 +216,7 @@ export function AppointmentActions({
           duration: 10000,
           action: {
             label: "Undo",
-            onClick: () => doUndo("no_show"),
+            onClick: () => doUndo(prevStatus, "no_show"),
           },
         });
       }
@@ -230,7 +226,7 @@ export function AppointmentActions({
   function runComplete(payload: BillingPayload) {
     if (pendingActionRef.current) return;
     const prevStatus = effectiveStatus;
-    undoStatusRef.current =
+    const undoTarget: InvoiceUndoStatus =
       prevStatus === "pending" || prevStatus === "confirmed"
         ? prevStatus
         : "confirmed";
@@ -249,16 +245,12 @@ export function AppointmentActions({
           duration: 10000,
           action: {
             label: "Undo",
+            // undoTarget and prevStatus are both captured at call time.
             onClick: async () => {
               if (pendingActionRef.current) return;
-              const target =
-                (undoStatusRef.current === "pending" ||
-                undoStatusRef.current === "confirmed"
-                  ? undoStatusRef.current
-                  : "confirmed") as InvoiceUndoStatus;
               setActionPending("undo");
-              reopenInvoiceDraft(payload);
-              const undo = await undoInvoiceCompletion(appointmentId, target);
+              reopenInvoiceDraft(payload, undoTarget);
+              const undo = await undoInvoiceCompletion(appointmentId, undoTarget);
               if (undo.error) {
                 toast.error(undo.error);
                 setOptimisticStatus("completed");

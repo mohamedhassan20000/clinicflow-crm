@@ -404,14 +404,15 @@ export function FollowupsView({
                     </span>
                   </header>
                   <div className="overflow-x-auto">
-                    <table className="w-full table-fixed text-sm">
+                    <table className="w-full min-w-[1040px] table-fixed text-sm">
                       <colgroup>
-                        <col className="w-32" />
-                        <col />
                         <col className="w-36" />
+                        <col className="w-[22%]" />
                         <col className="w-32" />
+                        <col className="w-44" />
                         <col className="w-40" />
-                        <col className="w-32 print:hidden" />
+                        <col className="w-48" />
+                        <col className="w-36 print:hidden" />
                       </colgroup>
                       <thead className="border-b border-border/40 bg-muted/30 text-[10px] uppercase tracking-wider text-muted-foreground">
                         <tr>
@@ -422,7 +423,10 @@ export function FollowupsView({
                             Patient
                           </th>
                           <th className="px-4 py-2.5 text-left font-medium">
-                            File / ID
+                            File #
+                          </th>
+                          <th className="px-4 py-2.5 text-left font-medium">
+                            National ID
                           </th>
                           <th className="px-4 py-2.5 text-left font-medium">
                             Phone
@@ -460,24 +464,26 @@ export function FollowupsView({
                                 {a.patients?.full_name ?? "—"}
                               </Link>
                             </td>
-                            <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
+                            <td className="px-4 py-3 font-mono text-xs text-muted-foreground whitespace-nowrap">
                               {a.patients?.file_number ?? "—"}
-                              {a.patients?.national_id && (
-                                <span className="ml-2">
-                                  {a.patients.national_id}
-                                </span>
-                              )}
                             </td>
-                            <td className="px-4 py-3 text-xs">
-                              <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                            <td className="px-4 py-3 font-mono text-xs text-muted-foreground whitespace-nowrap">
+                              <span className="block min-w-0 truncate">
+                                {a.patients?.national_id ?? "—"}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-xs whitespace-nowrap">
+                              <span className="inline-flex min-w-0 items-center gap-1.5 text-muted-foreground">
                                 <Phone className="h-3 w-3" />
-                                {a.patients?.phone ?? "—"}
+                                <span className="truncate">{a.patients?.phone ?? "—"}</span>
                               </span>
                             </td>
                             <td className="px-4 py-3 text-xs">
-                              <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                              <span className="inline-flex min-w-0 items-center gap-1.5 text-muted-foreground">
                                 <Stethoscope className="h-3 w-3" />
-                                {formatDoctorName(a.profiles?.full_name)}
+                                <span className="truncate">
+                                  {formatDoctorName(a.profiles?.full_name)}
+                                </span>
                               </span>
                             </td>
                             <td className="px-4 py-3 text-right print:hidden">

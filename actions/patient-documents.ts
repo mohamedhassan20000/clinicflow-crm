@@ -112,11 +112,6 @@ function isValidDocumentPath(
   return documentPathPattern(clinicId, patientId, category, documentId).test(path);
 }
 
-function isMissingStorageObject(error: { message?: string; statusCode?: string } | null | undefined) {
-  const message = error?.message?.toLowerCase() ?? "";
-  return error?.statusCode === "404" || message.includes("not found");
-}
-
 function toDocumentItem(row: PatientDocumentRow): PatientDocumentItem {
   return {
     id: row.id,
@@ -350,7 +345,11 @@ export async function deletePatientDocument(
     documentId,
     user.clinicId,
   );
-  if (!document) return { error: "Document not found." };
+  if (!document) {
+    const result = await listActiveDocuments(supabase, patientId, user.clinicId);
+    if (result.error) return { ok: true };
+    return { ok: true, data: groupDocuments(result.rows) };
+  }
 
   if (
     !isValidDocumentPath(
@@ -374,22 +373,37 @@ export async function deletePatientDocument(
 
   if (updateError) return { error: "Failed to delete document record." };
 
-  const { error: storageError } = await supabase.storage
-    .from(BUCKET)
-    .remove([document.storage_path]);
-
-  if (storageError && !isMissingStorageObject(storageError)) {
-    revalidatePath(`/patients/${patientId}`);
-    const result = await listActiveDocuments(supabase, patientId, user.clinicId);
-    if (result.error) return { ok: true };
-    return { ok: true, data: groupDocuments(result.rows) };
-  }
-
   revalidatePath(`/patients/${patientId}`);
 
   const result = await listActiveDocuments(supabase, patientId, user.clinicId);
   if (result.error) return { ok: true };
 
+  return { ok: true, data: groupDocuments(result.rows) };
+}
+
+export async function restorePatientDocument(
+  patientId: string,
+  documentId: string,
+): Promise<PatientDocumentResult<PatientDocumentsData>> {
+  const user = await requireRole(["admin", "receptionist"]);
+  const supabase = await createClient();
+
+  const patient = await getPatientForDocuments(supabase, patientId, user.clinicId);
+  if (!patient) return { error: "Patient not found." };
+
+  const { error } = await supabase
+    .from("patient_documents")
+    .update({ deleted_at: null })
+    .eq("id", documentId)
+    .eq("patient_id", patientId)
+    .eq("clinic_id", user.clinicId)
+    .not("deleted_at", "is", null);
+
+  if (error) return { error: "Failed to restore document." };
+
+  revalidatePath(`/patients/${patientId}`);
+  const result = await listActiveDocuments(supabase, patientId, user.clinicId);
+  if (result.error) return { ok: true };
   return { ok: true, data: groupDocuments(result.rows) };
 }
 

@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import {
   deleteMedicalNoteAttachment,
   getMedicalNoteAttachmentSignedUrl,
+  restoreMedicalNoteAttachment,
   uploadMedicalNoteAttachment,
   type MedicalNoteAttachmentItem,
 } from "@/actions/medical-note-attachments";
@@ -142,7 +143,25 @@ export function MedicalNoteAttachments({
         toast.error(result.error);
       } else {
         if (result.data) setAttachments(result.data);
-        toast.success("Attachment deleted.");
+        toast.success("Attachment moved to trash.", {
+          duration: 15000,
+          action: {
+            label: "Undo",
+            onClick: async () => {
+              const restored = await restoreMedicalNoteAttachment(
+                patientId,
+                noteId,
+                attachment.id,
+              );
+              if (restored.error) {
+                toast.error(restored.error);
+                return;
+              }
+              if (restored.data) setAttachments(restored.data);
+              toast.success("Attachment restored.");
+            },
+          },
+        });
       }
       setPendingKey(null);
     });

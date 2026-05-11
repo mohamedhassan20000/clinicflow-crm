@@ -42,7 +42,8 @@ describe("PatientProfilePrintDocument", () => {
   it("renders the required patient profile fields for print", () => {
     render(<PatientProfilePrintDocument {...baseProps} />);
 
-    expect(screen.getByText("Patient Profile")).toBeInTheDocument();
+    expect(screen.getByText("ClinicFlow Medical Center")).toBeInTheDocument();
+    expect(screen.getByText("Patient profile report")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Maya Hassan" })).toBeInTheDocument();
     expect(screen.getAllByText("CF-0042").length).toBeGreaterThan(0);
     expect(screen.getByText("12345678901")).toBeInTheDocument();

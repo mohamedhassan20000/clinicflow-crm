@@ -105,13 +105,6 @@ function isValidAttachmentPath(
   );
 }
 
-function isMissingStorageObject(
-  error: { message?: string; statusCode?: string } | null | undefined,
-) {
-  const message = error?.message?.toLowerCase() ?? "";
-  return error?.statusCode === "404" || message.includes("not found");
-}
-
 function validateFile(formData: FormData) {
   const file = formData.get(ATTACHMENT_FIELD);
   if (!(file instanceof File) || file.size === 0) {
@@ -337,7 +330,7 @@ export async function deleteMedicalNoteAttachment(
     noteId,
     attachmentId,
   );
-  if (!attachment) return { error: "Attachment not found." };
+  if (!attachment) return listMedicalNoteAttachments(patientId, noteId);
 
   if (
     !isValidAttachmentPath(
@@ -362,14 +355,31 @@ export async function deleteMedicalNoteAttachment(
 
   if (updateError) return { error: "Failed to delete attachment record." };
 
-  const { error: storageError } = await supabase.storage
-    .from(BUCKET)
-    .remove([attachment.storage_path]);
+  revalidatePath(`/patients/${patientId}`);
+  return listMedicalNoteAttachments(patientId, noteId);
+}
 
-  if (storageError && !isMissingStorageObject(storageError)) {
-    revalidatePath(`/patients/${patientId}`);
-    return listMedicalNoteAttachments(patientId, noteId);
-  }
+export async function restoreMedicalNoteAttachment(
+  patientId: string,
+  noteId: string,
+  attachmentId: string,
+): Promise<MedicalNoteAttachmentResult<MedicalNoteAttachmentItem[]>> {
+  const user = await requireRole(["admin", "doctor"]);
+  const supabase = await createClient();
+
+  const note = await getAccessibleNote(supabase, noteId, patientId);
+  if (!note) return { error: "Medical note not found." };
+
+  const { error } = await supabase
+    .from("medical_note_attachments")
+    .update({ deleted_at: null })
+    .eq("id", attachmentId)
+    .eq("clinic_id", user.clinicId)
+    .eq("patient_id", patientId)
+    .eq("note_id", noteId)
+    .not("deleted_at", "is", null);
+
+  if (error) return { error: "Failed to restore attachment." };
 
   revalidatePath(`/patients/${patientId}`);
   return listMedicalNoteAttachments(patientId, noteId);

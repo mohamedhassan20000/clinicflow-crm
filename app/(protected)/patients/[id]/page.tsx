@@ -72,8 +72,9 @@ export default async function PatientDetailPage({ params }: PageProps) {
   ] = await Promise.all([
     supabase
       .from("medical_notes")
-      .select("id, patient_id, doctor_id, note, created_at, created_by, profiles!doctor_id(full_name)")
+      .select("id, patient_id, doctor_id, note, created_at, created_by, deleted_at, profiles!doctor_id(full_name)")
       .eq("patient_id", id)
+      .is("deleted_at", null)
       .order("created_at", { ascending: false }),
     supabase
       .from("appointments")

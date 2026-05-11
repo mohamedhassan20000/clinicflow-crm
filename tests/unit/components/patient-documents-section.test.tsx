@@ -20,6 +20,7 @@ vi.mock("sonner", () => ({
 vi.mock("@/actions/patient-documents", () => ({
   deletePatientDocument: vi.fn(),
   getPatientDocumentSignedUrl: vi.fn(),
+  restorePatientDocument: vi.fn(),
   uploadPatientDocument: vi.fn(),
 }));
 

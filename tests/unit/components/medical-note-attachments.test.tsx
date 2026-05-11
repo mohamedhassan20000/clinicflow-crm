@@ -8,6 +8,7 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/actions/patients", () => ({
   deleteMedicalNote: vi.fn(),
+  restoreMedicalNote: vi.fn(),
   updateMedicalNote: vi.fn(),
 }));
 
@@ -15,6 +16,7 @@ vi.mock("@/actions/medical-note-attachments", () => ({
   uploadMedicalNoteAttachment: vi.fn(),
   getMedicalNoteAttachmentSignedUrl: vi.fn(),
   deleteMedicalNoteAttachment: vi.fn(),
+  restoreMedicalNoteAttachment: vi.fn(),
 }));
 
 describe("MedicalNotesList attachments", () => {
@@ -30,6 +32,7 @@ describe("MedicalNotesList attachments", () => {
             patient_id: "patient-1",
             doctor_id: "doctor-1",
             created_by: "user-1",
+            deleted_at: null,
             created_at: "2026-05-11T00:00:00Z",
             note: "Clinical note",
             profiles: { full_name: "Dr. User" },

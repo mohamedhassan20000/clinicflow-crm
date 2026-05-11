@@ -63,7 +63,7 @@ export function PatientProfilePrintDocument({
     const scheduled = new Date(item.scheduledAt).getTime();
     return Number.isFinite(scheduled) && scheduled > generatedAt.getTime();
   }).length;
-  const recentAppointments = appointments.slice(0, 6);
+  const recentAppointments = appointments.slice(0, 8);
 
   return (
     <article
@@ -71,48 +71,67 @@ export function PatientProfilePrintDocument({
       data-patient-profile-print-document
       aria-label="Patient profile print document"
     >
-      <header className="flex items-start justify-between gap-8 border-b-2 border-black pb-5">
-        <div className="space-y-2">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-black">
-            Patient Profile
-          </p>
-          <h1 className="text-3xl font-semibold tracking-normal text-black">
-            {fullName}
-          </h1>
-          <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-black">
-            <span>
-              File No: <strong className="font-mono">{empty(fileNumber)}</strong>
-            </span>
-            <span>Registered: {formatDate(registrationDate)}</span>
-            <span>Printed: {formatDateTime(generatedAt.toISOString())}</span>
+      <header className="border-b border-slate-900 pb-5">
+        <div className="flex items-start justify-between gap-8">
+          <div className="min-w-0">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-sm border border-slate-900 text-sm font-bold text-slate-900">
+                CF
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-700">
+                  ClinicFlow Medical Center
+                </p>
+                <p className="text-[10px] text-slate-500">
+                  Patient profile report
+                </p>
+              </div>
+            </div>
+            <h1 className="mt-5 text-[28px] font-semibold leading-tight text-slate-950">
+              {fullName}
+            </h1>
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-slate-700">
+              <span className="rounded-sm border border-slate-900 bg-slate-100 px-2 py-1 font-mono text-sm font-semibold text-slate-950">
+                {empty(fileNumber)}
+              </span>
+              <span>Registered {formatDate(registrationDate)}</span>
+              <span aria-hidden>·</span>
+              <span>Generated {formatDateTime(generatedAt.toISOString())}</span>
+            </div>
           </div>
-        </div>
-        <div className="flex h-32 w-28 shrink-0 items-center justify-center overflow-hidden border border-black bg-white text-lg font-semibold text-black">
-          {avatarUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={avatarUrl}
-              alt={`${fullName} patient photo`}
-              className="h-full w-full object-cover"
-              data-patient-profile-print-photo
-            />
-          ) : (
-            <span>{initials || "PT"}</span>
-          )}
+
+          <div className="shrink-0 text-right">
+            <div className="ml-auto flex h-32 w-28 items-center justify-center overflow-hidden rounded-sm border border-slate-900 bg-white text-lg font-semibold text-slate-900">
+              {avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={avatarUrl}
+                  alt={`${fullName} patient photo`}
+                  className="h-full w-full object-cover"
+                  data-patient-profile-print-photo
+                />
+              ) : (
+                <span>{initials || "PT"}</span>
+              )}
+            </div>
+            <p className="mt-2 text-[10px] uppercase tracking-[0.14em] text-slate-500">
+              Patient photo
+            </p>
+          </div>
         </div>
       </header>
 
-      <section className="mt-5 grid grid-cols-2 gap-5">
-        <PrintPanel title="Identity">
+      <section className="mt-5 grid grid-cols-[1.05fr_0.95fr] gap-4">
+        <PrintPanel title="Patient Identity">
           <PrintField label="Full name" value={fullName} />
           <PrintField label="File number" value={fileNumber} mono />
           <PrintField label="National ID" value={nationalId} mono />
-          <PrintField label="Date of birth" value={formatDate(dateOfBirth)} />
+          <PrintField label="Birth date" value={formatDate(dateOfBirth)} />
           <PrintField label="Age" value={age === null ? null : `${age} years`} />
           <PrintField label="Blood type" value={bloodType} />
         </PrintPanel>
 
-        <PrintPanel title="Contact & Care">
+        <PrintPanel title="Care & Contact">
           <PrintField label="Phone" value={phone} />
           <PrintField label="Email" value={email} />
           <PrintField label="Department" value={departmentName ?? "Unassigned"} />
@@ -125,96 +144,93 @@ export function PatientProfilePrintDocument({
             }
           />
           <PrintField label="Insurance" value={insuranceName ?? "No insurance"} />
-          <PrintField label="Registration date" value={formatDate(registrationDate)} />
+          <PrintField label="Registered" value={formatDate(registrationDate)} />
         </PrintPanel>
       </section>
 
       <section className="mt-5">
-        <h2 className="border-b border-black pb-1 text-xs font-semibold uppercase tracking-[0.18em] text-black">
-          Billing Summary
-        </h2>
+        <SectionHeading
+          title="Billing Summary"
+          subtitle={canViewBilling ? "Current patient financial overview" : "Restricted"}
+        />
         {canViewBilling ? (
-          <div className="mt-3 grid grid-cols-4 border border-black text-sm text-black">
+          <div className="mt-3 grid grid-cols-4 overflow-hidden rounded-sm border border-slate-900">
             <SummaryBox label="Billed" value={fmtTRY(billingTotals.billed)} />
             <SummaryBox label="Collected" value={fmtTRY(billingTotals.collected)} />
             <SummaryBox label="Outstanding" value={fmtTRY(billingTotals.outstanding)} />
             <SummaryBox label="Account balance" value={fmtTRY(billingTotals.accountBalance)} />
           </div>
         ) : (
-          <p className="mt-3 border border-black px-3 py-2 text-sm text-black">
+          <p className="mt-3 rounded-sm border border-slate-300 bg-slate-50 px-3 py-2 text-xs text-slate-700">
             Billing summary is restricted for this user role.
           </p>
         )}
       </section>
 
       <section className="mt-5">
-        <div className="flex items-end justify-between border-b border-black pb-1">
-          <h2 className="text-xs font-semibold uppercase tracking-[0.18em] text-black">
-            Appointments Summary
-          </h2>
-          <p className="text-xs text-black">
-            {appointments.length} total / {completedCount} completed / {upcomingCount} upcoming
-          </p>
-        </div>
+        <SectionHeading
+          title="Appointments Summary"
+          subtitle={`${appointments.length} total · ${completedCount} completed · ${upcomingCount} upcoming`}
+        />
 
         {recentAppointments.length > 0 ? (
-          <table className="mt-3 w-full border-collapse text-xs text-black">
+          <table className="mt-3 w-full border-collapse text-[10.5px] text-slate-950">
             <thead>
               <tr>
-                <th className="border border-black px-2 py-1.5 text-left font-semibold">
-                  Date
-                </th>
-                <th className="border border-black px-2 py-1.5 text-left font-semibold">
-                  Status
-                </th>
-                <th className="border border-black px-2 py-1.5 text-left font-semibold">
-                  Department
-                </th>
-                <th className="border border-black px-2 py-1.5 text-left font-semibold">
-                  Doctor
-                </th>
-                <th className="border border-black px-2 py-1.5 text-right font-semibold">
-                  Total
-                </th>
-                <th className="border border-black px-2 py-1.5 text-right font-semibold">
-                  Outstanding
-                </th>
+                <PrintTh>Date</PrintTh>
+                <PrintTh>Status</PrintTh>
+                <PrintTh>Department</PrintTh>
+                <PrintTh>Doctor</PrintTh>
+                <PrintTh align="right">Total</PrintTh>
+                <PrintTh align="right">Outstanding</PrintTh>
               </tr>
             </thead>
             <tbody>
               {recentAppointments.map((item) => (
                 <tr key={item.id}>
-                  <td className="border border-black px-2 py-1.5">
-                    {formatDateTime(item.scheduledAt)}
-                  </td>
-                  <td className="border border-black px-2 py-1.5 capitalize">
+                  <PrintTd>{formatDateTime(item.scheduledAt)}</PrintTd>
+                  <PrintTd className="capitalize">
                     {item.status.replaceAll("_", " ")}
-                  </td>
-                  <td className="border border-black px-2 py-1.5">
-                    {empty(item.departmentName)}
-                  </td>
-                  <td className="border border-black px-2 py-1.5">
+                  </PrintTd>
+                  <PrintTd>{empty(item.departmentName)}</PrintTd>
+                  <PrintTd>
                     {item.doctorName ? formatDoctorName(item.doctorName) : "Unassigned"}
-                  </td>
-                  <td className="border border-black px-2 py-1.5 text-right tabular-nums">
+                  </PrintTd>
+                  <PrintTd align="right">
                     {item.totalAmount === null ? "-" : fmtTRY(item.totalAmount)}
-                  </td>
-                  <td className="border border-black px-2 py-1.5 text-right tabular-nums">
+                  </PrintTd>
+                  <PrintTd align="right">
                     {item.outstandingAmount === null
                       ? "-"
                       : fmtTRY(item.outstandingAmount)}
-                  </td>
+                  </PrintTd>
                 </tr>
               ))}
             </tbody>
           </table>
         ) : (
-          <p className="mt-3 border border-black px-3 py-2 text-sm text-black">
+          <p className="mt-3 rounded-sm border border-slate-300 bg-slate-50 px-3 py-2 text-xs text-slate-700">
             No appointments recorded.
           </p>
         )}
       </section>
+
+      <footer className="mt-6 flex items-center justify-between border-t border-slate-300 pt-3 text-[9px] text-slate-500">
+        <span>ClinicFlow Medical Center · Confidential patient document</span>
+        <span>Generated {formatDateTime(generatedAt.toISOString())}</span>
+      </footer>
     </article>
+  );
+}
+
+function SectionHeading({ title, subtitle }: { title: string; subtitle: string }) {
+  return (
+    <div className="flex items-end justify-between gap-4 border-b border-slate-300 pb-1.5">
+      <h2 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-950">
+        {title}
+      </h2>
+      <p className="text-[10px] text-slate-500">{subtitle}</p>
+    </div>
   );
 }
 
@@ -226,11 +242,11 @@ function PrintPanel({
   children: React.ReactNode;
 }) {
   return (
-    <section className="border border-black">
-      <h2 className="border-b border-black px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-black">
+    <section className="overflow-hidden rounded-sm border border-slate-300">
+      <h2 className="border-b border-slate-300 bg-slate-100 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-950">
         {title}
       </h2>
-      <dl className="divide-y divide-black">{children}</dl>
+      <dl>{children}</dl>
     </section>
   );
 }
@@ -245,21 +261,65 @@ function PrintField({
   mono?: boolean;
 }) {
   return (
-    <div className="grid grid-cols-[42%_1fr] text-sm text-black">
-      <dt className="border-r border-black px-3 py-2 font-medium">{label}</dt>
-      <dd className={`px-3 py-2 ${mono ? "font-mono" : ""}`}>{empty(value)}</dd>
+    <div className="grid grid-cols-[38%_1fr] border-b border-slate-200 text-[11px] last:border-b-0">
+      <dt className="bg-slate-50 px-3 py-2 font-medium text-slate-600">
+        {label}
+      </dt>
+      <dd className={`px-3 py-2 text-slate-950 ${mono ? "font-mono" : ""}`}>
+        {empty(value)}
+      </dd>
     </div>
   );
 }
 
 function SummaryBox({ label, value }: { label: string; value: string }) {
   return (
-    <div className="border-r border-black px-3 py-2 last:border-r-0">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.14em]">
+    <div className="border-r border-slate-300 bg-white px-3 py-3 last:border-r-0">
+      <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-slate-500">
         {label}
       </p>
-      <p className="mt-1 text-base font-semibold tabular-nums">{value}</p>
+      <p className="mt-1 text-sm font-semibold tabular-nums text-slate-950">
+        {value}
+      </p>
     </div>
+  );
+}
+
+function PrintTh({
+  children,
+  align = "left",
+}: {
+  children: React.ReactNode;
+  align?: "left" | "right";
+}) {
+  return (
+    <th
+      className={`border border-slate-300 bg-slate-100 px-2 py-1.5 font-semibold uppercase tracking-[0.06em] text-slate-700 ${
+        align === "right" ? "text-right" : "text-left"
+      }`}
+    >
+      {children}
+    </th>
+  );
+}
+
+function PrintTd({
+  children,
+  align = "left",
+  className = "",
+}: {
+  children: React.ReactNode;
+  align?: "left" | "right";
+  className?: string;
+}) {
+  return (
+    <td
+      className={`border border-slate-300 px-2 py-1.5 align-top ${
+        align === "right" ? "text-right tabular-nums" : "text-left"
+      } ${className}`}
+    >
+      {children}
+    </td>
   );
 }
 

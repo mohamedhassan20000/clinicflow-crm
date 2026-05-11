@@ -224,7 +224,7 @@ describe("medical note attachment actions", () => {
     expect(mocks.state.storageLog).toEqual([]);
   });
 
-  it("soft-deletes the DB row and removes storage on delete", async () => {
+  it("soft-deletes the DB row without removing private storage on delete", async () => {
     const { deleteMedicalNoteAttachment, mocks } = await loadAttachmentActions();
     mocks.state.tableResults["medical_notes.select"] = [
       { data: noteRow(), error: null },
@@ -253,11 +253,7 @@ describe("medical note attachment actions", () => {
         args: [expect.objectContaining({ deleted_at: expect.any(String) })],
       }),
     );
-    expect(mocks.state.storageLog).toContainEqual({
-      bucket: "patient-assets",
-      operation: "remove",
-      args: [[STORAGE_PATH]],
-    });
+    expect(mocks.state.storageLog).toEqual([]);
   });
 
   it("still completes delete when storage object is already missing", async () => {
@@ -274,11 +270,6 @@ describe("medical note attachment actions", () => {
       data: null,
       error: null,
     };
-    mocks.state.storageRemove.mockResolvedValueOnce({
-      data: null,
-      error: { message: "Object not found", statusCode: "404" },
-    });
-
     const result = await deleteMedicalNoteAttachment(
       PATIENT_ID,
       NOTE_ID,
@@ -287,6 +278,7 @@ describe("medical note attachment actions", () => {
 
     expect(result.error).toBeUndefined();
     expect(result.data).toEqual([]);
+    expect(mocks.state.storageLog).toEqual([]);
   });
 
   it("does not remove storage if the DB soft-delete fails", async () => {
@@ -312,5 +304,58 @@ describe("medical note attachment actions", () => {
 
     expect(result).toEqual({ error: "Failed to delete attachment record." });
     expect(mocks.state.storageLog).toEqual([]);
+  });
+
+  it("treats repeated attachment delete attempts as idempotent", async () => {
+    const { deleteMedicalNoteAttachment, mocks } = await loadAttachmentActions();
+    mocks.state.tableResults["medical_notes.select"] = [
+      { data: noteRow(), error: null },
+      { data: noteRow(), error: null },
+    ];
+    mocks.state.tableResults["medical_note_attachments.select"] = [
+      { data: null, error: { message: "not found" } },
+      { data: [], error: null },
+    ];
+
+    const result = await deleteMedicalNoteAttachment(
+      PATIENT_ID,
+      NOTE_ID,
+      ATTACHMENT_ID,
+    );
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual([]);
+    expect(mocks.state.storageLog).toEqual([]);
+  });
+
+  it("restores a soft-deleted attachment during the undo window", async () => {
+    const { restoreMedicalNoteAttachment, mocks } = await loadAttachmentActions();
+    mocks.state.tableResults["medical_notes.select"] = [
+      { data: noteRow(), error: null },
+      { data: noteRow(), error: null },
+    ];
+    mocks.state.tableResults["medical_note_attachments.update"] = {
+      data: null,
+      error: null,
+    };
+    mocks.state.tableResults["medical_note_attachments.select"] = {
+      data: [attachmentRow()],
+      error: null,
+    };
+
+    const result = await restoreMedicalNoteAttachment(
+      PATIENT_ID,
+      NOTE_ID,
+      ATTACHMENT_ID,
+    );
+
+    expect(result.error).toBeUndefined();
+    expect(mocks.state.queryLog).toContainEqual(
+      expect.objectContaining({
+        table: "medical_note_attachments",
+        operation: "update",
+        args: [expect.objectContaining({ deleted_at: null })],
+      }),
+    );
   });
 });

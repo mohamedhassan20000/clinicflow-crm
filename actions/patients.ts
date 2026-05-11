@@ -20,8 +20,9 @@ async function getMedicalNoteForClinic(noteId: string, clinicId: string) {
   const adminClient = createAdminClient();
   const { data: notes, error: noteError } = await adminClient
     .from("medical_notes")
-    .select("id, patient_id, doctor_id, created_by, created_at, note")
+    .select("id, patient_id, doctor_id, created_by, created_at, note, deleted_at")
     .eq("id", noteId)
+    .is("deleted_at", null)
     .limit(1);
 
   if (noteError) throw new Error(noteError.message);
@@ -66,7 +67,7 @@ async function canAccessPatientForMedicalNotes(
 }
 
 function canMutateMedicalNote(
-  note: Awaited<ReturnType<typeof getMedicalNoteForClinic>>,
+  note: { created_by: string | null } | null,
   user: AuthedUser,
 ): boolean {
   if (!note) return false;
@@ -366,12 +367,51 @@ export async function deleteMedicalNote(noteId: string): Promise<ActionResult> {
   const adminClient = createAdminClient();
   const { error } = await adminClient
     .from("medical_notes")
-    .delete()
+    .update({ deleted_at: new Date().toISOString() })
     .eq("id", existing.id);
 
   if (error) return { error: error.message || "Failed to delete note." };
 
   revalidatePath(`/patients/${existing.patient_id}`);
+  return { success: true };
+}
+
+export async function restoreMedicalNote(noteId: string): Promise<ActionResult> {
+  const user = await requireRole(["admin", "doctor"]);
+
+  const adminClient = createAdminClient();
+  const { data: notes, error: noteError } = await adminClient
+    .from("medical_notes")
+    .select("id, patient_id, doctor_id, created_by, deleted_at")
+    .eq("id", noteId)
+    .limit(1);
+
+  if (noteError) return { error: noteError.message || "Failed to find note." };
+  const note = notes?.[0];
+  if (!note) return { error: "Medical note not found." };
+
+  const { data: patients, error: patientError } = await adminClient
+    .from("patients")
+    .select("id")
+    .eq("id", note.patient_id)
+    .eq("clinic_id", user.clinicId)
+    .eq("is_deleted", false)
+    .limit(1);
+
+  if (patientError) return { error: patientError.message || "Failed to find patient." };
+  if (!patients?.[0]) return { error: "Medical note not found." };
+  if (!canMutateMedicalNote(note, user)) {
+    return { error: "You can only restore your own medical notes." };
+  }
+
+  const { error } = await adminClient
+    .from("medical_notes")
+    .update({ deleted_at: null })
+    .eq("id", note.id);
+
+  if (error) return { error: error.message || "Failed to restore note." };
+
+  revalidatePath(`/patients/${note.patient_id}`);
   return { success: true };
 }
 

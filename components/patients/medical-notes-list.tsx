@@ -7,7 +7,11 @@ import { toast } from "sonner";
 import type { Tables } from "@/types/database";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { deleteMedicalNote, updateMedicalNote } from "@/actions/patients";
+import {
+  deleteMedicalNote,
+  restoreMedicalNote,
+  updateMedicalNote,
+} from "@/actions/patients";
 import { MedicalNoteAttachments } from "@/components/patients/medical-note-attachments";
 import type { MedicalNoteAttachmentItem } from "@/actions/medical-note-attachments";
 
@@ -92,7 +96,26 @@ export function MedicalNotesList({
                       return;
                     }
                     setHiddenIds((prev) => new Set(prev).add(note.id));
-                    toast.success("Medical note deleted.");
+                    toast.success("Medical note moved to trash.", {
+                      duration: 15000,
+                      action: {
+                        label: "Undo",
+                        onClick: async () => {
+                          const restore = await restoreMedicalNote(note.id);
+                          if (restore.error) {
+                            toast.error(restore.error);
+                            return;
+                          }
+                          setHiddenIds((prev) => {
+                            const next = new Set(prev);
+                            next.delete(note.id);
+                            return next;
+                          });
+                          toast.success("Medical note restored.");
+                          router.refresh();
+                        },
+                      },
+                    });
                     router.refresh();
                   })
                 }

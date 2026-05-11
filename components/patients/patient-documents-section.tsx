@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import {
   deletePatientDocument,
   getPatientDocumentSignedUrl,
+  restorePatientDocument,
   uploadPatientDocument,
   type PatientDocumentItem,
   type PatientDocumentsData,
@@ -132,7 +133,21 @@ export function PatientDocumentsSection({
         toast.error(result.error);
       } else {
         if (result.data) setDocuments(result.data);
-        toast.success("Document deleted.");
+        toast.success("Document moved to trash.", {
+          duration: 15000,
+          action: {
+            label: "Undo",
+            onClick: async () => {
+              const restored = await restorePatientDocument(patientId, document.id);
+              if (restored.error) {
+                toast.error(restored.error);
+                return;
+              }
+              if (restored.data) setDocuments(restored.data);
+              toast.success("Document restored.");
+            },
+          },
+        });
       }
       setPendingKey(null);
     });

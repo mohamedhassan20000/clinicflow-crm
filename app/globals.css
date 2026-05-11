@@ -414,8 +414,6 @@
   }
 
   body.patient-profile-print [data-patient-profile-print-document] * {
-    color: #000 !important;
-    border-color: #000 !important;
     box-shadow: none !important;
   }
 

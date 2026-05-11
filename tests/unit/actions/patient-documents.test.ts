@@ -183,10 +183,10 @@ describe("patient document actions", () => {
       data: null,
       error: null,
     };
-    mocks.state.tableResults["patient_documents.select"] = {
-      data: [],
-      error: null,
-    };
+    mocks.state.tableResults["patient_documents.select"] = [
+      { data: null, error: { message: "not found" } },
+      { data: [], error: null },
+    ];
 
     const result = await uploadPatientDocument(
       PATIENT_ID,
@@ -413,7 +413,7 @@ describe("patient document actions", () => {
     expect(mocks.state.storageRemove).not.toHaveBeenCalled();
   });
 
-  it("soft-deletes the document row then removes storage on delete", async () => {
+  it("soft-deletes the document row without removing private storage on delete", async () => {
     const { deletePatientDocument, mocks } = await loadPatientDocumentActions();
     mocks.state.tableResults["patients.select"] = {
       data: patientRow(),
@@ -437,13 +437,7 @@ describe("patient document actions", () => {
     const result = await deletePatientDocument(PATIENT_ID, DOCUMENT_ID);
 
     expect(result.ok).toBe(true);
-    expect(mocks.state.storageLog).toContainEqual(
-      expect.objectContaining({
-        bucket: "patient-assets",
-        operation: "remove",
-        args: [[DOCUMENT_PATH]],
-      }),
-    );
+    expect(mocks.state.storageLog).toEqual([]);
     expect(mocks.state.queryLog).toContainEqual(
       expect.objectContaining({
         table: "patient_documents",
@@ -465,24 +459,31 @@ describe("patient document actions", () => {
     expect(mocks.state.storageFrom).not.toHaveBeenCalled();
   });
 
-  it("returns document not found for missing or deleted documents before storage access", async () => {
+  it("treats repeated delete for missing or already-deleted documents as idempotent", async () => {
     const { deletePatientDocument, mocks } = await loadPatientDocumentActions();
     mocks.state.tableResults["patients.select"] = {
       data: patientRow(),
       error: null,
     };
-    mocks.state.tableResults["patient_documents.select"] = {
-      data: null,
-      error: { message: "not found" },
-    };
+    mocks.state.tableResults["patient_documents.select"] = [
+      { data: null, error: { message: "not found" } },
+      { data: [], error: null },
+    ];
 
     const result = await deletePatientDocument(PATIENT_ID, DOCUMENT_ID);
 
-    expect(result).toEqual({ error: "Document not found." });
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        nationalId: null,
+        insurance: null,
+        other: [],
+      },
+    });
     expect(mocks.state.storageFrom).not.toHaveBeenCalled();
   });
 
-  it("still soft-deletes the document row when storage object is already missing", async () => {
+  it("soft-deletes the document row even if the storage object is already missing", async () => {
     const { deletePatientDocument, mocks } = await loadPatientDocumentActions();
     mocks.state.tableResults["patients.select"] = {
       data: patientRow(),
@@ -502,11 +503,6 @@ describe("patient document actions", () => {
       data: null,
       error: null,
     };
-    mocks.state.storageRemove.mockResolvedValue({
-      data: null,
-      error: { message: "Object not found", statusCode: "404" },
-    });
-
     const result = await deletePatientDocument(PATIENT_ID, DOCUMENT_ID);
 
     expect(result.ok).toBe(true);
@@ -517,42 +513,28 @@ describe("patient document actions", () => {
         args: [expect.objectContaining({ deleted_at: expect.any(String) })],
       }),
     );
-    expect(mocks.state.storageRemove).toHaveBeenCalledWith([DOCUMENT_PATH]);
+    expect(mocks.state.storageRemove).not.toHaveBeenCalled();
   });
 
-  it("keeps delete successful when storage cleanup fails after the row is soft-deleted", async () => {
+  it("keeps view state intact when DB soft-delete fails before any storage cleanup", async () => {
     const { deletePatientDocument, mocks } = await loadPatientDocumentActions();
     mocks.state.tableResults["patients.select"] = {
       data: patientRow(),
       error: null,
     };
-    mocks.state.tableResults["patient_documents.select"] = [
-      {
-        data: documentRow(),
-        error: null,
-      },
-      {
-        data: [],
-        error: null,
-      },
-    ];
-    mocks.state.tableResults["patient_documents.update"] = {
-      data: null,
+    mocks.state.tableResults["patient_documents.select"] = {
+      data: documentRow(),
       error: null,
     };
-    mocks.state.storageRemove.mockResolvedValue({
+    mocks.state.tableResults["patient_documents.update"] = {
       data: null,
-      error: { message: "storage remove failed" },
-    });
+      error: { message: "update failed" },
+    };
 
     const result = await deletePatientDocument(PATIENT_ID, DOCUMENT_ID);
 
-    expect(result.ok).toBe(true);
-    expect(result.data).toEqual({
-      nationalId: null,
-      insurance: null,
-      other: [],
-    });
+    expect(result).toEqual({ error: "Failed to delete document record." });
+    expect(mocks.state.storageRemove).not.toHaveBeenCalled();
   });
 
   it("returns a record error before storage is removed when DB soft-delete fails", async () => {
@@ -574,6 +556,34 @@ describe("patient document actions", () => {
 
     expect(result).toEqual({ error: "Failed to delete document record." });
     expect(mocks.state.storageRemove).not.toHaveBeenCalled();
+  });
+
+  it("restores a soft-deleted document during the undo window", async () => {
+    const { restorePatientDocument, mocks } = await loadPatientDocumentActions();
+    mocks.state.tableResults["patients.select"] = {
+      data: patientRow(),
+      error: null,
+    };
+    mocks.state.tableResults["patient_documents.update"] = {
+      data: null,
+      error: null,
+    };
+    mocks.state.tableResults["patient_documents.select"] = {
+      data: [documentRow()],
+      error: null,
+    };
+
+    const result = await restorePatientDocument(PATIENT_ID, DOCUMENT_ID);
+
+    expect(result.ok).toBe(true);
+    expect(mocks.state.queryLog).toContainEqual(
+      expect.objectContaining({
+        table: "patient_documents",
+        operation: "update",
+        args: [expect.objectContaining({ deleted_at: null })],
+      }),
+    );
+    expect(mocks.state.storageLog).toEqual([]);
   });
 
   it("generates short-lived signed URLs only after document ownership validation", async () => {

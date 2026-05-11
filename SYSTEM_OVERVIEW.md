@@ -1,15 +1,12 @@
-# Clinic CRM — System Overview
+# ClinicFlow — System Overview
 
-> **Version:** 3.0 | **Status:** Production-ready  
-> **University:** Üsküdar University — Faculty of Engineering and Natural Sciences, Software Engineering Dept.  
-> **Supervisor:** Dr. Faezeh Rohani  
-> **Team:** Mohamed Ibrahim · 210209956 · Osama Ali · 220209367 · Mohamed Seif · 220209307
+> **Status:** Production-ready
 
 ---
 
 ## Project Overview
 
-Clinic CRM is a **staff-only** web-based management system for small-to-medium private clinics in Turkey. It replaces paper appointment books, phone-based scheduling, and Excel patient records with a single integrated digital platform.
+ClinicFlow is a **staff-only** web-based management system for small-to-medium private clinics in Turkey. It replaces paper appointment books, phone-based scheduling, and Excel patient records with a single integrated digital platform.
 
 Patients are data records only — they have no accounts, do not log in, and do not interact with the system in any way. All data entry and scheduling is performed exclusively by clinic staff.
 
@@ -398,7 +395,7 @@ The project deploys to Vercel as a Next.js App Router application. Configuration
 ## Folder Structure
 
 ```
-clinic-crm/
+clinicflow-crm/
 ├── app/                    ← Next.js App Router
 │   ├── (auth)/             ← Login, password reset
 │   ├── (protected)/        ← All authenticated pages
@@ -433,9 +430,9 @@ clinic-crm/
 
 ---
 
-## Known Limitations & Future Improvements
+## Known Limitations
 
-- **Single clinic per deployment** — the `clinic_id` column and multi-tenant schema exist, but the UI assumes a single clinic. A future super-admin interface could add clinic-switching.
+- **Single clinic per deployment** — the `clinic_id` column and multi-tenant schema exist, but the UI assumes a single clinic. Clinic-switching is not implemented.
 - **No real-time updates** — appointment and patient lists refresh on navigation; Supabase Realtime subscriptions are not currently wired up.
 - **Email delivery** — transactional email via Resend is wired for auth flows; appointment reminders and patient notifications are not implemented.
 - **CSV export** — infrastructure exists; UI-level export triggers are partially implemented.

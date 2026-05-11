@@ -420,15 +420,19 @@ export async function restorePatientDocument(
   const patient = await getPatientForDocuments(supabase, patientId, user.clinicId);
   if (!patient) return { error: "Patient not found." };
 
-  const { error } = await supabase
-    .from("patient_documents")
-    .update({ deleted_at: null })
-    .eq("id", documentId)
-    .eq("patient_id", patientId)
-    .eq("clinic_id", user.clinicId)
-    .not("deleted_at", "is", null);
+  const { error } = await supabase.rpc("restore_patient_document", {
+    p_document_id: documentId,
+    p_patient_id: patientId,
+  });
 
-  if (error) return { error: "Failed to restore document." };
+  if (error) {
+    logSupabaseError("patient_document_restore_failed", error, {
+      clinicId: user.clinicId,
+      patientId,
+      documentId,
+    });
+    return { error: "Failed to restore document." };
+  }
 
   revalidatePath(`/patients/${patientId}`);
   const result = await listActiveDocuments(supabase, patientId, user.clinicId);

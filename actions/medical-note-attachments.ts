@@ -409,16 +409,21 @@ export async function restoreMedicalNoteAttachment(
   const note = await getAccessibleNote(supabase, noteId, patientId);
   if (!note) return { error: "Medical note not found." };
 
-  const { error } = await supabase
-    .from("medical_note_attachments")
-    .update({ deleted_at: null })
-    .eq("id", attachmentId)
-    .eq("clinic_id", user.clinicId)
-    .eq("patient_id", patientId)
-    .eq("note_id", noteId)
-    .not("deleted_at", "is", null);
+  const { error } = await supabase.rpc("restore_medical_note_attachment", {
+    p_attachment_id: attachmentId,
+    p_note_id: noteId,
+    p_patient_id: patientId,
+  });
 
-  if (error) return { error: "Failed to restore attachment." };
+  if (error) {
+    logSupabaseError("medical_note_attachment_restore_failed", error, {
+      clinicId: user.clinicId,
+      patientId,
+      noteId,
+      attachmentId,
+    });
+    return { error: "Failed to restore attachment." };
+  }
 
   revalidatePath(`/patients/${patientId}`);
   return listMedicalNoteAttachments(patientId, noteId);

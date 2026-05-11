@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { toast } from "sonner";
@@ -6,6 +6,7 @@ import { PatientDocumentsSection } from "@/components/patients/patient-documents
 import {
   deletePatientDocument,
   getPatientDocumentSignedUrl,
+  restorePatientDocument,
   uploadPatientDocument,
   type PatientDocumentsData,
 } from "@/actions/patient-documents";
@@ -83,6 +84,7 @@ function renderSection(documents: PatientDocumentsData = baseDocuments) {
 describe("PatientDocumentsSection", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.clearAllMocks();
     vi.mocked(getPatientDocumentSignedUrl).mockResolvedValue({
       data: { url: "https://signed.local/document" },
     });
@@ -96,6 +98,10 @@ describe("PatientDocumentsSection", () => {
         ...baseDocuments,
         nationalId: null,
       },
+    });
+    vi.mocked(restorePatientDocument).mockResolvedValue({
+      ok: true,
+      data: baseDocuments,
     });
     vi.spyOn(window, "open").mockImplementation(() => null);
   });
@@ -306,6 +312,70 @@ describe("PatientDocumentsSection", () => {
       expect(deletePatientDocument).toHaveBeenCalled();
     });
     expect(screen.getByText("national-id.pdf")).toBeInTheDocument();
+  });
+
+  it("restores a deleted patient document from the undo toast and shows it immediately", async () => {
+    const user = userEvent.setup();
+    renderSection();
+
+    await user.click(screen.getAllByRole("button", { name: /delete/i })[0]);
+    const dialog = screen.getByRole("alertdialog");
+    await user.click(within(dialog).getByRole("button", { name: /^delete$/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByText("national-id.pdf")).not.toBeInTheDocument();
+    });
+
+    const undoOptions = vi.mocked(toast.success).mock.calls.find(
+      ([message]) => message === "Document moved to trash.",
+    )?.[1] as
+      | { action?: { onClick?: () => void | Promise<void> } }
+      | undefined;
+    const undo = undoOptions?.action?.onClick;
+    expect(undo).toBeTypeOf("function");
+
+    await act(async () => {
+      await undo?.();
+    });
+
+    await waitFor(() => {
+      expect(restorePatientDocument).toHaveBeenCalledWith(
+        PATIENT_ID,
+        "national-doc",
+      );
+      expect(screen.getByText("national-id.pdf")).toBeInTheDocument();
+    });
+  });
+
+  it("can view a patient document after undo restore", async () => {
+    const user = userEvent.setup();
+    renderSection();
+
+    await user.click(screen.getAllByRole("button", { name: /delete/i })[0]);
+    const dialog = screen.getByRole("alertdialog");
+    await user.click(within(dialog).getByRole("button", { name: /^delete$/i }));
+    const undoOptions = vi.mocked(toast.success).mock.calls.find(
+      ([message]) => message === "Document moved to trash.",
+    )?.[1] as
+      | { action?: { onClick?: () => void | Promise<void> } }
+      | undefined;
+    const undo = undoOptions?.action?.onClick;
+
+    await act(async () => {
+      await undo?.();
+    });
+    await waitFor(() => {
+      expect(screen.getByText("national-id.pdf")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: /view national-id.pdf/i }));
+
+    await waitFor(() => {
+      expect(getPatientDocumentSignedUrl).toHaveBeenCalledWith(
+        PATIENT_ID,
+        "national-doc",
+      );
+    });
   });
 
   it("restricts file inputs to PDF and supported image types", () => {

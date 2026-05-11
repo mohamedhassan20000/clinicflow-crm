@@ -363,7 +363,7 @@ describe("medical note attachment actions", () => {
       { data: noteRow(), error: null },
       { data: noteRow(), error: null },
     ];
-    mocks.state.tableResults["medical_note_attachments.update"] = {
+    mocks.state.rpcResults.restore_medical_note_attachment = {
       data: null,
       error: null,
     };
@@ -379,13 +379,40 @@ describe("medical note attachment actions", () => {
     );
 
     expect(result.error).toBeUndefined();
-    expect(mocks.state.queryLog).toContainEqual(
-      expect.objectContaining({
-        table: "medical_note_attachments",
-        operation: "update",
-        args: [expect.objectContaining({ deleted_at: null })],
-      }),
+    expect(mocks.state.rpc).toHaveBeenCalledWith(
+      "restore_medical_note_attachment",
+      {
+        p_attachment_id: ATTACHMENT_ID,
+        p_note_id: NOTE_ID,
+        p_patient_id: PATIENT_ID,
+      },
     );
+  });
+
+  it("treats repeated attachment undo restore as idempotent through the restore RPC", async () => {
+    const { restoreMedicalNoteAttachment, mocks } = await loadAttachmentActions();
+    mocks.state.tableResults["medical_notes.select"] = [
+      { data: noteRow(), error: null },
+      { data: noteRow(), error: null },
+    ];
+    mocks.state.rpcResults.restore_medical_note_attachment = {
+      data: true,
+      error: null,
+    };
+    mocks.state.tableResults["medical_note_attachments.select"] = {
+      data: [attachmentRow()],
+      error: null,
+    };
+
+    const result = await restoreMedicalNoteAttachment(
+      PATIENT_ID,
+      NOTE_ID,
+      ATTACHMENT_ID,
+    );
+
+    expect(result.error).toBeUndefined();
+    expect(result.data?.[0]?.id).toBe(ATTACHMENT_ID);
+    expect(mocks.state.storageLog).toEqual([]);
   });
 
   it("returns a clear unavailable-file message and logs diagnostics when attachment signing fails", async () => {

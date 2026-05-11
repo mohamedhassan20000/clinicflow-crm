@@ -584,7 +584,7 @@ describe("patient document actions", () => {
       data: patientRow(),
       error: null,
     };
-    mocks.state.tableResults["patient_documents.update"] = {
+    mocks.state.rpcResults.restore_patient_document = {
       data: null,
       error: null,
     };
@@ -596,13 +596,35 @@ describe("patient document actions", () => {
     const result = await restorePatientDocument(PATIENT_ID, DOCUMENT_ID);
 
     expect(result.ok).toBe(true);
-    expect(mocks.state.queryLog).toContainEqual(
-      expect.objectContaining({
-        table: "patient_documents",
-        operation: "update",
-        args: [expect.objectContaining({ deleted_at: null })],
-      }),
+    expect(mocks.state.rpc).toHaveBeenCalledWith(
+      "restore_patient_document",
+      {
+        p_document_id: DOCUMENT_ID,
+        p_patient_id: PATIENT_ID,
+      },
     );
+    expect(mocks.state.storageLog).toEqual([]);
+  });
+
+  it("treats repeated document undo restore as idempotent through the restore RPC", async () => {
+    const { restorePatientDocument, mocks } = await loadPatientDocumentActions();
+    mocks.state.tableResults["patients.select"] = {
+      data: patientRow(),
+      error: null,
+    };
+    mocks.state.rpcResults.restore_patient_document = {
+      data: true,
+      error: null,
+    };
+    mocks.state.tableResults["patient_documents.select"] = {
+      data: [documentRow()],
+      error: null,
+    };
+
+    const result = await restorePatientDocument(PATIENT_ID, DOCUMENT_ID);
+
+    expect(result.ok).toBe(true);
+    expect(result.data?.nationalId?.id).toBe(DOCUMENT_ID);
     expect(mocks.state.storageLog).toEqual([]);
   });
 

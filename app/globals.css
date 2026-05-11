@@ -387,43 +387,4 @@
     display: none !important;
   }
 
-  body.patient-profile-print {
-    print-color-adjust: exact;
-    -webkit-print-color-adjust: exact;
-  }
-
-  body.patient-profile-print [data-patient-profile-print-hide] {
-    display: none !important;
-  }
-
-  body.patient-profile-print [data-patient-profile-print-root] {
-    display: block !important;
-    max-width: none !important;
-    width: 100% !important;
-  }
-
-  body.patient-profile-print [data-patient-profile-print-document] {
-    display: block !important;
-    page: patient-profile;
-    width: 100% !important;
-    max-width: 180mm !important;
-    margin: 0 auto !important;
-    background: #fff !important;
-    color: #000 !important;
-    box-shadow: none !important;
-  }
-
-  body.patient-profile-print [data-patient-profile-print-document] * {
-    box-shadow: none !important;
-  }
-
-  body.patient-profile-print [data-patient-profile-print-root] img {
-    print-color-adjust: exact;
-    -webkit-print-color-adjust: exact;
-  }
-
-  body.patient-profile-print [data-patient-profile-print-photo] {
-    print-color-adjust: exact;
-    -webkit-print-color-adjust: exact;
-  }
 }

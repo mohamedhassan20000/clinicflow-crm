@@ -85,9 +85,21 @@ export interface DoneRow {
 
 type OutcomeFilter = "all_fine" | "has_problem" | "no_response" | null;
 
+export interface FollowupsSummary {
+  pendingCount: number;
+  completedCount: number;
+  allFineCount: number;
+  hasProblemCount: number;
+  noResponseCount: number;
+}
+
 interface Props {
   pending: PendingRow[];
   done: DoneRow[];
+  summary: FollowupsSummary;
+  pendingPreviewLimit: number;
+  completedPage: number;
+  completedPageSize: number;
   departments: Department[];
   doctors: { id: string; full_name: string }[];
   scope: Scope;
@@ -142,6 +154,10 @@ function fmtDateTime(iso: string) {
 export function FollowupsView({
   pending,
   done,
+  summary,
+  pendingPreviewLimit,
+  completedPage,
+  completedPageSize,
   departments,
   doctors,
   scope,
@@ -189,6 +205,9 @@ export function FollowupsView({
     for (const [k, v] of Object.entries(next)) {
       if (v === null || v === "") p.delete(k);
       else p.set(k, v);
+    }
+    if (!Object.prototype.hasOwnProperty.call(next, "completedPage")) {
+      p.delete("completedPage");
     }
     startTransition(() => router.push(`/followups?${p.toString()}`));
   }
@@ -327,26 +346,27 @@ export function FollowupsView({
         hideDeptFilter={readOnly || hideScopeFilters}
         className="print:hidden"
         fallbackParams={{ name: ["q"] }}
+        resetParamsOnApply={["completedPage"]}
         clearExtraParams={["q"]}
         actions={<FollowupsPrintButton />}
       />
 
       {/* Summary strip */}
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border/50 bg-border/40 sm:grid-cols-4">
-        <SummaryCell label="Awaiting follow-up" value={pending.length} />
+        <SummaryCell label="Awaiting follow-up" value={summary.pendingCount} />
         <SummaryCell
           label="All fine"
-          value={done.filter((d) => d.outcome === "all_fine").length}
+          value={summary.allFineCount}
           accent="text-emerald-600 dark:text-emerald-400"
         />
         <SummaryCell
           label="Reported a problem"
-          value={done.filter((d) => d.outcome === "has_problem").length}
+          value={summary.hasProblemCount}
           accent="text-amber-600 dark:text-amber-400"
         />
         <SummaryCell
           label="No response"
-          value={done.filter((d) => d.outcome === "no_response").length}
+          value={summary.noResponseCount}
           accent="text-muted-foreground"
         />
       </div>
@@ -358,11 +378,11 @@ export function FollowupsView({
             Awaiting follow-up
           </h2>
           <span className="text-xs text-muted-foreground">
-            {pending.length} patient{pending.length !== 1 ? "s" : ""}
+            {summary.pendingCount} patient{summary.pendingCount !== 1 ? "s" : ""}
           </span>
         </div>
 
-        {pendingGroups.length === 0 ? (
+        {summary.pendingCount === 0 ? (
           <div className="rounded-xl border border-border/50 bg-card px-4 py-10 text-center text-sm text-muted-foreground">
             All caught up — no completed sessions waiting for a follow-up call.
           </div>
@@ -564,6 +584,14 @@ export function FollowupsView({
                 </section>
               );
             })}
+            {summary.pendingCount > pending.length && (
+              <div className="rounded-lg border border-border/50 bg-muted/20 px-4 py-2 text-xs text-muted-foreground print:hidden">
+                Showing the first {pendingPreviewLimit} awaiting follow-ups.
+                Narrow the filters to work through the remaining{" "}
+                {summary.pendingCount - pending.length} patient
+                {summary.pendingCount - pending.length !== 1 ? "s" : ""}.
+              </div>
+            )}
           </div>
         )}
       </section>
@@ -575,28 +603,28 @@ export function FollowupsView({
             Completed follow-ups
           </h2>
           <span className="text-xs text-muted-foreground">
-            {done.length} record{done.length !== 1 ? "s" : ""}
+            {summary.completedCount} record{summary.completedCount !== 1 ? "s" : ""}
           </span>
         </div>
 
         <div className="inline-flex flex-wrap items-center gap-0.5 rounded-lg border border-border/60 bg-muted/40 p-0.5 print:hidden">
           {(
             [
-              { value: null, label: "All", count: done.length },
+              { value: null, label: "All", count: summary.completedCount },
               {
                 value: "has_problem" as const,
                 label: "Reported a problem",
-                count: done.filter((d) => d.outcome === "has_problem").length,
+                count: summary.hasProblemCount,
               },
               {
                 value: "all_fine" as const,
                 label: "All fine",
-                count: done.filter((d) => d.outcome === "all_fine").length,
+                count: summary.allFineCount,
               },
               {
                 value: "no_response" as const,
                 label: "No response",
-                count: done.filter((d) => d.outcome === "no_response").length,
+                count: summary.noResponseCount,
               },
             ] as const
           ).map(({ value, label, count }) => {
@@ -629,7 +657,7 @@ export function FollowupsView({
           })}
         </div>
 
-        {doneGroups.length === 0 ? (
+        {summary.completedCount === 0 ? (
           <div className="rounded-xl border border-border/50 bg-card px-4 py-10 text-center text-sm text-muted-foreground">
             No follow-ups recorded in this period yet.
           </div>
@@ -866,6 +894,12 @@ export function FollowupsView({
                 </section>
               );
             })}
+            <CompletedPager
+              page={completedPage}
+              pageSize={completedPageSize}
+              total={summary.completedCount}
+              onPage={(page) => update({ completedPage: String(page) })}
+            />
           </div>
         )}
       </section>
@@ -931,6 +965,66 @@ function SummaryCell({
       <p className={cn("mt-1 text-lg font-semibold tabular-nums", accent)}>
         {value}
       </p>
+    </div>
+  );
+}
+
+function CompletedPager({
+  page,
+  pageSize,
+  total,
+  onPage,
+}: {
+  page: number;
+  pageSize: number;
+  total: number;
+  onPage: (page: number) => void;
+}) {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  if (totalPages <= 1) return null;
+
+  const currentPage = Math.min(Math.max(1, page), totalPages);
+  const start = (currentPage - 1) * pageSize + 1;
+  const end = Math.min(currentPage * pageSize, total);
+
+  return (
+    <div className="flex items-center justify-between rounded-xl border border-border/50 bg-card px-4 py-2.5 text-xs text-muted-foreground print:hidden">
+      <span>
+        Showing{" "}
+        <span className="font-medium text-foreground tabular-nums">
+          {start}–{end}
+        </span>{" "}
+        of{" "}
+        <span className="font-medium text-foreground tabular-nums">{total}</span>{" "}
+        completed follow-ups
+      </span>
+      <div className="flex items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 w-7 p-0"
+          disabled={currentPage <= 1}
+          onClick={() => onPage(currentPage - 1)}
+          aria-label="Previous completed follow-ups page"
+        >
+          <ChevronLeft className="h-3.5 w-3.5" />
+        </Button>
+        <span className="tabular-nums">
+          Page{" "}
+          <span className="font-medium text-foreground">{currentPage}</span> of{" "}
+          <span className="font-medium text-foreground">{totalPages}</span>
+        </span>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 w-7 p-0"
+          disabled={currentPage >= totalPages}
+          onClick={() => onPage(currentPage + 1)}
+          aria-label="Next completed follow-ups page"
+        >
+          <ChevronRight className="h-3.5 w-3.5" />
+        </Button>
+      </div>
     </div>
   );
 }

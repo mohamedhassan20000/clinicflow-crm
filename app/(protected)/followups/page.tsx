@@ -7,6 +7,32 @@ import { FollowupsView } from "@/components/followups/followups-view";
 export const metadata: Metadata = { title: "Follow-ups" };
 
 type Scope = "day" | "yesterday" | "week" | "month";
+type FollowupOutcome = "all_fine" | "has_problem" | "no_response";
+
+const PENDING_PREVIEW_LIMIT = 250;
+const COMPLETED_PAGE_SIZE = 50;
+
+interface FollowupsDashboardSummary {
+  pendingCount: number;
+  completedCount: number;
+  allFineCount: number;
+  hasProblemCount: number;
+  noResponseCount: number;
+}
+
+const EMPTY_SUMMARY: FollowupsDashboardSummary = {
+  pendingCount: 0,
+  completedCount: 0,
+  allFineCount: 0,
+  hasProblemCount: 0,
+  noResponseCount: 0,
+};
+
+interface FollowupsDashboardPayload {
+  summary: FollowupsDashboardSummary;
+  pending: unknown[];
+  done: unknown[];
+}
 
 interface PageProps {
   searchParams: Promise<{
@@ -20,6 +46,7 @@ interface PageProps {
     dept?: string;
     doctor?: string;
     outcome?: string;
+    completedPage?: string;
   }>;
 }
 
@@ -62,6 +89,36 @@ function resolveRange(scope: Scope, dateStr?: string) {
   return { start: startOfDay(start30), end: endOfDay(yesterday) };
 }
 
+function toNumber(value: unknown): number {
+  const n = typeof value === "number" ? value : Number(value ?? 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function normalizeDashboardPayload(payload: unknown): FollowupsDashboardPayload {
+  if (!payload || typeof payload !== "object") {
+    return { summary: EMPTY_SUMMARY, pending: [], done: [] };
+  }
+
+  const source = payload as {
+    summary?: Record<string, unknown>;
+    pending?: unknown;
+    done?: unknown;
+  };
+  const summary = source.summary ?? {};
+
+  return {
+    summary: {
+      pendingCount: toNumber(summary.pendingCount),
+      completedCount: toNumber(summary.completedCount),
+      allFineCount: toNumber(summary.allFineCount),
+      hasProblemCount: toNumber(summary.hasProblemCount),
+      noResponseCount: toNumber(summary.noResponseCount),
+    },
+    pending: Array.isArray(source.pending) ? source.pending : [],
+    done: Array.isArray(source.done) ? source.done : [],
+  };
+}
+
 export default async function FollowupsPage({ searchParams }: PageProps) {
   const user = await requireUser();
   if (user.role === "manager") redirect("/dashboard");
@@ -84,7 +141,9 @@ export default async function FollowupsPage({ searchParams }: PageProps) {
     const v = sp.outcome?.trim();
     if (v === "all_fine" || v === "has_problem" || v === "no_response") return v;
     return null;
-  })();
+  })() satisfies FollowupOutcome | null;
+  const completedPage = Math.max(1, Number(sp.completedPage ?? "1") || 1);
+  const completedOffset = (completedPage - 1) * COMPLETED_PAGE_SIZE;
 
   const supabase = await createClient();
 
@@ -107,47 +166,26 @@ export default async function FollowupsPage({ searchParams }: PageProps) {
     if (phone) patientQuery = patientQuery.ilike("phone", `%${phone}%`);
     const { data: matches } = await patientQuery;
     patientIdFilter = (matches ?? []).map((m) => m.id);
-    if (patientIdFilter.length === 0) patientIdFilter = ["__none__"];
   }
+  const hasNoPatientMatches = patientIdFilter?.length === 0;
 
-  // Completed appointments inside the window — we'll filter out any that
-  // already have a follow_ups row in JS (PostgREST can't filter the parent
-  // by emptiness of an embedded relation).
-  let pendingQ = supabase
-    .from("appointments")
-    .select(
-      "id, scheduled_at, paid_at, patient_id, department_id, doctor_id, total_amount, payment_note, patients(id, full_name, phone, file_number, national_id, department_id), profiles!doctor_id(full_name), departments(id, name, color), follow_ups(id)",
-    )
-    .eq("clinic_id", user.clinicId)
-    .eq("status", "completed")
-    .is("deleted_at", null)
-    .gte("scheduled_at", range.start.toISOString())
-    .lte("scheduled_at", range.end.toISOString())
-    .order("scheduled_at", { ascending: false })
-    .limit(500);
+  const dashboardPromise = hasNoPatientMatches
+    ? Promise.resolve({ data: { summary: EMPTY_SUMMARY, pending: [], done: [] } })
+    : supabase.rpc("get_followups_dashboard" as never, {
+        p_start: range.start.toISOString(),
+        p_end: range.end.toISOString(),
+        p_department_id: filterDept,
+        p_doctor_id: filterDoctor,
+        p_patient_ids: patientIdFilter,
+        p_outcome: filterOutcome,
+        p_pending_limit: PENDING_PREVIEW_LIMIT,
+        p_done_limit: COMPLETED_PAGE_SIZE,
+        p_done_offset: completedOffset,
+      } as never);
 
-  if (filterDept) pendingQ = pendingQ.eq("department_id", filterDept);
-  if (filterDoctor) pendingQ = pendingQ.eq("doctor_id", filterDoctor);
-  if (patientIdFilter) pendingQ = pendingQ.in("patient_id", patientIdFilter);
-
-  // Done: follow_ups inside the window, with their appointment + patient context.
-  let doneQ = supabase
-    .from("follow_ups")
-    .select(
-      "id, recorded_at, outcome, notes, patient_id, appointment_id, patients(id, full_name, phone, file_number, national_id, department_id), recorded_by:profiles!recorded_by(full_name), appointment:appointments!appointment_id(id, scheduled_at, department_id, doctor_id, profiles!doctor_id(full_name), departments(id, name, color))",
-    )
-    .eq("clinic_id", user.clinicId)
-    .gte("recorded_at", range.start.toISOString())
-    .lte("recorded_at", range.end.toISOString())
-    .order("recorded_at", { ascending: false })
-    .limit(500);
-
-  if (patientIdFilter) doneQ = doneQ.in("patient_id", patientIdFilter);
-
-  const [{ data: pendingRaw }, { data: done }, { data: departments }, { data: doctors }] =
+  const [{ data: dashboardRaw }, { data: departments }, { data: doctors }] =
     await Promise.all([
-      pendingQ,
-      doneQ,
+      dashboardPromise,
       supabase
         .from("departments")
         .select("id, name, color")
@@ -165,41 +203,18 @@ export default async function FollowupsPage({ searchParams }: PageProps) {
             .order("full_name"),
     ]);
 
-  // Drop appointments that already have a follow-up.
-  const pending = (pendingRaw ?? []).filter(
-    (a) => !a.follow_ups || a.follow_ups.length === 0,
-  );
-
-  // Department + outcome filters apply on the JS side (the dept filter must
-  // walk the joined appointment).
-  const OUTCOME_RANK: Record<string, number> = {
-    has_problem: 0,
-    all_fine: 1,
-    no_response: 2,
-  };
-  const doneFiltered = (done ?? [])
-    .filter((d) => {
-      if (filterDept && d.appointment?.department_id !== filterDept) return false;
-      if (filterDoctor && d.appointment?.doctor_id !== filterDoctor) return false;
-      if (filterOutcome && d.outcome !== filterOutcome) return false;
-      return true;
-    })
-    .sort((a, b) => {
-      // Surface "Reported a problem" first so reception can address them.
-      const da = OUTCOME_RANK[a.outcome] ?? 99;
-      const db = OUTCOME_RANK[b.outcome] ?? 99;
-      if (da !== db) return da - db;
-      return (
-        new Date(b.recorded_at).getTime() - new Date(a.recorded_at).getTime()
-      );
-    });
+  const dashboard = normalizeDashboardPayload(dashboardRaw);
 
   return (
     <FollowupsView
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      pending={(pending ?? []) as any}
+      pending={dashboard.pending as any}
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      done={doneFiltered as any}
+      done={dashboard.done as any}
+      summary={dashboard.summary}
+      pendingPreviewLimit={PENDING_PREVIEW_LIMIT}
+      completedPage={completedPage}
+      completedPageSize={COMPLETED_PAGE_SIZE}
       departments={departments ?? []}
       doctors={doctors ?? []}
       scope={scope}

@@ -3,12 +3,17 @@
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Loader2, Save, Upload, X } from "lucide-react";
+import { Loader2, Maximize2, Save, Upload, X } from "lucide-react";
 import { toast } from "sonner";
-import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Form,
   FormControl,
@@ -34,6 +39,8 @@ export function ClinicForm({ defaultValues, logoUrl: initialLogoUrl, readOnly = 
   );
 
   const [logoUrl, setLogoUrl] = useState(initialLogoUrl);
+  const [logoLoadError, setLogoLoadError] = useState(false);
+  const [logoDialogOpen, setLogoDialogOpen] = useState(false);
   const [logoUploading, startLogoTransition] = useTransition();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -77,21 +84,46 @@ export function ClinicForm({ defaultValues, logoUrl: initialLogoUrl, readOnly = 
       <div className="rounded-xl border border-border/50 bg-card p-6">
         <h3 className="mb-4 text-sm font-semibold">Clinic logo</h3>
         <div className="flex items-center gap-5">
-          <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl border border-border bg-muted">
-            {logoUrl ? (
-              <Image
-                src={logoUrl}
-                alt="Clinic logo"
-                fill
-                className="object-contain p-1"
-                sizes="80px"
-              />
-            ) : (
-              <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-                No logo
-              </div>
-            )}
-          </div>
+          {logoUrl && !logoLoadError ? (
+            <>
+              <button
+                type="button"
+                aria-label="Preview clinic logo"
+                onClick={() => setLogoDialogOpen(true)}
+                className="group relative h-20 w-20 shrink-0 overflow-hidden rounded-xl border border-border bg-muted outline-none transition focus-visible:ring-2 focus-visible:ring-ring/50"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={logoUrl}
+                  alt="Clinic logo"
+                  onError={() => setLogoLoadError(true)}
+                  className="h-full w-full object-contain p-1"
+                />
+                <span className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/0 transition group-hover:bg-black/20">
+                  <Maximize2 className="h-4 w-4 text-white opacity-0 drop-shadow transition group-hover:opacity-100" />
+                </span>
+              </button>
+
+              <Dialog open={logoDialogOpen} onOpenChange={setLogoDialogOpen}>
+                <DialogContent className="max-w-[calc(100%-2rem)] p-4 sm:max-w-lg">
+                  <DialogTitle>Clinic logo</DialogTitle>
+                  <DialogDescription className="sr-only">
+                    Full-size preview of the clinic logo
+                  </DialogDescription>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={logoUrl}
+                    alt="Clinic logo full size"
+                    className="max-h-[70vh] w-full rounded-lg object-contain"
+                  />
+                </DialogContent>
+              </Dialog>
+            </>
+          ) : (
+            <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl border border-border bg-muted text-xs text-muted-foreground">
+              No logo
+            </div>
+          )}
           <div className="space-y-1.5">
             <p className="text-sm text-muted-foreground">
               PNG, JPEG, or SVG · max 500 KB

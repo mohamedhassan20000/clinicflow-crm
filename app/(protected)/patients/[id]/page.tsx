@@ -5,7 +5,10 @@ import { AlertCircle, ChevronLeft, Pencil, Receipt } from "lucide-react";
 import { StatusBadge } from "@/components/appointments/status-badge";
 import { requireUser } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
-import { MedicalNotesList } from "@/components/patients/medical-notes-list";
+import {
+  MedicalNotesList,
+  type MedicalNoteWithAttachments,
+} from "@/components/patients/medical-notes-list";
 import { NoteComposer } from "@/components/patients/note-composer";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +22,7 @@ import { PatientAvatarPreview } from "@/components/patients/patient-avatar-previ
 import { PatientProfilePrintButton } from "@/components/patients/patient-profile-print-button";
 import { PatientProfilePrintDocument } from "@/components/patients/patient-profile-print-document";
 import { listPatientDocuments, type PatientDocumentsData } from "@/actions/patient-documents";
+import type { MedicalNoteAttachmentItem } from "@/actions/medical-note-attachments";
 import { formatDoctorName } from "@/lib/format-doctor";
 
 export const metadata: Metadata = { title: "Patient" };
@@ -94,6 +98,50 @@ export default async function PatientDetailPage({ params }: PageProps) {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const appointments = appointmentsResult.data as any[] | null;
+  const noteRows = (notes ?? []) as MedicalNoteWithAttachments[];
+  const noteIds = noteRows.map((note) => note.id);
+  const attachmentsByNote = new Map<string, MedicalNoteAttachmentItem[]>();
+
+  if ((isAdmin || isDoctor) && noteIds.length > 0) {
+    const { data: attachmentRows } = await supabase
+      .from("medical_note_attachments")
+      .select(
+        "id, note_id, file_name, mime_type, size_bytes, created_at, uploaded_by, uploaded_by_profile:profiles!medical_note_attachments_uploaded_by_fkey(full_name)",
+      )
+      .eq("clinic_id", user.clinicId)
+      .eq("patient_id", id)
+      .in("note_id", noteIds)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false });
+
+    for (const row of (attachmentRows ?? []) as {
+      id: string;
+      note_id: string;
+      file_name: string;
+      mime_type: string;
+      size_bytes: number;
+      created_at: string;
+      uploaded_by: string | null;
+      uploaded_by_profile?: { full_name: string | null } | null;
+    }[]) {
+      const list = attachmentsByNote.get(row.note_id) ?? [];
+      list.push({
+        id: row.id,
+        fileName: row.file_name,
+        mimeType: row.mime_type,
+        sizeBytes: Number(row.size_bytes),
+        createdAt: row.created_at,
+        uploadedById: row.uploaded_by,
+        uploadedByName: row.uploaded_by_profile?.full_name ?? null,
+      });
+      attachmentsByNote.set(row.note_id, list);
+    }
+  }
+
+  const notesWithAttachments = noteRows.map((note) => ({
+    ...note,
+    attachments: attachmentsByNote.get(note.id) ?? [],
+  }));
 
   // Financial data — only loaded for non-doctor roles
   const settlementsByAppt = new Map<
@@ -595,8 +643,12 @@ export default async function PatientDetailPage({ params }: PageProps) {
           )}
 
           {(isAdmin || isDoctor) && (
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            <MedicalNotesList notes={(notes ?? []) as any} />
+            <MedicalNotesList
+              notes={notesWithAttachments}
+              patientId={id}
+              currentUserId={user.id}
+              canManageAllAttachments={isAdmin}
+            />
           )}
         </div>
       </div>

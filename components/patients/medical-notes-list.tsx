@@ -8,16 +8,27 @@ import type { Tables } from "@/types/database";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { deleteMedicalNote, updateMedicalNote } from "@/actions/patients";
+import { MedicalNoteAttachments } from "@/components/patients/medical-note-attachments";
+import type { MedicalNoteAttachmentItem } from "@/actions/medical-note-attachments";
 
-type MedicalNote = Tables<"medical_notes"> & {
+export type MedicalNoteWithAttachments = Tables<"medical_notes"> & {
   profiles: { full_name: string } | null;
+  attachments?: MedicalNoteAttachmentItem[];
 };
 
 interface MedicalNotesListProps {
-  notes: MedicalNote[];
+  notes: MedicalNoteWithAttachments[];
+  patientId: string;
+  currentUserId: string;
+  canManageAllAttachments: boolean;
 }
 
-export function MedicalNotesList({ notes }: MedicalNotesListProps) {
+export function MedicalNotesList({
+  notes,
+  patientId,
+  currentUserId,
+  canManageAllAttachments,
+}: MedicalNotesListProps) {
   const router = useRouter();
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -139,6 +150,14 @@ export function MedicalNotesList({ notes }: MedicalNotesListProps) {
               {note.note}
             </p>
           )}
+          <MedicalNoteAttachments
+            patientId={patientId}
+            noteId={note.id}
+            noteAuthorId={note.created_by}
+            currentUserId={currentUserId}
+            canManageAllAttachments={canManageAllAttachments}
+            initialAttachments={note.attachments ?? []}
+          />
         </div>
       ))}
     </div>

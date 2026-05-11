@@ -607,6 +607,80 @@ export type Database = {
           },
         ]
       }
+      medical_note_attachments: {
+        Row: {
+          clinic_id: string
+          created_at: string
+          deleted_at: string | null
+          file_name: string
+          id: string
+          mime_type: string
+          note_id: string
+          patient_id: string
+          size_bytes: number
+          storage_path: string
+          updated_at: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          clinic_id: string
+          created_at?: string
+          deleted_at?: string | null
+          file_name: string
+          id?: string
+          mime_type: string
+          note_id: string
+          patient_id: string
+          size_bytes: number
+          storage_path: string
+          updated_at?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          clinic_id?: string
+          created_at?: string
+          deleted_at?: string | null
+          file_name?: string
+          id?: string
+          mime_type?: string
+          note_id?: string
+          patient_id?: string
+          size_bytes?: number
+          storage_path?: string
+          updated_at?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "medical_note_attachments_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "medical_note_attachments_note_id_fkey"
+            columns: ["note_id"]
+            isOneToOne: false
+            referencedRelation: "medical_notes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "medical_note_attachments_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "medical_note_attachments_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       outstanding_settlements: {
         Row: {
           amount: number

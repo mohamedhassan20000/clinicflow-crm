@@ -322,6 +322,61 @@ describe("appointment conflict prevention", () => {
     expect(result.error).toContain("15-minute recovery/buffer window");
     expect(wroteAppointments(mocks)).toBe(false);
   });
+
+  it("conflict query excludes soft-deleted appointments via deleted_at IS NULL filter", async () => {
+    const { createAppointment, mocks } = await loadAppointmentsActions();
+    allowValidReferences(mocks, { sameDay: [] });
+
+    await createAppointment(
+      null,
+      appointmentForm({ scheduled_at: "2099-01-01T10:00:00.000Z" }),
+    );
+
+    expect(mocks.state.queryLog).toContainEqual(
+      expect.objectContaining({
+        table: "appointments",
+        operation: "select",
+        args: ["is", "deleted_at", null],
+      }),
+    );
+  });
+
+  it("allows booking the same slot when the existing appointment is soft-deleted (deleted_at set)", async () => {
+    const { createAppointment, mocks } = await loadAppointmentsActions();
+    // Simulate the conflict query returning no rows — as it would when the
+    // only appointment at that slot has deleted_at set and is filtered out.
+    allowValidReferences(mocks, { sameDay: [] });
+
+    await createAppointment(
+      null,
+      appointmentForm({ scheduled_at: "2099-01-01T10:00:00.000Z" }),
+    );
+
+    expect(mocks.state.redirect).toHaveBeenCalledWith("/appointments");
+    expect(wroteAppointments(mocks)).toBe(true);
+  });
+
+  it("still blocks booking when an active (non-deleted) appointment occupies the slot", async () => {
+    const { createAppointment, mocks } = await loadAppointmentsActions();
+    allowValidReferences(mocks, {
+      sameDay: [
+        {
+          scheduled_at: "2099-01-01T10:00:00.000Z",
+          duration_minutes: 30,
+        },
+      ],
+    });
+
+    const result = await createAppointment(
+      null,
+      appointmentForm({ scheduled_at: "2099-01-01T10:15:00.000Z" }),
+    );
+
+    expect(result.error).toBe(
+      "This doctor is already booked during the selected session time. Please choose a different time slot.",
+    );
+    expect(wroteAppointments(mocks)).toBe(false);
+  });
 });
 
 describe("appointment status and role boundaries", () => {

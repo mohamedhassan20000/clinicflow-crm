@@ -265,7 +265,7 @@ export async function updatePatient(
 }
 
 export async function softDeletePatient(id: string): Promise<ActionResult> {
-  const user = await requireRole("admin");
+  const user = await requireRole(["admin", "receptionist"]);
 
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("soft_delete_patient", {

@@ -309,7 +309,7 @@ export default async function PatientDetailPage({ params }: PageProps) {
                 Edit
               </Link>
             </Button>
-            {isAdmin && !patient.is_deleted && (
+            {!patient.is_deleted && (
               <DeletePatientButton patientId={id} />
             )}
             </>

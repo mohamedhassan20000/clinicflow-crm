@@ -19,7 +19,7 @@ vi.mock("@/actions/staff-files", () => ({
   uploadStaffOtherDoc: vi.fn(),
 }));
 
-const staff = {
+const staffFixture = {
   id: "staff-1",
   full_name: "Sara Emad",
   avatar_url: "https://signed.local/staff-photo.webp",
@@ -30,7 +30,9 @@ const staff = {
   last_login_at: "2026-05-11T09:15:00.000Z",
   is_active: true,
   must_change_password: false,
-} as never;
+};
+
+const staff = staffFixture as never;
 
 describe("StaffProfileSheet", () => {
   it("does not render the profile avatar upload section and shows last login", async () => {
@@ -45,5 +47,17 @@ describe("StaffProfileSheet", () => {
     await waitFor(() => {
       expect(screen.getByText(/11 May 2026/)).toBeInTheDocument();
     });
+  });
+
+  it("shows a clear fallback when staff has never logged in", async () => {
+    render(
+      <StaffProfileSheet
+        staff={{ ...staffFixture, last_login_at: null } as never}
+        open
+        onOpenChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Never logged in")).toBeInTheDocument();
   });
 });

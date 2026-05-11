@@ -6,6 +6,7 @@ import { AppointmentForm } from "@/components/appointments/appointment-form";
 const PATIENT_ID = "22222222-2222-4222-8222-222222222222";
 const DEPARTMENT_ID = "33333333-3333-4333-8333-333333333333";
 const DOCTOR_ID = "44444444-4444-4444-8444-444444444444";
+const MANUAL_DOCTOR_ID = "77777777-7777-4777-8777-777777777777";
 const PATIENT_INSURANCE_ID = "55555555-5555-4555-8555-555555555555";
 const MANUAL_INSURANCE_ID = "66666666-6666-4666-8666-666666666666";
 
@@ -29,6 +30,11 @@ function renderAppointmentForm() {
         {
           id: DOCTOR_ID,
           full_name: "Doctor One",
+          department_id: DEPARTMENT_ID,
+        },
+        {
+          id: MANUAL_DOCTOR_ID,
+          full_name: "Doctor Two",
           department_id: DEPARTMENT_ID,
         },
       ]}
@@ -55,10 +61,19 @@ async function selectInsurance(
   await user.click(within(listbox).getByText(providerName));
 }
 
-function expectSelectedInsurance(providerName: string) {
+async function selectDoctor(
+  user: ReturnType<typeof userEvent.setup>,
+  doctorName: string,
+) {
+  await user.click(screen.getByRole("combobox", { name: /doctor/i }));
+  const listbox = await screen.findByRole("listbox");
+  await user.click(within(listbox).getByText(doctorName));
+}
+
+function expectSelectedValue(value: string) {
   expect(
     screen
-      .getAllByText(providerName)
+      .getAllByText(value)
       .some((element) => element.getAttribute("data-slot") === "select-value"),
   ).toBe(true);
 }
@@ -68,13 +83,25 @@ describe("appointment form patient context autofill", () => {
     vi.restoreAllMocks();
   });
 
-  it("autofills patient insurance when selecting a patient", async () => {
+  it("autofills patient department, doctor, and insurance when selecting a patient", async () => {
     const user = userEvent.setup();
     renderAppointmentForm();
 
     await selectPatient(user);
 
-    expectSelectedInsurance("Acme Insurance");
+    expectSelectedValue("Cardiology");
+    expectSelectedValue("Doctor One");
+    expectSelectedValue("Acme Insurance");
+  });
+
+  it("does not overwrite a manually selected doctor after patient selection", async () => {
+    const user = userEvent.setup();
+    renderAppointmentForm();
+
+    await selectDoctor(user, "Doctor Two");
+    await selectPatient(user);
+
+    expectSelectedValue("Doctor Two");
   });
 
   it("does not overwrite a manually selected insurance provider after patient selection", async () => {
@@ -84,7 +111,7 @@ describe("appointment form patient context autofill", () => {
     await selectInsurance(user, "Manual Insurance");
     await selectPatient(user);
 
-    expectSelectedInsurance("Manual Insurance");
+    expectSelectedValue("Manual Insurance");
   });
 
   it("positions the time dropdown with popper alignment under its field", async () => {

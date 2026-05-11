@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Check, ChevronsUpDown, Loader2, CalendarPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -128,7 +128,6 @@ export function AppointmentForm({
 }: AppointmentFormProps) {
   const [state, formAction, isPending] = useActionState(action, null);
   const [patientOpen, setPatientOpen] = useState(false);
-  const [selectedDept, setSelectedDept] = useState<string | null>(null);
   const departmentChangedRef = useRef(false);
   const doctorChangedRef = useRef(false);
   const insuranceChangedRef = useRef(false);
@@ -151,7 +150,6 @@ export function AppointmentForm({
       form.setValue("department_id", patient.department_id ?? null, {
         shouldDirty: true,
       });
-      setSelectedDept(patient.department_id ?? null);
     }
 
     if (!doctorChangedRef.current) {
@@ -180,7 +178,8 @@ export function AppointmentForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const activeDept = selectedDept ?? form.getValues("department_id") ?? null;
+  const activeDept =
+    useWatch({ control: form.control, name: "department_id" }) ?? null;
   const filteredDoctors = activeDept
     ? doctors.filter((d) => d.department_id === activeDept)
     : doctors;
@@ -306,7 +305,6 @@ export function AppointmentForm({
                   onValueChange={(v) => {
                     departmentChangedRef.current = true;
                     field.onChange(v);
-                    setSelectedDept(v);
                     if (!doctorChangedRef.current) form.setValue("doctor_id", "");
                   }}
                   disabled={isPending}

@@ -63,7 +63,7 @@ function fmt(iso: string | null | undefined) {
 }
 
 function fmtDateTime(iso: string | null | undefined) {
-  if (!iso) return "—";
+  if (!iso) return "Never logged in";
   return new Date(iso).toLocaleString("en-GB", {
     day: "2-digit",
     month: "short",

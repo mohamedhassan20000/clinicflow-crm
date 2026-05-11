@@ -106,7 +106,7 @@ export async function listStaffPagePermissions(): Promise<{
   data?: StaffPagePermissionsRow[];
   error?: string;
 }> {
-  const user = await requireRole(["admin", "manager"]);
+  const user = await requireRole("admin");
   if (
     user.role === "admin" &&
     !(await isPrimaryClinicAdmin(user.id, user.clinicId))
@@ -211,7 +211,7 @@ export async function updateUserPageVisibility(
   pageSlug: PageSlug,
   isVisible: boolean,
 ): Promise<PagePermissionResult> {
-  const user = await requireRole(["admin", "manager"]);
+  const user = await requireRole("admin");
   if (
     user.role === "admin" &&
     !(await isPrimaryClinicAdmin(user.id, user.clinicId))
@@ -267,7 +267,7 @@ export async function saveUserPageVisibilityChanges(
   targetUserId: string,
   changes: PendingPageVisibilityChange[],
 ): Promise<PagePermissionResult> {
-  const user = await requireRole(["admin", "manager"]);
+  const user = await requireRole("admin");
   if (
     user.role === "admin" &&
     !(await isPrimaryClinicAdmin(user.id, user.clinicId))
@@ -327,7 +327,7 @@ export async function saveUserPageVisibilityChanges(
 export async function resetUserPageVisibilityToRoleDefaults(
   targetUserId: string,
 ): Promise<PagePermissionResult> {
-  const user = await requireRole(["admin", "manager"]);
+  const user = await requireRole("admin");
   const adminClient = createAdminClient();
   const { data: target, error: targetError } = await adminClient
     .from("profiles")

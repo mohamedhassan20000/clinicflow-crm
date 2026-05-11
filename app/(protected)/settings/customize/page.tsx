@@ -10,7 +10,7 @@ interface PageProps {
 }
 
 export default async function CustomizeSettingsPage({ searchParams }: PageProps) {
-  await requireRole(["admin", "manager"]);
+  await requireRole("admin");
   const params = await searchParams;
   const { data, error } = await listStaffPagePermissions();
 

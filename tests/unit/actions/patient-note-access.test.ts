@@ -174,7 +174,10 @@ describe("patient action permissions", () => {
 
     await softDeletePatient(PATIENT_ID);
 
-    expect(mocks.state.requireRole).toHaveBeenCalledWith("admin");
+    expect(mocks.state.requireRole).toHaveBeenCalledWith([
+      "admin",
+      "receptionist",
+    ]);
     expect(mocks.state.rpc).toHaveBeenCalledWith("soft_delete_patient", {
       p_patient_id: PATIENT_ID,
     });
@@ -182,6 +185,43 @@ describe("patient action permissions", () => {
     expect(mocks.state.storageLog).toEqual([]);
     expect(mocks.state.revalidatePath).toHaveBeenCalledWith("/patients");
     expect(mocks.state.redirect).toHaveBeenCalledWith("/patients");
+  });
+
+  it("allows receptionists to soft-delete patients through the scoped RPC", async () => {
+    const { softDeletePatient, mocks } = await loadPatientsActions();
+    mocks.state.authedUser.role = "receptionist";
+    mocks.state.rpcResults.soft_delete_patient = { data: true, error: null };
+
+    await softDeletePatient(PATIENT_ID);
+
+    expect(mocks.state.requireRole).toHaveBeenCalledWith([
+      "admin",
+      "receptionist",
+    ]);
+    expect(mocks.state.rpc).toHaveBeenCalledWith("soft_delete_patient", {
+      p_patient_id: PATIENT_ID,
+    });
+    expect(mocks.state.redirect).toHaveBeenCalledWith("/patients");
+  });
+
+  it("does not call the patient soft-delete RPC for managers or doctors", async () => {
+    for (const role of ["manager", "doctor"] as const) {
+      const { softDeletePatient, mocks } = await loadPatientsActions();
+      mocks.state.authedUser.role = role;
+      mocks.state.requireRole.mockImplementation(async (allowed) => {
+        const allowedRoles = Array.isArray(allowed) ? allowed : [allowed];
+        if (!allowedRoles.includes(mocks.state.authedUser.role)) {
+          throw new Error("not authorized");
+        }
+        return mocks.state.authedUser;
+      });
+
+      await expect(softDeletePatient(PATIENT_ID)).rejects.toThrow(
+        "not authorized",
+      );
+
+      expect(mocks.state.rpc).not.toHaveBeenCalled();
+    }
   });
 
   it("returns a clear error when the patient soft-delete RPC cannot find the row", async () => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -41,7 +41,6 @@ export function AppointmentActions({
   /** @deprecated kept for back-compat */
   hasInsurance?: boolean;
 }) {
-  const [, startTransition] = useTransition();
   const [billingOpen, setBillingOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
@@ -159,8 +158,7 @@ export function AppointmentActions({
     undoStatusRef.current = prevStatus;
     setActionPending(newStatus === "confirmed" ? "confirm" : null);
     setOptimisticStatus(newStatus);
-    startTransition(async () => {
-      const result = await updateAppointmentStatus(appointmentId, newStatus);
+    updateAppointmentStatus(appointmentId, newStatus).then((result) => {
       if (result.error) {
         toast.error(result.error);
         setOptimisticStatus(null);
@@ -173,6 +171,7 @@ export function AppointmentActions({
           },
         });
       }
+    }).finally(() => {
       setActionPending(null);
     });
   }
@@ -183,13 +182,7 @@ export function AppointmentActions({
     undoStatusRef.current = prevStatus;
     setActionPending("cancel");
     setIsCancelling(true);
-    startTransition(async () => {
-      const result = await updateAppointmentStatus(
-        appointmentId,
-        "cancelled",
-        null,
-        reason,
-      );
+    updateAppointmentStatus(appointmentId, "cancelled", null, reason).then((result) => {
       if (result.error) {
         setIsCancelling(false);
         setActionPending(null);
@@ -215,14 +208,7 @@ export function AppointmentActions({
     setActionPending("no_show");
     setIsNoShow(true);
     setOptimisticStatus("no_show");
-    startTransition(async () => {
-      const result = await updateAppointmentStatus(
-        appointmentId,
-        "no_show",
-        null,
-        null,
-        reason,
-      );
+    updateAppointmentStatus(appointmentId, "no_show", null, null, reason).then((result) => {
       if (result.error) {
         setIsNoShow(false);
         setActionPending(null);
@@ -251,12 +237,7 @@ export function AppointmentActions({
     setInvoiceDraft(payload);
     setActionPending("complete");
     setIsCompleting(true);
-    startTransition(async () => {
-      const result = await updateAppointmentStatus(
-        appointmentId,
-        "completed",
-        payload,
-      );
+    updateAppointmentStatus(appointmentId, "completed", payload).then(async (result) => {
       if (result.error) {
         setIsCompleting(false);
         setActionPending(null);

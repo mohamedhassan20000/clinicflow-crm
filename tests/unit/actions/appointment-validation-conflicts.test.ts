@@ -323,6 +323,46 @@ describe("appointment conflict prevention", () => {
     expect(wroteAppointments(mocks)).toBe(false);
   });
 
+  it("conflict query excludes cancelled appointments so their slot can be rebooked", async () => {
+    const { createAppointment, mocks } = await loadAppointmentsActions();
+    // Cancelled appointment is not returned by the conflict query (excluded by status filter)
+    allowValidReferences(mocks, { sameDay: [] });
+
+    await createAppointment(
+      null,
+      appointmentForm({ scheduled_at: "2099-01-01T10:00:00.000Z" }),
+    );
+
+    expect(mocks.state.queryLog).toContainEqual(
+      expect.objectContaining({
+        table: "appointments",
+        operation: "select",
+        args: ["not", "status", "in", '("cancelled","no_show")'],
+      }),
+    );
+    expect(mocks.state.redirect).toHaveBeenCalledWith("/appointments");
+  });
+
+  it("conflict query excludes no_show appointments so their slot can be rebooked", async () => {
+    const { createAppointment, mocks } = await loadAppointmentsActions();
+    // No-show appointment is not returned by the conflict query (excluded by status filter)
+    allowValidReferences(mocks, { sameDay: [] });
+
+    await createAppointment(
+      null,
+      appointmentForm({ scheduled_at: "2099-01-01T11:00:00.000Z" }),
+    );
+
+    expect(mocks.state.queryLog).toContainEqual(
+      expect.objectContaining({
+        table: "appointments",
+        operation: "select",
+        args: ["not", "status", "in", '("cancelled","no_show")'],
+      }),
+    );
+    expect(mocks.state.redirect).toHaveBeenCalledWith("/appointments");
+  });
+
   it("conflict query excludes soft-deleted appointments via deleted_at IS NULL filter", async () => {
     const { createAppointment, mocks } = await loadAppointmentsActions();
     allowValidReferences(mocks, { sameDay: [] });
@@ -508,5 +548,68 @@ describe("appointment status and role boundaries", () => {
     expect(mocks.state.revalidatePath).toHaveBeenCalledWith(
       `/patients/${PATIENT_ID}`,
     );
+  });
+});
+
+describe("checkSameDayPatient", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("returns hasSameDay true when the patient has an active appointment on that day", async () => {
+    const { checkSameDayPatient, mocks } = await loadAppointmentsActions();
+    mocks.state.tableResults["appointments.select"] = {
+      data: [{ id: APPOINTMENT_ID }],
+      error: null,
+    };
+
+    const result = await checkSameDayPatient(PATIENT_ID, "2099-01-01T10:00:00.000Z");
+
+    expect(result).toEqual({ hasSameDay: true });
+    expect(mocks.state.queryLog).toContainEqual(
+      expect.objectContaining({
+        table: "appointments",
+        operation: "select",
+        args: ["eq", "patient_id", PATIENT_ID],
+      }),
+    );
+    expect(mocks.state.queryLog).toContainEqual(
+      expect.objectContaining({
+        table: "appointments",
+        operation: "select",
+        args: ["is", "deleted_at", null],
+      }),
+    );
+    expect(mocks.state.queryLog).toContainEqual(
+      expect.objectContaining({
+        table: "appointments",
+        operation: "select",
+        args: ["not", "status", "in", '("cancelled","no_show")'],
+      }),
+    );
+  });
+
+  it("returns hasSameDay false when the patient has no active appointment on that day", async () => {
+    const { checkSameDayPatient, mocks } = await loadAppointmentsActions();
+    mocks.state.tableResults["appointments.select"] = {
+      data: [],
+      error: null,
+    };
+
+    const result = await checkSameDayPatient(PATIENT_ID, "2099-01-01T10:00:00.000Z");
+
+    expect(result).toEqual({ hasSameDay: false });
+  });
+
+  it("returns hasSameDay false on DB error so booking is never blocked by a check failure", async () => {
+    const { checkSameDayPatient, mocks } = await loadAppointmentsActions();
+    mocks.state.tableResults["appointments.select"] = {
+      data: null,
+      error: { message: "connection error" },
+    };
+
+    const result = await checkSameDayPatient(PATIENT_ID, "2099-01-01T10:00:00.000Z");
+
+    expect(result).toEqual({ hasSameDay: false });
   });
 });

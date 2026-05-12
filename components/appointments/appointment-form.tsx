@@ -40,7 +40,17 @@ import {
   appointmentSchema,
   type AppointmentFormValues,
 } from "@/lib/validations/appointment";
-import type { ActionResult } from "@/actions/appointments";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { checkSameDayPatient, type ActionResult } from "@/actions/appointments";
 import type { Tables } from "@/types/database";
 
 type Patient = Pick<
@@ -138,6 +148,9 @@ export function AppointmentForm({
 }: AppointmentFormProps) {
   const [state, formAction, isPending] = useActionState(action, null);
   const [patientOpen, setPatientOpen] = useState(false);
+  const [sameDayWarning, setSameDayWarning] = useState(false);
+  const [pendingFd, setPendingFd] = useState<FormData | null>(null);
+  const [checkingDay, setCheckingDay] = useState(false);
   const departmentChangedRef = useRef(false);
   const doctorChangedRef = useRef(false);
   const doctorInteractedRef = useRef(false);
@@ -225,15 +238,7 @@ export function AppointmentForm({
     });
   }, [form, patients, selectedPatientId]);
 
-  function onSubmit(values: AppointmentFormValues) {
-    if (isPastClinicSlot(values.scheduled_at)) {
-      form.setError("scheduled_at", {
-        type: "validate",
-        message: "Choose a future date and time for the appointment.",
-      });
-      return;
-    }
-
+  function buildFd(values: AppointmentFormValues): FormData {
     const fd = new FormData();
     fd.set("patient_id", values.patient_id);
     fd.set("doctor_id", values.doctor_id);
@@ -243,7 +248,34 @@ export function AppointmentForm({
     if (values.insurance_provider_id)
       fd.set("insurance_provider_id", values.insurance_provider_id);
     if (values.notes) fd.set("notes", values.notes);
+    return fd;
+  }
+
+  function submitFd(fd: FormData) {
     startTransition(() => formAction(fd));
+  }
+
+  function onSubmit(values: AppointmentFormValues) {
+    if (isPastClinicSlot(values.scheduled_at)) {
+      form.setError("scheduled_at", {
+        type: "validate",
+        message: "Choose a future date and time for the appointment.",
+      });
+      return;
+    }
+
+    const fd = buildFd(values);
+    setCheckingDay(true);
+    checkSameDayPatient(values.patient_id, values.scheduled_at)
+      .then(({ hasSameDay }) => {
+        if (hasSameDay) {
+          setPendingFd(fd);
+          setSameDayWarning(true);
+        } else {
+          submitFd(fd);
+        }
+      })
+      .finally(() => setCheckingDay(false));
   }
 
   return (
@@ -613,8 +645,8 @@ export function AppointmentForm({
           >
             Cancel
           </Button>
-          <Button type="submit" disabled={isPending} className="gap-2">
-            {isPending ? (
+          <Button type="submit" disabled={isPending || checkingDay} className="gap-2">
+            {isPending || checkingDay ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <CalendarPlus className="h-4 w-4" />
@@ -623,6 +655,31 @@ export function AppointmentForm({
           </Button>
         </div>
       </form>
+
+      <AlertDialog open={sameDayWarning} onOpenChange={setSameDayWarning}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Patient already has an appointment today</AlertDialogTitle>
+            <AlertDialogDescription>
+              This patient already has an appointment scheduled for this day. Do
+              you want to continue and book another appointment?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setPendingFd(null)}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (pendingFd) submitFd(pendingFd);
+                setPendingFd(null);
+              }}
+            >
+              Continue booking
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Form>
   );
 }

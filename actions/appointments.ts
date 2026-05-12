@@ -808,3 +808,41 @@ export async function getBillingContext(
     },
   };
 }
+
+/**
+ * Returns whether a patient already has at least one active (non-cancelled,
+ * non-no_show, non-deleted) appointment on the calendar day of scheduledAt.
+ * Used by the booking form to show a soft warning before submitting.
+ * Errors are treated as "no conflict" so they never block the booking flow.
+ */
+export async function checkSameDayPatient(
+  patientId: string,
+  scheduledAt: string,
+): Promise<{ hasSameDay: boolean }> {
+  try {
+    const user = await requireRole(["admin", "receptionist"]);
+    const supabase = await createClient();
+
+    const date = new Date(scheduledAt);
+    const dayStart = new Date(date);
+    dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(date);
+    dayEnd.setHours(23, 59, 59, 999);
+
+    const { data, error } = await supabase
+      .from("appointments")
+      .select("id")
+      .eq("patient_id", patientId)
+      .eq("clinic_id", user.clinicId)
+      .is("deleted_at", null)
+      .not("status", "in", '("cancelled","no_show")')
+      .gte("scheduled_at", dayStart.toISOString())
+      .lte("scheduled_at", dayEnd.toISOString())
+      .limit(1);
+
+    if (error || !data) return { hasSameDay: false };
+    return { hasSameDay: data.length > 0 };
+  } catch {
+    return { hasSameDay: false };
+  }
+}

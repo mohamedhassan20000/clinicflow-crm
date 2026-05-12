@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AlertCircle, ChevronLeft, Pencil, Receipt } from "lucide-react";
+import { AlertCircle, ChevronLeft, FileText, Pencil, Receipt } from "lucide-react";
 import { StatusBadge } from "@/components/appointments/status-badge";
 import { requireUser } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
@@ -475,10 +475,18 @@ export default async function PatientDetailPage({ params }: PageProps) {
               <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                 Appointments
               </h2>
-              <span className="text-xs text-muted-foreground">
-                {appointments?.length ?? 0} record
-                {appointments?.length !== 1 ? "s" : ""}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">
+                  {appointments?.length ?? 0} record
+                  {appointments?.length !== 1 ? "s" : ""}
+                </span>
+                <Button asChild variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs">
+                  <Link href={`/patients/${id}/appointments-report`}>
+                    <FileText className="h-3 w-3" />
+                    Full report
+                  </Link>
+                </Button>
+              </div>
             </div>
             <div className="rounded-xl border border-border/50 bg-card overflow-hidden">
               {appointments && appointments.length > 0 ? (
@@ -515,9 +523,17 @@ export default async function PatientDetailPage({ params }: PageProps) {
               <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                 Follow-up Notes
               </h2>
-              <span className="text-xs text-muted-foreground">
-                {followups?.length ?? 0} record{followups?.length !== 1 ? "s" : ""}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">
+                  {followups?.length ?? 0} record{followups?.length !== 1 ? "s" : ""}
+                </span>
+                <Button asChild variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs">
+                  <Link href={`/patients/${id}/followups-report`}>
+                    <FileText className="h-3 w-3" />
+                    Full report
+                  </Link>
+                </Button>
+              </div>
             </div>
             <div className="overflow-hidden rounded-xl border border-border/50 bg-card">
               {!followups || followups.length === 0 ? (
@@ -590,9 +606,19 @@ export default async function PatientDetailPage({ params }: PageProps) {
             <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
               Medical Notes
             </h2>
-            <span className="text-xs text-muted-foreground">
-              {notes?.length ?? 0} note{notes?.length !== 1 ? "s" : ""}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">
+                {notes?.length ?? 0} note{notes?.length !== 1 ? "s" : ""}
+              </span>
+              {(isAdmin || isDoctor) && (
+                <Button asChild variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs">
+                  <Link href={`/patients/${id}/medical-notes-report`}>
+                    <FileText className="h-3 w-3" />
+                    Full report
+                  </Link>
+                </Button>
+              )}
+            </div>
           </div>
 
           {(isAdmin || isDoctor) && !patient.is_deleted && (

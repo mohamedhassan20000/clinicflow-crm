@@ -607,7 +607,7 @@ clinicflow-crm/
 ## Author
 
 **Mohamed Hassan Mohamed Ibrahim**  
-Software Engineering Student  
+Senior Software Engineering Student  
 Üsküdar University — Istanbul, Türkiye
 
 ---

@@ -18,16 +18,12 @@ import {
 import { StatusBadge } from "@/components/appointments/status-badge";
 import { AppointmentActions } from "@/components/appointments/appointment-actions";
 import { softDeleteAppointment, restoreAppointment } from "@/actions/appointments";
-import type { Tables } from "@/types/database";
+import {
+  AppointmentDetailDialog,
+  type AppointmentForDetail,
+} from "@/components/appointments/appointment-detail-dialog";
 
-type Appointment = Pick<
-  Tables<"appointments">,
-  "id" | "scheduled_at" | "status" | "insurance_provider_id" | "notes"
-> & {
-  patients: { full_name: string } | null;
-  profiles: { full_name: string } | null;
-  departments: { name: string; color: string } | null;
-};
+type Appointment = AppointmentForDetail;
 
 interface WeekCalendarProps {
   appointments: Appointment[];
@@ -190,6 +186,7 @@ function AppointmentCard({
 }) {
   const [deleted, setDeleted] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
   const [isDeleting, startDelete] = useTransition();
   const [isRestoring, setIsRestoring] = useState(false);
   const isRestoringRef = useRef(false);
@@ -239,87 +236,100 @@ function AppointmentCard({
   }
 
   return (
-    <div
-      className="group relative space-y-1 rounded-lg border p-2 pl-2.5 text-xs transition-colors hover:brightness-[1.02]"
-      style={{
-        borderColor: `color-mix(in oklab, ${deptColor} 35%, transparent)`,
-        backgroundColor: `color-mix(in oklab, ${deptColor} 8%, var(--card))`,
-      }}
-    >
-      <span
-        aria-hidden
-        className="absolute inset-y-0 left-0 w-1 rounded-l-lg"
-        style={{ backgroundColor: deptColor }}
-      />
-      <div className="flex items-start justify-between gap-1">
-        <div className="font-medium text-foreground leading-tight truncate">
-          {patientName}
+    <>
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => setDetailOpen(true)}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setDetailOpen(true); }}
+        className="group relative space-y-1 rounded-lg border p-2 pl-2.5 text-xs transition-colors hover:brightness-[1.02] cursor-pointer"
+        style={{
+          borderColor: `color-mix(in oklab, ${deptColor} 35%, transparent)`,
+          backgroundColor: `color-mix(in oklab, ${deptColor} 8%, var(--card))`,
+        }}
+      >
+        <span
+          aria-hidden
+          className="absolute inset-y-0 left-0 w-1 rounded-l-lg"
+          style={{ backgroundColor: deptColor }}
+        />
+        <div className="flex items-start justify-between gap-1">
+          <div className="font-medium text-foreground leading-tight truncate">
+            {patientName}
+          </div>
+          {canEdit && (
+            <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+              <button
+                onClick={(e) => { e.stopPropagation(); setConfirmOpen(true); }}
+                disabled={isDeleting || isRestoring}
+                className="shrink-0 opacity-0 group-hover:opacity-100 text-muted-foreground/40 hover:text-destructive transition-opacity"
+                title="Move appointment to trash"
+              >
+                <Trash2 className="h-3 w-3" />
+              </button>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Move appointment to trash?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    The appointment for <strong>{patientName}</strong> will be
+                    moved to the recycle bin and can be restored within 30 days.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    disabled={isDeleting}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setConfirmOpen(false);
+                      handleDelete();
+                    }}
+                  >
+                    Move to trash
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
         </div>
+        <div className="flex min-w-0 items-center justify-between gap-2 text-muted-foreground">
+          <span>{time}</span>
+          <span
+            className="max-w-[90px] truncate rounded-sm px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider"
+            style={{
+              backgroundColor: `color-mix(in oklab, ${deptColor} 18%, transparent)`,
+              color: deptColor,
+            }}
+          >
+            {deptName}
+          </span>
+        </div>
+        <div className="text-muted-foreground/70 truncate">
+          {appt.profiles?.full_name ?? "—"}
+        </div>
+        {appt.notes && (
+          <p className="line-clamp-2 rounded bg-background/50 px-1.5 py-1 text-[10px] leading-snug text-muted-foreground">
+            {appt.notes}
+          </p>
+        )}
+        <StatusBadge status={appt.status} />
         {canEdit && (
-          <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-            <button
-              onClick={() => setConfirmOpen(true)}
-              disabled={isDeleting || isRestoring}
-              className="shrink-0 opacity-0 group-hover:opacity-100 text-muted-foreground/40 hover:text-destructive transition-opacity"
-              title="Move appointment to trash"
-            >
-              <Trash2 className="h-3 w-3" />
-            </button>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Move appointment to trash?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  The appointment for <strong>{patientName}</strong> will be
-                  moved to the recycle bin and can be restored within 30 days.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  disabled={isDeleting}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    setConfirmOpen(false);
-                    handleDelete();
-                  }}
-                >
-                  Move to trash
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+          <div className="pt-0.5" onClick={(e) => e.stopPropagation()}>
+            <AppointmentActions
+              appointmentId={appt.id}
+              currentStatus={appt.status}
+              hasInsurance={Boolean(appt.insurance_provider_id)}
+            />
+          </div>
         )}
       </div>
-      <div className="flex min-w-0 items-center justify-between gap-2 text-muted-foreground">
-        <span>{time}</span>
-        <span
-          className="max-w-[90px] truncate rounded-sm px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider"
-          style={{
-            backgroundColor: `color-mix(in oklab, ${deptColor} 18%, transparent)`,
-            color: deptColor,
-          }}
-        >
-          {deptName}
-        </span>
-      </div>
-      <div className="text-muted-foreground/70 truncate">
-        {appt.profiles?.full_name ?? "—"}
-      </div>
-      {appt.notes && (
-        <p className="line-clamp-2 rounded bg-background/50 px-1.5 py-1 text-[10px] leading-snug text-muted-foreground">
-          {appt.notes}
-        </p>
-      )}
-      <StatusBadge status={appt.status} />
-      {canEdit && (
-        <div className="pt-0.5">
-          <AppointmentActions
-            appointmentId={appt.id}
-            currentStatus={appt.status}
-            hasInsurance={Boolean(appt.insurance_provider_id)}
-          />
-        </div>
-      )}
-    </div>
+
+      <AppointmentDetailDialog
+        appointment={appt}
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+        canEdit={canEdit}
+      />
+    </>
   );
 }

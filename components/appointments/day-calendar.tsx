@@ -18,17 +18,13 @@ import {
 import { StatusBadge } from "@/components/appointments/status-badge";
 import { AppointmentActions } from "@/components/appointments/appointment-actions";
 import { softDeleteAppointment, restoreAppointment } from "@/actions/appointments";
-import type { Tables } from "@/types/database";
 import { formatDoctorName } from "@/lib/format-doctor";
+import {
+  AppointmentDetailDialog,
+  type AppointmentForDetail,
+} from "@/components/appointments/appointment-detail-dialog";
 
-type Appointment = Pick<
-  Tables<"appointments">,
-  "id" | "scheduled_at" | "status" | "insurance_provider_id" | "notes"
-> & {
-  patients: { full_name: string } | null;
-  profiles: { full_name: string } | null;
-  departments: { name: string; color: string } | null;
-};
+type Appointment = AppointmentForDetail;
 
 interface Props {
   appointments: Appointment[];
@@ -116,6 +112,7 @@ export function DayCalendar({ appointments, date, canEdit }: Props) {
 function DayRow({ appt, canEdit }: { appt: Appointment; canEdit: boolean }) {
   const [deleted, setDeleted] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
   const [isDeleting, startDelete] = useTransition();
 
   const time = new Date(appt.scheduled_at).toLocaleTimeString("en-GB", {
@@ -153,98 +150,114 @@ function DayRow({ appt, canEdit }: { appt: Appointment; canEdit: boolean }) {
   }
 
   return (
-    <div
-      className="flex flex-wrap items-start gap-3 px-3 py-3 sm:gap-4 sm:px-4"
-      style={{
-        backgroundColor: `color-mix(in oklab, ${deptColor} 4%, transparent)`,
-      }}
-    >
-      <div className="flex min-w-[58px] flex-col sm:min-w-[70px]">
-        <span className="font-mono text-base font-semibold tabular-nums">
-          {time}
-        </span>
+    <>
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => setDetailOpen(true)}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setDetailOpen(true); }}
+        className="flex flex-wrap items-start gap-3 px-3 py-3 sm:gap-4 sm:px-4 cursor-pointer hover:brightness-[0.97] transition-[filter]"
+        style={{
+          backgroundColor: `color-mix(in oklab, ${deptColor} 4%, transparent)`,
+        }}
+      >
+        <div className="flex min-w-[58px] flex-col sm:min-w-[70px]">
+          <span className="font-mono text-base font-semibold tabular-nums">
+            {time}
+          </span>
+        </div>
+        <span
+          aria-hidden
+          className="h-10 w-1 shrink-0 rounded-full"
+          style={{ backgroundColor: deptColor }}
+        />
+        <div className="min-w-0 flex-[1_1_220px] space-y-0.5">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <span className="min-w-0 truncate font-medium text-foreground">
+              {patientName}
+            </span>
+            <span
+              className="rounded-sm px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
+              style={{
+                backgroundColor: `color-mix(in oklab, ${deptColor} 18%, transparent)`,
+                color: deptColor,
+              }}
+            >
+              {deptName}
+            </span>
+          </div>
+          <div className="text-xs text-muted-foreground">
+            {appt.profiles?.full_name
+              ? formatDoctorName(appt.profiles.full_name)
+              : "Unassigned"}
+          </div>
+          {appt.notes && (
+            <p className="line-clamp-2 max-w-2xl rounded bg-muted/40 px-2 py-1 text-xs leading-snug text-muted-foreground">
+              {appt.notes}
+            </p>
+          )}
+        </div>
+        <div
+          className="ml-auto flex w-full shrink-0 flex-wrap items-center justify-start gap-2 sm:w-auto sm:justify-end"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <StatusBadge status={appt.status} />
+          {canEdit && (
+            <>
+              <AppointmentActions
+                appointmentId={appt.id}
+                currentStatus={appt.status}
+                hasInsurance={Boolean(appt.insurance_provider_id)}
+              />
+              <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 text-muted-foreground/50 hover:text-destructive"
+                  onClick={(e) => { e.stopPropagation(); setConfirmOpen(true); }}
+                  disabled={isDeleting}
+                  title="Move appointment to trash"
+                >
+                  {isDeleting ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-3.5 w-3.5" />
+                  )}
+                </Button>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Move appointment to trash?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      The appointment for <strong>{patientName}</strong> will be
+                      moved to the recycle bin and can be restored within 30 days.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      disabled={isDeleting}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setConfirmOpen(false);
+                        handleDelete();
+                      }}
+                    >
+                      Move to trash
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </>
+          )}
+        </div>
       </div>
-      <span
-        aria-hidden
-        className="h-10 w-1 shrink-0 rounded-full"
-        style={{ backgroundColor: deptColor }}
+
+      <AppointmentDetailDialog
+        appointment={appt}
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+        canEdit={canEdit}
       />
-      <div className="min-w-0 flex-[1_1_220px] space-y-0.5">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <span className="min-w-0 truncate font-medium text-foreground">
-            {patientName}
-          </span>
-          <span
-            className="rounded-sm px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
-            style={{
-              backgroundColor: `color-mix(in oklab, ${deptColor} 18%, transparent)`,
-              color: deptColor,
-            }}
-          >
-            {deptName}
-          </span>
-        </div>
-        <div className="text-xs text-muted-foreground">
-          {appt.profiles?.full_name
-            ? formatDoctorName(appt.profiles.full_name)
-            : "Unassigned"}
-        </div>
-        {appt.notes && (
-          <p className="line-clamp-2 max-w-2xl rounded bg-muted/40 px-2 py-1 text-xs leading-snug text-muted-foreground">
-            {appt.notes}
-          </p>
-        )}
-      </div>
-      <div className="ml-auto flex w-full shrink-0 flex-wrap items-center justify-start gap-2 sm:w-auto sm:justify-end">
-        <StatusBadge status={appt.status} />
-        {canEdit && (
-          <>
-            <AppointmentActions
-              appointmentId={appt.id}
-              currentStatus={appt.status}
-              hasInsurance={Boolean(appt.insurance_provider_id)}
-            />
-            <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 text-muted-foreground/50 hover:text-destructive"
-                onClick={() => setConfirmOpen(true)}
-                disabled={isDeleting}
-                title="Move appointment to trash"
-              >
-                {isDeleting ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Trash2 className="h-3.5 w-3.5" />
-                )}
-              </Button>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Move appointment to trash?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    The appointment for <strong>{patientName}</strong> will be
-                    moved to the recycle bin and can be restored within 30 days.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
-                  <AlertDialogAction
-                    disabled={isDeleting}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      setConfirmOpen(false);
-                      handleDelete();
-                    }}
-                  >
-                    Move to trash
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          </>
-        )}
-      </div>
-    </div>
+    </>
   );
 }

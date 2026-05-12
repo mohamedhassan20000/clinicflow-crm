@@ -18,6 +18,7 @@ import { SettleOutstandingDialog } from "@/components/patients/settle-outstandin
 import { AddDepositDialog } from "@/components/patients/add-deposit-dialog";
 import { PatientAvatarControls } from "@/components/patients/patient-avatar-controls";
 import { PatientDocumentsSection } from "@/components/patients/patient-documents-section";
+import { FollowupsList, type FollowupItem } from "@/components/patients/followups-list";
 import { PatientAvatarPreview } from "@/components/patients/patient-avatar-preview";
 import { listPatientDocuments, type PatientDocumentsData } from "@/actions/patient-documents";
 import type { MedicalNoteAttachmentItem } from "@/actions/medical-note-attachments";
@@ -73,7 +74,8 @@ export default async function PatientDetailPage({ params }: PageProps) {
       .select("id, patient_id, doctor_id, note, created_at, created_by, deleted_at, profiles!doctor_id(full_name)")
       .eq("patient_id", id)
       .is("deleted_at", null)
-      .order("created_at", { ascending: false }),
+      .order("created_at", { ascending: false })
+      .limit(3),
     supabase
       .from("appointments")
       .select(
@@ -83,7 +85,7 @@ export default async function PatientDetailPage({ params }: PageProps) {
       .eq("clinic_id", user.clinicId)
       .is("deleted_at", null)
       .order("scheduled_at", { ascending: false })
-      .limit(30),
+      .limit(3),
     // Follow-ups recorded for this patient (any of their sessions).
     supabase
       .from("follow_ups")
@@ -92,7 +94,8 @@ export default async function PatientDetailPage({ params }: PageProps) {
       )
       .eq("patient_id", id)
       .eq("clinic_id", user.clinicId)
-      .order("recorded_at", { ascending: false }),
+      .order("recorded_at", { ascending: false })
+      .limit(3),
   ]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -536,68 +539,7 @@ export default async function PatientDetailPage({ params }: PageProps) {
               </div>
             </div>
             <div className="overflow-hidden rounded-xl border border-border/50 bg-card">
-              {!followups || followups.length === 0 ? (
-                <div className="px-5 py-6 text-center text-sm text-muted-foreground">
-                  No follow-up notes yet.
-                </div>
-              ) : (
-                <ul className="divide-y divide-border/30">
-                  {followups.map((f) => {
-                    const meta = FOLLOWUP_META[f.outcome];
-                    const dept = f.appointment?.departments;
-                    return (
-                      <li key={f.id} className="px-4 py-3 space-y-1.5">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span
-                            className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium ${meta.className}`}
-                          >
-                            {meta.label}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            {new Date(f.recorded_at).toLocaleString("en-GB", {
-                              dateStyle: "medium",
-                              timeStyle: "short",
-                            })}
-                          </span>
-                          {f.appointment?.scheduled_at && (
-                            <span className="text-[11px] text-muted-foreground">
-                              · session{" "}
-                              {new Date(
-                                f.appointment.scheduled_at,
-                              ).toLocaleDateString("en-GB", {
-                                day: "2-digit",
-                                month: "short",
-                                year: "numeric",
-                              })}
-                            </span>
-                          )}
-                          {dept?.name && (
-                            <span
-                              className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
-                              style={{
-                                backgroundColor: `color-mix(in oklab, ${dept.color} 14%, transparent)`,
-                                color: dept.color,
-                              }}
-                            >
-                              {dept.name}
-                            </span>
-                          )}
-                        </div>
-                        {f.notes && (
-                          <p className="text-sm text-foreground">
-                            &ldquo;{f.notes}&rdquo;
-                          </p>
-                        )}
-                        {f.recorded_by?.full_name && (
-                          <p className="text-[10px] text-muted-foreground">
-                            Recorded by {f.recorded_by.full_name}
-                          </p>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
+              <FollowupsList followups={(followups ?? []) as FollowupItem[]} />
             </div>
           </div>
 
@@ -646,26 +588,6 @@ export default async function PatientDetailPage({ params }: PageProps) {
     </div>
   );
 }
-
-const FOLLOWUP_META: Record<
-  "all_fine" | "has_problem" | "no_response",
-  { label: string; className: string }
-> = {
-  all_fine: {
-    label: "Everything is fine",
-    className:
-      "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
-  },
-  has_problem: {
-    label: "Reported a problem",
-    className:
-      "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400",
-  },
-  no_response: {
-    label: "No response",
-    className: "border-border bg-muted/40 text-muted-foreground",
-  },
-};
 
 function fmtTRY(n: number) {
   return new Intl.NumberFormat("en-GB", {

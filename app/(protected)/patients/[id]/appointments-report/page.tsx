@@ -7,48 +7,35 @@ import { createClient } from "@/lib/supabase/server";
 import { StatusBadge } from "@/components/appointments/status-badge";
 import { formatDoctorName } from "@/lib/format-doctor";
 import { PrintButton } from "@/components/patients/print-button";
+import { ReportDateFilter } from "@/components/patients/report-date-filter";
+import { AppointmentsReportList } from "@/components/patients/appointments-report-list";
+import type {
+  AppointmentPaymentRowData,
+  SettlementEntry,
+} from "@/components/patients/appointment-payment-row";
 
 export const metadata: Metadata = { title: "Appointments Report" };
 
 interface PageProps {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ from?: string; to?: string }>;
 }
 
-function fmtTRY(n: number) {
-  return new Intl.NumberFormat("en-GB", {
-    style: "currency",
-    currency: "TRY",
-    maximumFractionDigits: 2,
-  }).format(Number.isFinite(n) ? n : 0);
-}
-
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-GB", {
-    timeZone: "Europe/Istanbul",
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-}
-
-function fmtTime(iso: string) {
-  return new Date(iso).toLocaleTimeString("en-GB", {
-    timeZone: "Europe/Istanbul",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-}
-
-export default async function AppointmentsReportPage({ params }: PageProps) {
+export default async function AppointmentsReportPage({
+  params,
+  searchParams,
+}: PageProps) {
   const { id } = await params;
+  const { from, to } = await searchParams;
   const user = await requireUser();
   const isDoctor = user.role === "doctor";
   const supabase = await createClient();
 
   const { data: patient } = await supabase
     .from("patients")
-    .select("id, full_name, file_number, phone, is_deleted, assigned_doctor_id, department_id")
+    .select(
+      "id, full_name, file_number, phone, is_deleted, assigned_doctor_id, department_id",
+    )
     .eq("id", id)
     .eq("clinic_id", user.clinicId)
     .single();
@@ -62,25 +49,50 @@ export default async function AppointmentsReportPage({ params }: PageProps) {
     if (!canAccess) notFound();
   }
 
-  const { data: appointments } = await supabase
+  // Doctors see a simplified view without billing; non-doctors see full payment data
+  let apptQuery = supabase
     .from("appointments")
     .select(
-      "id, scheduled_at, status, total_amount, notes, profiles!doctor_id(full_name), departments(name, color)",
+      isDoctor
+        ? "id, scheduled_at, status, cancellation_reason, cancelled_at, profiles!doctor_id(full_name), departments(name, color)"
+        : "id, scheduled_at, status, payment_method, paid_at, total_amount, paid_amount, insurance_amount, secondary_amount, deposit_amount, outstanding_amount, secondary_payment_method, payment_note, cancellation_reason, cancelled_at, profiles!doctor_id(full_name), departments(name, color), insurance_providers(name), appointment_services(id, name, price, quantity)",
     )
     .eq("patient_id", id)
     .eq("clinic_id", user.clinicId)
     .is("deleted_at", null)
     .order("scheduled_at", { ascending: true });
 
-  const appts = (appointments ?? []) as {
-    id: string;
-    scheduled_at: string;
-    status: Parameters<typeof StatusBadge>[0]["status"];
-    total_amount: number | null;
-    notes: string | null;
-    profiles: { full_name: string } | null;
-    departments: { name: string; color: string } | null;
-  }[];
+  if (from) apptQuery = apptQuery.gte("scheduled_at", `${from}T00:00:00.000Z`);
+  if (to) apptQuery = apptQuery.lte("scheduled_at", `${to}T23:59:59.999Z`);
+
+  const { data: appointments } = await apptQuery;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const appts = (appointments ?? []) as any[];
+
+  // Fetch settlements for non-doctors
+  const settlementsByAppt: Record<string, SettlementEntry[]> = {};
+  if (!isDoctor) {
+    const { data: settlements } = await supabase
+      .from("outstanding_settlements")
+      .select("id, appointment_id, settled_at, amount, payment_method, note")
+      .eq("patient_id", id)
+      .eq("clinic_id", user.clinicId)
+      .order("settled_at", { ascending: true });
+
+    for (const s of settlements ?? []) {
+      if (!s.appointment_id) continue;
+      settlementsByAppt[s.appointment_id] = [
+        ...(settlementsByAppt[s.appointment_id] ?? []),
+        {
+          id: s.id,
+          settled_at: s.settled_at,
+          amount: Number(s.amount ?? 0),
+          payment_method: s.payment_method,
+          note: s.note,
+        },
+      ];
+    }
+  }
 
   const generatedAt = new Date().toLocaleString("en-GB", {
     dateStyle: "long",
@@ -103,107 +115,115 @@ export default async function AppointmentsReportPage({ params }: PageProps) {
         <div>
           <div className="flex items-center gap-2">
             <FileText className="h-5 w-5 text-muted-foreground print:hidden" aria-hidden />
-            <h1 className="text-2xl font-semibold tracking-tight">Appointments Report</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">
+              Appointments Report
+            </h1>
           </div>
           <div className="mt-2 space-y-0.5 text-sm text-muted-foreground">
-            <p className="font-medium text-foreground text-base">{patient.full_name}</p>
-            {patient.file_number && <p>File: <span className="font-mono">{patient.file_number}</span></p>}
+            <p className="font-medium text-foreground text-base">
+              {patient.full_name}
+            </p>
+            {patient.file_number && (
+              <p>
+                File: <span className="font-mono">{patient.file_number}</span>
+              </p>
+            )}
             {patient.phone && <p>Phone: {patient.phone}</p>}
             <p>Generated: {generatedAt}</p>
-            <p>{appts.length} appointment{appts.length !== 1 ? "s" : ""} on record</p>
+            <p>
+              {appts.length} appointment{appts.length !== 1 ? "s" : ""}
+              {(from || to) && " (filtered)"}
+            </p>
           </div>
         </div>
         <PrintButton />
       </div>
 
-      {appts.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border/60 bg-muted/20 px-6 py-12 text-center text-sm text-muted-foreground">
-          No appointments on record for this patient.
-        </div>
+      <ReportDateFilter from={from} to={to} />
+
+      {isDoctor ? (
+        <DoctorApptList appts={appts} />
       ) : (
-        <div className="rounded-xl border border-border/50 bg-card overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border/50 bg-muted/30">
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Date
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Time
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Doctor
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Department
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Status
-                </th>
-                {!isDoctor && (
-                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Billed
-                  </th>
-                )}
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Notes
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {appts.map((a, i) => {
-                const dept = a.departments;
-                return (
-                  <tr
-                    key={a.id}
-                    className={`border-b border-border/30 last:border-0 ${
-                      i % 2 === 1 ? "bg-muted/20" : ""
-                    }`}
-                  >
-                    <td className="px-4 py-3 font-medium tabular-nums whitespace-nowrap">
-                      {fmtDate(a.scheduled_at)}
-                    </td>
-                    <td className="px-4 py-3 font-mono text-xs tabular-nums whitespace-nowrap">
-                      {fmtTime(a.scheduled_at)}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      {formatDoctorName(a.profiles?.full_name)}
-                    </td>
-                    <td className="px-4 py-3">
-                      {dept ? (
-                        <span className="inline-flex items-center gap-1.5">
-                          <span
-                            aria-hidden
-                            className="h-2 w-2 rounded-full shrink-0 print:hidden"
-                            style={{ backgroundColor: dept.color }}
-                          />
-                          {dept.name}
-                        </span>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <StatusBadge status={a.status} />
-                    </td>
-                    {!isDoctor && (
-                      <td className="px-4 py-3 text-right tabular-nums font-mono text-xs whitespace-nowrap">
-                        {a.total_amount != null ? fmtTRY(a.total_amount) : "—"}
-                      </td>
-                    )}
-                    <td className="px-4 py-3 max-w-[280px]">
-                      {a.notes ? (
-                        <span className="text-xs text-muted-foreground">{a.notes}</span>
-                      ) : (
-                        <span className="text-muted-foreground/40">—</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <AppointmentsReportList
+          appointments={appts as AppointmentPaymentRowData[]}
+          settlementsByAppt={settlementsByAppt}
+        />
+      )}
+    </div>
+  );
+}
+
+function DoctorApptList({
+  appts,
+}: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  appts: any[];
+}) {
+  if (appts.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed border-border/60 bg-muted/20 px-6 py-12 text-center text-sm text-muted-foreground">
+        No appointments match the selected date range.
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-border/50 bg-card overflow-hidden">
+      {appts.map(
+        (a: {
+          id: string;
+          scheduled_at: string;
+          status: string;
+          cancellation_reason?: string | null;
+          profiles?: { full_name: string } | null;
+          departments?: { name: string; color: string } | null;
+        }) => {
+          const dept = a.departments;
+          const deptColor = dept?.color ?? "#64748b";
+          return (
+            <div
+              key={a.id}
+              className="flex flex-wrap items-center gap-3 border-b border-border/30 last:border-0 px-5 py-3.5"
+            >
+              <div className="min-w-0 flex-1 space-y-0.5">
+                <div className="text-sm font-medium">
+                  {new Date(a.scheduled_at).toLocaleDateString("en-GB", {
+                    timeZone: "Europe/Istanbul",
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric",
+                  })}
+                  <span className="ml-1 font-normal text-muted-foreground">
+                    {new Date(a.scheduled_at).toLocaleTimeString("en-GB", {
+                      timeZone: "Europe/Istanbul",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <span>{formatDoctorName(a.profiles?.full_name)}</span>
+                  {dept && (
+                    <span
+                      className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
+                      style={{
+                        backgroundColor: `color-mix(in oklab, ${deptColor} 14%, transparent)`,
+                        color: deptColor,
+                      }}
+                    >
+                      {dept.name}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <StatusBadge
+                status={
+                  a.status as Parameters<typeof StatusBadge>[0]["status"]
+                }
+              />
+            </div>
+          );
+        },
       )}
     </div>
   );

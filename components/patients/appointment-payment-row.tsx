@@ -80,11 +80,26 @@ export interface SettlementEntry {
 export function AppointmentPaymentRow({
   a,
   settlements = [],
+  open: controlledOpen,
+  onOpenChange,
 }: {
   a: AppointmentPaymentRowData;
   settlements?: SettlementEntry[];
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
+
+  function handleToggle() {
+    if (!isCompleted) return;
+    if (onOpenChange) {
+      onOpenChange(!open);
+    } else {
+      setInternalOpen((v) => !v);
+    }
+  }
+
   const dt = new Date(a.scheduled_at);
   const isCompleted = a.status === "completed";
   const isCancelled = a.status === "cancelled";
@@ -106,7 +121,7 @@ export function AppointmentPaymentRow({
     <div className="border-b border-border/30 last:border-0">
       <button
         type="button"
-        onClick={() => isCompleted && setOpen((v) => !v)}
+        onClick={handleToggle}
         disabled={!isCompleted}
         className={cn(
           "flex w-full items-center justify-between gap-4 px-5 py-3.5 text-left transition-colors",

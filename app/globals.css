@@ -271,6 +271,32 @@
 
 /* ─── Print rules — used by /revenue statement ─── */
 @media print {
+  /* Force light-mode design tokens so print is always readable regardless
+     of whether the user has dark mode active. */
+  :root,
+  .dark {
+    --background: oklch(0.987 0.006 210);
+    --foreground: oklch(0.2 0.06 222);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.2 0.06 222);
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.2 0.06 222);
+    --muted: oklch(0.965 0.012 210);
+    --muted-foreground: oklch(0.52 0.04 225);
+    --border: oklch(0.91 0.015 215);
+    --input: oklch(0.91 0.015 215);
+    --secondary: oklch(0.96 0.018 205);
+    --secondary-foreground: oklch(0.28 0.06 220);
+    --accent: oklch(0.78 0.13 205);
+    --accent-foreground: oklch(0.15 0.05 230);
+    --primary: oklch(0.6 0.14 208);
+    --primary-foreground: oklch(0.98 0.015 200);
+    --destructive: oklch(0.62 0.23 27);
+    --success: oklch(0.66 0.18 160);
+    --warning: oklch(0.78 0.16 75);
+    --ring: oklch(0.6 0.14 208);
+  }
+
   @page {
     size: A4 landscape;
     margin: 10mm;

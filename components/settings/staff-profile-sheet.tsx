@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import {
@@ -139,10 +140,11 @@ export function StaffProfileSheet({ staff, open, onOpenChange }: Props) {
         <SheetHeader className="border-b border-border/50 px-8 py-5 pr-14">
           <div className="flex items-center gap-4">
             {staff.avatar_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
+              <Image
                 src={staff.avatar_url}
                 alt={staff.full_name}
+                width={56}
+                height={56}
                 className="h-14 w-14 rounded-full object-cover ring-2 ring-border"
               />
             ) : (

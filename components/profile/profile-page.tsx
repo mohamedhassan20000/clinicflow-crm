@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -124,10 +125,12 @@ function ProfileCard({ profile }: { profile: ProfileData }) {
             )}
           >
             {avatar ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
+              <Image
                 src={avatar}
                 alt={profile.full_name}
+                width={128}
+                height={128}
+                unoptimized={avatar.startsWith("blob:")}
                 className={cn(
                   "h-full w-full object-cover",
                   avatarActionPending && "opacity-60",

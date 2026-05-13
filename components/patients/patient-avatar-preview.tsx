@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { Maximize2 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -59,10 +60,11 @@ export function PatientAvatarPreview({
         >
           Patient photo preview
         </DialogDescription>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
+        <Image
           src={avatarUrl}
           alt={`${fullName} full-size avatar`}
+          width={800}
+          height={800}
           className="max-h-[75vh] w-full rounded-lg object-contain"
         />
       </DialogContent>

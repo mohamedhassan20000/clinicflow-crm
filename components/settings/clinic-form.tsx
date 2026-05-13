@@ -3,6 +3,7 @@
 import { startTransition, useActionState, useEffect, useRef, useState, useTransition } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import Image from "next/image";
 import { Loader2, Maximize2, Save, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -93,12 +94,12 @@ export function ClinicForm({ defaultValues, logoUrl: initialLogoUrl, readOnly = 
                 onClick={() => setLogoDialogOpen(true)}
                 className="group relative h-20 w-20 shrink-0 overflow-hidden rounded-xl border border-border bg-muted outline-none transition focus-visible:ring-2 focus-visible:ring-ring/50"
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
+                <Image
                   src={logoUrl}
                   alt="Clinic logo"
+                  fill
                   onError={() => setLogoLoadError(true)}
-                  className="h-full w-full object-contain p-1"
+                  className="object-contain p-1"
                 />
                 <span className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/0 transition group-hover:bg-black/20">
                   <Maximize2 className="h-4 w-4 text-white opacity-0 drop-shadow transition group-hover:opacity-100" />
@@ -111,10 +112,11 @@ export function ClinicForm({ defaultValues, logoUrl: initialLogoUrl, readOnly = 
                   <DialogDescription className="sr-only">
                     Full-size preview of the clinic logo
                   </DialogDescription>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
+                  <Image
                     src={logoUrl}
                     alt="Clinic logo full size"
+                    width={800}
+                    height={800}
                     className="max-h-[70vh] w-full rounded-lg object-contain"
                   />
                 </DialogContent>

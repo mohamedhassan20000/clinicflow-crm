@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { requireRole } from "@/lib/rbac";
-import { createClient } from "@/lib/supabase/server";
+import { getCachedDepartments, getCachedStaff } from "@/lib/cache/reference-data";
 import { StaffByDepartment } from "@/components/settings/staff-by-department";
 import { AddStaffDialog } from "@/components/settings/add-staff-dialog";
 import { SettingsTrashSection, type TrashItem } from "@/components/settings/settings-trash-section";
@@ -13,28 +13,19 @@ const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 export default async function StaffSettingsPage() {
   const user = await requireRole(["admin", "manager"]);
-  const supabase = await createClient();
 
-  const [{ data: allStaff }, { data: departments }, canCustomize] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select("*, departments(name, color)")
-      .eq("clinic_id", user.clinicId)
-      .order("full_name"),
-    supabase
-      .from("departments")
-      .select("id, name, color")
-      .eq("clinic_id", user.clinicId)
-      .eq("is_active", true)
-      .order("name"),
+  const [allStaff, cachedDepts, canCustomize] = await Promise.all([
+    getCachedStaff(user.clinicId),
+    getCachedDepartments(user.clinicId),
     user.role === "admin"
       ? isPrimaryClinicAdmin(user.id, user.clinicId)
       : Promise.resolve(false),
   ]);
 
+  const departments = cachedDepts.filter((d) => !d.deleted_at && d.is_active);
   const cutoff = new Date(new Date().getTime() - THIRTY_DAYS_MS).toISOString();
-  const staff = (allStaff ?? []).filter((s) => !s.deleted_at);
-  const trashedStaff = (allStaff ?? []).filter(
+  const staff = allStaff.filter((s) => !s.deleted_at);
+  const trashedStaff = allStaff.filter(
     (s) => s.deleted_at && s.deleted_at > cutoff,
   );
 

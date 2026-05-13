@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { requireUser } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
+import { getCachedDepartments, getCachedStaff } from "@/lib/cache/reference-data";
 import { AdminDashboard } from "@/components/dashboard/admin-dashboard";
 import { ReceptionistDashboard } from "@/components/dashboard/receptionist-dashboard";
 import { ManagerDashboard } from "@/components/dashboard/manager-dashboard";
@@ -193,6 +194,9 @@ export default async function DashboardPage() {
     const earliestPriorStart =
       priorMonthRanges[priorMonthRanges.length - 1].start;
 
+    const adminStaffPromise = getCachedStaff(clinicId);
+    const adminDeptsPromise = getCachedDepartments(clinicId);
+
     const [
       { count: todayCount },
       { count: weekCount },
@@ -311,13 +315,12 @@ export default async function DashboardPage() {
         .eq("clinic_id", clinicId)
         .gte("scheduled_at", thisMonth.start)
         .lte("scheduled_at", thisMonth.end),
-      // Analytics: all active doctors
-      supabase
-        .from("profiles")
-        .select("id, full_name")
-        .eq("clinic_id", clinicId)
-        .eq("role", "doctor")
-        .eq("is_active", true),
+      // Analytics: all active doctors (cached)
+      adminStaffPromise.then((s) => ({
+        data: s
+          .filter((x) => x.role === "doctor" && x.is_active && !x.deleted_at)
+          .map((x) => ({ id: x.id, full_name: x.full_name })),
+      })),
       // Analytics: period appointments with stats fields
       supabase
         .from("appointments")
@@ -325,19 +328,18 @@ export default async function DashboardPage() {
         .eq("clinic_id", clinicId)
         .gte("scheduled_at", thisMonth.start)
         .lte("scheduled_at", thisMonth.end),
-      // Analytics: all active departments
-      supabase
-        .from("departments")
-        .select("id, name")
-        .eq("clinic_id", clinicId)
-        .eq("is_active", true),
-      // Analytics: all active receptionists
-      supabase
-        .from("profiles")
-        .select("id, full_name")
-        .eq("clinic_id", clinicId)
-        .eq("role", "receptionist")
-        .eq("is_active", true),
+      // Analytics: all active departments (cached)
+      adminDeptsPromise.then((d) => ({
+        data: d
+          .filter((x) => !x.deleted_at && x.is_active)
+          .map((x) => ({ id: x.id, name: x.name })),
+      })),
+      // Analytics: all active receptionists (cached)
+      adminStaffPromise.then((s) => ({
+        data: s
+          .filter((x) => x.role === "receptionist" && x.is_active && !x.deleted_at)
+          .map((x) => ({ id: x.id, full_name: x.full_name })),
+      })),
       // Analytics: appointments this month with created_by for receptionist stats
       supabase
         .from("appointments")
@@ -559,6 +561,9 @@ export default async function DashboardPage() {
   const week = weekBounds();
   const thisMonth = monthBounds(0);
 
+  const mgrStaffPromise = getCachedStaff(clinicId);
+  const mgrDeptsPromise = getCachedDepartments(clinicId);
+
   const [
     { count: todayCount },
     { count: weekCount },
@@ -625,29 +630,30 @@ export default async function DashboardPage() {
       .eq("clinic_id", clinicId)
       .gte("scheduled_at", thisMonth.start)
       .lte("scheduled_at", thisMonth.end),
-    supabase
-      .from("profiles")
-      .select("id, full_name")
-      .eq("clinic_id", clinicId)
-      .eq("role", "doctor")
-      .eq("is_active", true),
+    // all active doctors (cached)
+    mgrStaffPromise.then((s) => ({
+      data: s
+        .filter((x) => x.role === "doctor" && x.is_active && !x.deleted_at)
+        .map((x) => ({ id: x.id, full_name: x.full_name })),
+    })),
     supabase
       .from("appointments")
       .select("doctor_id, department_id, patient_id, status, paid_amount, insurance_amount, secondary_amount")
       .eq("clinic_id", clinicId)
       .gte("scheduled_at", thisMonth.start)
       .lte("scheduled_at", thisMonth.end),
-    supabase
-      .from("departments")
-      .select("id, name")
-      .eq("clinic_id", clinicId)
-      .eq("is_active", true),
-    supabase
-      .from("profiles")
-      .select("id, full_name")
-      .eq("clinic_id", clinicId)
-      .eq("role", "receptionist")
-      .eq("is_active", true),
+    // all active departments (cached)
+    mgrDeptsPromise.then((d) => ({
+      data: d
+        .filter((x) => !x.deleted_at && x.is_active)
+        .map((x) => ({ id: x.id, name: x.name })),
+    })),
+    // all active receptionists (cached)
+    mgrStaffPromise.then((s) => ({
+      data: s
+        .filter((x) => x.role === "receptionist" && x.is_active && !x.deleted_at)
+        .map((x) => ({ id: x.id, full_name: x.full_name })),
+    })),
     supabase
       .from("appointments")
       .select("created_by, status")

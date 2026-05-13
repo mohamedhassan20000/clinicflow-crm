@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { requireRole } from "@/lib/rbac";
-import { createClient } from "@/lib/supabase/server";
+import { getCachedDepartments, getCachedServices } from "@/lib/cache/reference-data";
 import { AddServiceDialog } from "@/components/settings/add-service-dialog";
 import { ServiceRowActions } from "@/components/settings/service-row-actions";
 import { SettingsTrashSection, type TrashItem } from "@/components/settings/settings-trash-section";
@@ -20,25 +20,15 @@ function fmtTRY(n: number) {
 
 export default async function ServicesSettingsPage() {
   const user = await requireRole(["admin", "manager"]);
-  const supabase = await createClient();
 
-  const [{ data: departments }, { data: allServices }] = await Promise.all([
-    supabase
-      .from("departments")
-      .select("id, name, color")
-      .eq("clinic_id", user.clinicId)
-      .eq("is_active", true)
-      .order("name"),
-    supabase
-      .from("services")
-      .select("id, name, price, department_id, is_active, deleted_at, departments(id, name, color)")
-      .eq("clinic_id", user.clinicId)
-      .order("name"),
+  const [allDepartments, allServices] = await Promise.all([
+    getCachedDepartments(user.clinicId),
+    getCachedServices(user.clinicId),
   ]);
 
-  const deptList = departments ?? [];
+  const deptList = allDepartments.filter((d) => !d.deleted_at && d.is_active);
   const cutoff = new Date(new Date().getTime() - THIRTY_DAYS_MS).toISOString();
-  const svcList = (allServices ?? []).filter((s) => !s.deleted_at);
+  const svcList = allServices.filter((s) => !s.deleted_at);
   const trashedServices = (allServices ?? []).filter(
     (s) => s.deleted_at && s.deleted_at > cutoff,
   );

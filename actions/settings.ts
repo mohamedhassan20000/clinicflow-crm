@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/rbac";
@@ -112,6 +112,7 @@ export async function createStaff(
     await ensureDefaultPagePermissions(userId, role, user.clinicId);
   }
 
+  revalidateTag(`staff:${user.clinicId}`, {});
   revalidatePath("/settings/staff");
   return { success: true, staffId: userId };
 }
@@ -169,6 +170,7 @@ export async function updateStaff(
     await ensureDefaultPagePermissions(staffId, parsed.data.role, user.clinicId);
   }
 
+  revalidateTag(`staff:${user.clinicId}`, {});
   revalidatePath("/settings/staff");
   return { success: true };
 }
@@ -198,6 +200,7 @@ export async function toggleStaffActive(
 
   if (error) return { error: error.message };
 
+  revalidateTag(`staff:${user.clinicId}`, {});
   revalidatePath("/settings/staff");
   return { success: true };
 }
@@ -224,6 +227,7 @@ export async function softDeleteStaff(staffId: string): Promise<ActionResult> {
 
   if (error) return { error: error.message };
 
+  revalidateTag(`staff:${user.clinicId}`, {});
   revalidatePath("/settings/staff");
   return { success: true };
 }
@@ -246,6 +250,7 @@ export async function restoreStaff(staffId: string): Promise<ActionResult> {
 
   if (error) return { error: error.message };
 
+  revalidateTag(`staff:${user.clinicId}`, {});
   revalidatePath("/settings/staff");
   return { success: true };
 }
@@ -281,6 +286,7 @@ export async function deleteStaff(staffId: string): Promise<ActionResult> {
   // Best-effort profile cleanup if FK cascade didn't fire
   await supabase.from("profiles").delete().eq("id", staffId);
 
+  revalidateTag(`staff:${user.clinicId}`, {});
   revalidatePath("/settings/staff");
   return { success: true };
 }
@@ -324,6 +330,7 @@ export async function resetStaffPassword(
     .eq("id", staffId)
     .eq("clinic_id", user.clinicId);
 
+  revalidateTag(`staff:${user.clinicId}`, {});
   revalidatePath("/settings/staff");
   return { success: true };
 }
@@ -368,6 +375,7 @@ export async function emptyStaffTrash(): Promise<ActionResult> {
     )
     .not("deleted_at", "is", null);
 
+  revalidateTag(`staff:${user.clinicId}`, {});
   revalidatePath("/settings/staff");
   return { success: true };
 }
@@ -401,6 +409,7 @@ export async function createDepartment(
     return { error: error.message };
   }
 
+  revalidateTag(`departments:${user.clinicId}`, {});
   revalidatePath("/settings/departments");
   return { success: true };
 }
@@ -431,6 +440,7 @@ export async function updateDepartment(
 
   if (error) return { error: error.message };
 
+  revalidateTag(`departments:${user.clinicId}`, {});
   revalidatePath("/settings/departments");
   return { success: true };
 }
@@ -450,6 +460,7 @@ export async function toggleDepartmentActive(
 
   if (error) return { error: error.message };
 
+  revalidateTag(`departments:${user.clinicId}`, {});
   revalidatePath("/settings/departments");
   return { success: true };
 }
@@ -463,6 +474,7 @@ export async function softDeleteDepartment(deptId: string): Promise<ActionResult
     .eq("id", deptId)
     .eq("clinic_id", user.clinicId);
   if (error) return { error: error.message };
+  revalidateTag(`departments:${user.clinicId}`, {});
   revalidatePath("/settings/departments");
   return { success: true };
 }
@@ -476,6 +488,7 @@ export async function restoreDepartment(deptId: string): Promise<ActionResult> {
     .eq("id", deptId)
     .eq("clinic_id", user.clinicId);
   if (error) return { error: error.message };
+  revalidateTag(`departments:${user.clinicId}`, {});
   revalidatePath("/settings/departments");
   return { success: true };
 }
@@ -490,6 +503,7 @@ export async function permanentDeleteDepartment(deptId: string): Promise<ActionR
     .eq("clinic_id", user.clinicId)
     .not("deleted_at", "is", null);
   if (error) return { error: error.message };
+  revalidateTag(`departments:${user.clinicId}`, {});
   revalidatePath("/settings/departments");
   return { success: true };
 }
@@ -504,6 +518,7 @@ export async function emptyDepartmentsTrash(): Promise<ActionResult> {
     .not("deleted_at", "is", null);
 
   if (error) return { error: error.message };
+  revalidateTag(`departments:${user.clinicId}`, {});
   revalidatePath("/settings/departments");
   return { success: true };
 }
@@ -536,6 +551,7 @@ export async function createInsurance(
     return { error: error.message };
   }
 
+  revalidateTag(`insurance:${user.clinicId}`, {});
   revalidatePath("/settings/insurance");
   return { success: true };
 }
@@ -565,6 +581,7 @@ export async function updateInsurance(
 
   if (error) return { error: error.message };
 
+  revalidateTag(`insurance:${user.clinicId}`, {});
   revalidatePath("/settings/insurance");
   return { success: true };
 }
@@ -584,6 +601,7 @@ export async function toggleInsuranceActive(
 
   if (error) return { error: error.message };
 
+  revalidateTag(`insurance:${user.clinicId}`, {});
   revalidatePath("/settings/insurance");
   return { success: true };
 }
@@ -597,6 +615,7 @@ export async function softDeleteInsurance(insuranceId: string): Promise<ActionRe
     .eq("id", insuranceId)
     .eq("clinic_id", user.clinicId);
   if (error) return { error: error.message };
+  revalidateTag(`insurance:${user.clinicId}`, {});
   revalidatePath("/settings/insurance");
   return { success: true };
 }
@@ -610,6 +629,7 @@ export async function restoreInsurance(insuranceId: string): Promise<ActionResul
     .eq("id", insuranceId)
     .eq("clinic_id", user.clinicId);
   if (error) return { error: error.message };
+  revalidateTag(`insurance:${user.clinicId}`, {});
   revalidatePath("/settings/insurance");
   return { success: true };
 }
@@ -624,6 +644,7 @@ export async function permanentDeleteInsurance(insuranceId: string): Promise<Act
     .eq("clinic_id", user.clinicId)
     .not("deleted_at", "is", null);
   if (error) return { error: error.message };
+  revalidateTag(`insurance:${user.clinicId}`, {});
   revalidatePath("/settings/insurance");
   return { success: true };
 }
@@ -638,6 +659,7 @@ export async function emptyInsuranceTrash(): Promise<ActionResult> {
     .not("deleted_at", "is", null);
 
   if (error) return { error: error.message };
+  revalidateTag(`insurance:${user.clinicId}`, {});
   revalidatePath("/settings/insurance");
   return { success: true };
 }
@@ -741,6 +763,7 @@ export async function createService(
 
   if (error) return { error: error.message };
 
+  revalidateTag(`services:${user.clinicId}`, {});
   revalidatePath("/settings/services");
   return { success: true };
 }
@@ -775,6 +798,7 @@ export async function updateService(
 
   if (error) return { error: error.message };
 
+  revalidateTag(`services:${user.clinicId}`, {});
   revalidatePath("/settings/services");
   return { success: true };
 }
@@ -788,6 +812,7 @@ export async function softDeleteService(serviceId: string): Promise<ActionResult
     .eq("id", serviceId)
     .eq("clinic_id", user.clinicId);
   if (error) return { error: error.message };
+  revalidateTag(`services:${user.clinicId}`, {});
   revalidatePath("/settings/services");
   return { success: true };
 }
@@ -801,6 +826,7 @@ export async function restoreService(serviceId: string): Promise<ActionResult> {
     .eq("id", serviceId)
     .eq("clinic_id", user.clinicId);
   if (error) return { error: error.message };
+  revalidateTag(`services:${user.clinicId}`, {});
   revalidatePath("/settings/services");
   return { success: true };
 }
@@ -817,6 +843,7 @@ export async function deleteService(serviceId: string): Promise<ActionResult> {
 
   if (error) return { error: error.message };
 
+  revalidateTag(`services:${user.clinicId}`, {});
   revalidatePath("/settings/services");
   return { success: true };
 }
@@ -831,6 +858,7 @@ export async function emptyServicesTrash(): Promise<ActionResult> {
     .not("deleted_at", "is", null);
 
   if (error) return { error: error.message };
+  revalidateTag(`services:${user.clinicId}`, {});
   revalidatePath("/settings/services");
   return { success: true };
 }
@@ -849,6 +877,7 @@ export async function toggleServiceActive(
 
   if (error) return { error: error.message };
 
+  revalidateTag(`services:${user.clinicId}`, {});
   revalidatePath("/settings/services");
   return { success: true };
 }

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { requireRole } from "@/lib/rbac";
-import { createClient } from "@/lib/supabase/server";
+import { getCachedInsuranceProviders } from "@/lib/cache/reference-data";
 import { Badge } from "@/components/ui/badge";
 import { InsuranceActions } from "@/components/settings/insurance-actions";
 import { AddInsuranceDialog } from "@/components/settings/add-insurance-dialog";
@@ -20,13 +20,8 @@ const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 export default async function InsuranceSettingsPage() {
   const user = await requireRole(["admin", "manager"]);
-  const supabase = await createClient();
 
-  const { data: allProviders } = await supabase
-    .from("insurance_providers")
-    .select("*")
-    .eq("clinic_id", user.clinicId)
-    .order("name");
+  const allProviders = await getCachedInsuranceProviders(user.clinicId);
 
   const cutoff = new Date(new Date().getTime() - THIRTY_DAYS_MS).toISOString();
   const providers = (allProviders ?? []).filter((p) => !p.deleted_at);

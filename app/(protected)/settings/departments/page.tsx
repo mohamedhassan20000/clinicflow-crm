@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { requireRole } from "@/lib/rbac";
-import { createClient } from "@/lib/supabase/server";
+import { getCachedDepartments } from "@/lib/cache/reference-data";
 import { Badge } from "@/components/ui/badge";
 import {
   updateDepartment,
@@ -20,13 +20,8 @@ const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 export default async function DepartmentsSettingsPage() {
   const user = await requireRole(["admin", "manager"]);
-  const supabase = await createClient();
 
-  const { data: allDepartments } = await supabase
-    .from("departments")
-    .select("*")
-    .eq("clinic_id", user.clinicId)
-    .order("name");
+  const allDepartments = await getCachedDepartments(user.clinicId);
 
   const cutoff = new Date(new Date().getTime() - THIRTY_DAYS_MS).toISOString();
   const departments = (allDepartments ?? []).filter((d) => !d.deleted_at);

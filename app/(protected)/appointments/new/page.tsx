@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { requireRole } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
+import { getCachedDepartments, getCachedInsuranceProviders, getCachedStaff } from "@/lib/cache/reference-data";
 import { AppointmentForm } from "@/components/appointments/appointment-form";
 import { createAppointment } from "@/actions/appointments";
 
@@ -17,7 +18,7 @@ export default async function NewAppointmentPage({ searchParams }: PageProps) {
   const { patient_id } = await searchParams;
   const supabase = await createClient();
 
-  const [{ data: patients }, { data: doctors }, { data: departments }, { data: insurance }] =
+  const [{ data: patients }, cachedStaff, cachedDepartments, cachedInsurance] =
     await Promise.all([
       supabase
         .from("patients")
@@ -27,26 +28,20 @@ export default async function NewAppointmentPage({ searchParams }: PageProps) {
         .eq("clinic_id", user.clinicId)
         .eq("is_deleted", false)
         .order("full_name"),
-      supabase
-        .from("profiles")
-        .select("id, full_name, department_id")
-        .eq("clinic_id", user.clinicId)
-        .eq("is_active", true)
-        .eq("role", "doctor")
-        .order("full_name"),
-      supabase
-        .from("departments")
-        .select("id, name")
-        .eq("clinic_id", user.clinicId)
-        .eq("is_active", true)
-        .order("name"),
-      supabase
-        .from("insurance_providers")
-        .select("id, name")
-        .eq("clinic_id", user.clinicId)
-        .eq("is_active", true)
-        .order("name"),
+      getCachedStaff(user.clinicId),
+      getCachedDepartments(user.clinicId),
+      getCachedInsuranceProviders(user.clinicId),
     ]);
+
+  const doctors = cachedStaff
+    .filter((s) => s.role === "doctor" && s.is_active && !s.deleted_at)
+    .map((s) => ({ id: s.id, full_name: s.full_name, department_id: s.department_id }));
+  const departments = cachedDepartments
+    .filter((d) => !d.deleted_at && d.is_active)
+    .map((d) => ({ id: d.id, name: d.name }));
+  const insurance = cachedInsurance
+    .filter((p) => !p.deleted_at && p.is_active)
+    .map((p) => ({ id: p.id, name: p.name }));
 
   return (
     <div className="space-y-6">

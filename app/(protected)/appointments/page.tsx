@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { requireUser } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
+import { getCachedDepartments, getCachedStaff } from "@/lib/cache/reference-data";
 import { WeekCalendar } from "@/components/appointments/week-calendar";
 import { DayCalendar } from "@/components/appointments/day-calendar";
 import { MonthCalendar } from "@/components/appointments/month-calendar";
@@ -128,23 +129,16 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
       .lt("deleted_at", cutoff);
   }
 
-  const [{ data: doctors }, { data: departments }] = await Promise.all([
-    isDoctor
-      ? Promise.resolve({ data: [] as { id: string; full_name: string }[] })
-      : supabase
-          .from("profiles")
-          .select("id, full_name")
-          .eq("clinic_id", user.clinicId)
-          .eq("role", "doctor")
-          .eq("is_active", true)
-          .order("full_name"),
-    supabase
-      .from("departments")
-      .select("id, name, color")
-      .eq("clinic_id", user.clinicId)
-      .eq("is_active", true)
-      .order("name"),
-  ]);
+  const [cachedStaff, cachedDepartments] = isDoctor
+    ? [[] as Awaited<ReturnType<typeof getCachedStaff>>, await getCachedDepartments(user.clinicId)]
+    : await Promise.all([getCachedStaff(user.clinicId), getCachedDepartments(user.clinicId)]);
+
+  const doctors = cachedStaff
+    .filter((s) => s.role === "doctor" && s.is_active && !s.deleted_at)
+    .map((s) => ({ id: s.id, full_name: s.full_name }));
+  const departments = cachedDepartments
+    .filter((d) => !d.deleted_at && d.is_active)
+    .map((d) => ({ id: d.id, name: d.name, color: d.color }));
 
   let patientIds: string[] | null = null;
   const hasPatientFilter = !!file || !!nat || !!phone || !!name;
@@ -240,8 +234,8 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
       </div>
 
       <AppointmentsFilterBar
-        doctors={doctors ?? []}
-        departments={departments ?? []}
+        doctors={doctors}
+        departments={departments}
         hideDoctorFilter={isDoctor}
         hideDeptFilter={isDoctor}
       />

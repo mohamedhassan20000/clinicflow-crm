@@ -16,7 +16,7 @@ import type { ClinicWorkingHoursValues } from "@/lib/validations/settings";
 type Appointment = AppointmentForDetail;
 
 // ── Time grid constants (must match week-calendar) ────────────────────────────
-const BUCKET_H_PX = 380;
+const BUCKET_H_PX = 420;
 const CARD_H_PX   = 110;
 
 function timeStrToMin(t: string): number {
@@ -180,7 +180,7 @@ export function DayCalendar({
             {hourRows.map((hMin) => (
               <div
                 key={hMin}
-                className="border-b border-border/20 flex items-center justify-end pr-1.5"
+                className="border-b border-border/20 flex items-center justify-center"
                 style={{ height: BUCKET_H_PX }}
               >
                 <span className="text-[9px] text-muted-foreground/50 leading-none whitespace-nowrap">
@@ -269,8 +269,8 @@ function DayBucketCell({
   canEdit: boolean;
 }) {
   const [showAllOpen, setShowAllOpen] = useState(false);
-  const hasMore = appts.length > 2;
-  const visible = hasMore ? appts.slice(0, 2) : appts;
+  const hasMore = appts.length > 3;
+  const visible = hasMore ? appts.slice(0, 3) : appts;
 
   return (
     <div

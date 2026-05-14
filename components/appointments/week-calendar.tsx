@@ -6,16 +6,6 @@ import { ChevronLeft, ChevronRight, CalendarPlus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -36,7 +26,7 @@ import { HourAppointmentsDialog } from "@/components/appointments/hour-appointme
 type Appointment = AppointmentForDetail;
 
 // ── Time grid constants ────────────────────────────────────────────────────────
-const BUCKET_H_PX = 380; // fixed height per hour row — fits 3 full compact cards
+const BUCKET_H_PX = 420; // fixed height per hour row — fits 3 full compact cards
 const CARD_H_PX   = 110; // compact card: name + badge + time + doctor + dept
 
 function timeStrToMin(t: string): number {
@@ -247,7 +237,7 @@ export function WeekCalendar({
             {hourRows.map((hMin) => (
               <div
                 key={hMin}
-                className="border-b border-border/20 flex items-center justify-end pr-1.5"
+                className="border-b border-border/20 flex items-center justify-center"
                 style={{ height: BUCKET_H_PX }}
               >
                 <span className="text-[9px] text-muted-foreground/50 leading-none whitespace-nowrap">
@@ -339,7 +329,7 @@ function HourBucketRow({
 }) {
   const [showAllOpen, setShowAllOpen] = useState(false);
   const hasMore = appts.length > MAX_VISIBLE;
-  const visibleAppts = hasMore ? appts.slice(0, 2) : appts;
+  const visibleAppts = hasMore ? appts.slice(0, 3) : appts;
 
   return (
     <div
@@ -395,7 +385,6 @@ export function AppointmentCard({
 }) {
   const { formatTime } = useClinicSettings();
   const [deleted, setDeleted] = useState(false);
-  const [confirmOpen, setConfirmOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [isDeleting, startDelete] = useTransition();
   const [isRestoring, setIsRestoring] = useState(false);
@@ -467,34 +456,15 @@ export function AppointmentCard({
               {patientName}
             </span>
 
-            {canEdit && (
-              <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-                <button
-                  onClick={(e) => { e.stopPropagation(); setConfirmOpen(true); }}
-                  disabled={isDeleting || isRestoring}
-                  className="shrink-0 opacity-0 group-hover:opacity-100 text-muted-foreground/40 hover:text-destructive transition-opacity"
-                  title="Move to trash"
-                >
-                  <Trash2 className="h-3 w-3" />
-                </button>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Move appointment to trash?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      The appointment for <strong>{patientName}</strong> will be moved to the recycle bin.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
-                    <AlertDialogAction
-                      disabled={isDeleting}
-                      onClick={(e) => { e.preventDefault(); setConfirmOpen(false); handleDelete(); }}
-                    >
-                      Move to trash
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+            {canEdit && appt.status !== "completed" && (
+              <button
+                onClick={(e) => { e.stopPropagation(); handleDelete(); }}
+                disabled={isDeleting || isRestoring}
+                className="shrink-0 opacity-0 group-hover:opacity-100 text-muted-foreground/40 hover:text-destructive transition-opacity"
+                title="Move to trash"
+              >
+                <Trash2 className="h-3 w-3" />
+              </button>
             )}
           </div>
 

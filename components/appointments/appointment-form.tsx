@@ -51,6 +51,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { checkSameDayPatient, type ActionResult } from "@/actions/appointments";
+import { getAvailableTimeSlots, type SlotInfo } from "@/actions/time-slots";
 import type { Tables } from "@/types/database";
 
 type Patient = Pick<
@@ -81,13 +82,6 @@ interface AppointmentFormProps {
   defaultPatientId?: string;
 }
 
-// Generate 15-min slots 08:00 → 18:00 (24-hour format)
-const TIME_SLOTS = Array.from({ length: 41 }, (_, i) => {
-  const totalMinutes = 8 * 60 + i * 15;
-  const h = String(Math.floor(totalMinutes / 60)).padStart(2, "0");
-  const m = String(totalMinutes % 60).padStart(2, "0");
-  return `${h}:${m}`;
-});
 
 // All clinic times are authored in Europe/Istanbul (UTC+3, no DST).
 // Tag the local date/time with the +03:00 offset so Postgres timestamptz
@@ -237,6 +231,26 @@ export function AppointmentForm({
       shouldValidate: true,
     });
   }, [form, patients, selectedPatientId]);
+
+  // ── Smart time slots ───────────────────────────────────────────────────────
+  const scheduledAt = useWatch({ control: form.control, name: "scheduled_at" });
+  const dateVal = scheduledAt ? scheduledAt.split("T")[0] ?? "" : "";
+
+  const [slots, setSlots] = useState<SlotInfo[]>([]);
+  const [slotsLoading, setSlotsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!selectedDoctorId || !dateVal) {
+      setSlots([]);
+      return;
+    }
+    let cancelled = false;
+    setSlotsLoading(true);
+    getAvailableTimeSlots(selectedDoctorId, dateVal)
+      .then(({ slots: s }) => { if (!cancelled) setSlots(s); })
+      .finally(() => { if (!cancelled) setSlotsLoading(false); });
+    return () => { cancelled = true; };
+  }, [selectedDoctorId, dateVal]);
 
   function buildFd(values: AppointmentFormValues): FormData {
     const fd = new FormData();
@@ -507,7 +521,6 @@ export function AppointmentForm({
             control={form.control}
             name="scheduled_at"
             render={({ field }) => {
-              const dateVal = field.value ? field.value.split("T")[0] : "";
               const timeVal = field.value
                 ? field.value.split("T")[1]?.slice(0, 5)
                 : "";
@@ -519,25 +532,50 @@ export function AppointmentForm({
                   <Select
                     value={timeVal}
                     onValueChange={(t) => {
-                      const d = selectedDate;
-                      field.onChange(buildClinicIso(d, t));
+                      field.onChange(buildClinicIso(selectedDate, t));
                     }}
-                    disabled={isPending}
+                    disabled={isPending || slotsLoading}
                   >
                     <FormControl>
                       <SelectTrigger>
-                        <SelectValue placeholder="Select time" />
+                        {slotsLoading ? (
+                          <span className="flex items-center gap-1.5 text-muted-foreground">
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            Loading…
+                          </span>
+                        ) : (
+                          <SelectValue placeholder="Select time" />
+                        )}
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent position="popper" align="start">
-                      {TIME_SLOTS.map((t) => {
-                        const disabled =
+                      {slots.length === 0 && !slotsLoading && (
+                        <SelectItem value="__empty__" disabled>
+                          {selectedDoctorId && dateVal
+                            ? "No slots available"
+                            : "Select a doctor and date first"}
+                        </SelectItem>
+                      )}
+                      {slots.map((slot) => {
+                        const isPast =
                           selectedDate < now.date ||
                           (selectedDate === now.date &&
-                            timeToMinutes(t) <= now.minutes);
+                            timeToMinutes(slot.time) <= now.minutes);
+                        const isDisabled = slot.disabled || isPast;
                         return (
-                          <SelectItem key={t} value={t} disabled={disabled}>
-                            {t}
+                          <SelectItem
+                            key={slot.time}
+                            value={slot.time}
+                            disabled={isDisabled}
+                            className={
+                              slot.label === "Break"
+                                ? "text-muted-foreground italic"
+                                : slot.label
+                                  ? "text-amber-600"
+                                  : undefined
+                            }
+                          >
+                            {slot.label ? `${slot.time} — ${slot.label}` : slot.time}
                           </SelectItem>
                         );
                       })}

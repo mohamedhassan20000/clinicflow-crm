@@ -16,6 +16,7 @@ import {
   AppointmentDetailDialog,
   type AppointmentForDetail,
 } from "@/components/appointments/appointment-detail-dialog";
+import { DeleteConfirmDialog } from "@/components/appointments/delete-confirm-dialog";
 import { softDeleteAppointment, restoreAppointment } from "@/actions/appointments";
 import { formatDoctorName } from "@/lib/format-doctor";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
@@ -33,6 +34,7 @@ function PopupAppointmentRow({
 }) {
   const { formatTime } = useClinicSettings();
   const [detailOpen, setDetailOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [isDeleting, startDelete] = useTransition();
 
   const time = formatTime(appt.scheduled_at);
@@ -121,7 +123,7 @@ function PopupAppointmentRow({
           )}
         </div>
 
-        {/* Trash — direct delete, no confirmation */}
+        {/* Trash */}
         {canEdit && appt.status !== "completed" && (
           <Button
             variant="ghost"
@@ -129,7 +131,7 @@ function PopupAppointmentRow({
             className="h-8 w-8 shrink-0 text-muted-foreground/40 hover:text-destructive"
             onClick={(e) => {
               e.stopPropagation();
-              handleDelete();
+              setConfirmOpen(true);
             }}
             disabled={isDeleting}
             title="Move to trash"
@@ -144,6 +146,13 @@ function PopupAppointmentRow({
         open={detailOpen}
         onOpenChange={setDetailOpen}
         canEdit={canEdit}
+        onDeleted={() => onDeleted(appt.id)}
+      />
+      <DeleteConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        onConfirm={handleDelete}
+        disabled={isDeleting}
       />
     </>
   );

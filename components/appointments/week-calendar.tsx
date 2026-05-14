@@ -22,6 +22,7 @@ import type { ClinicWorkingHoursValues } from "@/lib/validations/settings";
 import { isDayClosed } from "@/lib/calendar-utils";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
 import { HourAppointmentsDialog } from "@/components/appointments/hour-appointments-dialog";
+import { DeleteConfirmDialog } from "@/components/appointments/delete-confirm-dialog";
 
 type Appointment = AppointmentForDetail;
 
@@ -385,6 +386,7 @@ export function AppointmentCard({
 }) {
   const { formatTime } = useClinicSettings();
   const [deleted, setDeleted] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [isDeleting, startDelete] = useTransition();
   const [isRestoring, setIsRestoring] = useState(false);
@@ -458,7 +460,7 @@ export function AppointmentCard({
 
             {canEdit && appt.status !== "completed" && (
               <button
-                onClick={(e) => { e.stopPropagation(); handleDelete(); }}
+                onClick={(e) => { e.stopPropagation(); setConfirmOpen(true); }}
                 disabled={isDeleting || isRestoring}
                 className="shrink-0 p-1 opacity-0 group-hover:opacity-100 text-muted-foreground/40 hover:text-destructive transition-opacity"
                 title="Move to trash"
@@ -530,6 +532,13 @@ export function AppointmentCard({
         open={detailOpen}
         onOpenChange={setDetailOpen}
         canEdit={canEdit}
+        onDeleted={() => setDeleted(true)}
+      />
+      <DeleteConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        onConfirm={handleDelete}
+        disabled={isDeleting || isRestoring}
       />
     </>
   );

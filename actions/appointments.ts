@@ -13,7 +13,7 @@ import {
   type BillingValues,
   type LineItemValues,
 } from "@/lib/validations/appointment";
-import type { Database, TablesInsert, TablesUpdate } from "@/types/database";
+import type { Database, TablesUpdate } from "@/types/database";
 import { getPatientAccountBalance } from "@/actions/patients";
 
 export type ActionResult = {
@@ -477,102 +477,32 @@ async function deleteAppointmentDependents(
   return {};
 }
 
-async function writeAppointmentStatusDirectly(
-  id: string,
-  targetStatus: AppointmentStatus,
-): Promise<ActionResult> {
-  const user = await requireRole(["admin", "receptionist"]);
-  const adminClient = createAdminClient();
-
-  const { data: appt, error: apptError } = await adminClient
-    .from("appointments")
-    .select("*")
-    .eq("id", id)
-    .eq("clinic_id", user.clinicId)
-    .single();
-
-  if (apptError || !appt) return { error: "Appointment not found." };
-
-  const replacement: TablesInsert<"appointments"> = {
-    id: appt.id,
-    clinic_id: appt.clinic_id,
-    patient_id: appt.patient_id,
-    doctor_id: appt.doctor_id,
-    department_id: appt.department_id,
-    service_id: appt.service_id,
-    insurance_provider_id: appt.insurance_provider_id,
-    scheduled_at: appt.scheduled_at,
-    duration_minutes: appt.duration_minutes,
-    status: targetStatus,
-    notes: appt.notes,
-    created_by: appt.created_by,
-    created_at: appt.created_at,
-    updated_by: user.id,
-    deleted_at: appt.deleted_at,
-    reminder_sent_at: appt.reminder_sent_at,
-    cancellation_reason: null,
-    cancelled_at: null,
-    cancelled_by: null,
-    no_show_reason: null,
-    no_showed_at: null,
-    no_showed_by: null,
-    payment_method: null,
-    secondary_payment_method: null,
-    payment_note: null,
-    paid_at: null,
-    total_amount: null,
-    paid_amount: null,
-    insurance_amount: null,
-    secondary_amount: 0,
-    deposit_amount: 0,
-    outstanding_amount: null,
-  };
-
-  // The production database enforces status changes with an UPDATE trigger.
-  // Undo is a rollback, not a transition, so replace the row instead of
-  // issuing any status UPDATE that the trigger can reject.
-  await adminClient
-    .from("appointment_services")
-    .delete()
-    .eq("appointment_id", id)
-    .eq("clinic_id", user.clinicId);
-  await adminClient
-    .from("follow_ups")
-    .update({ appointment_id: null })
-    .eq("appointment_id", id)
-    .eq("clinic_id", user.clinicId);
-  await adminClient
-    .from("outstanding_settlements")
-    .update({ appointment_id: null })
-    .eq("appointment_id", id)
-    .eq("clinic_id", user.clinicId);
-
-  const { error: deleteError } = await adminClient
-    .from("appointments")
-    .delete()
-    .eq("id", id)
-    .eq("clinic_id", user.clinicId);
-
-  if (deleteError) return { error: deleteError.message };
-
-  const { error: insertError } = await adminClient
-    .from("appointments")
-    .insert(replacement);
-
-  if (insertError) return { error: insertError.message };
-
-  revalidatePath("/appointments");
-  revalidatePath(`/patients/${appt.patient_id}`);
-  return {};
-}
-
-// Undo is not a new user transition. It directly rolls the row back to the
-// status captured before the original action, bypassing STATUS_TRANSITIONS.
 export async function undoAppointmentStatus(
   id: string,
   targetStatus: "pending" | "confirmed",
 ): Promise<ActionResult> {
-  return writeAppointmentStatusDirectly(id, targetStatus);
+  const user = await requireRole(["admin", "receptionist"]);
+  const supabase = await createClient();
+
+  const { data: appt } = await supabase
+    .from("appointments")
+    .select("patient_id")
+    .eq("id", id)
+    .eq("clinic_id", user.clinicId)
+    .single();
+
+  if (!appt) return { error: "Appointment not found." };
+
+  const { error } = await supabase.rpc("undo_appointment_status", {
+    p_appointment_id: id,
+    p_target_status: targetStatus,
+  });
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/appointments");
+  revalidatePath(`/patients/${appt.patient_id}`);
+  return {};
 }
 
 export async function undoInvoiceCompletion(
@@ -945,18 +875,16 @@ export async function confirmAndDisplaceConflicts(
   // Displace all conflicting pending appointments
   if (conflictingIds.length > 0) {
     const now = new Date().toISOString();
-    // displaced_at/displaced_by are new columns not yet in generated types — cast required
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error: displaceErr } = await (supabase
+    const { error: displaceErr } = await supabase
       .from("appointments")
       .update({
         deleted_at: now,
         displaced_at: now,
         displaced_by: user.id,
-      } as any)
+      })
       .in("id", conflictingIds)
       .eq("clinic_id", user.clinicId)
-      .eq("status", "pending") as any);
+      .eq("status", "pending");
 
     if (displaceErr) {
       return { error: "Appointment confirmed, but failed to remove conflicting appointments." };

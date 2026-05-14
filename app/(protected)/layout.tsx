@@ -61,7 +61,7 @@ export default async function ProtectedLayout({
           </div>
         </header>
 
-        <main className="flex-1 overflow-auto px-4 py-4 lg:py-5 max-w-7xl w-full mx-auto">
+        <main className="flex-1 overflow-auto px-4 py-4 lg:px-6 lg:py-5">
           {children}
         </main>
       </div>

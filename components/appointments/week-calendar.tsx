@@ -34,8 +34,8 @@ import { isDayClosed } from "@/lib/calendar-utils";
 type Appointment = AppointmentForDetail;
 
 // ── Time grid constants ────────────────────────────────────────────────────────
-const BUCKET_H_PX = 82; // fixed height per hour row — fits 3 compact cards
-const CARD_H_PX   = 24; // compact card height
+const BUCKET_H_PX = 144; // fixed height per hour row — fits 3 compact cards comfortably
+const CARD_H_PX   = 42;  // compact card height (name + status badge + padding)
 
 function timeStrToMin(t: string): number {
   const [h, m] = t.split(":").map(Number);
@@ -407,7 +407,7 @@ function HourAppointmentsDialog({
           <DialogHeader>
             <DialogTitle>{appointments.length} appointments at {hourLabel}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+          <div className="space-y-1.5 max-h-96 overflow-y-auto pr-1">
             {sorted.map((appt) => {
               const time = new Date(appt.scheduled_at).toLocaleTimeString("en-GB", {
                 hour: "2-digit",
@@ -419,20 +419,27 @@ function HourAppointmentsDialog({
                 <button
                   key={appt.id}
                   onClick={() => setSelectedAppt(appt)}
-                  className="w-full text-left rounded-lg border border-border/40 px-3 py-2 text-sm hover:bg-muted/40 transition-colors flex items-center gap-3"
+                  className="w-full text-left rounded-lg border border-border/40 overflow-hidden text-sm hover:bg-muted/40 transition-colors flex items-stretch gap-0"
+                  style={{ borderLeftColor: deptColor, borderLeftWidth: 3 }}
                 >
-                  <span
-                    className="h-2 w-2 rounded-full shrink-0"
+                  {/* Department color left accent */}
+                  <div
+                    className="w-0.5 shrink-0 self-stretch"
                     style={{ backgroundColor: deptColor }}
                   />
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium truncate">{appt.patients?.full_name ?? "—"}</div>
-                    <div className="text-muted-foreground text-xs">
-                      {time} · {appt.duration_minutes ?? 30}min
-                      {appt.departments?.name ? ` · ${appt.departments.name}` : ""}
+                  <div
+                    className="flex flex-1 items-center gap-3 px-3 py-2"
+                    style={{ backgroundColor: `color-mix(in oklab, ${deptColor} 5%, transparent)` }}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium truncate">{appt.patients?.full_name ?? "—"}</div>
+                      <div className="text-muted-foreground text-xs truncate">
+                        {time} · {appt.duration_minutes ?? 30}min
+                        {appt.profiles?.full_name ? ` · Dr. ${appt.profiles.full_name}` : ""}
+                      </div>
                     </div>
+                    <StatusBadge status={appt.status} />
                   </div>
-                  <StatusBadge status={appt.status} />
                 </button>
               );
             })}

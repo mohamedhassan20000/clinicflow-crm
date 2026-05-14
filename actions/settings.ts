@@ -12,6 +12,10 @@ import {
   insuranceSchema,
   clinicSchema,
   serviceSchema,
+  clinicWorkingHoursSchema,
+  doctorScheduleSchema,
+  type ClinicWorkingHoursValues,
+  type DoctorScheduleValues,
 } from "@/lib/validations/settings";
 
 export interface ActionResult {
@@ -879,5 +883,166 @@ export async function toggleServiceActive(
 
   revalidateTag(`services:${user.clinicId}`, {});
   revalidatePath("/settings/services");
+  return { success: true };
+}
+
+// ── Clinic working hours ──────────────────────────────────────────────────────
+
+const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6] as const;
+
+export async function getClinicWorkingHours(): Promise<ClinicWorkingHoursValues> {
+  const user = await requireRole(["admin", "manager", "receptionist", "doctor"]);
+  const supabase = await createClient();
+
+  const { data } = await supabase
+    .from("clinic_working_hours")
+    .select("day_of_week, shift_start, shift_end")
+    .eq("clinic_id", user.clinicId)
+    .order("day_of_week")
+    .order("shift_start");
+
+  const rows = data ?? [];
+
+  return ALL_DAYS.map((dow) => {
+    const dayRows = rows.filter((r) => r.day_of_week === dow);
+    return {
+      day_of_week: dow,
+      open: dayRows.length > 0,
+      shifts: dayRows.map((r) => ({
+        shift_start: (r.shift_start as string).slice(0, 5),
+        shift_end: (r.shift_end as string).slice(0, 5),
+      })),
+    };
+  });
+}
+
+export async function upsertClinicWorkingHours(
+  _prev: ActionResult | null,
+  fd: FormData,
+): Promise<ActionResult> {
+  const user = await requireRole(["admin"]);
+
+  const raw = fd.get("working_hours");
+  if (typeof raw !== "string") return { error: "Invalid payload." };
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { error: "Invalid payload." };
+  }
+
+  const result = clinicWorkingHoursSchema.safeParse(parsed);
+  if (!result.success) {
+    return { error: result.error.issues[0]?.message ?? "Validation error." };
+  }
+
+  const rows = result.data
+    .filter((d) => d.open && d.shifts.length > 0)
+    .flatMap((d) =>
+      d.shifts.map((s) => ({
+        clinic_id: user.clinicId,
+        day_of_week: d.day_of_week,
+        shift_start: s.shift_start,
+        shift_end: s.shift_end,
+      })),
+    );
+
+  const supabase = await createClient();
+
+  const { error: delErr } = await supabase
+    .from("clinic_working_hours")
+    .delete()
+    .eq("clinic_id", user.clinicId);
+  if (delErr) return { error: delErr.message };
+
+  if (rows.length > 0) {
+    const { error: insErr } = await supabase
+      .from("clinic_working_hours")
+      .insert(rows);
+    if (insErr) return { error: insErr.message };
+  }
+
+  revalidatePath("/settings/clinic");
+  return { success: true };
+}
+
+// ── Doctor schedule ───────────────────────────────────────────────────────────
+
+export async function getDoctorSchedule(
+  doctorId: string,
+): Promise<DoctorScheduleValues> {
+  const user = await requireRole(["admin", "manager", "receptionist", "doctor"]);
+  const supabase = await createClient();
+
+  const { data } = await supabase
+    .from("doctor_schedules")
+    .select("day_of_week, start_time, end_time")
+    .eq("doctor_id", doctorId)
+    .eq("clinic_id", user.clinicId)
+    .order("day_of_week");
+
+  const rows = data ?? [];
+
+  return ALL_DAYS.map((dow) => {
+    const row = rows.find((r) => r.day_of_week === dow);
+    return {
+      day_of_week: dow,
+      works: !!row,
+      start_time: row ? (row.start_time as string).slice(0, 5) : null,
+      end_time: row ? (row.end_time as string).slice(0, 5) : null,
+    };
+  });
+}
+
+export async function upsertDoctorSchedule(
+  doctorId: string,
+  _prev: ActionResult | null,
+  fd: FormData,
+): Promise<ActionResult> {
+  const user = await requireRole(["admin"]);
+
+  const raw = fd.get("schedule");
+  if (typeof raw !== "string") return { error: "Invalid payload." };
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { error: "Invalid payload." };
+  }
+
+  const result = doctorScheduleSchema.safeParse(parsed);
+  if (!result.success) {
+    return { error: result.error.issues[0]?.message ?? "Validation error." };
+  }
+
+  const rows = result.data
+    .filter((d) => d.works && d.start_time && d.end_time)
+    .map((d) => ({
+      doctor_id: doctorId,
+      clinic_id: user.clinicId,
+      day_of_week: d.day_of_week,
+      start_time: d.start_time as string,
+      end_time: d.end_time as string,
+    }));
+
+  const supabase = await createClient();
+
+  const { error: delErr } = await supabase
+    .from("doctor_schedules")
+    .delete()
+    .eq("doctor_id", doctorId)
+    .eq("clinic_id", user.clinicId);
+  if (delErr) return { error: delErr.message };
+
+  if (rows.length > 0) {
+    const { error: insErr } = await supabase
+      .from("doctor_schedules")
+      .insert(rows);
+    if (insErr) return { error: insErr.message };
+  }
+
+  revalidatePath("/settings/staff");
   return { success: true };
 }

@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { requireRole } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
 import { ClinicForm } from "@/components/settings/clinic-form";
+import { ClinicWorkingHoursForm } from "@/components/settings/clinic-working-hours-form";
+import { getClinicWorkingHours } from "@/actions/settings";
 
 export const metadata: Metadata = { title: "Clinic Settings" };
 
@@ -9,18 +11,23 @@ export default async function ClinicSettingsPage() {
   const user = await requireRole(["admin", "manager"]);
   const supabase = await createClient();
 
-  const { data: clinic } = await supabase
-    .from("clinics")
-    .select("name, phone, address, logo_url")
-    .eq("id", user.clinicId)
-    .single();
+  const [{ data: clinic }, workingHours] = await Promise.all([
+    supabase
+      .from("clinics")
+      .select("name, phone, address, logo_url")
+      .eq("id", user.clinicId)
+      .single(),
+    getClinicWorkingHours(),
+  ]);
+
+  const isReadOnly = user.role !== "admin";
 
   return (
-    <div className="max-w-2xl space-y-2">
+    <div className="max-w-2xl space-y-6">
       <div>
         <h2 className="font-semibold">Clinic settings</h2>
         <p className="text-sm text-muted-foreground">
-          Update your clinic&apos;s name, logo, and contact information.
+          Update your clinic&apos;s name, logo, contact information, and working hours.
         </p>
       </div>
 
@@ -31,7 +38,10 @@ export default async function ClinicSettingsPage() {
           address: clinic?.address ?? null,
         }}
         logoUrl={clinic?.logo_url ?? null}
+        readOnly={isReadOnly}
       />
+
+      <ClinicWorkingHoursForm defaultValues={workingHours} readOnly={isReadOnly} />
     </div>
   );
 }

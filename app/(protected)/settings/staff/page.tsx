@@ -76,6 +76,7 @@ export default async function StaffSettingsPage() {
         departments={departments ?? []}
         currentUserId={user.id}
         lastSeenMap={lastSeenMap ?? undefined}
+        isAdmin={user.role === "admin"}
       />
 
       <SettingsTrashSection

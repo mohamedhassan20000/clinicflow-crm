@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { startTransition, useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import {
   CalendarDays,
@@ -11,12 +11,17 @@ import {
   GraduationCap,
   Loader2,
   Phone,
+  Plus,
+  Save,
+  Trash2,
   Upload,
   User,
   X,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import {
   Sheet,
@@ -34,6 +39,8 @@ import {
   type StaffFile,
   type StaffFiles,
 } from "@/actions/staff-files";
+import { getDoctorSchedule, upsertDoctorSchedule } from "@/actions/settings";
+import type { DoctorScheduleValues } from "@/lib/validations/settings";
 import type { Tables } from "@/types/database";
 
 type StaffMember = Tables<"profiles"> & {
@@ -82,9 +89,10 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   lastSeen?: string | null;
+  isAdmin?: boolean;
 }
 
-export function StaffProfileSheet({ staff, open, onOpenChange, lastSeen }: Props) {
+export function StaffProfileSheet({ staff, open, onOpenChange, lastSeen, isAdmin }: Props) {
   const [files, setFiles] = useState<StaffFiles | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -203,6 +211,9 @@ export function StaffProfileSheet({ staff, open, onOpenChange, lastSeen }: Props
           <TabsList className="mx-8 mt-4 w-fit">
             <TabsTrigger value="profile">Profile</TabsTrigger>
             <TabsTrigger value="documents">Documents</TabsTrigger>
+            {staff.role === "doctor" && (
+              <TabsTrigger value="schedule">Schedule</TabsTrigger>
+            )}
           </TabsList>
 
           {/* ── Profile tab ── */}
@@ -262,6 +273,13 @@ export function StaffProfileSheet({ staff, open, onOpenChange, lastSeen }: Props
             </div>
           </TabsContent>
 
+          {/* ── Schedule tab (doctors only) ── */}
+          {staff.role === "doctor" && (
+            <TabsContent value="schedule" className="flex-1 overflow-y-auto px-8 py-5">
+              <DoctorScheduleTab doctorId={staff.id} open={open} isAdmin={!!isAdmin} />
+            </TabsContent>
+          )}
+
           {/* ── Documents tab ── */}
           <TabsContent
             value="documents"
@@ -319,6 +337,143 @@ export function StaffProfileSheet({ staff, open, onOpenChange, lastSeen }: Props
         </Tabs>
       </SheetContent>
     </Sheet>
+  );
+}
+
+// ── Doctor Schedule Tab ───────────────────────────────────────────────────────
+
+const SCHEDULE_DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const SCHEDULE_DAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
+
+function DoctorScheduleTab({
+  doctorId,
+  open,
+  isAdmin,
+}: {
+  doctorId: string;
+  open: boolean;
+  isAdmin: boolean;
+}) {
+  const [schedule, setSchedule] = useState<DoctorScheduleValues | null>(null);
+  const [saving, startSave] = useTransition();
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    let active = true;
+    setSchedule(null);
+    getDoctorSchedule(doctorId).then((data) => {
+      if (active) setSchedule(data);
+    });
+    return () => { active = false; };
+  }, [open, doctorId]);
+
+  function toggleDay(dow: number, works: boolean) {
+    setSchedule((prev) =>
+      prev?.map((d) =>
+        d.day_of_week === dow
+          ? { ...d, works, start_time: works ? (d.start_time ?? "09:00") : null, end_time: works ? (d.end_time ?? "17:00") : null }
+          : d,
+      ) ?? null,
+    );
+  }
+
+  function updateTime(dow: number, field: "start_time" | "end_time", value: string) {
+    setSchedule((prev) =>
+      prev?.map((d) => (d.day_of_week === dow ? { ...d, [field]: value } : d)) ?? null,
+    );
+  }
+
+  function onSave() {
+    if (!schedule) return;
+    setSaveError(null);
+    const fd = new FormData();
+    fd.set("schedule", JSON.stringify(schedule));
+    startSave(async () => {
+      const res = await upsertDoctorSchedule(doctorId, null, fd);
+      if (res.error) setSaveError(res.error);
+      else toast.success("Schedule saved.");
+    });
+  }
+
+  if (!schedule) {
+    return (
+      <div className="flex justify-center py-16">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-muted-foreground">
+        Set which days this doctor works and their hours for each day.
+      </p>
+
+      {saveError && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+          {saveError}
+        </div>
+      )}
+
+      <div className="space-y-2">
+        {SCHEDULE_DAY_ORDER.map((dow) => {
+          const day = schedule.find((d) => d.day_of_week === dow);
+          if (!day) return null;
+
+          return (
+            <div key={dow} className="rounded-lg border border-border/40 bg-muted/20 p-3">
+              <div className="flex items-center gap-3">
+                <Checkbox
+                  id={`sched-${doctorId}-${dow}`}
+                  checked={day.works}
+                  onCheckedChange={(v) => isAdmin && toggleDay(dow, !!v)}
+                  disabled={!isAdmin || saving}
+                />
+                <Label
+                  htmlFor={`sched-${doctorId}-${dow}`}
+                  className="w-24 cursor-pointer text-sm font-medium select-none"
+                >
+                  {SCHEDULE_DAY_NAMES[dow]}
+                </Label>
+                {!day.works && (
+                  <span className="text-xs text-muted-foreground">Day off</span>
+                )}
+              </div>
+
+              {day.works && (
+                <div className="mt-3 flex items-center gap-2 pl-7">
+                  <input
+                    type="time"
+                    value={day.start_time ?? ""}
+                    disabled={!isAdmin || saving}
+                    onChange={(e) => updateTime(dow, "start_time", e.target.value)}
+                    className="h-8 w-28 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                  />
+                  <span className="text-xs text-muted-foreground">to</span>
+                  <input
+                    type="time"
+                    value={day.end_time ?? ""}
+                    disabled={!isAdmin || saving}
+                    onChange={(e) => updateTime(dow, "end_time", e.target.value)}
+                    className="h-8 w-28 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                  />
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {isAdmin && (
+        <div className="flex justify-end pt-2">
+          <Button onClick={onSave} disabled={saving} className="gap-2">
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            Save schedule
+          </Button>
+        </div>
+      )}
+    </div>
   );
 }
 

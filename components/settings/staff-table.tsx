@@ -94,10 +94,11 @@ interface StaffTableProps {
   departments: Department[];
   currentUserId: string;
   lastSeenMap?: Record<string, string | null>;
+  isAdmin?: boolean;
 }
 
 
-export function StaffTable({ staff, departments, currentUserId, lastSeenMap }: StaffTableProps) {
+export function StaffTable({ staff, departments, currentUserId, lastSeenMap, isAdmin }: StaffTableProps) {
   const [editTarget, setEditTarget] = useState<StaffMember | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<StaffMember | null>(null);
   const [profileTarget, setProfileTarget] = useState<StaffMember | null>(null);
@@ -352,6 +353,7 @@ export function StaffTable({ staff, departments, currentUserId, lastSeenMap }: S
         open={!!profileTarget}
         onOpenChange={(open) => !open && setProfileTarget(null)}
         lastSeen={profileTarget ? (lastSeenMap?.[profileTarget.id] ?? null) : null}
+        isAdmin={isAdmin}
       />
 
       {/* Edit dialog */}

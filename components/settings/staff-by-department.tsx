@@ -14,6 +14,7 @@ interface Props {
   departments: DepartmentLite[];
   currentUserId: string;
   lastSeenMap?: Record<string, string | null>;
+  isAdmin?: boolean;
 }
 
 const UNASSIGNED_COLOR = "#94a3b8"; // slate-400
@@ -28,6 +29,7 @@ export function StaffByDepartment({
   departments,
   currentUserId,
   lastSeenMap,
+  isAdmin,
 }: Props) {
   const groups = useMemo(() => {
     const byDept = new Map<string, StaffMember[]>();
@@ -66,6 +68,7 @@ export function StaffByDepartment({
             departments={deptOptions}
             currentUserId={currentUserId}
             lastSeenMap={lastSeenMap}
+            isAdmin={isAdmin}
           />
         </DepartmentSection>
       )}
@@ -109,6 +112,7 @@ export function StaffByDepartment({
             departments={deptOptions}
             currentUserId={currentUserId}
             lastSeenMap={lastSeenMap}
+            isAdmin={isAdmin}
           />
         </DepartmentSection>
       )}

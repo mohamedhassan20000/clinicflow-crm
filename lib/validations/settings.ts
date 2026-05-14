@@ -76,3 +76,45 @@ export const serviceSchema = z.object({
 });
 
 export type ServiceValues = z.infer<typeof serviceSchema>;
+
+// ── Clinic working hours ──────────────────────────────────────────────────────
+
+const timeRegex = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+export const clinicShiftSchema = z
+  .object({
+    shift_start: z.string().regex(timeRegex, "Invalid time format"),
+    shift_end: z.string().regex(timeRegex, "Invalid time format"),
+  })
+  .refine((d) => d.shift_end > d.shift_start, {
+    path: ["shift_end"],
+    message: "End time must be after start time",
+  });
+
+export const clinicDayScheduleSchema = z.object({
+  day_of_week: z.number().int().min(0).max(6),
+  open: z.boolean(),
+  shifts: z.array(clinicShiftSchema).max(2),
+});
+
+export const clinicWorkingHoursSchema = z.array(clinicDayScheduleSchema);
+export type ClinicWorkingHoursValues = z.infer<typeof clinicWorkingHoursSchema>;
+
+// ── Doctor schedule ───────────────────────────────────────────────────────────
+
+export const doctorDayScheduleSchema = z
+  .object({
+    day_of_week: z.number().int().min(0).max(6),
+    works: z.boolean(),
+    start_time: z.string().regex(timeRegex, "Invalid time").optional().nullable(),
+    end_time: z.string().regex(timeRegex, "Invalid time").optional().nullable(),
+  })
+  .refine(
+    (d) =>
+      !d.works ||
+      (!!d.start_time && !!d.end_time && d.end_time > d.start_time),
+    { path: ["end_time"], message: "Working days must have valid start and end times" },
+  );
+
+export const doctorScheduleSchema = z.array(doctorDayScheduleSchema);
+export type DoctorScheduleValues = z.infer<typeof doctorScheduleSchema>;

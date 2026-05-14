@@ -460,10 +460,10 @@ export function AppointmentCard({
               <button
                 onClick={(e) => { e.stopPropagation(); handleDelete(); }}
                 disabled={isDeleting || isRestoring}
-                className="shrink-0 opacity-0 group-hover:opacity-100 text-muted-foreground/40 hover:text-destructive transition-opacity"
+                className="shrink-0 p-1 opacity-0 group-hover:opacity-100 text-muted-foreground/40 hover:text-destructive transition-opacity"
                 title="Move to trash"
               >
-                <Trash2 className="h-3 w-3" />
+                <Trash2 className="h-4 w-4" />
               </button>
             )}
           </div>

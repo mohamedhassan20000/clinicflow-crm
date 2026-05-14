@@ -9,16 +9,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/appointments/status-badge";
 import { AppointmentActions } from "@/components/appointments/appointment-actions";
@@ -43,7 +33,6 @@ function PopupAppointmentRow({
 }) {
   const { formatTime } = useClinicSettings();
   const [detailOpen, setDetailOpen] = useState(false);
-  const [confirmOpen, setConfirmOpen] = useState(false);
   const [isDeleting, startDelete] = useTransition();
 
   const time = formatTime(appt.scheduled_at);
@@ -132,47 +121,21 @@ function PopupAppointmentRow({
           )}
         </div>
 
-        {/* Trash */}
-        {canEdit && (
-          <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 shrink-0 text-muted-foreground/40 hover:text-destructive"
-              onClick={(e) => {
-                e.stopPropagation();
-                setConfirmOpen(true);
-              }}
-              disabled={isDeleting}
-              title="Move to trash"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Move appointment to trash?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  The appointment for <strong>{patientName}</strong> will be
-                  moved to the recycle bin and can be restored within 30 days.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel disabled={isDeleting}>
-                  Cancel
-                </AlertDialogCancel>
-                <AlertDialogAction
-                  disabled={isDeleting}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    setConfirmOpen(false);
-                    handleDelete();
-                  }}
-                >
-                  Move to trash
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+        {/* Trash — direct delete, no confirmation */}
+        {canEdit && appt.status !== "completed" && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 shrink-0 text-muted-foreground/40 hover:text-destructive"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleDelete();
+            }}
+            disabled={isDeleting}
+            title="Move to trash"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
         )}
       </div>
 
@@ -220,14 +183,14 @@ export function HourAppointmentsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[50vw] max-h-[70vh] overflow-hidden p-0">
-        <DialogHeader className="border-b border-border/40 px-4 pb-3 pt-4">
+      <DialogContent className="w-[50vw] min-w-[600px] h-[70vh] flex flex-col overflow-hidden p-0">
+        <DialogHeader className="shrink-0 border-b border-border/40 px-4 pb-3 pt-4">
           <DialogTitle>
             {appointments.length} appointment
             {appointments.length !== 1 ? "s" : ""} at {hourLabel}
           </DialogTitle>
         </DialogHeader>
-        <div className="max-h-[70vh] divide-y divide-border/20 overflow-y-auto">
+        <div className="flex-1 divide-y divide-border/20 overflow-y-auto">
           {sorted.length === 0 ? (
             <div className="px-4 py-8 text-center text-sm text-muted-foreground">
               All appointments have been removed.

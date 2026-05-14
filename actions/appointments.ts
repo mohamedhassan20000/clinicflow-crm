@@ -471,10 +471,9 @@ async function deleteAppointmentDependents(
       .eq("clinic_id", clinicId),
   ];
 
-  for (const op of operations) {
-    const { error } = await op;
-    if (error) return { error: error.message };
-  }
+  const results = await Promise.all(operations);
+  const failed = results.find((r) => r.error);
+  if (failed?.error) return { error: failed.error.message };
   return {};
 }
 

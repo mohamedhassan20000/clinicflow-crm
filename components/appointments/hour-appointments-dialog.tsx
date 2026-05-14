@@ -1,0 +1,249 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import { StatusBadge } from "@/components/appointments/status-badge";
+import { AppointmentActions } from "@/components/appointments/appointment-actions";
+import {
+  AppointmentDetailDialog,
+  type AppointmentForDetail,
+} from "@/components/appointments/appointment-detail-dialog";
+import { softDeleteAppointment, restoreAppointment } from "@/actions/appointments";
+import { formatDoctorName } from "@/lib/format-doctor";
+import { useClinicSettings } from "@/contexts/clinic-settings-context";
+
+// ── Single appointment row inside the popup ───────────────────────────────────
+
+function PopupAppointmentRow({
+  appt,
+  canEdit,
+  onDeleted,
+}: {
+  appt: AppointmentForDetail;
+  canEdit: boolean;
+  onDeleted: (id: string) => void;
+}) {
+  const { formatTime } = useClinicSettings();
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [isDeleting, startDelete] = useTransition();
+
+  const time = formatTime(appt.scheduled_at);
+  const deptColor = appt.departments?.color ?? "#64748b";
+  const deptName = appt.departments?.name ?? "General";
+  const patientName = appt.patients?.full_name ?? "Unknown";
+
+  function handleDelete() {
+    startDelete(async () => {
+      const res = await softDeleteAppointment(appt.id);
+      if (res.error) {
+        toast.error(res.error);
+      } else {
+        toast.success(`${patientName} moved to trash.`, {
+          duration: 10000,
+          action: {
+            label: "Undo",
+            onClick: () => {
+              restoreAppointment(appt.id).then((r) => {
+                if (r.error) toast.error(r.error);
+              });
+            },
+          },
+        });
+        onDeleted(appt.id);
+      }
+    });
+  }
+
+  return (
+    <>
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => setDetailOpen(true)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") setDetailOpen(true);
+        }}
+        className="flex items-start gap-3 px-3 py-3 cursor-pointer hover:brightness-[0.97] transition-[filter]"
+        style={{
+          backgroundColor: `color-mix(in oklab, ${deptColor} 4%, transparent)`,
+        }}
+      >
+        {/* Colored vertical bar */}
+        <span
+          aria-hidden
+          className="mt-1 h-10 w-1 shrink-0 rounded-full"
+          style={{ backgroundColor: deptColor }}
+        />
+
+        {/* Time */}
+        <div className="w-14 shrink-0 font-mono text-sm font-semibold tabular-nums leading-snug">
+          {time}
+        </div>
+
+        {/* Patient + info */}
+        <div className="min-w-0 flex-1 space-y-0.5">
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+            <span className="min-w-0 truncate font-medium text-foreground">
+              {patientName}
+            </span>
+            <span
+              className="shrink-0 rounded-sm px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
+              style={{
+                backgroundColor: `color-mix(in oklab, ${deptColor} 18%, transparent)`,
+                color: deptColor,
+              }}
+            >
+              {deptName}
+            </span>
+          </div>
+          <div className="text-xs text-muted-foreground">
+            {appt.profiles?.full_name
+              ? formatDoctorName(appt.profiles.full_name)
+              : "Unassigned"}
+          </div>
+          <StatusBadge status={appt.status} />
+          {canEdit && (
+            <div className="pt-0.5" onClick={(e) => e.stopPropagation()}>
+              <AppointmentActions
+                appointmentId={appt.id}
+                currentStatus={appt.status}
+                hasInsurance={Boolean(appt.insurance_provider_id)}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Trash */}
+        {canEdit && (
+          <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 shrink-0 text-muted-foreground/40 hover:text-destructive"
+              onClick={(e) => {
+                e.stopPropagation();
+                setConfirmOpen(true);
+              }}
+              disabled={isDeleting}
+              title="Move to trash"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Move appointment to trash?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  The appointment for <strong>{patientName}</strong> will be
+                  moved to the recycle bin and can be restored within 30 days.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={isDeleting}>
+                  Cancel
+                </AlertDialogCancel>
+                <AlertDialogAction
+                  disabled={isDeleting}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setConfirmOpen(false);
+                    handleDelete();
+                  }}
+                >
+                  Move to trash
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
+      </div>
+
+      <AppointmentDetailDialog
+        appointment={appt}
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+        canEdit={canEdit}
+      />
+    </>
+  );
+}
+
+// ── Exported dialog ───────────────────────────────────────────────────────────
+
+export function HourAppointmentsDialog({
+  appointments: initialAppointments,
+  bucketMin,
+  open,
+  onOpenChange,
+  canEdit,
+}: {
+  appointments: AppointmentForDetail[];
+  bucketMin: number;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  canEdit: boolean;
+}) {
+  const { formatSlotTime } = useClinicSettings();
+  const [appointments, setAppointments] = useState(initialAppointments);
+
+  const sorted = [...appointments].sort((a, b) => {
+    const deptA = a.departments?.name ?? "";
+    const deptB = b.departments?.name ?? "";
+    if (deptA !== deptB) return deptA.localeCompare(deptB);
+    return new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime();
+  });
+
+  const h = Math.floor(bucketMin / 60);
+  const hourLabel = formatSlotTime(`${String(h).padStart(2, "0")}:00`);
+
+  function handleDeleted(id: string) {
+    setAppointments((prev) => prev.filter((a) => a.id !== id));
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg overflow-hidden p-0">
+        <DialogHeader className="border-b border-border/40 px-4 pb-3 pt-4">
+          <DialogTitle>
+            {appointments.length} appointment
+            {appointments.length !== 1 ? "s" : ""} at {hourLabel}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="max-h-[70vh] divide-y divide-border/20 overflow-y-auto">
+          {sorted.length === 0 ? (
+            <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+              All appointments have been removed.
+            </div>
+          ) : (
+            sorted.map((appt) => (
+              <PopupAppointmentRow
+                key={appt.id}
+                appt={appt}
+                canEdit={canEdit}
+                onDeleted={handleDeleted}
+              />
+            ))
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, CalendarPlus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -25,12 +25,29 @@ import {
 } from "@/components/appointments/appointment-detail-dialog";
 import type { ClinicWorkingHoursValues } from "@/lib/validations/settings";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
+import { HourAppointmentsDialog } from "@/components/appointments/hour-appointments-dialog";
 
 type Appointment = AppointmentForDetail;
 
 // ── Time grid constants ────────────────────────────────────────────────────────
-const BUCKET_H_PX = 260; // fixed height per hour row
-const CARD_H_PX   = 80;  // appointment card height inside bucket
+const BUCKET_H_PX = 380; // fixed height per hour row
+const CARD_H_PX   = 110; // appointment card height inside bucket
+
+// Responsive: how many cards to show before "Show all" in the day time grid.
+function useVisibleCount(): number {
+  const [count, setCount] = useState(5);
+  useEffect(() => {
+    function update() {
+      if (window.innerWidth >= 1280) setCount(8);
+      else if (window.innerWidth >= 768) setCount(5);
+      else setCount(2);
+    }
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+  return count;
+}
 
 function timeStrToMin(t: string): number {
   const [h, m] = t.split(":").map(Number);
@@ -143,6 +160,8 @@ export function DayCalendar({
   canEdit,
   clinicHours = [],
 }: Props) {
+  const { formatSlotTime } = useClinicSettings();
+  const visibleCount = useVisibleCount();
   const prev = addDays(date, -1);
   const next = addDays(date, 1);
   const dow = dateToDow(date);
@@ -228,7 +247,7 @@ export function DayCalendar({
                 style={{ height: BUCKET_H_PX }}
               >
                 <span className="text-[9px] text-muted-foreground/50 leading-none">
-                  {String(Math.floor(hMin / 60)).padStart(2, "0")}:00
+                  {formatSlotTime(`${String(Math.floor(hMin / 60)).padStart(2, "0")}:00`)}
                 </span>
               </div>
             ))}
@@ -271,17 +290,13 @@ export function DayCalendar({
                   }
                   const appts = hourBuckets.get(hMin) ?? [];
                   return (
-                    <div
+                    <DayHourBucketRow
                       key={hMin}
-                      className="border-b border-border/20 flex gap-0.5 px-0.5 py-0.5 overflow-hidden"
-                      style={{ height: BUCKET_H_PX }}
-                    >
-                      {appts.length === 0 ? null : appts.map((appt) => (
-                        <div key={appt.id} style={{ height: CARD_H_PX }} className="min-w-0 flex-1 shrink-0">
-                          <DayCard appt={appt} canEdit={canEdit} />
-                        </div>
-                      ))}
-                    </div>
+                      appts={appts}
+                      bucketMin={hMin}
+                      visibleCount={visibleCount}
+                      canEdit={canEdit}
+                    />
                   );
                 })}
                 {sorted.length === 0 && (
@@ -297,6 +312,56 @@ export function DayCalendar({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── Hour bucket row (desktop grid) ───────────────────────────────────────────
+
+function DayHourBucketRow({
+  appts,
+  bucketMin,
+  visibleCount,
+  canEdit,
+}: {
+  appts: Appointment[];
+  bucketMin: number;
+  visibleCount: number;
+  canEdit: boolean;
+}) {
+  const [showAllOpen, setShowAllOpen] = useState(false);
+  const hasMore = appts.length > visibleCount;
+  const visible = hasMore ? appts.slice(0, visibleCount) : appts;
+
+  return (
+    <div
+      className="relative border-b border-border/20 flex flex-col gap-0.5 px-0.5 py-0.5 overflow-hidden"
+      style={{ height: BUCKET_H_PX }}
+    >
+      <div className="flex gap-0.5 flex-1 min-h-0 overflow-hidden">
+        {visible.map((appt) => (
+          <div key={appt.id} style={{ height: CARD_H_PX }} className="min-w-0 flex-1 shrink-0">
+            <DayCard appt={appt} canEdit={canEdit} />
+          </div>
+        ))}
+      </div>
+      {hasMore && (
+        <button
+          onClick={() => setShowAllOpen(true)}
+          className="mt-auto text-[9px] text-primary font-medium hover:underline text-left px-1 leading-none py-0.5 shrink-0"
+        >
+          Show all ({appts.length})
+        </button>
+      )}
+      {showAllOpen && (
+        <HourAppointmentsDialog
+          appointments={appts}
+          bucketMin={bucketMin}
+          open={showAllOpen}
+          onOpenChange={setShowAllOpen}
+          canEdit={canEdit}
+        />
+      )}
     </div>
   );
 }

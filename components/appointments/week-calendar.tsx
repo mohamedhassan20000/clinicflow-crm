@@ -31,12 +31,13 @@ import {
 import type { ClinicWorkingHoursValues } from "@/lib/validations/settings";
 import { isDayClosed } from "@/lib/calendar-utils";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
+import { HourAppointmentsDialog } from "@/components/appointments/hour-appointments-dialog";
 
 type Appointment = AppointmentForDetail;
 
 // ── Time grid constants ────────────────────────────────────────────────────────
-const BUCKET_H_PX = 260; // fixed height per hour row — fits 3 full compact cards
-const CARD_H_PX   = 80;  // compact card: name + badge + time + doctor + dept
+const BUCKET_H_PX = 380; // fixed height per hour row — fits 3 full compact cards
+const CARD_H_PX   = 110; // compact card: name + badge + time + doctor + dept
 
 function timeStrToMin(t: string): number {
   const [h, m] = t.split(":").map(Number);
@@ -167,6 +168,7 @@ export function WeekCalendar({
   // Fall back to showing all 7 if no clinic hours are configured
   const displayDays = visibleDays.length > 0 ? visibleDays : allDays;
   const colCount = displayDays.length;
+  const { formatSlotTime } = useClinicSettings();
   const today = new Date();
 
   const appointmentsByDate = useMemo(() => {
@@ -249,7 +251,7 @@ export function WeekCalendar({
                 style={{ height: BUCKET_H_PX }}
               >
                 <span className="text-[9px] text-muted-foreground/50 leading-none">
-                  {String(Math.floor(hMin / 60)).padStart(2, "0")}:00
+                  {formatSlotTime(`${String(Math.floor(hMin / 60)).padStart(2, "0")}:00`)}
                 </span>
               </div>
             ))}
@@ -379,86 +381,6 @@ const STATUS_SORT_RANK: Record<string, number> = {
   no_show: 3,
   cancelled: 4,
 };
-
-function HourAppointmentsDialog({
-  appointments,
-  bucketMin,
-  open,
-  onOpenChange,
-  canEdit,
-}: {
-  appointments: Appointment[];
-  bucketMin: number;
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-  canEdit: boolean;
-}) {
-  const [selectedAppt, setSelectedAppt] = useState<Appointment | null>(null);
-  const { formatTime } = useClinicSettings();
-
-  const sorted = [...appointments].sort((a, b) => {
-    const deptA = a.departments?.name ?? "";
-    const deptB = b.departments?.name ?? "";
-    if (deptA !== deptB) return deptA.localeCompare(deptB);
-    return new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime();
-  });
-
-  const hourLabel = `${String(Math.floor(bucketMin / 60)).padStart(2, "0")}:00`;
-
-  return (
-    <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>{appointments.length} appointments at {hourLabel}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-1.5 max-h-96 overflow-y-auto pr-1">
-            {sorted.map((appt) => {
-              const time = formatTime(appt.scheduled_at);
-              const deptColor = appt.departments?.color ?? "#64748b";
-              return (
-                <button
-                  key={appt.id}
-                  onClick={() => setSelectedAppt(appt)}
-                  className="w-full text-left rounded-lg border border-border/40 overflow-hidden text-sm hover:bg-muted/40 transition-colors flex items-stretch gap-0"
-                  style={{ borderLeftColor: deptColor, borderLeftWidth: 3 }}
-                >
-                  {/* Department color left accent */}
-                  <div
-                    className="w-0.5 shrink-0 self-stretch"
-                    style={{ backgroundColor: deptColor }}
-                  />
-                  <div
-                    className="flex flex-1 items-center gap-3 px-3 py-2"
-                    style={{ backgroundColor: `color-mix(in oklab, ${deptColor} 5%, transparent)` }}
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium truncate">{appt.patients?.full_name ?? "—"}</div>
-                      <div className="text-muted-foreground text-xs truncate">
-                        {time} · {appt.duration_minutes ?? 30}min
-                        {appt.profiles?.full_name ? ` · Dr. ${appt.profiles.full_name}` : ""}
-                      </div>
-                    </div>
-                    <StatusBadge status={appt.status} />
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {selectedAppt && (
-        <AppointmentDetailDialog
-          appointment={selectedAppt}
-          open={Boolean(selectedAppt)}
-          onOpenChange={(v) => { if (!v) setSelectedAppt(null); }}
-          canEdit={canEdit}
-        />
-      )}
-    </>
-  );
-}
 
 // ── Appointment card ──────────────────────────────────────────────────────────
 

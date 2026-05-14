@@ -240,17 +240,17 @@ export function WeekCalendar({
         <div className="flex" style={{ minWidth: `${colCount * 146}px` }}>
 
           {/* Time axis */}
-          <div className="w-10 shrink-0 border-r border-border/30">
+          <div className="w-16 shrink-0 border-r border-border/30">
             {/* Spacer for day-header row */}
             <div className="h-8 border-b border-border/30" />
             {/* Hour labels — one per row, aligned with day columns */}
             {hourRows.map((hMin) => (
               <div
                 key={hMin}
-                className="border-b border-border/20 flex items-start justify-end pr-1 pt-0.5"
+                className="border-b border-border/20 flex items-start justify-end pr-1.5 pt-0.5"
                 style={{ height: BUCKET_H_PX }}
               >
-                <span className="text-[9px] text-muted-foreground/50 leading-none">
+                <span className="text-[9px] text-muted-foreground/50 leading-none whitespace-nowrap">
                   {formatSlotTime(`${String(Math.floor(hMin / 60)).padStart(2, "0")}:00`)}
                 </span>
               </div>
@@ -384,7 +384,7 @@ const STATUS_SORT_RANK: Record<string, number> = {
 
 // ── Appointment card ──────────────────────────────────────────────────────────
 
-function AppointmentCard({
+export function AppointmentCard({
   appt,
   canEdit,
   compact = false,

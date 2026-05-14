@@ -26,7 +26,7 @@ export default async function ClinicSettingsPage() {
   const clinicData = clinic as any;
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="max-w-2xl mx-auto space-y-6">
       <div>
         <h2 className="font-semibold">Clinic settings</h2>
         <p className="text-sm text-muted-foreground">

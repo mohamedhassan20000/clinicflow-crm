@@ -6,6 +6,7 @@ import { AddStaffDialog } from "@/components/settings/add-staff-dialog";
 import { SettingsTrashSection, type TrashItem } from "@/components/settings/settings-trash-section";
 import { restoreStaff, deleteStaff, emptyStaffTrash } from "@/actions/settings";
 import { isPrimaryClinicAdmin } from "@/lib/primary-admin";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export const metadata: Metadata = { title: "Staff" };
 
@@ -14,12 +15,24 @@ const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 export default async function StaffSettingsPage() {
   const user = await requireRole(["admin", "manager"]);
 
-  const [allStaff, cachedDepts, canCustomize] = await Promise.all([
+  const [allStaff, cachedDepts, canCustomize, lastSeenMap] = await Promise.all([
     getCachedStaff(user.clinicId),
     getCachedDepartments(user.clinicId),
     user.role === "admin"
       ? isPrimaryClinicAdmin(user.id, user.clinicId)
       : Promise.resolve(false),
+    user.role === "admin"
+      ? createAdminClient()
+          .auth.admin.listUsers({ perPage: 1000 })
+          .then(({ data }) => {
+            const map: Record<string, string | null> = {};
+            for (const u of data?.users ?? []) {
+              map[u.id] = u.last_sign_in_at ?? null;
+            }
+            return map;
+          })
+          .catch(() => null)
+      : Promise.resolve(null),
   ]);
 
   const departments = cachedDepts.filter((d) => !d.deleted_at && d.is_active);
@@ -62,6 +75,7 @@ export default async function StaffSettingsPage() {
         }
         departments={departments ?? []}
         currentUserId={user.id}
+        lastSeenMap={lastSeenMap ?? undefined}
       />
 
       <SettingsTrashSection

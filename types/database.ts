@@ -7,30 +7,10 @@ export type Json =
   | Json[]
 
 export type Database = {
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
@@ -100,6 +80,8 @@ export type Database = {
           deleted_at: string | null
           department_id: string | null
           deposit_amount: number
+          displaced_at: string | null
+          displaced_by: string | null
           doctor_id: string
           duration_minutes: number
           id: string
@@ -137,6 +119,8 @@ export type Database = {
           deleted_at?: string | null
           department_id?: string | null
           deposit_amount?: number
+          displaced_at?: string | null
+          displaced_by?: string | null
           doctor_id: string
           duration_minutes?: number
           id?: string
@@ -174,6 +158,8 @@ export type Database = {
           deleted_at?: string | null
           department_id?: string | null
           deposit_amount?: number
+          displaced_at?: string | null
+          displaced_by?: string | null
           doctor_id?: string
           duration_minutes?: number
           id?: string
@@ -228,6 +214,13 @@ export type Database = {
             columns: ["department_id"]
             isOneToOne: false
             referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointments_displaced_by_fkey"
+            columns: ["displaced_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
@@ -373,6 +366,7 @@ export type Database = {
           name: string
           phone: string | null
           reminder_lead_hours: number
+          time_format: string
           updated_at: string
           working_hours_end: string | null
           working_hours_start: string | null
@@ -386,6 +380,7 @@ export type Database = {
           name: string
           phone?: string | null
           reminder_lead_hours?: number
+          time_format?: string
           updated_at?: string
           working_hours_end?: string | null
           working_hours_start?: string | null
@@ -399,6 +394,7 @@ export type Database = {
           name?: string
           phone?: string | null
           reminder_lead_hours?: number
+          time_format?: string
           updated_at?: string
           working_hours_end?: string | null
           working_hours_start?: string | null
@@ -638,58 +634,6 @@ export type Database = {
           },
         ]
       }
-      medical_notes: {
-        Row: {
-          created_at: string
-          created_by: string | null
-          deleted_at: string | null
-          doctor_id: string
-          id: string
-          note: string
-          patient_id: string
-        }
-        Insert: {
-          created_at?: string
-          created_by?: string | null
-          deleted_at?: string | null
-          doctor_id: string
-          id?: string
-          note: string
-          patient_id: string
-        }
-        Update: {
-          created_at?: string
-          created_by?: string | null
-          deleted_at?: string | null
-          doctor_id?: string
-          id?: string
-          note?: string
-          patient_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "medical_notes_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "medical_notes_doctor_id_fkey"
-            columns: ["doctor_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "medical_notes_patient_id_fkey"
-            columns: ["patient_id"]
-            isOneToOne: false
-            referencedRelation: "patients"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       medical_note_attachments: {
         Row: {
           clinic_id: string
@@ -760,6 +704,58 @@ export type Database = {
             columns: ["uploaded_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      medical_notes: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          doctor_id: string
+          id: string
+          note: string
+          patient_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          doctor_id: string
+          id?: string
+          note: string
+          patient_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          doctor_id?: string
+          id?: string
+          note?: string
+          patient_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "medical_notes_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "medical_notes_doctor_id_fkey"
+            columns: ["doctor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "medical_notes_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
             referencedColumns: ["id"]
           },
         ]
@@ -1368,30 +1364,42 @@ export type Database = {
         }
         Returns: undefined
       }
-      complete_appointment_billing_with_previous_settlement: {
+      get_followups_dashboard: {
         Args: {
-          p_appointment_id: string
-          p_deposit_amount?: number
-          p_insurance_amount?: number
-          p_line_items: Json
-          p_paid_amount: number
-          p_payment_method: string
-          p_payment_note?: string
-          p_previous_note?: string
-          p_previous_payment_method?: string
-          p_previous_settlement_amount?: number
-          p_secondary_amount?: number
-          p_secondary_payment_method?: string
+          p_department_id?: string
+          p_doctor_id?: string
+          p_done_limit?: number
+          p_done_offset?: number
+          p_end: string
+          p_outcome?: Database["public"]["Enums"]["follow_up_outcome"]
+          p_patient_ids?: string[]
+          p_pending_limit?: number
+          p_start: string
         }
-        Returns: {
-          affected_prior_appointment_ids: string[]
-          current_collected: number
-          current_outstanding: number
-          current_total: number
-          previous_outstanding_after: number
-          previous_outstanding_before: number
-          previous_settled_now: number
-        }[]
+        Returns: Json
+      }
+      get_revenue_summary: {
+        Args: {
+          p_department_id?: string
+          p_doctor_id?: string
+          p_end: string
+          p_patient_ids?: string[]
+          p_start: string
+        }
+        Returns: Json
+      }
+      record_own_last_login: { Args: never; Returns: boolean }
+      restore_medical_note_attachment: {
+        Args: {
+          p_attachment_id: string
+          p_note_id: string
+          p_patient_id: string
+        }
+        Returns: boolean
+      }
+      restore_patient_document: {
+        Args: { p_document_id: string; p_patient_id: string }
+        Returns: boolean
       }
       settle_patient_outstanding: {
         Args: {
@@ -1405,18 +1413,8 @@ export type Database = {
         }
         Returns: undefined
       }
-      restore_medical_note_attachment: {
-        Args: {
-          p_attachment_id: string
-          p_note_id: string
-          p_patient_id: string
-        }
-        Returns: boolean
-      }
-      restore_patient_document: {
-        Args: { p_document_id: string; p_patient_id: string }
-        Returns: boolean
-      }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
       soft_delete_medical_note_attachment: {
         Args: {
           p_attachment_id: string
@@ -1425,16 +1423,11 @@ export type Database = {
         }
         Returns: boolean
       }
-      soft_delete_patient: {
-        Args: { p_patient_id: string }
-        Returns: boolean
-      }
+      soft_delete_patient: { Args: { p_patient_id: string }; Returns: boolean }
       soft_delete_patient_document: {
         Args: { p_document_id: string; p_patient_id: string }
         Returns: boolean
       }
-      show_limit: { Args: never; Returns: number }
-      show_trgm: { Args: { "": string }; Returns: string[] }
       undo_appointment_billing: {
         Args: { p_appointment_id: string; p_target_status: string }
         Returns: undefined
@@ -1589,9 +1582,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       appointment_status: [

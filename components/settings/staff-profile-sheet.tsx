@@ -39,8 +39,8 @@ import {
   type StaffFile,
   type StaffFiles,
 } from "@/actions/staff-files";
-import { getDoctorSchedule, upsertDoctorSchedule } from "@/actions/settings";
-import type { DoctorScheduleValues } from "@/lib/validations/settings";
+import { getDoctorSchedule, upsertDoctorSchedule, getClinicWorkingHours } from "@/actions/settings";
+import type { DoctorScheduleValues, ClinicWorkingHoursValues } from "@/lib/validations/settings";
 import type { Tables } from "@/types/database";
 
 type StaffMember = Tables<"profiles"> & {
@@ -345,6 +345,14 @@ export function StaffProfileSheet({ staff, open, onOpenChange, lastSeen, isAdmin
 const SCHEDULE_DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const SCHEDULE_DAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
+// Returns true if the clinic has working hours configured and the given dow is closed.
+function isClinicDayClosed(clinicHours: ClinicWorkingHoursValues, dow: number): boolean {
+  const hasAnyConfig = clinicHours.some((d) => d.open);
+  if (!hasAnyConfig) return false;
+  const day = clinicHours.find((d) => d.day_of_week === dow);
+  return !day?.open;
+}
+
 function DoctorScheduleTab({
   doctorId,
   open,
@@ -355,6 +363,7 @@ function DoctorScheduleTab({
   isAdmin: boolean;
 }) {
   const [schedule, setSchedule] = useState<DoctorScheduleValues | null>(null);
+  const [clinicHours, setClinicHours] = useState<ClinicWorkingHoursValues>([]);
   const [saving, startSave] = useTransition();
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -362,8 +371,13 @@ function DoctorScheduleTab({
     if (!open) return;
     let active = true;
     setSchedule(null);
-    getDoctorSchedule(doctorId).then((data) => {
-      if (active) setSchedule(data);
+    Promise.all([
+      getDoctorSchedule(doctorId),
+      getClinicWorkingHours(),
+    ]).then(([scheduleData, hoursData]) => {
+      if (!active) return;
+      setSchedule(scheduleData);
+      setClinicHours(hoursData ?? []);
     });
     return () => { active = false; };
   }, [open, doctorId]);
@@ -421,14 +435,19 @@ function DoctorScheduleTab({
           const day = schedule.find((d) => d.day_of_week === dow);
           if (!day) return null;
 
+          const clinicClosed = isClinicDayClosed(clinicHours, dow);
+
           return (
-            <div key={dow} className="rounded-lg border border-border/40 bg-muted/20 p-3">
+            <div
+              key={dow}
+              className={`rounded-lg border border-border/40 p-3 ${clinicClosed ? "bg-muted/10 opacity-60" : "bg-muted/20"}`}
+            >
               <div className="flex items-center gap-3">
                 <Checkbox
                   id={`sched-${doctorId}-${dow}`}
                   checked={day.works}
-                  onCheckedChange={(v) => isAdmin && toggleDay(dow, !!v)}
-                  disabled={!isAdmin || saving}
+                  onCheckedChange={(v) => isAdmin && !clinicClosed && toggleDay(dow, !!v)}
+                  disabled={!isAdmin || saving || clinicClosed}
                 />
                 <Label
                   htmlFor={`sched-${doctorId}-${dow}`}
@@ -436,12 +455,14 @@ function DoctorScheduleTab({
                 >
                   {SCHEDULE_DAY_NAMES[dow]}
                 </Label>
-                {!day.works && (
+                {clinicClosed ? (
+                  <span className="text-xs text-muted-foreground/60 italic">Clinic closed</span>
+                ) : !day.works ? (
                   <span className="text-xs text-muted-foreground">Day off</span>
-                )}
+                ) : null}
               </div>
 
-              {day.works && (
+              {day.works && !clinicClosed && (
                 <div className="mt-3 flex items-center gap-2 pl-7">
                   <input
                     type="time"

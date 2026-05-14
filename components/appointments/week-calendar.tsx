@@ -15,6 +15,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { StatusBadge } from "@/components/appointments/status-badge";
 import { AppointmentActions } from "@/components/appointments/appointment-actions";
 import { softDeleteAppointment, restoreAppointment } from "@/actions/appointments";
@@ -92,70 +98,24 @@ function isDayClosed(clinicHours: ClinicWorkingHoursValues, dow: number): boolea
   return !day?.open;
 }
 
-// Overlap layout: assigns colIndex/colCount to each appointment.
-type LayoutAppt = Appointment & { colIndex: number; colCount: number };
-
-function computeOverlapLayout(appts: Appointment[]): LayoutAppt[] {
-  if (appts.length === 0) return [];
-  const sorted = [...appts].sort(
-    (a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime(),
-  );
-
-  // Build augmented list with start/end in minutes
-  const items = sorted.map((a) => ({
-    appt: a,
-    start: apptStartMin(a),
-    end: apptStartMin(a) + (a.duration_minutes ?? 30),
-    colIndex: 0,
-    colCount: 1,
-  }));
-
-  // Sweep-line grouping
-  let groupStart = 0;
-  let groupEndMin = items[0]!.end;
-
-  for (let i = 1; i < items.length; i++) {
-    if (items[i]!.start < groupEndMin) {
-      // Part of the current overlap group
-      groupEndMin = Math.max(groupEndMin, items[i]!.end);
-    } else {
-      // Close current group
-      assignColumns(items, groupStart, i);
-      groupStart = i;
-      groupEndMin = items[i]!.end;
-    }
+// Groups appointments by 60-minute hour bucket based on start time.
+// Appointments starting in the same hour (e.g. 10:00–10:59) are grouped together.
+function groupByHourBucket(appts: Appointment[]): Map<number, Appointment[]> {
+  const groups = new Map<number, Appointment[]>();
+  for (const appt of appts) {
+    const startMin = apptStartMin(appt);
+    const bucket = Math.floor(startMin / 60) * 60;
+    const existing = groups.get(bucket) ?? [];
+    existing.push(appt);
+    groups.set(bucket, existing);
   }
-  assignColumns(items, groupStart, items.length);
-
-  return items.map(({ appt, colIndex, colCount }) => ({
-    ...appt,
-    colIndex,
-    colCount,
-  }));
-}
-
-function assignColumns(
-  items: { colIndex: number; colCount: number; start: number; end: number }[],
-  from: number,
-  to: number,
-) {
-  const group = items.slice(from, to);
-  const colCount = group.length; // simple: one column per appointment in the group
-  // Assign columns using a free-list (greedy interval scheduling)
-  const freeAt: number[] = Array(colCount).fill(0);
-  for (const item of group) {
-    let col = 0;
-    for (let c = 0; c < colCount; c++) {
-      if ((freeAt[c] ?? 0) <= item.start) { col = c; break; }
-    }
-    item.colIndex = col;
-    freeAt[col] = item.end;
+  // Sort each bucket by start time
+  for (const [key, list] of groups) {
+    groups.set(key, [...list].sort(
+      (a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime(),
+    ));
   }
-  // Determine actual max column used in this group for width calculation
-  const maxCol = Math.max(...group.map((g) => g.colIndex)) + 1;
-  for (const item of group) {
-    item.colCount = maxCol;
-  }
+  return groups;
 }
 
 // ── Calendar helpers ──────────────────────────────────────────────────────────
@@ -202,7 +162,18 @@ export function WeekCalendar({
   canEdit,
   clinicHours = [],
 }: WeekCalendarProps) {
-  const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+  const allDays = Array.from({ length: 7 }, (_, i) => ({
+    day: addDays(weekStart, i),
+    originalIndex: i,
+  }));
+  // Hide closed days from the week view (month view is unaffected)
+  const visibleDays = allDays.filter(({ originalIndex }) => {
+    const dow = dayIndexToDow(originalIndex);
+    return !isDayClosed(clinicHours, dow);
+  });
+  // Fall back to showing all 7 if no clinic hours are configured
+  const displayDays = visibleDays.length > 0 ? visibleDays : allDays;
+  const colCount = displayDays.length;
   const today = new Date();
 
   const appointmentsByDate = useMemo(() => {
@@ -272,7 +243,7 @@ export function WeekCalendar({
 
       {/* Grid */}
       <div className="overflow-x-auto rounded-xl border border-border/40 bg-card/40">
-        <div className="flex min-w-[1020px]">
+        <div className="flex" style={{ minWidth: `${colCount * 146}px` }}>
 
           {/* Time axis */}
           <div className="relative w-10 shrink-0 border-r border-border/30" style={{ height: gridHeightPx + 32 }}>
@@ -300,14 +271,17 @@ export function WeekCalendar({
           </div>
 
           {/* Day columns */}
-          <div className="grid flex-1 grid-cols-7 divide-x divide-border/30">
-            {days.map((day, i) => {
+          <div
+            className="grid flex-1 divide-x divide-border/30"
+            style={{ gridTemplateColumns: `repeat(${colCount}, minmax(0, 1fr))` }}
+          >
+            {displayDays.map(({ day, originalIndex }) => {
+              const i = originalIndex;
               const isToday = isSameDay(day, today);
               const dayAppts = appointmentsByDate.get(localDateKey(day)) ?? [];
               const dow = dayIndexToDow(i);
               const breaks = getBreakBands(clinicHours, dow);
-              const closed = isDayClosed(clinicHours, dow);
-              const layoutAppts = computeOverlapLayout(dayAppts);
+              const hourBuckets = groupByHourBucket(dayAppts);
 
               return (
                 <div key={i} className="flex flex-col">
@@ -351,36 +325,65 @@ export function WeekCalendar({
                       );
                     })}
 
-                    {/* Closed-day overlay */}
-                    {closed && (
-                      <div className="absolute inset-0 bg-muted/50 flex items-center justify-center pointer-events-none">
-                        <span className="text-[9px] text-muted-foreground/50 font-medium uppercase tracking-widest">
-                          Closed
-                        </span>
-                      </div>
-                    )}
+                    {/* Appointment groups by hour bucket */}
+                    {Array.from(hourBuckets.entries()).map(([bucketMin, appts]) => {
+                      const groupTop = ((bucketMin - startMin) / STEP_MIN) * ROW_PX;
 
-                    {/* Appointment cards */}
-                    {layoutAppts.map((appt) => {
+                      // 5+ in the same hour → summary card
+                      if (appts.length >= 5) {
+                        return (
+                          <div
+                            key={`summary-${bucketMin}`}
+                            className="absolute inset-x-0 px-0.5 py-0.5 box-border"
+                            style={{ top: groupTop, height: 4 * ROW_PX }}
+                          >
+                            <HourSummaryCard
+                              appointments={appts}
+                              canEdit={canEdit}
+                              bucketMin={bucketMin}
+                            />
+                          </div>
+                        );
+                      }
+
+                      // 2–4 → stack vertically from bucket top
+                      if (appts.length > 1) {
+                        return (
+                          <div
+                            key={`group-${bucketMin}`}
+                            className="absolute inset-x-0 px-0.5 py-0.5 box-border flex flex-col gap-0.5"
+                            style={{ top: groupTop }}
+                          >
+                            {appts.map((appt) => {
+                              const h = Math.max(
+                                ((appt.duration_minutes ?? 30) / STEP_MIN) * ROW_PX,
+                                ROW_PX,
+                              );
+                              return (
+                                <div key={appt.id} style={{ height: h }} className="min-w-0">
+                                  <AppointmentCard appt={appt} canEdit={canEdit} compact={h < 56} />
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      }
+
+                      // Single appointment → position at exact time
+                      const appt = appts[0]!;
                       const apptMin = apptStartMin(appt);
-                      const duration = appt.duration_minutes ?? 30;
+                      const h = Math.max(
+                        ((appt.duration_minutes ?? 30) / STEP_MIN) * ROW_PX,
+                        ROW_PX,
+                      );
                       const top = ((apptMin - startMin) / STEP_MIN) * ROW_PX;
-                      const height = Math.max((duration / STEP_MIN) * ROW_PX, ROW_PX);
-                      const leftPct = (appt.colIndex / appt.colCount) * 100;
-                      const widthPct = (1 / appt.colCount) * 100;
-
                       return (
                         <div
                           key={appt.id}
-                          className="absolute px-0.5 py-0.5 box-border"
-                          style={{
-                            top,
-                            height,
-                            left: `${leftPct}%`,
-                            width: `${widthPct}%`,
-                          }}
+                          className="absolute inset-x-0 px-0.5 py-0.5 box-border"
+                          style={{ top, height: h }}
                         >
-                          <AppointmentCard appt={appt} canEdit={canEdit} compact={height < 56} />
+                          <AppointmentCard appt={appt} canEdit={canEdit} compact={h < 56} />
                         </div>
                       );
                     })}
@@ -392,6 +395,118 @@ export function WeekCalendar({
         </div>
       </div>
     </div>
+  );
+}
+
+// ── Hour summary card (5+ appointments in the same hour bucket) ───────────────
+
+const STATUS_SORT_RANK: Record<string, number> = {
+  confirmed: 0,
+  pending: 1,
+  completed: 2,
+  no_show: 3,
+  cancelled: 4,
+};
+
+function HourSummaryCard({
+  appointments,
+  canEdit,
+  bucketMin,
+}: {
+  appointments: Appointment[];
+  canEdit: boolean;
+  bucketMin: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const [selectedAppt, setSelectedAppt] = useState<Appointment | null>(null);
+
+  const sorted = [...appointments].sort(
+    (a, b) => (STATUS_SORT_RANK[a.status] ?? 9) - (STATUS_SORT_RANK[b.status] ?? 9),
+  );
+
+  const hourLabel = `${String(Math.floor(bucketMin / 60)).padStart(2, "0")}:00`;
+
+  const statusCounts = appointments.reduce<Record<string, number>>((acc, a) => {
+    acc[a.status] = (acc[a.status] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  return (
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        className="h-full w-full overflow-hidden rounded-md border border-border/50 bg-muted/30 text-left text-xs transition-colors hover:bg-muted/50 flex flex-col items-center justify-center gap-1 cursor-pointer"
+      >
+        <span className="font-semibold text-foreground">{appointments.length} appointments</span>
+        <span className="text-muted-foreground">{hourLabel} hour</span>
+        <div className="flex gap-1 flex-wrap justify-center">
+          {statusCounts["confirmed"] ? (
+            <span className="rounded-full bg-primary/20 px-1.5 py-0.5 text-[9px] font-medium text-primary">
+              {statusCounts["confirmed"]} confirmed
+            </span>
+          ) : null}
+          {statusCounts["pending"] ? (
+            <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-medium text-amber-600 dark:text-amber-400">
+              {statusCounts["pending"]} pending
+            </span>
+          ) : null}
+          {statusCounts["completed"] ? (
+            <span className="rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-medium text-emerald-600 dark:text-emerald-400">
+              {statusCounts["completed"]} done
+            </span>
+          ) : null}
+        </div>
+      </button>
+
+      {/* Appointment list dialog */}
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{appointments.length} appointments at {hourLabel}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+            {sorted.map((appt) => {
+              const time = new Date(appt.scheduled_at).toLocaleTimeString("en-GB", {
+                hour: "2-digit",
+                minute: "2-digit",
+                timeZone: "Europe/Istanbul",
+              });
+              const deptColor = appt.departments?.color ?? "#64748b";
+              return (
+                <button
+                  key={appt.id}
+                  onClick={() => setSelectedAppt(appt)}
+                  className="w-full text-left rounded-lg border border-border/40 px-3 py-2 text-sm hover:bg-muted/40 transition-colors flex items-center gap-3"
+                >
+                  <span
+                    className="h-2 w-2 rounded-full shrink-0"
+                    style={{ backgroundColor: deptColor }}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium truncate">{appt.patients?.full_name ?? "—"}</div>
+                    <div className="text-muted-foreground text-xs">
+                      {time} · {appt.duration_minutes ?? 30}min
+                      {appt.departments?.name ? ` · ${appt.departments.name}` : ""}
+                    </div>
+                  </div>
+                  <StatusBadge status={appt.status} />
+                </button>
+              );
+            })}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Per-appointment detail dialog */}
+      {selectedAppt && (
+        <AppointmentDetailDialog
+          appointment={selectedAppt}
+          open={Boolean(selectedAppt)}
+          onOpenChange={(v) => { if (!v) setSelectedAppt(null); }}
+          canEdit={canEdit}
+        />
+      )}
+    </>
   );
 }
 
@@ -534,7 +649,20 @@ function AppointmentCard({
           )}
 
           {compact && (
-            <span className="text-muted-foreground truncate">{time}</span>
+            <div className="flex items-center gap-1 min-w-0">
+              <span
+                className="h-1.5 w-1.5 rounded-full shrink-0"
+                style={{
+                  backgroundColor:
+                    appt.status === "confirmed" ? "hsl(var(--primary))"
+                    : appt.status === "completed" ? "#10b981"
+                    : appt.status === "cancelled" ? "hsl(var(--destructive))"
+                    : appt.status === "no_show" ? "hsl(var(--muted-foreground))"
+                    : "#f59e0b", // pending
+                }}
+              />
+              <span className="text-muted-foreground truncate">{time}</span>
+            </div>
           )}
 
           {!compact && <StatusBadge status={appt.status} />}

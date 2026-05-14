@@ -846,3 +846,144 @@ export async function checkSameDayPatient(
     return { hasSameDay: false };
   }
 }
+
+// ── Conflict resolution ───────────────────────────────────────────────────────
+
+export type ConflictingAppointment = {
+  id: string;
+  scheduled_at: string;
+  duration_minutes: number;
+  patients: { full_name: string } | null;
+  departments: { name: string; color: string | null } | null;
+  profiles: { full_name: string } | null;
+};
+
+/**
+ * Returns pending appointments for the same doctor that overlap in time with
+ * the given appointment. Used before confirming to detect scheduling conflicts.
+ */
+export async function getConflictingPendingAppointments(
+  appointmentId: string,
+): Promise<{ data?: ConflictingAppointment[]; error?: string }> {
+  try {
+    const user = await requireRole(["admin", "receptionist"]);
+    const supabase = await createClient();
+
+    // Fetch the target appointment
+    const { data: target, error: targetErr } = await supabase
+      .from("appointments")
+      .select("doctor_id, scheduled_at, duration_minutes")
+      .eq("id", appointmentId)
+      .eq("clinic_id", user.clinicId)
+      .single();
+
+    if (targetErr || !target) return { error: "Appointment not found." };
+
+    const targetStart = new Date(target.scheduled_at);
+    const targetEnd = new Date(targetStart.getTime() + (target.duration_minutes ?? 30) * 60_000);
+
+    // Fetch all pending appointments for the same doctor on the same date
+    const dayStart = new Date(targetStart);
+    dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(targetStart);
+    dayEnd.setHours(23, 59, 59, 999);
+
+    const { data: candidates, error: candErr } = await supabase
+      .from("appointments")
+      .select(
+        "id, scheduled_at, duration_minutes, patients(full_name), departments(name, color), profiles!doctor_id(full_name)",
+      )
+      .eq("clinic_id", user.clinicId)
+      .eq("doctor_id", target.doctor_id)
+      .eq("status", "pending")
+      .neq("id", appointmentId)
+      .is("deleted_at", null)
+      .gte("scheduled_at", dayStart.toISOString())
+      .lte("scheduled_at", dayEnd.toISOString());
+
+    if (candErr) return { error: "Failed to check for conflicts." };
+
+    // Filter to true time overlaps in JS
+    const conflicts = (candidates ?? []).filter((c) => {
+      const cStart = new Date(c.scheduled_at);
+      const cEnd = new Date(cStart.getTime() + (c.duration_minutes ?? 30) * 60_000);
+      return cStart < targetEnd && cEnd > targetStart;
+    });
+
+    return { data: conflicts as unknown as ConflictingAppointment[] };
+  } catch {
+    return { error: "Failed to check for conflicts." };
+  }
+}
+
+/**
+ * Confirms an appointment and displaces all listed conflicting pending
+ * appointments (soft-deletes them and marks them as displaced so they appear
+ * in the rebook queue instead of the recycle bin).
+ */
+export async function confirmAndDisplaceConflicts(
+  appointmentId: string,
+  conflictingIds: string[],
+): Promise<ActionResult> {
+  const user = await requireRole(["admin", "receptionist"]);
+  const supabase = await createClient();
+
+  // Confirm the target appointment
+  const { error: confirmErr } = await supabase
+    .from("appointments")
+    .update({ status: "confirmed", updated_by: user.id })
+    .eq("id", appointmentId)
+    .eq("clinic_id", user.clinicId)
+    .eq("status", "pending");
+
+  if (confirmErr) {
+    if (confirmErr.code === "check_violation" || confirmErr.message?.includes("transition")) {
+      return { error: "Cannot confirm this appointment." };
+    }
+    return { error: confirmErr.message || "Failed to confirm appointment." };
+  }
+
+  // Displace all conflicting pending appointments
+  if (conflictingIds.length > 0) {
+    const now = new Date().toISOString();
+    // displaced_at/displaced_by are new columns not yet in generated types — cast required
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error: displaceErr } = await (supabase
+      .from("appointments")
+      .update({
+        deleted_at: now,
+        displaced_at: now,
+        displaced_by: user.id,
+      } as any)
+      .in("id", conflictingIds)
+      .eq("clinic_id", user.clinicId)
+      .eq("status", "pending") as any);
+
+    if (displaceErr) {
+      return { error: "Appointment confirmed, but failed to remove conflicting appointments." };
+    }
+  }
+
+  revalidatePath("/appointments");
+  return { success: true };
+}
+
+/**
+ * Permanently removes a displaced appointment from the rebook queue.
+ */
+export async function dismissDisplacedAppointment(id: string): Promise<ActionResult> {
+  const user = await requireRole(["admin", "receptionist"]);
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("appointments")
+    .delete()
+    .eq("id", id)
+    .eq("clinic_id", user.clinicId)
+    .not("displaced_at", "is", null);
+
+  if (error) return { error: error.message || "Failed to dismiss appointment." };
+
+  revalidatePath("/appointments");
+  return { success: true };
+}

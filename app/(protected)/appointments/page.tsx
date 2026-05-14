@@ -15,6 +15,10 @@ import {
   type AppointmentTrashItem,
 } from "@/components/appointments/appointments-recycle-bin";
 import {
+  DisplacedAppointments,
+  type DisplacedAppointmentItem,
+} from "@/components/appointments/displaced-appointments";
+import {
   emptyAppointmentsTrash,
   permanentDeleteAppointment,
   restoreAppointment,
@@ -123,11 +127,14 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
   const cutoff = new Date(new Date().getTime() - THIRTY_DAYS_MS).toISOString();
 
   if (canEditAppointments) {
-    await supabase
+    // Exclude displaced appointments from the 30-day auto-purge — they belong
+    // in the rebook queue until explicitly dismissed.
+    await (supabase as any)
       .from("appointments")
       .delete()
       .eq("clinic_id", user.clinicId)
-      .lt("deleted_at", cutoff);
+      .lt("deleted_at", cutoff)
+      .is("displaced_at", null);
   }
 
   const [cachedStaff, cachedDepartments, clinicHours] = isDoctor
@@ -177,33 +184,60 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
   if (patientIds) query = query.in("patient_id", patientIds);
 
   const { data: appointments } = await query;
+  // Recycle bin: soft-deleted but NOT displaced (displaced have their own section)
   const { data: deletedAppointments } = canEditAppointments
-    ? await supabase
+    ? await (supabase as any)
         .from("appointments")
         .select(
           "id, scheduled_at, deleted_at, patients(full_name), profiles!doctor_id(full_name)",
         )
         .eq("clinic_id", user.clinicId)
         .not("deleted_at", "is", null)
+        .is("displaced_at", null)
         .gt("deleted_at", cutoff)
         .order("deleted_at", { ascending: false })
         .limit(100)
     : { data: [] };
+
+  // Displaced appointments: pending appointments removed due to a confirmed conflict
+  const { data: displacedRaw } = canEditAppointments
+    ? await (supabase as any)
+        .from("appointments")
+        .select(
+          "id, scheduled_at, duration_minutes, displaced_at, patient_id, doctor_id, department_id, insurance_provider_id, patients(full_name, file_number), profiles!doctor_id(full_name), departments(name, color)",
+        )
+        .eq("clinic_id", user.clinicId)
+        .not("displaced_at", "is", null)
+        .not("deleted_at", "is", null)
+        .order("displaced_at", { ascending: false })
+    : { data: [] };
   const appts = (appointments ?? []) as Parameters<
     typeof WeekCalendar
   >[0]["appointments"];
-  const trashItems: AppointmentTrashItem[] = (deletedAppointments ?? []).map(
+  const trashItems: AppointmentTrashItem[] = ((deletedAppointments ?? []) as any[]).map(
     (a) => ({
-      id: a.id,
-      patientName:
-        (a.patients as { full_name: string } | null)?.full_name ?? "Unknown",
-      doctorName:
-        (a.profiles as { full_name: string } | null)?.full_name ??
-        "Unassigned",
-      scheduledAt: a.scheduled_at,
-      deletedAt: a.deleted_at!,
+      id: a.id as string,
+      patientName: (a.patients as { full_name: string } | null)?.full_name ?? "Unknown",
+      doctorName: (a.profiles as { full_name: string } | null)?.full_name ?? "Unassigned",
+      scheduledAt: a.scheduled_at as string,
+      deletedAt: a.deleted_at as string,
     }),
   );
+
+  const displacedItems: DisplacedAppointmentItem[] = ((displacedRaw ?? []) as any[]).map((a) => ({
+    id: a.id as string,
+    scheduled_at: a.scheduled_at as string,
+    duration_minutes: a.duration_minutes as number,
+    displaced_at: a.displaced_at as string,
+    patient_id: a.patient_id as string,
+    doctor_id: a.doctor_id as string,
+    department_id: a.department_id as string | null,
+    insurance_provider_id: a.insurance_provider_id as string | null,
+    patientName: (a.patients as { full_name: string } | null)?.full_name ?? "Unknown",
+    doctorName: (a.profiles as { full_name: string } | null)?.full_name ?? "Unassigned",
+    departmentName: (a.departments as { name: string } | null)?.name ?? null,
+    departmentColor: (a.departments as { color: string | null } | null)?.color ?? null,
+  }));
 
   const total = appts.length;
   const activeFilterCount =
@@ -270,6 +304,10 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
           onPermanentDelete={permanentDeleteAppointment}
           onEmptyTrash={emptyAppointmentsTrash}
         />
+      )}
+
+      {canEditAppointments && displacedItems.length > 0 && (
+        <DisplacedAppointments items={displacedItems} />
       )}
     </div>
   );

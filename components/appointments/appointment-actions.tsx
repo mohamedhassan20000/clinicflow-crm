@@ -9,9 +9,12 @@ import {
   updateAppointmentStatus,
   undoAppointmentStatus,
   undoInvoiceCompletion,
+  getConflictingPendingAppointments,
   type BillingContext,
   type InvoiceUndoStatus,
+  type ConflictingAppointment,
 } from "@/actions/appointments";
+import { ConflictResolutionModal } from "@/components/appointments/conflict-resolution-modal";
 import type { Database } from "@/types/database";
 import {
   BillingDialog,
@@ -47,6 +50,8 @@ function AppointmentActionsInner({
   const [noShowOpen, setNoShowOpen] = useState(false);
   const [isNoShow, setIsNoShow] = useState(false);
   const [optimisticStatus, setOptimisticStatus] = useState<Status | null>(null);
+  const [conflictModalOpen, setConflictModalOpen] = useState(false);
+  const [conflicts, setConflicts] = useState<ConflictingAppointment[]>([]);
   const [ctx, setCtx] = useState<BillingContext | null>(null);
   const [loadingCtx, setLoadingCtx] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
@@ -178,6 +183,27 @@ function AppointmentActionsInner({
       });
   }
 
+  async function handleConfirmClick() {
+    if (pendingActionRef.current) return;
+    setActionPending("confirm");
+    const result = await getConflictingPendingAppointments(appointmentId);
+    if (result.error) {
+      toast.error(result.error);
+      setActionPending(null);
+      return;
+    }
+    if (!result.data?.length) {
+      // No conflicts — proceed with normal confirm flow
+      setActionPending(null);
+      runStatus("confirmed");
+      return;
+    }
+    // Conflicts found — show resolution modal
+    setConflicts(result.data);
+    setConflictModalOpen(true);
+    setActionPending(null);
+  }
+
   function runCancel(reason: string) {
     if (pendingActionRef.current) return;
     const prevStatus = effectiveStatus;
@@ -284,7 +310,7 @@ function AppointmentActionsInner({
             variant="default"
             className="h-6 px-2 text-[10px] font-semibold"
             disabled={hasPendingAction}
-            onClick={() => runStatus("confirmed")}
+            onClick={handleConfirmClick}
           >
             Confirm
           </Button>
@@ -381,6 +407,14 @@ function AppointmentActionsInner({
         }}
         onConfirm={runNoShow}
         isPending={isNoShow}
+      />
+
+      <ConflictResolutionModal
+        open={conflictModalOpen}
+        onOpenChange={setConflictModalOpen}
+        appointmentId={appointmentId}
+        conflicts={conflicts}
+        onConfirmed={() => setOptimisticStatus("confirmed")}
       />
     </>
   );

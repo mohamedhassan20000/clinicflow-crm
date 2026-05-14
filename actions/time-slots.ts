@@ -59,7 +59,7 @@ export async function getAvailableTimeSlots(
 
   // ── Determine active windows (fallback chain) ─────────────────────────────
   let windows: ShiftWindow[];
-  let breakPeriods: ShiftWindow[] = [];
+  const breakPeriods: ShiftWindow[] = [];
 
   if (doctorResult.data) {
     // Doctor has a specific schedule for this day

@@ -10,12 +10,17 @@ import { createAppointment } from "@/actions/appointments";
 export const metadata: Metadata = { title: "New Appointment" };
 
 interface PageProps {
-  searchParams: Promise<{ patient_id?: string }>;
+  searchParams: Promise<{
+    patient_id?: string;
+    doctor_id?: string;
+    dept_id?: string;
+    insurance_id?: string;
+  }>;
 }
 
 export default async function NewAppointmentPage({ searchParams }: PageProps) {
   const user = await requireRole(["admin", "receptionist"]);
-  const { patient_id } = await searchParams;
+  const { patient_id, doctor_id, dept_id, insurance_id } = await searchParams;
   const supabase = await createClient();
 
   const [{ data: patients }, cachedStaff, cachedDepartments, cachedInsurance] =
@@ -70,6 +75,9 @@ export default async function NewAppointmentPage({ searchParams }: PageProps) {
           departments={departments ?? []}
           insuranceProviders={insurance ?? []}
           defaultPatientId={patient_id}
+          defaultDoctorId={doctor_id}
+          defaultDepartmentId={dept_id}
+          defaultInsuranceId={insurance_id}
         />
       </div>
     </div>

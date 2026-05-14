@@ -80,6 +80,9 @@ interface AppointmentFormProps {
   departments: Department[];
   insuranceProviders: InsuranceProvider[];
   defaultPatientId?: string;
+  defaultDoctorId?: string;
+  defaultDepartmentId?: string;
+  defaultInsuranceId?: string;
 }
 
 
@@ -139,26 +142,31 @@ export function AppointmentForm({
   departments,
   insuranceProviders,
   defaultPatientId,
+  defaultDoctorId,
+  defaultDepartmentId,
+  defaultInsuranceId,
 }: AppointmentFormProps) {
   const [state, formAction, isPending] = useActionState(action, null);
   const [patientOpen, setPatientOpen] = useState(false);
   const [sameDayWarning, setSameDayWarning] = useState(false);
   const [pendingFd, setPendingFd] = useState<FormData | null>(null);
   const [checkingDay, setCheckingDay] = useState(false);
-  const departmentChangedRef = useRef(false);
-  const doctorChangedRef = useRef(false);
+  // Initialize refs to true when URL defaults are provided so that applyPatientDefaults
+  // (triggered by defaultPatientId) does not overwrite the pre-filled values.
+  const departmentChangedRef = useRef(!!defaultDepartmentId);
+  const doctorChangedRef = useRef(!!defaultDoctorId);
   const doctorInteractedRef = useRef(false);
-  const insuranceChangedRef = useRef(false);
+  const insuranceChangedRef = useRef(!!defaultInsuranceId);
 
   const form = useForm<AppointmentFormValues, unknown, AppointmentFormValues>({
     resolver: zodResolver(appointmentSchema) as never,
     defaultValues: {
       patient_id: defaultPatientId ?? "",
-      doctor_id: "",
-      department_id: departments[0]?.id ?? null,
+      doctor_id: defaultDoctorId ?? "",
+      department_id: defaultDepartmentId ?? departments[0]?.id ?? null,
       scheduled_at: "",
       duration_minutes: 30,
-      insurance_provider_id: null,
+      insurance_provider_id: defaultInsuranceId ?? null,
       notes: null,
     },
   });

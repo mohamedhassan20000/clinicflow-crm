@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { PatientTable } from "@/components/patients/patient-table";
 import { PatientsFilterBar } from "@/components/patients/filter-bar";
 import { formatDoctorName } from "@/lib/format-doctor";
+import { PrintHeader } from "@/components/shared/print-header";
 
 export const metadata: Metadata = { title: "Patients" };
 
@@ -141,8 +142,27 @@ export default async function PatientsPage({ searchParams }: PageProps) {
     has_outstanding_balance: outstandingPatientIds.has(patient.id),
   }));
 
+  const { data: clinic } = await supabase
+    .from("clinics")
+    .select("name, address, phone, logo_url")
+    .eq("id", user.clinicId)
+    .single();
+
+  const generatedAt = new Date().toLocaleString("en-GB", {
+    dateStyle: "long",
+    timeStyle: "short",
+  });
+
   return (
     <div className="space-y-6">
+      <PrintHeader
+        clinicName={clinic?.name ?? ""}
+        clinicAddress={clinic?.address ?? null}
+        clinicPhone={clinic?.phone ?? null}
+        logoUrl={clinic?.logo_url ?? null}
+        documentName="Patient Roster"
+        generatedAt={generatedAt}
+      />
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Patients</h1>

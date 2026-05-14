@@ -183,7 +183,7 @@ export default async function FollowupsPage({ searchParams }: PageProps) {
         p_done_offset: completedOffset,
       } as never);
 
-  const [{ data: dashboardRaw }, { data: departments }, { data: doctors }] =
+  const [{ data: dashboardRaw }, { data: departments }, { data: doctors }, { data: clinic }] =
     await Promise.all([
       dashboardPromise,
       supabase
@@ -201,9 +201,19 @@ export default async function FollowupsPage({ searchParams }: PageProps) {
             .eq("role", "doctor")
             .eq("is_active", true)
             .order("full_name"),
+      supabase
+        .from("clinics")
+        .select("name, address, phone, logo_url")
+        .eq("id", user.clinicId)
+        .single(),
     ]);
 
   const dashboard = normalizeDashboardPayload(dashboardRaw);
+
+  const generatedAt = new Date().toLocaleString("en-GB", {
+    dateStyle: "long",
+    timeStyle: "short",
+  });
 
   return (
     <FollowupsView
@@ -228,6 +238,11 @@ export default async function FollowupsPage({ searchParams }: PageProps) {
         end: range.end.toISOString(),
       }}
       readOnly={isDoctor}
+      clinicName={clinic?.name ?? ""}
+      clinicAddress={clinic?.address ?? null}
+      clinicPhone={clinic?.phone ?? null}
+      clinicLogoUrl={clinic?.logo_url ?? null}
+      generatedAt={generatedAt}
     />
   );
 }

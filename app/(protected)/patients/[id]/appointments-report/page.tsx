@@ -144,7 +144,6 @@ export default async function AppointmentsReportPage({
               </p>
             )}
             {patient.phone && <p>Phone: {patient.phone}</p>}
-            <p>Generated: {generatedAt}</p>
             <p>
               {appts.length} appointment{appts.length !== 1 ? "s" : ""}
               {(from || to) && " (filtered)"}

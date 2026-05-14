@@ -328,6 +328,7 @@
   }
   main {
     padding: 0 !important;
+    padding-top: 36px !important; /* clearance for compact header on page 1 */
     margin: 0 !important;
     max-width: none !important;
     width: 100% !important;
@@ -429,12 +430,15 @@
     padding: 5px 10mm 0;
   }
 
-  /* Full header: inline on page 1; white background + higher z-index
-     paints above the compact header on page 1. */
+  /* Full header: inline on page 1; pulls up to y=0 with negative margin
+     so it covers the compact header (z-index 40) via higher stacking.
+     padding-bottom creates consistent space between the divider and content. */
   .print-full-header {
     position: relative;
     z-index: 50;
     background: #fff;
+    margin-top: -36px;
+    padding-bottom: 20px;
   }
 
   /* Settlements compact header — hide when not in settlements print mode */

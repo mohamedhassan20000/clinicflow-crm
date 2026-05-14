@@ -163,7 +163,6 @@ export default async function MedicalNotesReportPage({
               </p>
             )}
             {patient.phone && <p>Phone: {patient.phone}</p>}
-            <p>Generated: {generatedAt}</p>
             <p>
               {notesWithAttachments.length} note
               {notesWithAttachments.length !== 1 ? "s" : ""}

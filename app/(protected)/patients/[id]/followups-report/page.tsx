@@ -114,7 +114,6 @@ export default async function FollowupsReportPage({
               </p>
             )}
             {patient.phone && <p>Phone: {patient.phone}</p>}
-            <p>Generated: {generatedAt}</p>
             <p>
               {rows.length} follow-up{rows.length !== 1 ? "s" : ""}
               {(from || to) && " (filtered)"}

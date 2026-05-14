@@ -96,21 +96,6 @@ interface StaffTableProps {
   lastSeenMap?: Record<string, string | null>;
 }
 
-function formatLastSeen(iso: string | null | undefined): string {
-  if (!iso) return "Never";
-  const date = new Date(iso);
-  const now = new Date();
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const startOfYesterday = new Date(startOfToday.getTime() - 86400000);
-  const diffDays = Math.floor((startOfToday.getTime() - date.getTime()) / 86400000);
-
-  const timeStr = date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
-
-  if (date >= startOfToday) return `Today, ${timeStr}`;
-  if (date >= startOfYesterday) return `Yesterday, ${timeStr}`;
-  if (diffDays < 7) return `${diffDays} days ago`;
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
 
 export function StaffTable({ staff, departments, currentUserId, lastSeenMap }: StaffTableProps) {
   const [editTarget, setEditTarget] = useState<StaffMember | null>(null);
@@ -224,7 +209,6 @@ export function StaffTable({ staff, departments, currentUserId, lastSeenMap }: S
             <col className="hidden w-36 sm:table-column" />
             <col className="w-28" />
             <col className="w-24" />
-            {lastSeenMap && <col className="hidden w-32 lg:table-column" />}
             <col className="w-12" />
           </colgroup>
           <thead>
@@ -235,11 +219,6 @@ export function StaffTable({ staff, departments, currentUserId, lastSeenMap }: S
               </th>
               <th className="px-4 py-3 text-left font-medium text-muted-foreground">Role</th>
               <th className="px-4 py-3 text-left font-medium text-muted-foreground">Status</th>
-              {lastSeenMap && (
-                <th className="hidden px-4 py-3 text-left font-medium text-muted-foreground lg:table-cell">
-                  Last seen
-                </th>
-              )}
               <th className="px-4 py-3 text-right font-medium text-muted-foreground">
                 <span className="sr-only">Actions</span>
               </th>
@@ -249,7 +228,7 @@ export function StaffTable({ staff, departments, currentUserId, lastSeenMap }: S
             {staff.length === 0 && (
               <tr>
                 <td
-                  colSpan={lastSeenMap ? 6 : 5}
+                  colSpan={5}
                   className="py-10 text-center text-sm text-muted-foreground"
                 >
                   No staff members yet.
@@ -300,11 +279,6 @@ export function StaffTable({ staff, departments, currentUserId, lastSeenMap }: S
                     {s.is_active ? "Active" : "Inactive"}
                   </Badge>
                 </td>
-                {lastSeenMap && (
-                  <td className="hidden px-4 py-3 text-sm text-muted-foreground lg:table-cell">
-                    {formatLastSeen(lastSeenMap[s.id])}
-                  </td>
-                )}
                 <td
                   className="px-4 py-3 text-right"
                   onClick={(e) => e.stopPropagation()}
@@ -377,6 +351,7 @@ export function StaffTable({ staff, departments, currentUserId, lastSeenMap }: S
         staff={profileTarget}
         open={!!profileTarget}
         onOpenChange={(open) => !open && setProfileTarget(null)}
+        lastSeen={profileTarget ? (lastSeenMap?.[profileTarget.id] ?? null) : null}
       />
 
       {/* Edit dialog */}

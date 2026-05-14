@@ -21,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { RecordFollowupDialog } from "@/components/followups/record-dialog";
 import { PatientScopeFilterBar } from "@/components/shared/patient-scope-filter-bar";
+import { PrintHeader } from "@/components/shared/print-header";
 import { formatDoctorName } from "@/lib/format-doctor";
 
 type Scope = "day" | "yesterday" | "week" | "month";
@@ -110,6 +111,11 @@ interface Props {
   activeQuery: string;
   range: { start: string; end: string };
   readOnly?: boolean;
+  clinicName?: string;
+  clinicAddress?: string | null;
+  clinicPhone?: string | null;
+  clinicLogoUrl?: string | null;
+  generatedAt?: string;
 }
 
 const OUTCOME_META = {
@@ -168,6 +174,11 @@ export function FollowupsView({
   activeQuery,
   range,
   readOnly = false,
+  clinicName,
+  clinicAddress,
+  clinicPhone,
+  clinicLogoUrl,
+  generatedAt,
 }: Props) {
   const router = useRouter();
   const params = useSearchParams();
@@ -254,6 +265,17 @@ export function FollowupsView({
       : `${fmtDate(range.start)} → ${fmtDate(range.end)}`;
   return (
     <div className="space-y-6">
+      {clinicName !== undefined && (
+        <PrintHeader
+          clinicName={clinicName}
+          clinicAddress={clinicAddress}
+          clinicPhone={clinicPhone}
+          logoUrl={clinicLogoUrl}
+          documentName="Patient Follow-ups"
+          generatedAt={generatedAt ?? new Date().toLocaleString("en-GB", { dateStyle: "long", timeStyle: "short" })}
+        />
+      )}
+
       <div className="print:hidden flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <Link
@@ -269,7 +291,7 @@ export function FollowupsView({
         </div>
       </div>
 
-      {/* Print-only header */}
+      {/* Print-only document subtitle */}
       <div className="hidden print:block print:mb-4">
         <h1 className="text-xl font-semibold">Patient follow-ups</h1>
         <p className="text-xs text-muted-foreground">
@@ -279,8 +301,6 @@ export function FollowupsView({
             departments.find((d) => d.id === activeDept)?.name ?? "—"
           }`}
           {activeQuery && ` · Patient: ${activeQuery}`}
-          {" · "}
-          Printed {new Date().toLocaleDateString("en-GB")}
         </p>
       </div>
 

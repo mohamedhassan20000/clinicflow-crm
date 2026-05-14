@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import {
   CalendarDays,
+  Clock,
   FileText,
   FolderOpen,
   GraduationCap,
@@ -62,13 +63,28 @@ function fmt(iso: string | null | undefined) {
   });
 }
 
+function formatLastSeen(iso: string | null | undefined): string {
+  if (!iso) return "Never";
+  const date = new Date(iso);
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfYesterday = new Date(startOfToday.getTime() - 86400000);
+  const diffDays = Math.floor((startOfToday.getTime() - date.getTime()) / 86400000);
+  const timeStr = date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+  if (date >= startOfToday) return `Today, ${timeStr}`;
+  if (date >= startOfYesterday) return `Yesterday, ${timeStr}`;
+  if (diffDays < 7) return `${diffDays} days ago`;
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
 interface Props {
   staff: StaffMember | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  lastSeen?: string | null;
 }
 
-export function StaffProfileSheet({ staff, open, onOpenChange }: Props) {
+export function StaffProfileSheet({ staff, open, onOpenChange, lastSeen }: Props) {
   const [files, setFiles] = useState<StaffFiles | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -219,6 +235,13 @@ export function StaffProfileSheet({ staff, open, onOpenChange }: Props) {
                 label="Joined"
                 value={fmt(staff.created_at)}
               />
+              {lastSeen !== undefined && (
+                <InfoRow
+                  icon={<Clock className="h-4 w-4" />}
+                  label="Last seen"
+                  value={formatLastSeen(lastSeen)}
+                />
+              )}
               <InfoRow
                 icon={<User className="h-4 w-4" />}
                 label="Account status"

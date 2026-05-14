@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import {
   CalendarDays,
@@ -13,6 +15,7 @@ import { RevenueWidget, type RevenueWidgetProps } from "@/components/dashboard/r
 import { AnalyticsSection, type AnalyticsSectionProps } from "@/components/dashboard/analytics-section";
 import type { Tables } from "@/types/database";
 import { formatDoctorName } from "@/lib/format-doctor";
+import { useClinicSettings } from "@/contexts/clinic-settings-context";
 
 type Appointment = Tables<"appointments"> & {
   patients: { full_name: string } | null;
@@ -26,15 +29,6 @@ interface AdminDashboardProps {
   upcomingAppointments: Appointment[];
   revenue: RevenueWidgetProps;
   analytics: AnalyticsSectionProps;
-}
-
-function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString("en-GB", {
-    timeZone: "Europe/Istanbul",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
 }
 
 function formatDate(iso: string) {
@@ -53,6 +47,7 @@ export function AdminDashboard({
   revenue,
   analytics,
 }: AdminDashboardProps) {
+  const { formatTime } = useClinicSettings();
   return (
     <div className="space-y-6">
       {/* Header */}

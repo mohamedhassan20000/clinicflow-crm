@@ -5,6 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import Image from "next/image";
 import { Loader2, Maximize2, Save, Upload, X } from "lucide-react";
+import { useClinicSettings } from "@/contexts/clinic-settings-context";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,26 +40,34 @@ export function ClinicForm({ defaultValues, logoUrl: initialLogoUrl, readOnly = 
     null,
   );
 
+  const { setTimeFormat } = useClinicSettings();
+
   const [logoUrl, setLogoUrl] = useState(initialLogoUrl);
   const [logoLoadError, setLogoLoadError] = useState(false);
   const [logoDialogOpen, setLogoDialogOpen] = useState(false);
   const [logoUploading, startLogoTransition] = useTransition();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const form = useForm<ClinicValues>({
-    resolver: zodResolver(clinicSchema),
+    resolver: zodResolver(clinicSchema) as never,
     defaultValues,
   });
 
   useEffect(() => {
-    if (state?.success) toast.success("Clinic settings saved.");
-  }, [state]);
+    if (state?.success) {
+      toast.success("Clinic settings saved.");
+      const tf = form.getValues("time_format");
+      if (tf) setTimeFormat(tf);
+    }
+  }, [state]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function onSubmit(values: ClinicValues) {
     const fd = new FormData();
     fd.set("name", values.name);
     if (values.phone) fd.set("phone", values.phone);
     if (values.address) fd.set("address", values.address);
+    fd.set("time_format", values.time_format ?? "24h");
     startTransition(() => formAction(fd));
   }
 
@@ -229,6 +238,38 @@ export function ClinicForm({ defaultValues, logoUrl: initialLogoUrl, readOnly = 
                       className="resize-none text-sm"
                       placeholder="Full address…"
                     />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Time format toggle */}
+            <FormField
+              control={form.control}
+              name="time_format"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Time format</FormLabel>
+                  <FormControl>
+                    <div className="flex gap-2">
+                      {(["24h", "12h"] as const).map((fmt) => (
+                        <button
+                          key={fmt}
+                          type="button"
+                          disabled={isPending || readOnly}
+                          onClick={() => field.onChange(fmt)}
+                          className={[
+                            "rounded-lg border px-4 py-1.5 text-sm font-medium transition",
+                            field.value === fmt
+                              ? "border-primary bg-primary text-primary-foreground"
+                              : "border-border bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground",
+                          ].join(" ")}
+                        >
+                          {fmt === "24h" ? "24h (14:30)" : "12h (2:30 PM)"}
+                        </button>
+                      ))}
+                    </div>
                   </FormControl>
                   <FormMessage />
                 </FormItem>

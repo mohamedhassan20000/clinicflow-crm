@@ -11,6 +11,7 @@ import { StatusBadge } from "@/components/appointments/status-badge";
 import { AppointmentActions } from "@/components/appointments/appointment-actions";
 import type { Tables } from "@/types/database";
 import { formatDoctorName } from "@/lib/format-doctor";
+import { useClinicSettings } from "@/contexts/clinic-settings-context";
 
 export type AppointmentForDetail = Pick<
   Tables<"appointments">,
@@ -42,21 +43,14 @@ function fmtDate(iso: string) {
   });
 }
 
-function fmtTime(iso: string) {
-  return new Date(iso).toLocaleTimeString("en-GB", {
-    timeZone: "Europe/Istanbul",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-}
-
 export function AppointmentDetailDialog({
   appointment: appt,
   open,
   onOpenChange,
   canEdit,
 }: Props) {
+  const { formatTime } = useClinicSettings();
+
   if (!appt) return null;
 
   const deptColor = appt.departments?.color ?? "#94a3b8";
@@ -111,7 +105,7 @@ export function AppointmentDetailDialog({
                 <Calendar className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                 <span>{fmtDate(appt.scheduled_at)}</span>
                 <span className="font-mono text-xs text-muted-foreground tabular-nums">
-                  {fmtTime(appt.scheduled_at)}
+                  {formatTime(appt.scheduled_at)}
                 </span>
               </div>
               {appt.profiles?.full_name && (

@@ -53,6 +53,7 @@ import {
 import { checkSameDayPatient, type ActionResult } from "@/actions/appointments";
 import { getAvailableTimeSlots, type SlotInfo } from "@/actions/time-slots";
 import type { Tables } from "@/types/database";
+import { useClinicSettings } from "@/contexts/clinic-settings-context";
 
 type Patient = Pick<
   Tables<"patients">,
@@ -146,6 +147,7 @@ export function AppointmentForm({
   defaultDepartmentId,
   defaultInsuranceId,
 }: AppointmentFormProps) {
+  const { formatSlotTime } = useClinicSettings();
   const [state, formAction, isPending] = useActionState(action, null);
   const [patientOpen, setPatientOpen] = useState(false);
   const [sameDayWarning, setSameDayWarning] = useState(false);
@@ -583,7 +585,7 @@ export function AppointmentForm({
                                   : undefined
                             }
                           >
-                            {slot.label ? `${slot.time} — ${slot.label}` : slot.time}
+                            {slot.label ? `${formatSlotTime(slot.time)} — ${slot.label}` : formatSlotTime(slot.time)}
                           </SelectItem>
                         );
                       })}

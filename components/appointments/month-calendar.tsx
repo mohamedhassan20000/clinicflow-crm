@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import type { Tables } from "@/types/database";
 import type { ClinicWorkingHoursValues } from "@/lib/validations/settings";
 import { isDayClosed } from "@/lib/calendar-utils";
+import { useClinicSettings } from "@/contexts/clinic-settings-context";
 
 type Appointment = Pick<
   Tables<"appointments">,
@@ -66,6 +67,7 @@ function colIndexToDow(col: number): number {
 const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 export function MonthCalendar({ appointments, monthStart, canEdit, clinicHours = [] }: Props) {
+  const { formatTime } = useClinicSettings();
   const today = new Date();
   const prevMonth = addMonths(monthStart, -1);
   const nextMonth = addMonths(monthStart, 1);
@@ -193,14 +195,7 @@ export function MonthCalendar({ appointments, monthStart, canEdit, clinicHours =
                     <div className="space-y-0.5">
                       {dayAppts.slice(0, 3).map((a) => {
                         const color = a.departments?.color ?? "#64748b";
-                        const time = new Date(a.scheduled_at).toLocaleTimeString(
-                          "en-GB",
-                          {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                            timeZone: "Europe/Istanbul",
-                          },
-                        );
+                        const time = formatTime(a.scheduled_at);
                         return (
                           <div
                             key={a.id}

@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import {
   CalendarDays,
@@ -14,6 +16,7 @@ import { StatusBadge } from "@/components/appointments/status-badge";
 import { AppointmentActions } from "@/components/appointments/appointment-actions";
 import type { Tables } from "@/types/database";
 import { formatDoctorName } from "@/lib/format-doctor";
+import { useClinicSettings } from "@/contexts/clinic-settings-context";
 
 type Appointment = Tables<"appointments"> & {
   patients: { full_name: string } | null;
@@ -37,15 +40,6 @@ interface ReceptionistDashboardProps {
   showPendingConfirmationsList?: boolean;
 }
 
-function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString("en-GB", {
-    timeZone: "Europe/Istanbul",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-}
-
 export function ReceptionistDashboard({
   fullName,
   todayCount,
@@ -61,6 +55,7 @@ export function ReceptionistDashboard({
   showTodaySchedule = true,
   showPendingConfirmationsList = true,
 }: ReceptionistDashboardProps) {
+  const { formatTime } = useClinicSettings();
   return (
     <div className="space-y-6">
       {/* Header */}

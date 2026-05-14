@@ -6,6 +6,7 @@ import { requireUser } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
 import { StatusBadge } from "@/components/appointments/status-badge";
 import { formatDoctorName } from "@/lib/format-doctor";
+import { formatTime } from "@/lib/format-time";
 import { PrintButton } from "@/components/patients/print-button";
 import { PrintHeader } from "@/components/shared/print-header";
 import { ReportDateFilter } from "@/components/patients/report-date-filter";
@@ -95,11 +96,13 @@ export default async function AppointmentsReportPage({
     }
   }
 
-  const { data: clinic } = await supabase
-    .from("clinics")
-    .select("name, address, phone, logo_url")
-    .eq("id", user.clinicId)
-    .single();
+  const [{ data: clinic }, { data: clinicSettings }] = await Promise.all([
+    supabase.from("clinics").select("name, address, phone, logo_url").eq("id", user.clinicId).single(),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    supabase.from("clinics").select("time_format" as any).eq("id", user.clinicId).single(),
+  ]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const timeFormat = (clinicSettings as any)?.time_format === "12h" ? "12h" as const : "24h" as const;
 
   const generatedAt = new Date().toLocaleString("en-GB", {
     dateStyle: "long",
@@ -156,7 +159,7 @@ export default async function AppointmentsReportPage({
       <ReportDateFilter from={from} to={to} />
 
       {isDoctor ? (
-        <DoctorApptList appts={appts} />
+        <DoctorApptList appts={appts} timeFormat={timeFormat} />
       ) : (
         <AppointmentsReportList
           appointments={appts as AppointmentPaymentRowData[]}
@@ -169,9 +172,11 @@ export default async function AppointmentsReportPage({
 
 function DoctorApptList({
   appts,
+  timeFormat,
 }: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   appts: any[];
+  timeFormat: "12h" | "24h";
 }) {
   if (appts.length === 0) {
     return (
@@ -208,11 +213,7 @@ function DoctorApptList({
                     year: "numeric",
                   })}
                   <span className="ml-1 font-normal text-muted-foreground">
-                    {new Date(a.scheduled_at).toLocaleTimeString("en-GB", {
-                      timeZone: "Europe/Istanbul",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
+                    {formatTime(a.scheduled_at, timeFormat)}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">

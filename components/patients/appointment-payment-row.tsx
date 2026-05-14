@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDoctorName } from "@/lib/format-doctor";
+import { useClinicSettings } from "@/contexts/clinic-settings-context";
 
 const PAYMENT_META: Record<
   string,
@@ -88,6 +89,7 @@ export function AppointmentPaymentRow({
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 }) {
+  const { formatTime } = useClinicSettings();
   const [internalOpen, setInternalOpen] = useState(false);
   const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
 
@@ -137,10 +139,7 @@ export function AppointmentPaymentRow({
             })}
             <span className="text-muted-foreground font-normal">
               {" · "}
-              {dt.toLocaleTimeString("en-GB", {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
+              {formatTime(dt.toISOString())}
             </span>
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">

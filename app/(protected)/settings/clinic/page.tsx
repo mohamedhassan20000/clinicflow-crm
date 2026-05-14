@@ -14,13 +14,16 @@ export default async function ClinicSettingsPage() {
   const [{ data: clinic }, workingHours] = await Promise.all([
     supabase
       .from("clinics")
-      .select("name, phone, address, logo_url")
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .select("name, phone, address, logo_url, time_format" as any)
       .eq("id", user.clinicId)
       .single(),
     getClinicWorkingHours(),
   ]);
 
   const isReadOnly = user.role !== "admin";
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const clinicData = clinic as any;
 
   return (
     <div className="max-w-2xl space-y-6">
@@ -33,11 +36,12 @@ export default async function ClinicSettingsPage() {
 
       <ClinicForm
         defaultValues={{
-          name: clinic?.name ?? "",
-          phone: clinic?.phone ?? null,
-          address: clinic?.address ?? null,
+          name: clinicData?.name ?? "",
+          phone: clinicData?.phone ?? null,
+          address: clinicData?.address ?? null,
+          time_format: clinicData?.time_format === "12h" ? "12h" : "24h",
         }}
-        logoUrl={clinic?.logo_url ?? null}
+        logoUrl={clinicData?.logo_url ?? null}
         readOnly={isReadOnly}
       />
 

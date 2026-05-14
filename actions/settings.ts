@@ -680,6 +680,7 @@ export async function updateClinic(
     name: fd.get("name"),
     phone: fd.get("phone") || null,
     address: fd.get("address") || null,
+    time_format: fd.get("time_format") || "24h",
   });
 
   if (!parsed.success) {
@@ -689,16 +690,18 @@ export async function updateClinic(
   const supabase = await createClient();
   const { error } = await supabase
     .from("clinics")
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .update({
       name: parsed.data.name,
       phone: parsed.data.phone ?? null,
       address: parsed.data.address ?? null,
-    })
+      time_format: parsed.data.time_format,
+    } as any)
     .eq("id", user.clinicId);
 
   if (error) return { error: error.message };
 
-  revalidatePath("/settings/clinic");
+  revalidatePath("/", "layout");
   return { success: true };
 }
 

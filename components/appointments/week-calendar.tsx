@@ -30,12 +30,13 @@ import {
 } from "@/components/appointments/appointment-detail-dialog";
 import type { ClinicWorkingHoursValues } from "@/lib/validations/settings";
 import { isDayClosed } from "@/lib/calendar-utils";
+import { useClinicSettings } from "@/contexts/clinic-settings-context";
 
 type Appointment = AppointmentForDetail;
 
 // ── Time grid constants ────────────────────────────────────────────────────────
-const BUCKET_H_PX = 144; // fixed height per hour row — fits 3 compact cards comfortably
-const CARD_H_PX   = 42;  // compact card height (name + status badge + padding)
+const BUCKET_H_PX = 260; // fixed height per hour row — fits 3 full compact cards
+const CARD_H_PX   = 80;  // compact card: name + badge + time + doctor + dept
 
 function timeStrToMin(t: string): number {
   const [h, m] = t.split(":").map(Number);
@@ -393,10 +394,14 @@ function HourAppointmentsDialog({
   canEdit: boolean;
 }) {
   const [selectedAppt, setSelectedAppt] = useState<Appointment | null>(null);
+  const { formatTime } = useClinicSettings();
 
-  const sorted = [...appointments].sort(
-    (a, b) => (STATUS_SORT_RANK[a.status] ?? 9) - (STATUS_SORT_RANK[b.status] ?? 9),
-  );
+  const sorted = [...appointments].sort((a, b) => {
+    const deptA = a.departments?.name ?? "";
+    const deptB = b.departments?.name ?? "";
+    if (deptA !== deptB) return deptA.localeCompare(deptB);
+    return new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime();
+  });
 
   const hourLabel = `${String(Math.floor(bucketMin / 60)).padStart(2, "0")}:00`;
 
@@ -409,11 +414,7 @@ function HourAppointmentsDialog({
           </DialogHeader>
           <div className="space-y-1.5 max-h-96 overflow-y-auto pr-1">
             {sorted.map((appt) => {
-              const time = new Date(appt.scheduled_at).toLocaleTimeString("en-GB", {
-                hour: "2-digit",
-                minute: "2-digit",
-                timeZone: "Europe/Istanbul",
-              });
+              const time = formatTime(appt.scheduled_at);
               const deptColor = appt.departments?.color ?? "#64748b";
               return (
                 <button
@@ -470,6 +471,7 @@ function AppointmentCard({
   canEdit: boolean;
   compact?: boolean;
 }) {
+  const { formatTime } = useClinicSettings();
   const [deleted, setDeleted] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -477,11 +479,7 @@ function AppointmentCard({
   const [isRestoring, setIsRestoring] = useState(false);
   const isRestoringRef = useRef(false);
 
-  const time = new Date(appt.scheduled_at).toLocaleTimeString("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "Europe/Istanbul",
-  });
+  const time = formatTime(appt.scheduled_at);
 
   const deptColor = appt.departments?.color ?? "#64748b";
   const deptName = appt.departments?.name ?? "General";
@@ -599,9 +597,25 @@ function AppointmentCard({
           )}
 
           {compact && (
-            <div className="flex items-center gap-1 min-w-0">
+            <div className="flex flex-col gap-0.5 min-w-0">
               <StatusBadge status={appt.status} />
-              <span className="text-muted-foreground truncate">{time}</span>
+              <span className="text-muted-foreground truncate text-[10px]">{time}</span>
+              {appt.profiles?.full_name && (
+                <span className="text-muted-foreground/70 truncate text-[10px]">
+                  Dr. {appt.profiles.full_name}
+                </span>
+              )}
+              {appt.departments?.name && (
+                <span
+                  className="truncate rounded-sm px-1 py-px text-[9px] font-semibold uppercase tracking-wider self-start"
+                  style={{
+                    backgroundColor: `color-mix(in oklab, ${deptColor} 18%, transparent)`,
+                    color: deptColor,
+                  }}
+                >
+                  {deptName}
+                </span>
+              )}
             </div>
           )}
 

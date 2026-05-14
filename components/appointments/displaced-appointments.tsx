@@ -6,6 +6,7 @@ import { CalendarX2, ChevronDown, ChevronUp, RefreshCw, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { dismissDisplacedAppointment } from "@/actions/appointments";
+import { useClinicSettings } from "@/contexts/clinic-settings-context";
 
 export type DisplacedAppointmentItem = {
   id: string;
@@ -27,6 +28,7 @@ interface DisplacedAppointmentsProps {
 }
 
 export function DisplacedAppointments({ items }: DisplacedAppointmentsProps) {
+  const { formatTime } = useClinicSettings();
   const [collapsed, setCollapsed] = useState(false);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [isPending, startTransition] = useTransition();
@@ -84,11 +86,7 @@ export function DisplacedAppointments({ items }: DisplacedAppointmentsProps) {
                 year: "numeric",
                 timeZone: "Europe/Istanbul",
               });
-              const time = new Date(item.scheduled_at).toLocaleTimeString("en-GB", {
-                hour: "2-digit",
-                minute: "2-digit",
-                timeZone: "Europe/Istanbul",
-              });
+              const time = formatTime(item.scheduled_at);
 
               const rebookParams = new URLSearchParams({
                 patient_id: item.patient_id,

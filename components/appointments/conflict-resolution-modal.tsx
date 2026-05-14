@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/appointments/status-badge";
 import { confirmAndDisplaceConflicts, type ConflictingAppointment } from "@/actions/appointments";
 import { toast } from "sonner";
+import { useClinicSettings } from "@/contexts/clinic-settings-context";
 
 interface ConflictResolutionModalProps {
   open: boolean;
@@ -29,6 +30,7 @@ export function ConflictResolutionModal({
   conflicts,
   onConfirmed,
 }: ConflictResolutionModalProps) {
+  const { formatTime } = useClinicSettings();
   const [isPending, setIsPending] = useState(false);
 
   async function handleConfirmAndDisplace() {
@@ -63,11 +65,7 @@ export function ConflictResolutionModal({
 
         <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
           {conflicts.map((c) => {
-            const time = new Date(c.scheduled_at).toLocaleTimeString("en-GB", {
-              hour: "2-digit",
-              minute: "2-digit",
-              timeZone: "Europe/Istanbul",
-            });
+            const time = formatTime(c.scheduled_at);
             const date = new Date(c.scheduled_at).toLocaleDateString("en-GB", {
               day: "numeric",
               month: "short",

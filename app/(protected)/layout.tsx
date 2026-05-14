@@ -1,9 +1,12 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { requireUser } from "@/lib/rbac";
+import { createClient } from "@/lib/supabase/server";
 import { Sidebar } from "@/components/layout/sidebar";
 import { MobileNav } from "@/components/layout/mobile-nav";
 import { getVisiblePageSlugs } from "@/lib/server-page-permissions";
+import { ClinicSettingsProvider } from "@/contexts/clinic-settings-context";
+import type { TimeFormat } from "@/lib/format-time";
 
 export default async function ProtectedLayout({
   children,
@@ -20,51 +23,65 @@ export default async function ProtectedLayout({
   const theme = (cookieStore.get("theme")?.value ?? "light") as "light" | "dark";
   const visiblePages = await getVisiblePageSlugs(user);
 
-  return (
-    <div className="flex min-h-dvh bg-background">
-      {/* Desktop sidebar */}
-      <aside className="hidden w-60 shrink-0 border-r border-border/50 bg-card lg:block">
-        <Sidebar
-          role={user.role}
-          fullName={user.fullName}
-          avatarUrl={user.avatarUrl}
-          theme={theme}
-          visiblePages={visiblePages}
-        />
-      </aside>
+  const supabase = await createClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: clinic } = await supabase
+    .from("clinics")
+    .select("time_format" as any)
+    .eq("id", user.clinicId)
+    .single();
 
-      {/* Main column */}
-      <div className="flex flex-1 flex-col min-w-0">
-        {/* Top header */}
-        <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border/50 bg-card px-4 lg:px-6">
-          <MobileNav
+  const timeFormat: TimeFormat =
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (clinic as any)?.time_format === "12h" ? "12h" : "24h";
+
+  return (
+    <ClinicSettingsProvider timeFormat={timeFormat}>
+      <div className="flex min-h-dvh bg-background">
+        {/* Desktop sidebar */}
+        <aside className="hidden w-60 shrink-0 border-r border-border/50 bg-card lg:block">
+          <Sidebar
             role={user.role}
             fullName={user.fullName}
             avatarUrl={user.avatarUrl}
             theme={theme}
             visiblePages={visiblePages}
           />
-          {/* ClinicFlow brand for mobile */}
-          <span className="flex items-center gap-2 lg:hidden">
-            <span className="flex h-6 w-6 items-center justify-center rounded bg-primary text-primary-foreground text-[10px] font-bold">
-              CF
-            </span>
-            <span className="text-sm font-semibold">ClinicFlow</span>
-          </span>
-          <div className="flex-1" />
-          {/* Desktop: user chip */}
-          <div className="hidden lg:flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">{user.fullName}</span>
-            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium capitalize text-primary">
-              {user.role}
-            </span>
-          </div>
-        </header>
+        </aside>
 
-        <main className="flex-1 overflow-auto px-4 py-4 lg:px-6 lg:py-5">
-          {children}
-        </main>
+        {/* Main column */}
+        <div className="flex flex-1 flex-col min-w-0">
+          {/* Top header */}
+          <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border/50 bg-card px-4 lg:px-6">
+            <MobileNav
+              role={user.role}
+              fullName={user.fullName}
+              avatarUrl={user.avatarUrl}
+              theme={theme}
+              visiblePages={visiblePages}
+            />
+            {/* ClinicFlow brand for mobile */}
+            <span className="flex items-center gap-2 lg:hidden">
+              <span className="flex h-6 w-6 items-center justify-center rounded bg-primary text-primary-foreground text-[10px] font-bold">
+                CF
+              </span>
+              <span className="text-sm font-semibold">ClinicFlow</span>
+            </span>
+            <div className="flex-1" />
+            {/* Desktop: user chip */}
+            <div className="hidden lg:flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">{user.fullName}</span>
+              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium capitalize text-primary">
+                {user.role}
+              </span>
+            </div>
+          </header>
+
+          <main className="flex-1 overflow-auto px-6 py-4 lg:px-10 lg:py-6">
+            {children}
+          </main>
+        </div>
       </div>
-    </div>
+    </ClinicSettingsProvider>
   );
 }

@@ -61,6 +61,7 @@ export const clinicSchema = z.object({
     .nullable()
     .or(z.literal("")),
   address: z.string().max(500).optional().nullable(),
+  time_format: z.enum(["12h", "24h"]).default("24h"),
 });
 
 export type ClinicValues = z.infer<typeof clinicSchema>;

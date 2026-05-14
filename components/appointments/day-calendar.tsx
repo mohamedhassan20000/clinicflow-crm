@@ -24,12 +24,13 @@ import {
   type AppointmentForDetail,
 } from "@/components/appointments/appointment-detail-dialog";
 import type { ClinicWorkingHoursValues } from "@/lib/validations/settings";
+import { useClinicSettings } from "@/contexts/clinic-settings-context";
 
 type Appointment = AppointmentForDetail;
 
 // ── Time grid constants ────────────────────────────────────────────────────────
-const ROW_PX = 24; // px per 15-minute slot
-const STEP_MIN = 15;
+const BUCKET_H_PX = 260; // fixed height per hour row
+const CARD_H_PX   = 80;  // appointment card height inside bucket
 
 function timeStrToMin(t: string): number {
   const [h, m] = t.split(":").map(Number);
@@ -89,54 +90,22 @@ function isDayClosed(clinicHours: ClinicWorkingHoursValues, dow: number): boolea
   return !day?.open;
 }
 
-type LayoutAppt = Appointment & { colIndex: number; colCount: number };
-
-function computeOverlapLayout(appts: Appointment[]): LayoutAppt[] {
-  if (appts.length === 0) return [];
-  const sorted = [...appts].sort(
-    (a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime(),
-  );
-  const items = sorted.map((a) => ({
-    appt: a,
-    start: apptStartMin(a),
-    end: apptStartMin(a) + (a.duration_minutes ?? 30),
-    colIndex: 0,
-    colCount: 1,
-  }));
-
-  let groupStart = 0;
-  let groupEndMin = items[0]!.end;
-  for (let i = 1; i < items.length; i++) {
-    if (items[i]!.start < groupEndMin) {
-      groupEndMin = Math.max(groupEndMin, items[i]!.end);
-    } else {
-      assignColumns(items, groupStart, i);
-      groupStart = i;
-      groupEndMin = items[i]!.end;
-    }
+// Groups appointments by hour bucket using Math.floor so 09:45 → 09:00 bucket.
+function groupByHourBucket(appts: Appointment[]): Map<number, Appointment[]> {
+  const groups = new Map<number, Appointment[]>();
+  for (const appt of appts) {
+    const startMin = apptStartMin(appt);
+    const bucket = Math.floor(startMin / 60) * 60;
+    const existing = groups.get(bucket) ?? [];
+    existing.push(appt);
+    groups.set(bucket, existing);
   }
-  assignColumns(items, groupStart, items.length);
-  return items.map(({ appt, colIndex, colCount }) => ({ ...appt, colIndex, colCount }));
-}
-
-function assignColumns(
-  items: { colIndex: number; colCount: number; start: number; end: number }[],
-  from: number,
-  to: number,
-) {
-  const group = items.slice(from, to);
-  const colCount = group.length;
-  const freeAt: number[] = Array(colCount).fill(0);
-  for (const item of group) {
-    let col = 0;
-    for (let c = 0; c < colCount; c++) {
-      if ((freeAt[c] ?? 0) <= item.start) { col = c; break; }
-    }
-    item.colIndex = col;
-    freeAt[col] = item.end;
+  for (const [key, list] of groups) {
+    groups.set(key, [...list].sort(
+      (a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime(),
+    ));
   }
-  const maxCol = Math.max(...group.map((g) => g.colIndex)) + 1;
-  for (const item of group) item.colCount = maxCol;
+  return groups;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -187,14 +156,14 @@ export function DayCalendar({
   );
 
   const { startMin, endMin } = getGridBounds(clinicHours);
-  const gridHeightPx = ((endMin - startMin) / STEP_MIN) * ROW_PX;
 
-  const hourLabels: number[] = [];
-  for (let m = startMin; m <= endMin; m += 60) hourLabels.push(m);
+  // One row per hour within the grid range
+  const hourRows: number[] = [];
+  for (let m = startMin; m < endMin; m += 60) hourRows.push(m);
 
   const breaks = getBreakBands(clinicHours, dow);
   const closed = isDayClosed(clinicHours, dow);
-  const layoutAppts = computeOverlapLayout(sorted);
+  const hourBuckets = groupByHourBucket(sorted);
 
   return (
     <div className="space-y-4">
@@ -249,27 +218,20 @@ export function DayCalendar({
       <div className="hidden sm:block overflow-x-auto rounded-xl border border-border/40 bg-card/40">
         <div className="flex" style={{ minWidth: 360 }}>
 
-          {/* Time axis */}
-          <div className="relative w-10 shrink-0 border-r border-border/30" style={{ height: gridHeightPx + 32 }}>
-            <div className="h-8" />
-            <div className="relative" style={{ height: gridHeightPx }}>
-              {hourLabels.map((min) => (
-                <div
-                  key={min}
-                  className="absolute right-1 text-[9px] text-muted-foreground/50 leading-none -translate-y-2"
-                  style={{ top: ((min - startMin) / STEP_MIN) * ROW_PX }}
-                >
-                  {String(Math.floor(min / 60)).padStart(2, "0")}:{String(min % 60).padStart(2, "0")}
-                </div>
-              ))}
-              {hourLabels.map((min) => (
-                <div
-                  key={`line-${min}`}
-                  className="absolute left-0 right-0 border-t border-border/20"
-                  style={{ top: ((min - startMin) / STEP_MIN) * ROW_PX }}
-                />
-              ))}
-            </div>
+          {/* Time axis — one label per hour row */}
+          <div className="w-10 shrink-0 border-r border-border/30">
+            <div className="h-8 border-b border-border/30" />
+            {hourRows.map((hMin) => (
+              <div
+                key={hMin}
+                className="border-b border-border/20 flex items-start justify-end pr-1 pt-0.5"
+                style={{ height: BUCKET_H_PX }}
+              >
+                <span className="text-[9px] text-muted-foreground/50 leading-none">
+                  {String(Math.floor(hMin / 60)).padStart(2, "0")}:00
+                </span>
+              </div>
+            ))}
           </div>
 
           {/* Single day column */}
@@ -279,75 +241,59 @@ export function DayCalendar({
               {date.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}
             </div>
 
-            {/* Time grid body */}
-            <div className="relative" style={{ height: gridHeightPx }}>
-              {/* Hour lines */}
-              {hourLabels.map((min) => (
-                <div
-                  key={min}
-                  className="absolute inset-x-0 border-t border-border/20"
-                  style={{ top: ((min - startMin) / STEP_MIN) * ROW_PX }}
-                />
-              ))}
-
-              {/* Break bands */}
-              {breaks.map((b, bi) => {
-                const top = ((b.startMin - startMin) / STEP_MIN) * ROW_PX;
-                const height = ((b.endMin - b.startMin) / STEP_MIN) * ROW_PX;
-                return (
+            {closed ? (
+              <div
+                className="flex items-center justify-center bg-muted/40"
+                style={{ height: hourRows.length * BUCKET_H_PX }}
+              >
+                <span className="text-[9px] text-muted-foreground/50 font-medium uppercase tracking-widest">
+                  Closed
+                </span>
+              </div>
+            ) : (
+              <>
+                {hourRows.map((hMin) => {
+                  const isBreak = breaks.some(
+                    (b) => b.startMin <= hMin && b.endMin >= hMin + 60,
+                  );
+                  if (isBreak) {
+                    return (
+                      <div
+                        key={hMin}
+                        className="border-b border-border/20 bg-muted/40 flex items-center justify-center"
+                        style={{ height: BUCKET_H_PX }}
+                      >
+                        <span className="text-[9px] text-muted-foreground/50 font-medium uppercase tracking-widest">
+                          Break
+                        </span>
+                      </div>
+                    );
+                  }
+                  const appts = hourBuckets.get(hMin) ?? [];
+                  return (
+                    <div
+                      key={hMin}
+                      className="border-b border-border/20 flex gap-0.5 px-0.5 py-0.5 overflow-hidden"
+                      style={{ height: BUCKET_H_PX }}
+                    >
+                      {appts.length === 0 ? null : appts.map((appt) => (
+                        <div key={appt.id} style={{ height: CARD_H_PX }} className="min-w-0 flex-1 shrink-0">
+                          <DayCard appt={appt} canEdit={canEdit} />
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
+                {sorted.length === 0 && (
                   <div
-                    key={bi}
-                    className="absolute inset-x-0 bg-muted/40 flex items-center justify-center pointer-events-none"
-                    style={{ top, height }}
+                    className="flex items-center justify-center"
+                    style={{ height: hourRows.length * BUCKET_H_PX }}
                   >
-                    <span className="text-[9px] text-muted-foreground/50 font-medium uppercase tracking-widest">
-                      Break
-                    </span>
+                    <span className="text-xs text-muted-foreground/40">No appointments</span>
                   </div>
-                );
-              })}
-
-              {/* Closed-day overlay */}
-              {closed && (
-                <div className="absolute inset-0 bg-muted/50 flex items-center justify-center pointer-events-none">
-                  <span className="text-[9px] text-muted-foreground/50 font-medium uppercase tracking-widest">
-                    Closed
-                  </span>
-                </div>
-              )}
-
-              {/* Empty state */}
-              {!closed && layoutAppts.length === 0 && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <span className="text-xs text-muted-foreground/40">No appointments</span>
-                </div>
-              )}
-
-              {/* Appointment cards */}
-              {layoutAppts.map((appt) => {
-                const apptMin = apptStartMin(appt);
-                const duration = appt.duration_minutes ?? 30;
-                const top = ((apptMin - startMin) / STEP_MIN) * ROW_PX;
-                const height = Math.max((duration / STEP_MIN) * ROW_PX, ROW_PX);
-                const leftPct = (appt.colIndex / appt.colCount) * 100;
-                const widthPct = (1 / appt.colCount) * 100;
-
-                return (
-                  <div
-                    key={appt.id}
-                    className="absolute px-0.5 py-0.5 box-border"
-                    style={{
-                      top,
-                      height,
-                      left: `${leftPct}%`,
-                      width: `${widthPct}%`,
-                    }}
-                  >
-                    <DayCard appt={appt} canEdit={canEdit} compact={height < 56} />
-                  </div>
-                );
-              })}
-            </div>
+                )}
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -360,12 +306,11 @@ export function DayCalendar({
 function DayCard({
   appt,
   canEdit,
-  compact = false,
 }: {
   appt: Appointment;
   canEdit: boolean;
-  compact?: boolean;
 }) {
+  const { formatTime } = useClinicSettings();
   const [deleted, setDeleted] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -373,11 +318,7 @@ function DayCard({
   const [isRestoring, setIsRestoring] = useState(false);
   const isRestoringRef = useRef(false);
 
-  const time = new Date(appt.scheduled_at).toLocaleTimeString("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "Europe/Istanbul",
-  });
+  const time = formatTime(appt.scheduled_at);
   const deptColor = appt.departments?.color ?? "#64748b";
   const deptName = appt.departments?.name ?? "General";
   const patientName = appt.patients?.full_name ?? "Unknown";
@@ -439,7 +380,7 @@ function DayCard({
             <span className="font-medium text-foreground leading-tight truncate">
               {patientName}
             </span>
-            {canEdit && !compact && (
+            {canEdit && (
               <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
                 <button
                   onClick={(e) => { e.stopPropagation(); setConfirmOpen(true); }}
@@ -470,33 +411,26 @@ function DayCard({
             )}
           </div>
 
-          {!compact && (
-            <>
-              <div className="flex min-w-0 items-center justify-between gap-1 text-muted-foreground">
-                <span>{time}</span>
-                <span
-                  className="max-w-[70px] truncate rounded-sm px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wider"
-                  style={{
-                    backgroundColor: `color-mix(in oklab, ${deptColor} 18%, transparent)`,
-                    color: deptColor,
-                  }}
-                >
-                  {deptName}
-                </span>
-              </div>
-              <div className="text-muted-foreground/70 truncate">
-                {appt.profiles?.full_name ? formatDoctorName(appt.profiles.full_name) : "—"}
-              </div>
-            </>
-          )}
+          <div className="flex flex-col gap-0.5 min-w-0">
+            <StatusBadge status={appt.status} />
+            <span className="text-muted-foreground truncate text-[10px]">{time}</span>
+            {appt.profiles?.full_name && (
+              <span className="text-muted-foreground/70 truncate text-[10px]">
+                Dr. {formatDoctorName(appt.profiles.full_name)}
+              </span>
+            )}
+            <span
+              className="truncate rounded-sm px-1 py-px text-[9px] font-semibold uppercase tracking-wider self-start"
+              style={{
+                backgroundColor: `color-mix(in oklab, ${deptColor} 18%, transparent)`,
+                color: deptColor,
+              }}
+            >
+              {deptName}
+            </span>
+          </div>
 
-          {compact && (
-            <span className="text-muted-foreground truncate">{time}</span>
-          )}
-
-          {!compact && <StatusBadge status={appt.status} />}
-
-          {canEdit && !compact && (
+          {canEdit && (
             <div className="pt-0.5" onClick={(e) => e.stopPropagation()}>
               <AppointmentActions
                 appointmentId={appt.id}
@@ -521,16 +455,13 @@ function DayCard({
 // ── DayRow: list fallback (mobile) ────────────────────────────────────────────
 
 function DayRow({ appt, canEdit }: { appt: Appointment; canEdit: boolean }) {
+  const { formatTime } = useClinicSettings();
   const [deleted, setDeleted] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [isDeleting, startDelete] = useTransition();
 
-  const time = new Date(appt.scheduled_at).toLocaleTimeString("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "Europe/Istanbul",
-  });
+  const time = formatTime(appt.scheduled_at);
   const deptColor = appt.departments?.color ?? "#64748b";
   const deptName = appt.departments?.name ?? "General";
   const patientName = appt.patients?.full_name ?? "Unknown";

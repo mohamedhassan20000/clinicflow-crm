@@ -5,6 +5,8 @@ import Link from "next/link";
 import { ChevronLeft, ChevronRight, CalendarPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { Tables } from "@/types/database";
+import type { ClinicWorkingHoursValues } from "@/lib/validations/settings";
+import { isDayClosed } from "@/lib/calendar-utils";
 
 type Appointment = Pick<
   Tables<"appointments">,
@@ -19,6 +21,7 @@ interface Props {
   appointments: Appointment[];
   monthStart: Date; // first day of month (local)
   canEdit: boolean;
+  clinicHours?: ClinicWorkingHoursValues;
 }
 
 function addMonths(d: Date, n: number) {
@@ -55,9 +58,14 @@ function localDateKey(date: Date) {
   return `${y}-${m}-${d}`;
 }
 
+// Convert Mon-based grid column index (0=Mon…6=Sun) to JS getDay() dow (0=Sun…6=Sat)
+function colIndexToDow(col: number): number {
+  return col === 6 ? 0 : col + 1;
+}
+
 const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-export function MonthCalendar({ appointments, monthStart, canEdit }: Props) {
+export function MonthCalendar({ appointments, monthStart, canEdit, clinicHours = [] }: Props) {
   const today = new Date();
   const prevMonth = addMonths(monthStart, -1);
   const nextMonth = addMonths(monthStart, 1);
@@ -149,15 +157,16 @@ export function MonthCalendar({ appointments, monthStart, canEdit }: Props) {
               const inMonth = day.getMonth() === monthStart.getMonth();
               const isToday = isSameDay(day, today);
               const dayAppts = appointmentsByDate.get(localDateKey(day)) ?? [];
+              const col = i % 7; // 0=Mon…6=Sun
+              const dow = colIndexToDow(col);
+              const closed = inMonth && isDayClosed(clinicHours, dow);
 
-              return (
-                <Link
-                  key={i}
-                  href={`/appointments?view=day&date=${fmtDate(day)}`}
-                  className={`group border-b border-r border-border/40 p-1.5 transition-colors hover:bg-muted/30 ${
-                    i % 7 === 6 ? "border-r-0" : ""
-                  } ${!inMonth ? "bg-muted/10 text-muted-foreground/50" : ""}`}
-                >
+              const cellBase = `border-b border-r border-border/40 p-1.5 transition-colors ${
+                i % 7 === 6 ? "border-r-0" : ""
+              }`;
+
+              const cellContent = (
+                <>
                   <div className="mb-1 flex items-center justify-between">
                     <span
                       className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${
@@ -170,53 +179,92 @@ export function MonthCalendar({ appointments, monthStart, canEdit }: Props) {
                     >
                       {day.getDate()}
                     </span>
-                    {dayAppts.length > 0 && (
+                    {closed ? (
+                      <span className="text-[9px] font-medium uppercase tracking-wider text-muted-foreground/60">
+                        Closed
+                      </span>
+                    ) : dayAppts.length > 0 ? (
                       <span className="text-[10px] text-muted-foreground">
                         {dayAppts.length}
                       </span>
-                    )}
+                    ) : null}
                   </div>
-                  <div className="space-y-0.5">
-                    {dayAppts.slice(0, 3).map((a) => {
-                      const color = a.departments?.color ?? "#64748b";
-                      const time = new Date(a.scheduled_at).toLocaleTimeString(
-                        "en-GB",
-                        {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                          timeZone: "Europe/Istanbul",
-                        },
-                      );
-                      return (
-                        <div
-                          key={a.id}
-                          className="truncate rounded px-1 py-0.5 text-[10px]"
-                          style={{
-                            backgroundColor: `color-mix(in oklab, ${color} 14%, transparent)`,
-                            color,
-                          }}
-                          title={`${time} · ${a.patients?.full_name ?? ""}${a.notes ? ` · ${a.notes}` : ""}`}
-                        >
-                          <span className="font-semibold tabular-nums">
-                            {time}
-                          </span>
-                          <span className="ml-1 text-foreground/80">
-                            {a.patients?.full_name ?? "—"}
-                          </span>
-                          {a.notes && (
-                            <span className="ml-1 text-muted-foreground">
-                              •
+                  {!closed && (
+                    <div className="space-y-0.5">
+                      {dayAppts.slice(0, 3).map((a) => {
+                        const color = a.departments?.color ?? "#64748b";
+                        const time = new Date(a.scheduled_at).toLocaleTimeString(
+                          "en-GB",
+                          {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            timeZone: "Europe/Istanbul",
+                          },
+                        );
+                        return (
+                          <div
+                            key={a.id}
+                            className="truncate rounded px-1 py-0.5 text-[10px]"
+                            style={{
+                              backgroundColor: `color-mix(in oklab, ${color} 14%, transparent)`,
+                              color,
+                            }}
+                            title={`${time} · ${a.patients?.full_name ?? ""}${a.notes ? ` · ${a.notes}` : ""}`}
+                          >
+                            <span className="font-semibold tabular-nums">
+                              {time}
                             </span>
-                          )}
+                            <span className="ml-1 text-foreground/80">
+                              {a.patients?.full_name ?? "—"}
+                            </span>
+                            {a.notes && (
+                              <span className="ml-1 text-muted-foreground">
+                                •
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                      {dayAppts.length > 3 && (
+                        <div className="px-1 text-[10px] text-muted-foreground">
+                          +{dayAppts.length - 3} more
                         </div>
-                      );
-                    })}
-                    {dayAppts.length > 3 && (
-                      <div className="px-1 text-[10px] text-muted-foreground">
-                        +{dayAppts.length - 3} more
-                      </div>
-                    )}
+                      )}
+                    </div>
+                  )}
+                </>
+              );
+
+              if (closed) {
+                return (
+                  <div
+                    key={i}
+                    className={`${cellBase} bg-muted/20 cursor-default select-none`}
+                  >
+                    {cellContent}
                   </div>
+                );
+              }
+
+              if (!inMonth) {
+                return (
+                  <Link
+                    key={i}
+                    href={`/appointments?view=day&date=${fmtDate(day)}`}
+                    className={`${cellBase} bg-muted/10 text-muted-foreground/50 hover:bg-muted/30`}
+                  >
+                    {cellContent}
+                  </Link>
+                );
+              }
+
+              return (
+                <Link
+                  key={i}
+                  href={`/appointments?view=day&date=${fmtDate(day)}`}
+                  className={`${cellBase} hover:bg-muted/30`}
+                >
+                  {cellContent}
                 </Link>
               );
             })}

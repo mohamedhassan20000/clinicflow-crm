@@ -287,6 +287,7 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
           appointments={appts}
           monthStart={monthStart}
           canEdit={canEditAppointments}
+          clinicHours={clinicHours}
         />
       ) : (
         <WeekCalendar

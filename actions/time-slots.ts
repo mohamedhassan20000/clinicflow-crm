@@ -106,19 +106,6 @@ export async function getAvailableTimeSlots(
         .lte("scheduled_at", dayEndIso)
     : { data: [] };
 
-  // ── Also fetch pending appointments (for informational label only) ─────────
-  const { data: pendingAppts } = doctorId
-    ? await supabase
-        .from("appointments")
-        .select("scheduled_at, duration_minutes, status")
-        .eq("doctor_id", doctorId)
-        .eq("clinic_id", user.clinicId)
-        .eq("status", "pending")
-        .is("deleted_at", null)
-        .gte("scheduled_at", dayStartIso)
-        .lte("scheduled_at", dayEndIso)
-    : { data: [] };
-
   // ── Build blocked ranges (confirmed + 15-min buffer) ─────────────────────
   const BUFFER_MIN = 15;
   type BlockedRange = { start: number; end: number };
@@ -129,16 +116,6 @@ export async function getAvailableTimeSlots(
     );
     const apptEnd = apptStart + (a.duration_minutes ?? 30);
     return { start: apptStart - BUFFER_MIN, end: apptEnd + BUFFER_MIN };
-  });
-
-  // ── Build pending ranges (informational only) ─────────────────────────────
-  type PendingRange = { start: number; end: number };
-  const pendingRanges: PendingRange[] = (pendingAppts ?? []).map((a) => {
-    const apptStart = timeStrToMinutes(
-      new Date(a.scheduled_at)
-        .toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Istanbul" }),
-    );
-    return { start: apptStart, end: apptStart + (a.duration_minutes ?? 30) };
   });
 
   // ── Generate slots ────────────────────────────────────────────────────────
@@ -173,13 +150,6 @@ export async function getAvailableTimeSlots(
     const isBlocked = blockedRanges.some((b) => t < b.end && slotEnd > b.start);
     if (isBlocked) {
       slots.push({ time: timeStr, disabled: true });
-      continue;
-    }
-
-    // Check if slot has a pending appointment (informational warning only)
-    const hasPending = pendingRanges.some((p) => t < p.end && slotEnd > p.start);
-    if (hasPending) {
-      slots.push({ time: timeStr, disabled: false, label: "Pending – may conflict" });
       continue;
     }
 

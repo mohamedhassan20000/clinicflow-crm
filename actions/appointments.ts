@@ -117,7 +117,7 @@ async function validateAppointmentSlot(
     .eq("doctor_id", values.doctor_id)
     .eq("clinic_id", clinicId)
     .is("deleted_at", null)
-    .not("status", "in", '("cancelled","no_show")')
+    .eq("status", "confirmed")
     .gte("scheduled_at", dayStart.toISOString())
     .lte("scheduled_at", dayEnd.toISOString());
 

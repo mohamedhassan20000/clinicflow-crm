@@ -19,6 +19,7 @@ import {
   permanentDeleteAppointment,
   restoreAppointment,
 } from "@/actions/appointments";
+import { getClinicWorkingHours } from "@/actions/settings";
 
 export const metadata: Metadata = { title: "Appointments" };
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
@@ -129,9 +130,9 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
       .lt("deleted_at", cutoff);
   }
 
-  const [cachedStaff, cachedDepartments] = isDoctor
-    ? [[] as Awaited<ReturnType<typeof getCachedStaff>>, await getCachedDepartments(user.clinicId)]
-    : await Promise.all([getCachedStaff(user.clinicId), getCachedDepartments(user.clinicId)]);
+  const [cachedStaff, cachedDepartments, clinicHours] = isDoctor
+    ? [[] as Awaited<ReturnType<typeof getCachedStaff>>, await getCachedDepartments(user.clinicId), await getClinicWorkingHours()]
+    : await Promise.all([getCachedStaff(user.clinicId), getCachedDepartments(user.clinicId), getClinicWorkingHours()]);
 
   const doctors = cachedStaff
     .filter((s) => s.role === "doctor" && s.is_active && !s.deleted_at)
@@ -161,7 +162,7 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
   let query = supabase
     .from("appointments")
     .select(
-      "id, scheduled_at, status, insurance_provider_id, notes, patients(full_name, phone, file_number), profiles!doctor_id(full_name), departments(name, color)",
+      "id, scheduled_at, status, insurance_provider_id, notes, duration_minutes, patients(full_name, phone, file_number), profiles!doctor_id(full_name), departments(name, color)",
     )
     .eq("clinic_id", user.clinicId)
     .is("deleted_at", null)
@@ -245,6 +246,7 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
           appointments={appts}
           date={dayAnchor}
           canEdit={canEditAppointments}
+          clinicHours={clinicHours}
         />
       ) : view === "month" ? (
         <MonthCalendar
@@ -257,6 +259,7 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
           appointments={appts}
           weekStart={weekStart}
           canEdit={canEditAppointments}
+          clinicHours={clinicHours}
         />
       )}
 

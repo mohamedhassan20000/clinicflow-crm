@@ -14,7 +14,7 @@ import { formatDoctorName } from "@/lib/format-doctor";
 
 export type AppointmentForDetail = Pick<
   Tables<"appointments">,
-  "id" | "scheduled_at" | "status" | "insurance_provider_id" | "notes"
+  "id" | "scheduled_at" | "status" | "insurance_provider_id" | "notes" | "duration_minutes"
 > & {
   patients: {
     full_name: string;

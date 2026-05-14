@@ -27,7 +27,7 @@ import type { ClinicWorkingHoursValues } from "@/lib/validations/settings";
 type Appointment = AppointmentForDetail;
 
 // ── Time grid constants ────────────────────────────────────────────────────────
-const ROW_PX = 16; // px per 15-minute slot
+const ROW_PX = 24; // px per 15-minute slot
 const STEP_MIN = 15;
 
 function timeStrToMin(t: string): number {
@@ -380,7 +380,7 @@ export function WeekCalendar({
                             width: `${widthPct}%`,
                           }}
                         >
-                          <AppointmentCard appt={appt} canEdit={canEdit} compact={height < 48} />
+                          <AppointmentCard appt={appt} canEdit={canEdit} compact={height < 56} />
                         </div>
                       );
                     })}

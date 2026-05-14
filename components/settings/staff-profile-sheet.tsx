@@ -448,7 +448,7 @@ function DoctorScheduleTab({
                     value={day.start_time ?? ""}
                     disabled={!isAdmin || saving}
                     onChange={(e) => updateTime(dow, "start_time", e.target.value)}
-                    className="h-8 w-28 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                    className="h-8 w-32 rounded-md border border-input bg-background px-2 text-sm text-foreground [color-scheme:light] dark:[color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
                   />
                   <span className="text-xs text-muted-foreground">to</span>
                   <input
@@ -456,7 +456,7 @@ function DoctorScheduleTab({
                     value={day.end_time ?? ""}
                     disabled={!isAdmin || saving}
                     onChange={(e) => updateTime(dow, "end_time", e.target.value)}
-                    className="h-8 w-28 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                    className="h-8 w-32 rounded-md border border-input bg-background px-2 text-sm text-foreground [color-scheme:light] dark:[color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
                   />
                 </div>
               )}

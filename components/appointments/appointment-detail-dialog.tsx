@@ -1,6 +1,6 @@
 "use client";
 
-import { Phone, Stethoscope, Calendar, FileText, Hash } from "lucide-react";
+import { Phone, Stethoscope, Calendar, Clock, FileText, Hash } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -133,6 +133,12 @@ export function AppointmentDetailDialog({
                   >
                     {appt.departments.name}
                   </span>
+                </div>
+              )}
+              {appt.duration_minutes != null && (
+                <div className="flex items-center gap-2 text-sm">
+                  <Clock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <span className="text-muted-foreground">{appt.duration_minutes} min</span>
                 </div>
               )}
               <div className="flex items-center gap-2">

@@ -134,7 +134,7 @@ export function ClinicWorkingHoursForm({ defaultValues, readOnly = false }: Prop
                         value={shift.shift_start}
                         disabled={readOnly || isPending}
                         onChange={(e) => updateShift(dow, idx, "shift_start", e.target.value)}
-                        className="h-8 w-28 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                        className="h-8 w-32 rounded-md border border-input bg-background px-2 text-sm text-foreground [color-scheme:light] dark:[color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
                       />
                       <span className="text-xs text-muted-foreground">to</span>
                       <input
@@ -142,7 +142,7 @@ export function ClinicWorkingHoursForm({ defaultValues, readOnly = false }: Prop
                         value={shift.shift_end}
                         disabled={readOnly || isPending}
                         onChange={(e) => updateShift(dow, idx, "shift_end", e.target.value)}
-                        className="h-8 w-28 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                        className="h-8 w-32 rounded-md border border-input bg-background px-2 text-sm text-foreground [color-scheme:light] dark:[color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
                       />
                       {!readOnly && (
                         <button

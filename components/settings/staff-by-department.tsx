@@ -94,6 +94,7 @@ export function StaffByDepartment({
                 departments={deptOptions}
                 currentUserId={currentUserId}
                 lastSeenMap={lastSeenMap}
+                isAdmin={isAdmin}
               />
             )}
           </DepartmentSection>

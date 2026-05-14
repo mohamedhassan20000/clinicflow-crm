@@ -220,7 +220,7 @@ export function HourAppointmentsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl overflow-hidden p-0">
+      <DialogContent className="w-[50vw] max-h-[70vh] overflow-hidden p-0">
         <DialogHeader className="border-b border-border/40 px-4 pb-3 pt-4">
           <DialogTitle>
             {appointments.length} appointment

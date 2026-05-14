@@ -180,7 +180,7 @@ export function DayCalendar({
             {hourRows.map((hMin) => (
               <div
                 key={hMin}
-                className="border-b border-border/20 flex items-start justify-end pr-1.5 pt-0.5"
+                className="border-b border-border/20 flex items-center justify-end pr-1.5"
                 style={{ height: BUCKET_H_PX }}
               >
                 <span className="text-[9px] text-muted-foreground/50 leading-none whitespace-nowrap">
@@ -270,7 +270,7 @@ function DayBucketCell({
 }) {
   const [showAllOpen, setShowAllOpen] = useState(false);
   const hasMore = appts.length > 2;
-  const visible = hasMore ? appts.slice(0, 1) : appts;
+  const visible = hasMore ? appts.slice(0, 2) : appts;
 
   return (
     <div

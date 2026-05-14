@@ -247,7 +247,7 @@ export function WeekCalendar({
             {hourRows.map((hMin) => (
               <div
                 key={hMin}
-                className="border-b border-border/20 flex items-start justify-end pr-1.5 pt-0.5"
+                className="border-b border-border/20 flex items-center justify-end pr-1.5"
                 style={{ height: BUCKET_H_PX }}
               >
                 <span className="text-[9px] text-muted-foreground/50 leading-none whitespace-nowrap">
@@ -467,7 +467,7 @@ export function AppointmentCard({
               {patientName}
             </span>
 
-            {canEdit && !compact && (
+            {canEdit && (
               <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
                 <button
                   onClick={(e) => { e.stopPropagation(); setConfirmOpen(true); }}

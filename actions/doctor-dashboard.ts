@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { CLINIC_TZ } from "@/lib/datetime";
 
 export interface DoctorDashboardStats {
   todayAppts: number;
@@ -28,7 +29,7 @@ export interface DoctorDashboardStats {
   followUpOutcomes: { allFine: number; hasProblem: number; total: number };
 }
 
-function buildDateRange(mode: "today" | "week" | "month", tz = "Europe/Istanbul") {
+function buildDateRange(mode: "today" | "week" | "month", tz = CLINIC_TZ) {
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: tz }));
   const y = now.getFullYear();
   const m = now.getMonth();
@@ -161,7 +162,7 @@ export async function fetchDoctorDashboardStats(
   const endDate = new Date(end);
   while (current <= endDate) {
     const key = current.toLocaleDateString("en-US", {
-      timeZone: "Europe/Istanbul",
+      timeZone: CLINIC_TZ,
       month: "short",
       day: "numeric",
     });
@@ -172,7 +173,7 @@ export async function fetchDoctorDashboardStats(
   for (const a of myAppts ?? []) {
     if (a.status === "cancelled") continue;
     const key = new Date(a.scheduled_at).toLocaleDateString("en-US", {
-      timeZone: "Europe/Istanbul",
+      timeZone: CLINIC_TZ,
       month: "short",
       day: "numeric",
     });
@@ -181,7 +182,7 @@ export async function fetchDoctorDashboardStats(
   for (const a of deptAppts ?? []) {
     if (a.status === "cancelled") continue;
     const key = new Date(a.scheduled_at).toLocaleDateString("en-US", {
-      timeZone: "Europe/Istanbul",
+      timeZone: CLINIC_TZ,
       month: "short",
       day: "numeric",
     });

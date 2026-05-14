@@ -24,9 +24,9 @@ import {
   restoreAppointment,
 } from "@/actions/appointments";
 import { getClinicWorkingHours } from "@/actions/settings";
+import { THIRTY_DAYS_MS } from "@/lib/constants";
 
 export const metadata: Metadata = { title: "Appointments" };
-const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 interface PageProps {
   searchParams: Promise<{

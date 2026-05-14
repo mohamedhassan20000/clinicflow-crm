@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { CLINIC_TZ } from "@/lib/datetime";
 import { redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { requireUser } from "@/lib/rbac";
@@ -19,7 +20,7 @@ const SETTLEMENT_DETAIL_LIMIT = 50;
 
 // ─── date helpers (Europe/Istanbul) ─────────────────────────────────────────
 function toIstanbul(date: Date): Date {
-  return new Date(date.toLocaleString("en-US", { timeZone: "Europe/Istanbul" }));
+  return new Date(date.toLocaleString("en-US", { timeZone: CLINIC_TZ }));
 }
 
 function startOfDay(d: Date): Date {

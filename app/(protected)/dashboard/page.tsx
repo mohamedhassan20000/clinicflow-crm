@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { CLINIC_TZ } from "@/lib/datetime";
 import { requireUser } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedDepartments, getCachedStaff } from "@/lib/cache/reference-data";
@@ -15,7 +16,7 @@ export const metadata: Metadata = { title: "Dashboard" };
 function toIstanbul(date: Date): Date {
   // Shift to Istanbul time so midnight comparisons are correct
   return new Date(
-    date.toLocaleString("en-US", { timeZone: "Europe/Istanbul" }),
+    date.toLocaleString("en-US", { timeZone: CLINIC_TZ }),
   );
 }
 
@@ -74,7 +75,7 @@ function buildSeriesForRange(
   const end = new Date(endISO);
   while (current <= end) {
     const key = current.toLocaleDateString("en-US", {
-      timeZone: "Europe/Istanbul",
+      timeZone: CLINIC_TZ,
       month: "short",
       day: "numeric",
     });
@@ -83,7 +84,7 @@ function buildSeriesForRange(
   }
   for (const a of appointments) {
     const key = new Date(a.scheduled_at).toLocaleDateString("en-US", {
-      timeZone: "Europe/Istanbul",
+      timeZone: CLINIC_TZ,
       month: "short",
       day: "numeric",
     });
@@ -383,7 +384,7 @@ export default async function DashboardPage() {
 
     const priorMonths = priorMonthRanges.map(({ start, end }) => ({
       label: new Date(start).toLocaleDateString("en-US", {
-        timeZone: "Europe/Istanbul",
+        timeZone: CLINIC_TZ,
         month: "short",
       }),
       amount: sumInRange(start, end),

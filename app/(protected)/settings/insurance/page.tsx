@@ -13,10 +13,9 @@ import {
   emptyInsuranceTrash,
 } from "@/actions/settings";
 import { SettingsTrashSection, type TrashItem } from "@/components/settings/settings-trash-section";
+import { THIRTY_DAYS_MS } from "@/lib/constants";
 
 export const metadata: Metadata = { title: "Insurance" };
-
-const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 export default async function InsuranceSettingsPage() {
   const user = await requireRole(["admin", "manager"]);

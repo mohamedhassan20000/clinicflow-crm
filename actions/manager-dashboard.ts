@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { CLINIC_TZ } from "@/lib/datetime";
 
 export interface DoctorStat {
   name: string;
@@ -270,7 +271,7 @@ export async function fetchAppointmentsSeries(
 
   while (current <= endDate) {
     const key = current.toLocaleDateString("en-US", {
-      timeZone: "Europe/Istanbul",
+      timeZone: CLINIC_TZ,
       month: "short",
       day: "numeric",
     });
@@ -280,7 +281,7 @@ export async function fetchAppointmentsSeries(
 
   for (const a of data ?? []) {
     const key = new Date(a.scheduled_at).toLocaleDateString("en-US", {
-      timeZone: "Europe/Istanbul",
+      timeZone: CLINIC_TZ,
       month: "short",
       day: "numeric",
     });

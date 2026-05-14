@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/rbac";
+import { CLINIC_TZ } from "@/lib/datetime";
 
 export type SlotInfo = {
   time: string;      // "HH:MM"
@@ -21,7 +22,7 @@ function timeStrToMinutes(t: string): number {
 function getIstanbulDayOfWeek(dateIso: string): number {
   const d = new Date(`${dateIso}T12:00:00+03:00`);
   const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "Europe/Istanbul",
+    timeZone: CLINIC_TZ,
     weekday: "short",
   }).formatToParts(d);
   const day = parts.find((p) => p.type === "weekday")?.value ?? "Sun";
@@ -112,7 +113,7 @@ export async function getAvailableTimeSlots(
   const blockedRanges: BlockedRange[] = (confirmedAppts ?? []).map((a) => {
     const apptStart = timeStrToMinutes(
       new Date(a.scheduled_at)
-        .toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Istanbul" }),
+        .toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: CLINIC_TZ }),
     );
     const apptEnd = apptStart + (a.duration_minutes ?? 30);
     return { start: apptStart - BUFFER_MIN, end: apptEnd + BUFFER_MIN };

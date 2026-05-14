@@ -7,10 +7,9 @@ import { SettingsTrashSection, type TrashItem } from "@/components/settings/sett
 import { restoreStaff, deleteStaff, emptyStaffTrash } from "@/actions/settings";
 import { isPrimaryClinicAdmin } from "@/lib/primary-admin";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { THIRTY_DAYS_MS } from "@/lib/constants";
 
 export const metadata: Metadata = { title: "Staff" };
-
-const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 export default async function StaffSettingsPage() {
   const user = await requireRole(["admin", "manager"]);

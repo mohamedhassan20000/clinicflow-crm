@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { CLINIC_TZ } from "@/lib/datetime";
 import { AlertCircle, ChevronLeft, FileText, Pencil, Receipt } from "lucide-react";
 import { StatusBadge } from "@/components/appointments/status-badge";
 import { requireUser } from "@/lib/rbac";
@@ -617,7 +618,7 @@ function SimpleApptRow({
       <div className="min-w-0 flex-1 space-y-0.5">
         <p className="font-medium tabular-nums text-xs">
           {new Date(a.scheduled_at).toLocaleString("en-GB", {
-            timeZone: "Europe/Istanbul",
+            timeZone: CLINIC_TZ,
             dateStyle: "medium",
             timeStyle: "short",
           })}

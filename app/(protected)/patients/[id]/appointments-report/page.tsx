@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { CLINIC_TZ } from "@/lib/datetime";
 import { ChevronLeft, FileText } from "lucide-react";
 import { requireUser } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
@@ -207,7 +208,7 @@ function DoctorApptList({
               <div className="min-w-0 flex-1 space-y-0.5">
                 <div className="text-sm font-medium">
                   {new Date(a.scheduled_at).toLocaleDateString("en-GB", {
-                    timeZone: "Europe/Istanbul",
+                    timeZone: CLINIC_TZ,
                     day: "2-digit",
                     month: "short",
                     year: "numeric",

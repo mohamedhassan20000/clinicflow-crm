@@ -1,6 +1,16 @@
 import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
 
+function supabaseHostname(): string {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!url) return "*.supabase.co";
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return "*.supabase.co";
+  }
+}
+
 const securityHeaders = [
   { key: "X-Frame-Options", value: "DENY" },
   { key: "X-Content-Type-Options", value: "nosniff" },
@@ -33,7 +43,7 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       {
         protocol: "https",
-        hostname: "ayzetxywrqouqpurbjuv.supabase.co",
+        hostname: supabaseHostname(),
         pathname: "/storage/v1/object/**",
       },
     ],

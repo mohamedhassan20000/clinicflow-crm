@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { CLINIC_TZ } from "@/lib/datetime";
 import { requireUser } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
 import { FollowupsView } from "@/components/followups/followups-view";
@@ -51,7 +52,7 @@ interface PageProps {
 }
 
 function toIstanbul(date: Date): Date {
-  return new Date(date.toLocaleString("en-US", { timeZone: "Europe/Istanbul" }));
+  return new Date(date.toLocaleString("en-US", { timeZone: CLINIC_TZ }));
 }
 function startOfDay(d: Date) {
   const n = new Date(d);

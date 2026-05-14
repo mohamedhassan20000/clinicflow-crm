@@ -5,10 +5,9 @@ import { AddServiceDialog } from "@/components/settings/add-service-dialog";
 import { ServiceRowActions } from "@/components/settings/service-row-actions";
 import { SettingsTrashSection, type TrashItem } from "@/components/settings/settings-trash-section";
 import { restoreService, deleteService, emptyServicesTrash } from "@/actions/settings";
+import { THIRTY_DAYS_MS } from "@/lib/constants";
 
 export const metadata: Metadata = { title: "Services" };
-
-const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 function fmtTRY(n: number) {
   return new Intl.NumberFormat("en-GB", {

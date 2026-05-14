@@ -1,6 +1,8 @@
+import { CLINIC_TZ } from "@/lib/datetime";
+
 export type TimeFormat = "12h" | "24h";
 
-const TZ = "Europe/Istanbul";
+const TZ = CLINIC_TZ;
 
 /**
  * Format a Date or ISO string as a clinic time (Istanbul timezone).

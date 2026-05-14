@@ -413,4 +413,33 @@
     display: none !important;
   }
 
+  /* ── Clinic branding headers ───────────────────────────────────────────── */
+
+  /* Compact header: fixed at top of every printed page (page 2+).
+     Covered by the full header on page 1 via higher z-index. */
+  .print-compact-header {
+    display: flex !important;
+    flex-direction: column;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 40;
+    background: #fff;
+    padding: 5px 10mm 0;
+  }
+
+  /* Full header: inline on page 1; white background + higher z-index
+     paints above the compact header on page 1. */
+  .print-full-header {
+    position: relative;
+    z-index: 50;
+    background: #fff;
+  }
+
+  /* Settlements compact header — hide when not in settlements print mode */
+  body:not(.print-settlements-only) [data-compact-settlements] {
+    display: none !important;
+  }
+
 }

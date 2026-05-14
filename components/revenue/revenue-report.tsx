@@ -7,6 +7,8 @@ import {
   ChevronRight,
   CreditCard,
   Landmark,
+  MapPin,
+  Phone,
   ShieldCheck,
   Wallet,
   Wallet2,
@@ -146,6 +148,7 @@ interface Props {
   clinicName: string;
   clinicAddress: string | null;
   clinicPhone: string | null;
+  clinicLogoUrl?: string | null;
 }
 
 export function RevenueReport({
@@ -162,6 +165,7 @@ export function RevenueReport({
   clinicName,
   clinicAddress,
   clinicPhone,
+  clinicLogoUrl,
 }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -205,6 +209,36 @@ export function RevenueReport({
 
   return (
     <div className="space-y-6">
+      {/* Revenue statement compact header — fixed, repeats on every page; hidden in settlements mode */}
+      <div className="print-compact-header hidden" data-print-hide-when-settlements>
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-1.5">
+            {clinicLogoUrl && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={clinicLogoUrl} alt="" aria-hidden width={18} height={18} style={{ objectFit: "contain", flexShrink: 0 }} />
+            )}
+            <span style={{ fontSize: "11px", fontWeight: 600 }}>{clinicName}</span>
+          </div>
+          <span style={{ fontSize: "10px", color: "#64748b" }}>Revenue Statement</span>
+        </div>
+        <div style={{ borderBottom: "1px solid #cbd5e1", marginTop: "4px" }} />
+      </div>
+
+      {/* Settlement payments compact header — fixed, visible only in settlements mode */}
+      <div className="print-compact-header hidden" data-compact-settlements>
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-1.5">
+            {clinicLogoUrl && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={clinicLogoUrl} alt="" aria-hidden width={18} height={18} style={{ objectFit: "contain", flexShrink: 0 }} />
+            )}
+            <span style={{ fontSize: "11px", fontWeight: 600 }}>{clinicName}</span>
+          </div>
+          <span style={{ fontSize: "10px", color: "#64748b" }}>Settlement Payments</span>
+        </div>
+        <div style={{ borderBottom: "1px solid #cbd5e1", marginTop: "4px" }} />
+      </div>
+
       {/* Filter bar — hidden in print */}
       <div className="print:hidden rounded-xl border border-border/50 bg-card p-4 space-y-3">
         <div className="flex flex-wrap gap-2">
@@ -276,22 +310,29 @@ export function RevenueReport({
         data-print-hide-when-settlements
         className="rounded-xl border border-border/50 bg-card print:border-none print:bg-transparent"
       >
-        {/* Letterhead — visible in print */}
-        <div className="hidden print:block border-b border-border px-6 py-5">
+        {/* Letterhead — visible in print (full header, page 1) */}
+        <div className="print-full-header hidden print:block border-b border-border px-6 py-4">
           <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-xs uppercase tracking-widest text-muted-foreground">
-                Revenue statement
-              </p>
-              <h1 className="mt-1 text-xl font-semibold tracking-tight">
-                {clinicName}
-              </h1>
-              {clinicAddress && (
-                <p className="text-xs text-muted-foreground">{clinicAddress}</p>
+            <div className="flex items-start gap-3">
+              {clinicLogoUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={clinicLogoUrl} alt="" aria-hidden width={44} height={44} style={{ objectFit: "contain", flexShrink: 0 }} />
               )}
-              {clinicPhone && (
-                <p className="text-xs text-muted-foreground">{clinicPhone}</p>
-              )}
+              <div>
+                <h1 className="text-lg font-semibold tracking-tight">{clinicName}</h1>
+                {clinicAddress && (
+                  <p className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
+                    <MapPin className="h-2.5 w-2.5 flex-shrink-0" aria-hidden />
+                    {clinicAddress}
+                  </p>
+                )}
+                {clinicPhone && (
+                  <p className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
+                    <Phone className="h-2.5 w-2.5 flex-shrink-0" aria-hidden />
+                    {clinicPhone}
+                  </p>
+                )}
+              </div>
             </div>
             <div className="text-right text-xs text-muted-foreground">
               <p>Generated {fmtDateTime(new Date().toISOString())}</p>
@@ -526,24 +567,29 @@ export function RevenueReport({
           data-print-section="settlements"
           className="rounded-xl border border-amber-500/30 bg-card print:border-none print:bg-transparent"
         >
-          {/* Letterhead — visible only when printing */}
-          <div className="hidden print:block border-b border-border px-6 py-5">
+          {/* Letterhead — visible only when printing settlements (full header, page 1) */}
+          <div className="print-full-header hidden print:block border-b border-border px-6 py-4">
             <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-xs uppercase tracking-widest text-muted-foreground">
-                  Settlement payments
-                </p>
-                <h1 className="mt-1 text-xl font-semibold tracking-tight">
-                  {clinicName}
-                </h1>
-                {clinicAddress && (
-                  <p className="text-xs text-muted-foreground">
-                    {clinicAddress}
-                  </p>
+              <div className="flex items-start gap-3">
+                {clinicLogoUrl && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={clinicLogoUrl} alt="" aria-hidden width={44} height={44} style={{ objectFit: "contain", flexShrink: 0 }} />
                 )}
-                {clinicPhone && (
-                  <p className="text-xs text-muted-foreground">{clinicPhone}</p>
-                )}
+                <div>
+                  <h1 className="text-lg font-semibold tracking-tight">{clinicName}</h1>
+                  {clinicAddress && (
+                    <p className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
+                      <MapPin className="h-2.5 w-2.5 flex-shrink-0" aria-hidden />
+                      {clinicAddress}
+                    </p>
+                  )}
+                  {clinicPhone && (
+                    <p className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
+                      <Phone className="h-2.5 w-2.5 flex-shrink-0" aria-hidden />
+                      {clinicPhone}
+                    </p>
+                  )}
+                </div>
               </div>
               <div className="text-right text-xs text-muted-foreground">
                 <p>Generated {fmtDateTime(new Date().toISOString())}</p>

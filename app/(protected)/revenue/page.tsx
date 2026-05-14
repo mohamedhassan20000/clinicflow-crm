@@ -275,7 +275,7 @@ export default async function RevenuePage({ searchParams }: PageProps) {
 
   const { data: clinic } = await supabase
     .from("clinics")
-    .select("name, address, phone")
+    .select("name, address, phone, logo_url")
     .eq("id", user.clinicId)
     .single();
 
@@ -334,6 +334,7 @@ export default async function RevenuePage({ searchParams }: PageProps) {
         clinicName={clinic?.name ?? "ClinicFlow"}
         clinicAddress={clinic?.address ?? null}
         clinicPhone={clinic?.phone ?? null}
+        clinicLogoUrl={clinic?.logo_url ?? null}
       />
     </div>
   );

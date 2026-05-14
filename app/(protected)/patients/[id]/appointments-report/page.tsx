@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { StatusBadge } from "@/components/appointments/status-badge";
 import { formatDoctorName } from "@/lib/format-doctor";
 import { PrintButton } from "@/components/patients/print-button";
+import { PrintHeader } from "@/components/shared/print-header";
 import { ReportDateFilter } from "@/components/patients/report-date-filter";
 import { AppointmentsReportList } from "@/components/patients/appointments-report-list";
 import type {
@@ -94,6 +95,12 @@ export default async function AppointmentsReportPage({
     }
   }
 
+  const { data: clinic } = await supabase
+    .from("clinics")
+    .select("name, address, phone, logo_url")
+    .eq("id", user.clinicId)
+    .single();
+
   const generatedAt = new Date().toLocaleString("en-GB", {
     dateStyle: "long",
     timeStyle: "short",
@@ -101,6 +108,14 @@ export default async function AppointmentsReportPage({
 
   return (
     <div className="space-y-6">
+      <PrintHeader
+        clinicName={clinic?.name ?? ""}
+        clinicAddress={clinic?.address ?? null}
+        clinicPhone={clinic?.phone ?? null}
+        logoUrl={clinic?.logo_url ?? null}
+        documentName="Appointments Report"
+        generatedAt={generatedAt}
+      />
       <div className="flex items-center gap-2 print:hidden text-sm text-muted-foreground">
         <Link
           href={`/patients/${id}`}

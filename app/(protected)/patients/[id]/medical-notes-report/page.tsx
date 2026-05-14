@@ -10,6 +10,7 @@ import {
 } from "@/components/patients/medical-notes-list";
 import { NoteComposer } from "@/components/patients/note-composer";
 import { PrintButton } from "@/components/patients/print-button";
+import { PrintHeader } from "@/components/shared/print-header";
 import { ReportDateFilter } from "@/components/patients/report-date-filter";
 import type { MedicalNoteAttachmentItem } from "@/actions/medical-note-attachments";
 
@@ -110,6 +111,12 @@ export default async function MedicalNotesReportPage({
     attachments: attachmentsByNote.get(note.id) ?? [],
   }));
 
+  const { data: clinic } = await supabase
+    .from("clinics")
+    .select("name, address, phone, logo_url")
+    .eq("id", user.clinicId)
+    .single();
+
   const generatedAt = new Date().toLocaleString("en-GB", {
     dateStyle: "long",
     timeStyle: "short",
@@ -117,6 +124,14 @@ export default async function MedicalNotesReportPage({
 
   return (
     <div className="space-y-6">
+      <PrintHeader
+        clinicName={clinic?.name ?? ""}
+        clinicAddress={clinic?.address ?? null}
+        clinicPhone={clinic?.phone ?? null}
+        logoUrl={clinic?.logo_url ?? null}
+        documentName="Medical Notes Report"
+        generatedAt={generatedAt}
+      />
       <div className="flex items-center gap-2 print:hidden text-sm text-muted-foreground">
         <Link
           href={`/patients/${id}`}

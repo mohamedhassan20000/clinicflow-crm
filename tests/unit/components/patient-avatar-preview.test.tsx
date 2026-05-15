@@ -19,9 +19,11 @@ describe("PatientAvatarPreview", () => {
     );
 
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    // Next/Image rewrites src to /_next/image?url=<encoded-url>&w=...&q=...
+    // Assert that the optimized src contains the encoded original URL.
     expect(
-      screen.getByRole("img", { name: /sara patient full-size avatar/i }),
-    ).toHaveAttribute("src", "https://signed.local/avatar.webp");
+      screen.getByRole("img", { name: /sara patient full-size avatar/i }).getAttribute("src"),
+    ).toContain(encodeURIComponent("https://signed.local/avatar.webp"));
   });
 
   it("renders a non-clickable fallback when no avatar URL is available", () => {

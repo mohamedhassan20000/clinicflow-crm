@@ -35,7 +35,7 @@ Replaces paper appointment books, phone scheduling, and Excel patient records wi
 
 **Appointment Scheduling**
 - Day, week, and month calendar views
-- Conflict detection — no double-booking a doctor
+- Conflict handling for confirmed appointments with pending overlap and displacement support
 - Database-enforced appointment status state machine (`pending → confirmed → completed / cancelled / no-show`)
 - Appointment detail modal with inline status transitions
 
@@ -323,7 +323,7 @@ Replaces paper appointment books, phone scheduling, and Excel patient records wi
 
 | Layer | Technology |
 |---|---|
-| Framework | Next.js 15 (App Router) |
+| Framework | Next.js 16 (App Router) |
 | Language | TypeScript — strict mode |
 | Database | Supabase Postgres |
 | Auth | Supabase Auth + `@supabase/ssr` |

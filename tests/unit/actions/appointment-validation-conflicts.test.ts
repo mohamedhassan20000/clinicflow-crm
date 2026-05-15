@@ -323,9 +323,11 @@ describe("appointment conflict prevention", () => {
     expect(wroteAppointments(mocks)).toBe(false);
   });
 
-  it("conflict query excludes cancelled appointments so their slot can be rebooked", async () => {
+  it("conflict query only blocks confirmed appointments — cancelled slots can be rebooked", async () => {
     const { createAppointment, mocks } = await loadAppointmentsActions();
-    // Cancelled appointment is not returned by the conflict query (excluded by status filter)
+    // Cancelled appointments are not confirmed, so the conflict query returns no rows
+    // and the booking proceeds. Multiple pending appointments for the same slot are
+    // intentionally allowed; only confirmed appointments block new bookings.
     allowValidReferences(mocks, { sameDay: [] });
 
     await createAppointment(
@@ -337,15 +339,16 @@ describe("appointment conflict prevention", () => {
       expect.objectContaining({
         table: "appointments",
         operation: "select",
-        args: ["not", "status", "in", '("cancelled","no_show")'],
+        args: ["eq", "status", "confirmed"],
       }),
     );
     expect(mocks.state.redirect).toHaveBeenCalledWith("/appointments");
   });
 
-  it("conflict query excludes no_show appointments so their slot can be rebooked", async () => {
+  it("conflict query only blocks confirmed appointments — no_show slots can be rebooked", async () => {
     const { createAppointment, mocks } = await loadAppointmentsActions();
-    // No-show appointment is not returned by the conflict query (excluded by status filter)
+    // No-show appointments are not confirmed, so the conflict query returns no rows
+    // and the booking proceeds.
     allowValidReferences(mocks, { sameDay: [] });
 
     await createAppointment(
@@ -357,7 +360,7 @@ describe("appointment conflict prevention", () => {
       expect.objectContaining({
         table: "appointments",
         operation: "select",
-        args: ["not", "status", "in", '("cancelled","no_show")'],
+        args: ["eq", "status", "confirmed"],
       }),
     );
     expect(mocks.state.redirect).toHaveBeenCalledWith("/appointments");

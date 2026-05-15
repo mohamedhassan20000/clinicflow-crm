@@ -27,41 +27,66 @@ export default function AuthLayout({
           ══════════════════════════════════════════ */}
       <aside className="relative hidden lg:flex lg:w-[56%] xl:w-[60%] flex-col overflow-hidden">
 
-        {/* Deep cinematic gradient */}
-        <div className="absolute inset-0 bg-[linear-gradient(150deg,#040f1a_0%,#072944_38%,#094d70_65%,#0b6892_100%)]" />
+        {/* Deep cinematic gradient — very dark navy base */}
+        <div className="absolute inset-0 bg-[linear-gradient(150deg,#020b14_0%,#041e33_30%,#063652_55%,#084d6e_80%,#0a6384_100%)]" />
 
-        {/* ── Aurora atmosphere ── */}
+        {/* ── Atmospheric layer ── */}
         <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
-          <div className="aurora-blob-1 absolute -top-36 -left-20 h-[54rem] w-[54rem] rounded-full bg-cyan-400/[0.13] blur-[88px]" />
-          <div className="aurora-blob-2 absolute top-[28%] -right-28 h-[38rem] w-[38rem] rounded-full bg-sky-300/[0.09] blur-[80px]" />
-          <div className="aurora-blob-3 absolute -bottom-24 left-[18%] h-[46rem] w-[46rem] rounded-full bg-teal-500/[0.16] blur-[105px]" />
 
-          {/* Subtle grid */}
+          {/* Primary aurora blobs — strong and vivid */}
+          <div className="aurora-blob-1 absolute -top-32 -left-16 h-[56rem] w-[56rem] rounded-full bg-cyan-400/[0.22] blur-[100px]" />
+          <div className="aurora-blob-2 absolute top-[20%] -right-24 h-[42rem] w-[42rem] rounded-full bg-sky-300/[0.16] blur-[90px]" />
+          <div className="aurora-blob-3 absolute -bottom-20 left-[12%] h-[50rem] w-[50rem] rounded-full bg-teal-400/[0.24] blur-[110px]" />
+
+          {/* Central bloom — the bright glowing hotspot in the reference */}
           <div
-            className="absolute inset-0 opacity-[0.038]"
+            className="absolute"
+            style={{
+              top: "8%",
+              left: "38%",
+              width: "62%",
+              height: "55%",
+              background:
+                "radial-gradient(ellipse at center, rgba(0,210,255,0.18) 0%, rgba(0,180,220,0.08) 38%, transparent 72%)",
+              filter: "blur(24px)",
+            }}
+          />
+
+          {/* Secondary warm teal accent — lower-left depth */}
+          <div
+            className="absolute -bottom-8 -left-8 h-[32rem] w-[32rem] rounded-full opacity-40"
+            style={{
+              background: "radial-gradient(circle, rgba(20,184,166,0.35) 0%, transparent 65%)",
+              filter: "blur(80px)",
+            }}
+          />
+
+          {/* Subtle grid — more visible than before */}
+          <div
+            className="absolute inset-0 opacity-[0.065]"
             style={{
               backgroundImage:
-                "linear-gradient(rgba(255,255,255,0.5) 1px,transparent 1px)," +
-                "linear-gradient(90deg,rgba(255,255,255,0.5) 1px,transparent 1px)",
+                "linear-gradient(rgba(255,255,255,0.55) 1px,transparent 1px)," +
+                "linear-gradient(90deg,rgba(255,255,255,0.55) 1px,transparent 1px)",
               backgroundSize: "44px 44px",
             }}
           />
 
-          {/* Film grain */}
+          {/* Film grain — subtle texture */}
           <div
-            className="absolute inset-0 opacity-[0.042] mix-blend-overlay"
+            className="absolute inset-0 opacity-[0.048] mix-blend-overlay"
             style={{
               backgroundImage:
                 "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.6 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>\")",
             }}
           />
 
-          {/* Edge vignette — adds cinematic depth */}
+          {/* Edge vignette — cinematic depth */}
           <div
             className="absolute inset-0"
             style={{
               background:
-                "radial-gradient(ellipse 82% 88% at 42% 50%, transparent 42%, rgba(4,15,26,0.58) 100%)",
+                "radial-gradient(ellipse 80% 86% at 44% 50%, transparent 38%, rgba(2,11,20,0.65) 100%)",
             }}
           />
         </div>
@@ -72,23 +97,23 @@ export default function AuthLayout({
           {/* Top — logo lockup */}
           <Link
             href="/login"
-            className="flex items-center gap-2.5 w-fit"
+            className="flex items-center gap-3 w-fit"
             aria-label="ClinicFlow home"
           >
-            {/* Icon height matches the "ClinicFlow" text line-height */}
+            {/* Logo mark — ~2× larger, height matches wordmark */}
             <Image
               src="/brand/clinicflow-mark.png"
               alt=""
-              width={26}
-              height={22}
-              className="h-[22px] w-auto shrink-0 object-contain drop-shadow-[0_0_10px_rgba(0,220,255,0.85)]"
+              width={42}
+              height={36}
+              className="h-9 w-auto shrink-0 object-contain drop-shadow-[0_0_16px_rgba(0,220,255,0.90)]"
               priority
             />
             <div>
-              <p className="text-[1.1rem] font-semibold leading-none tracking-tight text-white">
+              <p className="text-[1.4rem] font-semibold leading-none tracking-tight text-white">
                 ClinicFlow
               </p>
-              <p className="mt-0.5 text-[10px] font-medium tracking-[0.18em] uppercase text-white/36">
+              <p className="mt-1 text-[11px] font-medium tracking-[0.18em] uppercase text-white/36">
                 Clinic CRM Platform
               </p>
             </div>
@@ -98,7 +123,7 @@ export default function AuthLayout({
           <div className="space-y-9">
 
             {/* Live status pill */}
-            <span className="inline-flex items-center gap-2 rounded-full border border-white/[0.13] bg-white/[0.07] px-3 py-1.5 text-[11px] font-medium tracking-wide text-white/80 backdrop-blur-sm">
+            <span className="inline-flex items-center gap-2 rounded-full border border-white/[0.15] bg-white/[0.08] px-3.5 py-1.5 text-[11px] font-medium tracking-wide text-white/80 backdrop-blur-sm">
               <span className="relative flex h-1.5 w-1.5 shrink-0">
                 <span className="absolute inset-0 rounded-full bg-emerald-300 opacity-75 pulse-dot" />
                 <span className="relative h-1.5 w-1.5 rounded-full bg-emerald-300" />
@@ -112,7 +137,7 @@ export default function AuthLayout({
                 className="relative text-[2.2rem] xl:text-[2.8rem] font-semibold leading-[0.96] tracking-tight text-white auth-stagger"
                 style={{ animationDelay: "80ms" }}
               >
-                {/* Subtle glow halo behind heading */}
+                {/* Glow halo behind heading */}
                 <span
                   aria-hidden
                   className="pointer-events-none absolute -inset-8 -z-10 rounded-[40%] opacity-30 blur-3xl"
@@ -147,12 +172,9 @@ export default function AuthLayout({
                   className="auth-feature-item group flex items-center gap-3 cursor-default py-1.5 transition-all duration-200 ease-out [will-change:transform] hover:translate-x-2"
                   style={{ animationDelay: `${240 + i * 75}ms` }}
                 >
-                  {/* Icon — glows on hover, no container box */}
                   <span className="flex shrink-0 items-center justify-center transition-all duration-200 group-hover:drop-shadow-[0_0_10px_rgba(0,210,255,0.72)]">
                     <Icon className="h-[18px] w-[18px] text-cyan-400/58 transition-all duration-200 group-hover:text-cyan-200 group-hover:scale-110" />
                   </span>
-
-                  {/* Label */}
                   <span className="text-[0.8125rem] font-medium text-white/60 transition-colors duration-200 group-hover:text-white/92">
                     {label}
                   </span>
@@ -184,7 +206,7 @@ export default function AuthLayout({
           }}
         />
 
-        {/* Ambient teal glow center — dark mode depth */}
+        {/* Ambient teal glow center */}
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0"

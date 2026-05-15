@@ -79,8 +79,8 @@ function NavLink({
       className={cn(
         "flex items-center rounded-lg transition-colors",
         collapsed
-          ? "justify-center p-2.5"
-          : "gap-3.5 px-3.5 py-3 text-base font-medium",
+          ? "justify-center p-3"
+          : "gap-4 px-4 py-3.5 text-[15px] font-medium",
         isActive
           ? "bg-primary/10 text-primary"
           : "text-foreground/60 hover:bg-accent/5 hover:text-foreground",
@@ -88,7 +88,8 @@ function NavLink({
     >
       <Icon
         className={cn(
-          "h-5 w-5 shrink-0",
+          "shrink-0",
+          collapsed ? "h-6 w-6" : "h-[22px] w-[22px]",
           isActive ? "text-primary" : "text-foreground/40",
         )}
       />
@@ -142,27 +143,27 @@ export function Sidebar({
       {/* ── Logo header ── */}
       <div
         className={cn(
-          "relative flex h-14 shrink-0 items-center border-b border-border/50",
-          isCollapsed ? "justify-center px-2" : "gap-2.5 px-4",
+          "relative flex h-16 shrink-0 items-center border-b border-border/50",
+          isCollapsed ? "justify-center px-2" : "gap-3 px-5",
         )}
       >
-        {/* Logo mark — height matches "ClinicFlow" text line-height */}
+        {/* Logo mark — ~2× larger, height visually matches wordmark */}
         <Image
           src="/brand/clinicflow-mark.png"
           alt="ClinicFlow"
-          width={24}
-          height={21}
-          className="h-[22px] w-auto shrink-0 object-contain"
+          width={37}
+          height={32}
+          className="h-8 w-auto shrink-0 object-contain"
           priority
         />
 
         {!isCollapsed && (
-          <span className="text-[15px] font-semibold leading-none tracking-tight">
+          <span className="text-[17px] font-semibold leading-none tracking-tight">
             ClinicFlow
           </span>
         )}
 
-        {/* Collapse/expand toggle — only in sidebar mode */}
+        {/* Collapse/expand toggle — sidebar mode only */}
         {mode === "sidebar" && (
           <button
             onClick={toggleCollapsed}
@@ -185,7 +186,7 @@ export function Sidebar({
       <nav
         className={cn(
           "flex-1 overflow-auto space-y-0.5",
-          isCollapsed ? "p-2 pt-3" : "p-2.5 pt-4",
+          isCollapsed ? "p-2.5 pt-4" : "p-3 pt-5",
         )}
       >
         {nav.map((n) => (
@@ -213,7 +214,7 @@ export function Sidebar({
           <div className="flex items-center gap-2.5 mb-2 px-1">
             <Link
               href="/profile"
-              className="flex min-w-0 flex-1 items-center gap-2.5 rounded-md px-1.5 py-1.5 transition-colors hover:bg-accent/5"
+              className="flex min-w-0 flex-1 items-center gap-3 rounded-md px-1.5 py-1.5 transition-colors hover:bg-accent/5"
               title="My profile"
             >
               <Avatar className="h-9 w-9 shrink-0">
@@ -237,10 +238,10 @@ export function Sidebar({
             title={isCollapsed ? "Sign out" : undefined}
             className={cn(
               "flex w-full items-center rounded-lg text-sm text-muted-foreground transition-colors hover:bg-destructive/5 hover:text-destructive",
-              isCollapsed ? "justify-center p-2.5" : "gap-2.5 px-3.5 py-2.5",
+              isCollapsed ? "justify-center p-3" : "gap-3 px-4 py-3",
             )}
           >
-            <LogOut className="h-4 w-4 shrink-0" />
+            <LogOut className="h-[18px] w-[18px] shrink-0" />
             {!isCollapsed && "Sign out"}
           </button>
         </form>
@@ -259,7 +260,7 @@ export function Sidebar({
       className={cn(
         "hidden shrink-0 border-r border-border/50 bg-card lg:block",
         "transition-[width] duration-200 ease-out",
-        isCollapsed ? "w-[60px]" : "w-72",
+        isCollapsed ? "w-[64px]" : "w-[280px]",
       )}
     >
       {inner}

@@ -102,11 +102,11 @@ export function Sidebar({
       {/* Logo */}
       <div className="flex h-14 shrink-0 items-center gap-3 border-b border-border/50 px-5">
         <Image
-          src="/brand/clinicflow-mark.png"
+          src="/brand/clinicflow-mark.svg"
           alt="ClinicFlow"
           width={32}
           height={32}
-          className="h-8 w-8 rounded-lg object-cover"
+          className="h-8 w-8 rounded-lg object-contain"
         />
         <span className="text-base font-semibold tracking-tight">ClinicFlow</span>
       </div>

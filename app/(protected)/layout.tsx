@@ -62,11 +62,11 @@ export default async function ProtectedLayout({
             {/* ClinicFlow brand for mobile */}
             <span className="flex items-center gap-2 lg:hidden">
               <Image
-                src="/brand/clinicflow-mark.png"
+                src="/brand/clinicflow-mark.svg"
                 alt="ClinicFlow"
                 width={24}
                 height={24}
-                className="h-6 w-6 rounded object-cover"
+                className="h-6 w-6 rounded object-contain"
               />
               <span className="text-sm font-semibold">ClinicFlow</span>
             </span>

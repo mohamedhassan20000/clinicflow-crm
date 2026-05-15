@@ -104,9 +104,9 @@ export function Sidebar({
         <Image
           src="/brand/clinicflow-mark.png"
           alt="ClinicFlow"
-          width={32}
-          height={32}
-          className="h-8 w-8 rounded-lg object-cover"
+          width={44}
+          height={44}
+          className="h-11 w-11 object-contain"
         />
         <span className="text-base font-semibold tracking-tight">ClinicFlow</span>
       </div>

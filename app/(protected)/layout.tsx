@@ -64,9 +64,9 @@ export default async function ProtectedLayout({
               <Image
                 src="/brand/clinicflow-mark.png"
                 alt="ClinicFlow"
-                width={24}
-                height={24}
-                className="h-6 w-6 rounded object-cover"
+                width={36}
+                height={36}
+                className="h-9 w-9 object-contain"
               />
               <span className="text-sm font-semibold">ClinicFlow</span>
             </span>

@@ -55,7 +55,7 @@ import { getAvailableTimeSlots, type SlotInfo } from "@/actions/time-slots";
 import type { Tables } from "@/types/database";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
 
-type Patient = Pick<
+export type Patient = Pick<
   Tables<"patients">,
   | "id"
   | "full_name"
@@ -66,11 +66,11 @@ type Patient = Pick<
   | "national_id"
   | "file_number"
 >;
-type Doctor = Pick<Tables<"profiles">, "id" | "full_name" | "department_id">;
+export type Doctor = Pick<Tables<"profiles">, "id" | "full_name" | "department_id">;
 type PatientDoctorRelation = Doctor | Doctor[] | null;
-type Department = Pick<Tables<"departments">, "id" | "name">;
-type InsuranceProvider = Pick<Tables<"insurance_providers">, "id" | "name">;
-type PatientWithDoctor = Patient & {
+export type Department = Pick<Tables<"departments">, "id" | "name">;
+export type InsuranceProvider = Pick<Tables<"insurance_providers">, "id" | "name">;
+export type PatientWithDoctor = Patient & {
   assigned_doctor?: PatientDoctorRelation;
 };
 
@@ -84,6 +84,7 @@ interface AppointmentFormProps {
   defaultDoctorId?: string;
   defaultDepartmentId?: string;
   defaultInsuranceId?: string;
+  onPatientChange?: (patient: PatientWithDoctor | null) => void;
 }
 
 
@@ -146,6 +147,7 @@ export function AppointmentForm({
   defaultDoctorId,
   defaultDepartmentId,
   defaultInsuranceId,
+  onPatientChange,
 }: AppointmentFormProps) {
   const { formatSlotTime } = useClinicSettings();
   const [state, formAction, isPending] = useActionState(action, null);
@@ -204,6 +206,7 @@ export function AppointmentForm({
     if (!p) return;
     queueMicrotask(() => {
       applyPatientDefaults(p);
+      onPatientChange?.(p);
     });
     // Run once on mount; patients list is stable for the lifetime of the page.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -368,6 +371,7 @@ export function AppointmentForm({
                               field.onChange(p.id);
                               setPatientOpen(false);
                               applyPatientDefaults(p);
+                              onPatientChange?.(p);
                             }}
                             onSelect={() => {
                               doctorChangedRef.current = false;
@@ -375,6 +379,7 @@ export function AppointmentForm({
                               field.onChange(p.id);
                               setPatientOpen(false);
                               applyPatientDefaults(p);
+                              onPatientChange?.(p);
                             }}
                           >
                             <Check

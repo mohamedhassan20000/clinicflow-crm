@@ -54,6 +54,7 @@ async function loadAuthActions() {
 
   vi.doMock("next/cache", () => ({
     revalidatePath: mocks.state.revalidatePath,
+    revalidateTag: vi.fn(),
   }));
   vi.doMock("next/navigation", () => ({
     redirect: mocks.state.redirect,
@@ -81,6 +82,7 @@ async function loadSettingsActions() {
 
   vi.doMock("next/cache", () => ({
     revalidatePath: mocks.state.revalidatePath,
+    revalidateTag: vi.fn(),
   }));
   vi.doMock("@/lib/rbac", () => ({
     requireRole: mocks.state.requireRole,

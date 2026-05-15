@@ -14,26 +14,26 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const passwordChanged = params.password_changed === "1";
 
   return (
-    <div className="space-y-7">
-      <div className="space-y-2 auth-stagger" style={{ animationDelay: "60ms" }}>
-        <h2 className="text-[2rem] leading-[1.05] tracking-tight text-foreground">
-          <span
-            className="italic font-normal"
-            style={{ fontFamily: "var(--font-instrument)" }}
-          >
-            Welcome back.
-          </span>
+    <div className="space-y-6">
+      {/* Simple heading */}
+      <div className="space-y-1.5 auth-stagger" style={{ animationDelay: "60ms" }}>
+        <h2 className="text-[1.75rem] font-semibold leading-tight tracking-tight text-foreground">
+          Welcome back
         </h2>
         <p className="text-sm text-muted-foreground">
-          Sign in to continue to ClinicFlow.
+          Sign in to your ClinicFlow account
         </p>
       </div>
+
+      {/* Password-changed success notice */}
       {passwordChanged && (
         <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-300">
           Password updated. Sign in again with your new password.
         </div>
       )}
-      <div className="auth-stagger" style={{ animationDelay: "140ms" }}>
+
+      {/* Login form — auth logic untouched */}
+      <div className="auth-stagger" style={{ animationDelay: "120ms" }}>
         <LoginForm />
       </div>
     </div>

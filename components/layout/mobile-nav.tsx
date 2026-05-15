@@ -46,6 +46,7 @@ export function MobileNav({
               avatarUrl={avatarUrl}
               theme={theme}
               visiblePages={visiblePages}
+              mode="sheet"
             />
           </div>
         </SheetContent>

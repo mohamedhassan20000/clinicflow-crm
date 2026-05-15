@@ -252,6 +252,14 @@
   animation: auth-stagger-in 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+@keyframes auth-feature-in {
+  from { opacity: 0; transform: translateX(-14px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.auth-feature-item {
+  animation: auth-feature-in 460ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 .auth-right-panel {
   background:
     radial-gradient(ellipse 90% 60% at top, oklch(0.96 0.03 208) 0%, var(--background) 60%);
@@ -264,7 +272,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .aurora-blob-1, .aurora-blob-2, .aurora-blob-3,
-  .pulse-dot, .auth-card, .auth-stagger {
+  .pulse-dot, .auth-card, .auth-stagger, .auth-feature-item {
     animation: none !important;
   }
 }

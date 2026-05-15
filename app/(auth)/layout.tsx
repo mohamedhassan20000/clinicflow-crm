@@ -1,33 +1,19 @@
+import Image from "next/image";
 import Link from "next/link";
 import {
-  Stethoscope,
   CalendarCheck,
   Users,
-  ShieldCheck,
+  Briefcase,
   TrendingUp,
+  ShieldCheck,
 } from "lucide-react";
 
 const features = [
-  {
-    icon: CalendarCheck,
-    title: "Smart scheduling",
-    desc: "Conflict-free booking with real-time slot detection.",
-  },
-  {
-    icon: Users,
-    title: "Patient records",
-    desc: "Unified profiles, history, and medical notes in one place.",
-  },
-  {
-    icon: TrendingUp,
-    title: "Live dashboards",
-    desc: "Role-scoped KPIs and appointment analytics.",
-  },
-  {
-    icon: ShieldCheck,
-    title: "Enterprise security",
-    desc: "Row-level security, full audit trail, KVKK-ready.",
-  },
+  { icon: CalendarCheck, label: "Appointment Scheduling" },
+  { icon: Users,         label: "Patient Management"      },
+  { icon: Briefcase,     label: "Staff Workflows"         },
+  { icon: TrendingUp,    label: "Revenue Tracking"        },
+  { icon: ShieldCheck,   label: "Secure Clinic Access"    },
 ];
 
 export default function AuthLayout({
@@ -35,118 +21,245 @@ export default function AuthLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <div className="flex min-h-dvh">
-      {/* ── Left brand panel (desktop only) ── */}
-      <aside className="relative hidden lg:flex lg:w-[48%] xl:w-[52%] flex-col overflow-hidden">
-        {/* deep teal gradient base */}
-        <div className="absolute inset-0 bg-[linear-gradient(135deg,_#0c4a6e_0%,_#075985_40%,_#0891b2_100%)]" />
 
-        {/* aurora blobs */}
+      {/* ══════════════════════════════════════════
+          LEFT  —  Cinematic brand panel (lg+)
+          ══════════════════════════════════════════ */}
+      <aside className="relative hidden lg:flex lg:w-[56%] xl:w-[60%] flex-col overflow-hidden">
+
+        {/* Base — near-black deep space */}
+        <div className="absolute inset-0 bg-[#080e18]" />
+
+        {/* ── Atmospheric / space layer ── */}
         <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
-          <div className="aurora-blob-1 absolute -top-32 -left-32 h-[36rem] w-[36rem] rounded-full bg-cyan-400/20 blur-[80px]" />
-          <div className="aurora-blob-2 absolute top-1/2 -right-24 h-[28rem] w-[28rem] rounded-full bg-sky-300/15 blur-[70px]" />
-          <div className="aurora-blob-3 absolute -bottom-24 left-1/4 h-[32rem] w-[32rem] rounded-full bg-teal-500/25 blur-[90px]" />
-          {/* subtle grid overlay */}
+
+          {/* ── Orbital ring arc ── */}
           <div
-            className="absolute inset-0 opacity-[0.04]"
+            className="absolute rounded-full"
             style={{
-              backgroundImage:
-                "linear-gradient(rgba(255,255,255,0.6) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.6) 1px,transparent 1px)",
-              backgroundSize: "40px 40px",
+              right: "-20%",
+              top: "4%",
+              width: "70%",
+              height: "82%",
+              border: "1px solid rgba(0,220,255,0.13)",
+              boxShadow: "inset 0 0 80px rgba(0,200,255,0.03)",
             }}
           />
-          {/* film grain overlay */}
+
+          {/* Orbital bright glowing dot — top-right of ring */}
           <div
-            className="absolute inset-0 opacity-[0.05] mix-blend-overlay"
+            className="absolute h-3.5 w-3.5 rounded-full"
+            style={{
+              right: "21%",
+              top: "4.5%",
+              background: "rgba(0,220,255,1)",
+              boxShadow:
+                "0 0 6px 2px rgba(0,220,255,0.9), " +
+                "0 0 20px 8px rgba(0,210,255,0.55), " +
+                "0 0 50px 18px rgba(0,195,255,0.25), " +
+                "0 0 100px 40px rgba(0,180,255,0.10)",
+            }}
+          />
+
+          {/* Soft halo bloom around the bright dot */}
+          <div
+            className="absolute rounded-full"
+            style={{
+              right: "18%",
+              top: "1%",
+              width: "9%",
+              height: "11%",
+              background:
+                "radial-gradient(ellipse, rgba(0,210,255,0.16) 0%, transparent 70%)",
+              filter: "blur(20px)",
+            }}
+          />
+
+          {/* ── Teal aurora base — deep lower-left bloom ── */}
+          <div
+            className="aurora-blob-3 absolute"
+            style={{
+              bottom: "-8%",
+              left: "-5%",
+              width: "72%",
+              height: "58%",
+              borderRadius: "50%",
+              background:
+                "radial-gradient(ellipse, rgba(20,184,166,0.28) 0%, rgba(6,148,162,0.12) 40%, transparent 72%)",
+              filter: "blur(90px)",
+            }}
+          />
+
+          {/* Secondary right-side cyan depth blob */}
+          <div
+            className="aurora-blob-2 absolute"
+            style={{
+              top: "28%",
+              right: "-10%",
+              width: "50%",
+              height: "55%",
+              borderRadius: "50%",
+              background:
+                "radial-gradient(ellipse, rgba(0,180,210,0.14) 0%, transparent 68%)",
+              filter: "blur(80px)",
+            }}
+          />
+
+          {/* Upper-left faint teal glow */}
+          <div
+            className="aurora-blob-1 absolute"
+            style={{
+              top: "-10%",
+              left: "-8%",
+              width: "50%",
+              height: "50%",
+              borderRadius: "50%",
+              background:
+                "radial-gradient(ellipse, rgba(6,148,162,0.15) 0%, transparent 68%)",
+              filter: "blur(100px)",
+            }}
+          />
+
+          {/* Grid overlay */}
+          <div
+            className="absolute inset-0"
+            style={{
+              opacity: 0.055,
+              backgroundImage:
+                "linear-gradient(rgba(255,255,255,0.5) 1px,transparent 1px)," +
+                "linear-gradient(90deg,rgba(255,255,255,0.5) 1px,transparent 1px)",
+              backgroundSize: "44px 44px",
+            }}
+          />
+
+          {/* Film grain */}
+          <div
+            className="absolute inset-0 opacity-[0.045] mix-blend-overlay"
             style={{
               backgroundImage:
                 "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.6 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>\")",
             }}
           />
+
+          {/* Vignette edges */}
+          <div
+            className="absolute inset-0"
+            style={{
+              background:
+                "radial-gradient(ellipse 80% 88% at 42% 52%, transparent 35%, rgba(8,14,24,0.72) 100%)",
+            }}
+          />
         </div>
 
-        {/* content */}
-        <div className="relative z-10 flex flex-1 flex-col justify-between p-10 xl:p-14">
-          {/* logo */}
+        {/* ── Panel content ── */}
+        <div className="relative z-10 flex flex-1 flex-col justify-between p-12 xl:p-16">
+
+          {/* Top — logo lockup */}
           <Link
             href="/login"
             className="flex items-center gap-3 w-fit"
             aria-label="ClinicFlow home"
           >
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/15 ring-1 ring-white/25 backdrop-blur-sm">
-              <Stethoscope className="h-5 w-5 text-white" />
-            </span>
-            <span className="text-xl font-semibold tracking-tight text-white">
-              ClinicFlow
-            </span>
+            <Image
+              src="/brand/clinicflow-mark.png"
+              alt=""
+              width={42}
+              height={36}
+              className="h-9 w-auto shrink-0 object-contain drop-shadow-[0_0_16px_rgba(0,220,255,0.90)]"
+              priority
+            />
+            <div>
+              <p className="text-[1.4rem] font-semibold leading-none tracking-tight text-white">
+                ClinicFlow
+              </p>
+              <p className="mt-1 text-[11px] font-medium tracking-[0.18em] uppercase text-white/36">
+                Clinic CRM Platform
+              </p>
+            </div>
           </Link>
 
-          {/* hero copy */}
-          <div className="space-y-6">
-            <div className="space-y-4">
-              {/* live status pill */}
-              <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-medium tracking-wide text-white/90 backdrop-blur-sm">
-                <span className="relative flex h-1.5 w-1.5">
-                  <span className="absolute inset-0 rounded-full bg-emerald-300 opacity-75 pulse-dot" />
-                  <span className="relative h-1.5 w-1.5 rounded-full bg-emerald-300" />
-                </span>
-                Online — RLS active
-              </span>
+          {/* Center — hero marketing block */}
+          <div className="space-y-9">
 
-              <h1 className="relative text-4xl xl:text-5xl font-semibold leading-[0.98] tracking-tight text-white">
+            {/* Live status pill */}
+            <span className="inline-flex items-center gap-2 rounded-full border border-white/[0.15] bg-white/[0.07] px-3.5 py-1.5 text-[11px] font-medium tracking-wide text-white/80 backdrop-blur-sm">
+              <span className="relative flex h-1.5 w-1.5 shrink-0">
+                <span className="absolute inset-0 rounded-full bg-emerald-300 opacity-75 pulse-dot" />
+                <span className="relative h-1.5 w-1.5 rounded-full bg-emerald-300" />
+              </span>
+              Online — Secure &amp; KVKK-ready
+            </span>
+
+            {/* Headline */}
+            <div className="space-y-3">
+              <h1
+                className="relative text-[2.2rem] xl:text-[2.8rem] font-semibold leading-[0.96] tracking-tight text-white auth-stagger"
+                style={{ animationDelay: "80ms" }}
+              >
                 <span
                   aria-hidden
-                  className="pointer-events-none absolute -inset-8 -z-10 rounded-[40%] opacity-50 blur-2xl"
+                  className="pointer-events-none absolute -inset-8 -z-10 rounded-[40%] opacity-30 blur-3xl"
                   style={{
                     background:
-                      "radial-gradient(ellipse at center, oklch(0.85 0.15 200 / 0.25) 0%, transparent 65%)",
+                      "radial-gradient(ellipse at center, oklch(0.85 0.18 200 / 0.28) 0%, transparent 65%)",
                   }}
                 />
-                Run your clinic{" "}
+                Smart clinic management{" "}
                 <span
-                  className="block font-display italic font-normal text-cyan-200"
+                  className="block mt-1.5 font-display italic font-normal text-cyan-200"
                   style={{ fontFamily: "var(--font-instrument)" }}
                 >
-                  effortlessly.
+                  for modern medical teams
                 </span>
               </h1>
-              <p className="max-w-sm text-base leading-relaxed text-white/65">
-                One platform for scheduling, patient records, and team
-                collaboration — purpose-built for private clinics.
+
+              <p
+                className="max-w-[28rem] text-[0.9375rem] leading-relaxed text-white/55 auth-stagger"
+                style={{ animationDelay: "160ms" }}
+              >
+                Appointments, patient records, follow-ups, billing, and staff
+                workflows in one secure platform.
               </p>
             </div>
 
-            {/* feature list */}
-            <ul className="space-y-3">
-              {features.map(({ icon: Icon, title, desc }) => (
+            {/* Interactive feature list — icon + text, text doubles on hover */}
+            <ul className="space-y-2">
+              {features.map(({ icon: Icon, label }, i) => (
                 <li
-                  key={title}
-                  className="group flex items-start gap-3 transition-transform duration-150 ease-out hover:-translate-y-0.5"
+                  key={label}
+                  className="auth-feature-item group flex items-center gap-3 cursor-default py-1 transition-all duration-300 ease-out [will-change:transform] hover:translate-x-2"
+                  style={{ animationDelay: `${240 + i * 75}ms` }}
                 >
-                  <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-white/15 to-white/5 ring-1 ring-white/20 shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] transition-colors group-hover:ring-cyan-300/40">
-                    <Icon className="h-3.5 w-3.5 text-cyan-300" />
+                  {/* Icon — glows and scales on hover */}
+                  <span className="flex shrink-0 items-center justify-center transition-all duration-300 group-hover:drop-shadow-[0_0_12px_rgba(0,210,255,0.80)]">
+                    <Icon className="h-[18px] w-[18px] text-cyan-400/60 transition-all duration-300 group-hover:text-cyan-300 group-hover:scale-125" />
                   </span>
-                  <div>
-                    <p className="text-sm font-medium text-white">{title}</p>
-                    <p className="text-xs leading-relaxed text-white/55">{desc}</p>
-                  </div>
+
+                  {/* Label — always at full size, brightens on hover */}
+                  <span className="text-[1.15rem] font-medium leading-none text-white/60 transition-colors duration-300 ease-out group-hover:text-white/95 group-hover:font-semibold">
+                    {label}
+                  </span>
                 </li>
               ))}
             </ul>
           </div>
 
-          {/* footer */}
-          <p className="text-xs text-white/30">
+          {/* Bottom — copyright */}
+          <p className="text-[11px] text-white/22">
             © {new Date().getFullYear()} ClinicFlow. All rights reserved.
           </p>
         </div>
       </aside>
 
-      {/* ── Right form panel ── */}
+      {/* ══════════════════════════════════════════
+          RIGHT  —  Auth form panel
+          ══════════════════════════════════════════ */}
       <main className="auth-right-panel relative flex flex-1 flex-col items-center justify-center overflow-hidden px-6 py-12">
-        {/* subtle background texture for right panel */}
+
+        {/* Dot-grid texture */}
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-0 opacity-[0.015]"
+          className="pointer-events-none absolute inset-0 opacity-[0.016]"
           style={{
             backgroundImage:
               "radial-gradient(circle at 1px 1px, oklch(0.6 0.14 208) 1px, transparent 0)",
@@ -154,26 +267,46 @@ export default function AuthLayout({
           }}
         />
 
-        {/* mobile logo — only shows below lg */}
+        {/* Ambient teal glow center */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(ellipse 70% 55% at 50% 50%, oklch(0.6 0.14 208 / 0.055) 0%, transparent 72%)",
+          }}
+        />
+
+        {/* Mobile logo — hidden on lg+ */}
         <Link
           href="/login"
-          className="mb-8 flex items-center gap-2.5 lg:hidden"
+          className="relative z-10 mb-8 flex flex-col items-center gap-2 lg:hidden"
           aria-label="ClinicFlow home"
         >
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow">
-            <Stethoscope className="h-[18px] w-[18px]" />
-          </span>
-          <span className="text-lg font-semibold tracking-tight">ClinicFlow</span>
+          <Image
+            src="/brand/clinicflow-mark.png"
+            alt="ClinicFlow"
+            width={47}
+            height={40}
+            className="h-10 w-auto object-contain drop-shadow-[0_0_14px_rgba(0,220,255,0.60)]"
+            priority
+          />
+          <p className="text-base font-semibold tracking-tight">ClinicFlow</p>
+          <p className="text-[10px] font-medium tracking-[0.16em] uppercase text-muted-foreground/50">
+            Clinic CRM Platform
+          </p>
         </Link>
 
+        {/* Auth card */}
         <div className="auth-card relative z-10 w-full max-w-[400px] rounded-2xl border border-border/50 bg-card/70 p-8 shadow-[0_8px_32px_-8px_oklch(0.6_0.14_208_/_0.15)] backdrop-blur-xl">
           {children}
         </div>
 
-        <p className="mt-8 text-center text-xs text-muted-foreground/60">
+        <p className="relative z-10 mt-6 text-center text-xs text-muted-foreground/55">
           © {new Date().getFullYear()} ClinicFlow
         </p>
       </main>
+
     </div>
   );
 }

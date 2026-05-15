@@ -24,16 +24,14 @@ export default async function ProtectedLayout({
   const visiblePages = await getVisiblePageSlugs(user);
 
   const supabase = await createClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: clinic } = await supabase
     .from("clinics")
-    .select("time_format" as any)
+    .select("time_format")
     .eq("id", user.clinicId)
     .single();
 
   const timeFormat: TimeFormat =
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (clinic as any)?.time_format === "12h" ? "12h" : "24h";
+    clinic?.time_format === "12h" ? "12h" : "24h";
 
   return (
     <ClinicSettingsProvider timeFormat={timeFormat}>

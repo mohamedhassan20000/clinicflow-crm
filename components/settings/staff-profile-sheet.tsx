@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { startTransition, useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import {
   CalendarDays,
@@ -11,9 +11,7 @@ import {
   GraduationCap,
   Loader2,
   Phone,
-  Plus,
   Save,
-  Trash2,
   Upload,
   User,
   X,
@@ -370,7 +368,7 @@ function DoctorScheduleTab({
   useEffect(() => {
     if (!open) return;
     let active = true;
-    setSchedule(null);
+    queueMicrotask(() => { if (active) setSchedule(null); });
     Promise.all([
       getDoctorSchedule(doctorId),
       getClinicWorkingHours(),

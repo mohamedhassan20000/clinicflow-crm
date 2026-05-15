@@ -251,14 +251,17 @@ export function AppointmentForm({
 
   useEffect(() => {
     if (!selectedDoctorId || !dateVal) {
-      setSlots([]);
+      queueMicrotask(() => setSlots([]));
       return;
     }
     let cancelled = false;
-    setSlotsLoading(true);
-    getAvailableTimeSlots(selectedDoctorId, dateVal)
-      .then(({ slots: s }) => { if (!cancelled) setSlots(s); })
-      .finally(() => { if (!cancelled) setSlotsLoading(false); });
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setSlotsLoading(true);
+      getAvailableTimeSlots(selectedDoctorId, dateVal)
+        .then(({ slots: s }) => { if (!cancelled) setSlots(s); })
+        .finally(() => { if (!cancelled) setSlotsLoading(false); });
+    });
     return () => { cancelled = true; };
   }, [selectedDoctorId, dateVal]);
 

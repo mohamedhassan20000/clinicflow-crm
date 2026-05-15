@@ -129,7 +129,7 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
   if (canEditAppointments) {
     // Exclude displaced appointments from the 30-day auto-purge — they belong
     // in the rebook queue until explicitly dismissed.
-    await (supabase as any)
+    await supabase
       .from("appointments")
       .delete()
       .eq("clinic_id", user.clinicId)
@@ -186,7 +186,7 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
   const { data: appointments } = await query;
   // Recycle bin: soft-deleted but NOT displaced (displaced have their own section)
   const { data: deletedAppointments } = canEditAppointments
-    ? await (supabase as any)
+    ? await supabase
         .from("appointments")
         .select(
           "id, scheduled_at, deleted_at, patients(full_name), profiles!doctor_id(full_name)",
@@ -201,7 +201,7 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
 
   // Displaced appointments: pending appointments removed due to a confirmed conflict
   const { data: displacedRaw } = canEditAppointments
-    ? await (supabase as any)
+    ? await supabase
         .from("appointments")
         .select(
           "id, scheduled_at, duration_minutes, displaced_at, patient_id, doctor_id, department_id, insurance_provider_id, patients(full_name, file_number), profiles!doctor_id(full_name), departments(name, color)",
@@ -214,6 +214,7 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
   const appts = (appointments ?? []) as Parameters<
     typeof WeekCalendar
   >[0]["appointments"];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const trashItems: AppointmentTrashItem[] = ((deletedAppointments ?? []) as any[]).map(
     (a) => ({
       id: a.id as string,
@@ -224,6 +225,7 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
     }),
   );
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const displacedItems: DisplacedAppointmentItem[] = ((displacedRaw ?? []) as any[]).map((a) => ({
     id: a.id as string,
     scheduled_at: a.scheduled_at as string,

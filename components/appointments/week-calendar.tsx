@@ -5,12 +5,6 @@ import Link from "next/link";
 import { ChevronLeft, ChevronRight, CalendarPlus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { StatusBadge } from "@/components/appointments/status-badge";
 import { AppointmentActions } from "@/components/appointments/appointment-actions";
 import { softDeleteAppointment, restoreAppointment } from "@/actions/appointments";
@@ -362,16 +356,6 @@ function HourBucketRow({
     </div>
   );
 }
-
-// ── Hour appointments dialog ──────────────────────────────────────────────────
-
-const STATUS_SORT_RANK: Record<string, number> = {
-  confirmed: 0,
-  pending: 1,
-  completed: 2,
-  no_show: 3,
-  cancelled: 4,
-};
 
 // ── Appointment card ──────────────────────────────────────────────────────────
 

@@ -48,7 +48,6 @@ export function ClinicForm({ defaultValues, logoUrl: initialLogoUrl, readOnly = 
   const [logoUploading, startLogoTransition] = useTransition();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const form = useForm<ClinicValues>({
     resolver: zodResolver(clinicSchema) as never,
     defaultValues,

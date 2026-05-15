@@ -57,7 +57,7 @@ export default async function NewPatientPage() {
         </p>
       </div>
 
-      <div className="max-w-2xl rounded-xl border border-border/50 bg-card p-6">
+      <div className="max-w-2xl mx-auto rounded-xl border border-border/50 bg-card p-6">
         <PatientForm
           action={createPatient}
           departments={departments ?? []}

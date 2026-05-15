@@ -4,7 +4,7 @@ import { ChevronLeft } from "lucide-react";
 import { requireRole } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedDepartments, getCachedInsuranceProviders, getCachedStaff } from "@/lib/cache/reference-data";
-import { AppointmentForm } from "@/components/appointments/appointment-form";
+import { NewAppointmentLayout } from "@/components/appointments/new-appointment-layout";
 import { createAppointment } from "@/actions/appointments";
 
 export const metadata: Metadata = { title: "New Appointment" };
@@ -49,7 +49,7 @@ export default async function NewAppointmentPage({ searchParams }: PageProps) {
     .map((p) => ({ id: p.id, name: p.name }));
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="space-y-6">
       <div className="flex items-center gap-3">
         <Link
           href="/appointments"
@@ -67,19 +67,17 @@ export default async function NewAppointmentPage({ searchParams }: PageProps) {
         </p>
       </div>
 
-      <div className="max-w-2xl rounded-xl border border-border/50 bg-card p-6">
-        <AppointmentForm
-          action={createAppointment}
-          patients={patients ?? []}
-          doctors={doctors ?? []}
-          departments={departments ?? []}
-          insuranceProviders={insurance ?? []}
-          defaultPatientId={patient_id}
-          defaultDoctorId={doctor_id}
-          defaultDepartmentId={dept_id}
-          defaultInsuranceId={insurance_id}
-        />
-      </div>
+      <NewAppointmentLayout
+        action={createAppointment}
+        patients={patients ?? []}
+        doctors={doctors ?? []}
+        departments={departments ?? []}
+        insuranceProviders={insurance ?? []}
+        defaultPatientId={patient_id}
+        defaultDoctorId={doctor_id}
+        defaultDepartmentId={dept_id}
+        defaultInsuranceId={insurance_id}
+      />
     </div>
   );
 }

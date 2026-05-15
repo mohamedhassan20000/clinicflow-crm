@@ -26,7 +26,7 @@ export default async function ClinicSettingsPage() {
   const clinicData = clinic as any;
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="space-y-6">
       <div>
         <h2 className="font-semibold">Clinic settings</h2>
         <p className="text-sm text-muted-foreground">
@@ -34,18 +34,20 @@ export default async function ClinicSettingsPage() {
         </p>
       </div>
 
-      <ClinicForm
-        defaultValues={{
-          name: clinicData?.name ?? "",
-          phone: clinicData?.phone ?? null,
-          address: clinicData?.address ?? null,
-          time_format: clinicData?.time_format === "12h" ? "12h" : "24h",
-        }}
-        logoUrl={clinicData?.logo_url ?? null}
-        readOnly={isReadOnly}
-      />
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:items-start">
+        <ClinicForm
+          defaultValues={{
+            name: clinicData?.name ?? "",
+            phone: clinicData?.phone ?? null,
+            address: clinicData?.address ?? null,
+            time_format: clinicData?.time_format === "12h" ? "12h" : "24h",
+          }}
+          logoUrl={clinicData?.logo_url ?? null}
+          readOnly={isReadOnly}
+        />
 
-      <ClinicWorkingHoursForm defaultValues={workingHours} readOnly={isReadOnly} />
+        <ClinicWorkingHoursForm defaultValues={workingHours} readOnly={isReadOnly} />
+      </div>
     </div>
   );
 }

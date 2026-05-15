@@ -64,7 +64,7 @@ function NavLink({ href, label, icon: Icon }: NavEntry) {
     <Link
       href={href}
       className={cn(
-        "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+        "flex items-center gap-3.5 rounded-lg px-3.5 py-3 text-base font-medium transition-colors",
         isActive
           ? "bg-primary/10 text-primary"
           : "text-foreground/60 hover:bg-accent/5 hover:text-foreground",
@@ -72,7 +72,7 @@ function NavLink({ href, label, icon: Icon }: NavEntry) {
     >
       <Icon
         className={cn(
-          "h-4 w-4 shrink-0",
+          "h-5 w-5 shrink-0",
           isActive ? "text-primary" : "text-foreground/40",
         )}
       />
@@ -99,37 +99,37 @@ export function Sidebar({
   return (
     <aside className="flex h-full flex-col">
       {/* Logo */}
-      <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-border/50 px-4">
-        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-primary-foreground text-xs font-bold select-none">
+      <div className="flex h-14 shrink-0 items-center gap-3 border-b border-border/50 px-5">
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground text-sm font-bold select-none">
           CF
         </span>
-        <span className="text-sm font-semibold tracking-tight">ClinicFlow</span>
+        <span className="text-base font-semibold tracking-tight">ClinicFlow</span>
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 overflow-auto p-2 pt-3 space-y-0.5">
+      <nav className="flex-1 overflow-auto p-2.5 pt-4 space-y-0.5">
         {nav.map((n) => (
           <NavLink key={n.href} {...n} />
         ))}
       </nav>
 
       {/* Footer */}
-      <div className="border-t border-border/50 p-3">
-        <div className="flex items-center gap-2 mb-2 px-1">
+      <div className="border-t border-border/50 p-4">
+        <div className="flex items-center gap-2.5 mb-2 px-1">
           <Link
             href="/profile"
-            className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-1 transition-colors hover:bg-accent/5"
+            className="flex min-w-0 flex-1 items-center gap-2.5 rounded-md px-1.5 py-1.5 transition-colors hover:bg-accent/5"
             title="My profile"
           >
-            <Avatar size="sm" className="h-7 w-7">
+            <Avatar size="sm" className="h-9 w-9">
               {avatarUrl && <AvatarImage src={avatarUrl} alt={fullName} />}
-              <AvatarFallback className="bg-primary/10 text-[11px] font-semibold text-primary">
+              <AvatarFallback className="bg-primary/10 text-xs font-semibold text-primary">
                 {initials}
               </AvatarFallback>
             </Avatar>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-medium">{fullName}</p>
-              <p className="text-[10px] capitalize text-muted-foreground">
+              <p className="truncate text-sm font-medium">{fullName}</p>
+              <p className="text-xs capitalize text-muted-foreground">
                 {role}
               </p>
             </div>
@@ -139,9 +139,9 @@ export function Sidebar({
         <form action={signOut}>
           <button
             type="submit"
-            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-destructive/5 hover:text-destructive"
+            className="flex w-full items-center gap-2.5 rounded-lg px-3.5 py-2.5 text-sm text-muted-foreground transition-colors hover:bg-destructive/5 hover:text-destructive"
           >
-            <LogOut className="h-3.5 w-3.5 shrink-0" />
+            <LogOut className="h-4 w-4 shrink-0" />
             Sign out
           </button>
         </form>

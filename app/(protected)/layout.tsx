@@ -37,7 +37,7 @@ export default async function ProtectedLayout({
     <ClinicSettingsProvider timeFormat={timeFormat}>
       <div className="flex min-h-dvh bg-background">
         {/* Desktop sidebar */}
-        <aside className="hidden w-60 shrink-0 border-r border-border/50 bg-card lg:block">
+        <aside className="hidden w-72 shrink-0 border-r border-border/50 bg-card lg:block">
           <Sidebar
             role={user.role}
             fullName={user.fullName}

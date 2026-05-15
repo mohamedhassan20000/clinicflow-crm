@@ -72,15 +72,16 @@ export default function AuthLayout({
           {/* Top — logo lockup */}
           <Link
             href="/login"
-            className="flex items-center gap-3.5 w-fit"
+            className="flex items-center gap-2.5 w-fit"
             aria-label="ClinicFlow home"
           >
+            {/* Icon height matches the "ClinicFlow" text line-height */}
             <Image
               src="/brand/clinicflow-mark.png"
               alt=""
-              width={72}
-              height={72}
-              className="h-[72px] w-[72px] object-contain drop-shadow-[0_0_22px_rgba(0,220,255,0.75)]"
+              width={26}
+              height={22}
+              className="h-[22px] w-auto shrink-0 object-contain drop-shadow-[0_0_10px_rgba(0,220,255,0.85)]"
               priority
             />
             <div>
@@ -202,9 +203,9 @@ export default function AuthLayout({
           <Image
             src="/brand/clinicflow-mark.png"
             alt="ClinicFlow"
-            width={72}
-            height={72}
-            className="h-[72px] w-[72px] object-contain drop-shadow-[0_0_18px_rgba(0,220,255,0.55)]"
+            width={47}
+            height={40}
+            className="h-10 w-auto object-contain drop-shadow-[0_0_14px_rgba(0,220,255,0.60)]"
             priority
           />
           <p className="text-base font-semibold tracking-tight">ClinicFlow</p>

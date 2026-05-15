@@ -235,8 +235,8 @@ export default function AuthLayout({
                     <Icon className="h-[18px] w-[18px] text-cyan-400/60 transition-all duration-300 group-hover:text-cyan-300 group-hover:scale-125" />
                   </span>
 
-                  {/* Label — doubles in size on hover */}
-                  <span className="text-[0.8125rem] font-medium leading-none text-white/60 transition-all duration-300 ease-out group-hover:text-[1.625rem] group-hover:text-white/95 group-hover:font-semibold">
+                  {/* Label — always at full size, brightens on hover */}
+                  <span className="text-[1.15rem] font-medium leading-none text-white/60 transition-colors duration-300 ease-out group-hover:text-white/95 group-hover:font-semibold">
                     {label}
                   </span>
                 </li>

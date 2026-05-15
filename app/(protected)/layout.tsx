@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { requireUser } from "@/lib/rbac";
@@ -60,9 +61,13 @@ export default async function ProtectedLayout({
             />
             {/* ClinicFlow brand for mobile */}
             <span className="flex items-center gap-2 lg:hidden">
-              <span className="flex h-6 w-6 items-center justify-center rounded bg-primary text-primary-foreground text-[10px] font-bold">
-                CF
-              </span>
+              <Image
+                src="/brand/clinicflow-mark.png"
+                alt="ClinicFlow"
+                width={24}
+                height={24}
+                className="h-6 w-6 rounded object-cover"
+              />
               <span className="text-sm font-semibold">ClinicFlow</span>
             </span>
             <div className="flex-1" />

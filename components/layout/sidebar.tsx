@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -100,9 +101,13 @@ export function Sidebar({
     <aside className="flex h-full flex-col">
       {/* Logo */}
       <div className="flex h-14 shrink-0 items-center gap-3 border-b border-border/50 px-5">
-        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground text-sm font-bold select-none">
-          CF
-        </span>
+        <Image
+          src="/brand/clinicflow-mark.png"
+          alt="ClinicFlow"
+          width={32}
+          height={32}
+          className="h-8 w-8 rounded-lg object-cover"
+        />
         <span className="text-base font-semibold tracking-tight">ClinicFlow</span>
       </div>
 

@@ -39,7 +39,7 @@ jobs:
         run: pnpm typecheck
 
       - name: Unit tests
-        run: pnpm test -- --exclude 'tests/unit/integration/**'
+        run: pnpm vitest run tests/unit/actions tests/unit/components tests/unit/db tests/unit/lib tests/unit/pages tests/unit/sanity.test.ts
 
       - name: Build (smoke)
         env:

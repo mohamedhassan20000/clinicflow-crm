@@ -1,5 +1,10 @@
 # ClinicFlow CRM
 
+![Status](https://img.shields.io/badge/status-production-success)
+![License](https://img.shields.io/badge/license-MIT-blue)
+![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js)
+![Tests](https://img.shields.io/badge/tests-249%20passing-brightgreen)
+
 A **staff-only** clinic management system for small-to-medium private clinics. Built as a graduation project at Üsküdar University and deployed to production on Vercel + Supabase.
 
 Replaces paper appointment books, phone scheduling, and Excel patient records with a single integrated platform — covering appointments, billing, patient records, follow-ups, medical notes, and role-scoped analytics.

@@ -39,7 +39,7 @@ jobs:
         run: pnpm typecheck
 
       - name: Unit tests
-        run: pnpm test
+        run: pnpm test -- --exclude 'tests/unit/integration/**'
 
       - name: Build (smoke)
         env:

@@ -458,7 +458,7 @@ export function AppointmentCard({
               {patientName}
             </span>
 
-            {canEdit && appt.status !== "completed" && (
+            {canEdit && (appt.status === "pending" || appt.status === "confirmed") && (
               <button
                 onClick={(e) => { e.stopPropagation(); setConfirmOpen(true); }}
                 disabled={isDeleting || isRestoring}

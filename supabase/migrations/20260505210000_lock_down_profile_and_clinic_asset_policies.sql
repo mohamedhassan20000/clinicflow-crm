@@ -46,15 +46,12 @@ begin
   return new;
 end;
 $$;
-
 drop trigger if exists prevent_profile_self_privilege_update on public.profiles;
 create trigger prevent_profile_self_privilege_update
 before update on public.profiles
 for each row
 execute function public.prevent_profile_self_privilege_update();
-
 drop policy if exists "profiles_update_self" on public.profiles;
-
 create policy "profiles_update_self_safe_fields"
 on public.profiles
 for update
@@ -74,7 +71,6 @@ with check (
   and is_deleted = false
   and deleted_at is null
 );
-
 create or replace function public.clear_own_must_change_password()
 returns void
 language plpgsql
@@ -99,15 +95,12 @@ begin
     and must_change_password = true;
 end;
 $$;
-
 revoke all on function public.clear_own_must_change_password() from public;
 grant execute on function public.clear_own_must_change_password() to authenticated;
-
 drop policy if exists "Admin full access xr6sco_0" on storage.objects;
 drop policy if exists "Admin full access xr6sco_1" on storage.objects;
 drop policy if exists "Admin full access xr6sco_2" on storage.objects;
 drop policy if exists "Admin full access xr6sco_3" on storage.objects;
-
 create policy "clinic_assets_select_scoped"
 on storage.objects
 for select
@@ -126,7 +119,6 @@ using (
     )
   )
 );
-
 create policy "clinic_assets_insert_admin_manager"
 on storage.objects
 for insert
@@ -137,7 +129,6 @@ with check (
   and (storage.foldername(name))[2] = public.auth_clinic_id()::text
   and public.auth_role() = any (array['admin'::public.user_role, 'manager'::public.user_role])
 );
-
 create policy "clinic_assets_update_admin_manager"
 on storage.objects
 for update
@@ -154,7 +145,6 @@ with check (
   and (storage.foldername(name))[2] = public.auth_clinic_id()::text
   and public.auth_role() = any (array['admin'::public.user_role, 'manager'::public.user_role])
 );
-
 create policy "clinic_assets_delete_admin_manager"
 on storage.objects
 for delete

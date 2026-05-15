@@ -93,8 +93,20 @@ export function AppointmentDetailDialog({
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-md">
+          {canEdit && (appt.status === "pending" || appt.status === "confirmed") && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute top-2 right-10 h-7 w-7 text-muted-foreground/40 hover:text-destructive"
+              onClick={() => setConfirmOpen(true)}
+              disabled={isDeleting}
+              title="Move to trash"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          )}
           <DialogHeader>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 pr-2">
               <span
                 aria-hidden
                 className="h-3 w-3 shrink-0 rounded-full"
@@ -103,18 +115,6 @@ export function AppointmentDetailDialog({
               <DialogTitle className="flex-1 text-base leading-snug">
                 {patientName}
               </DialogTitle>
-              {canEdit && appt.status !== "completed" && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 shrink-0 text-muted-foreground/40 hover:text-destructive"
-                  onClick={() => setConfirmOpen(true)}
-                  disabled={isDeleting}
-                  title="Move to trash"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              )}
             </div>
           </DialogHeader>
 
@@ -209,6 +209,7 @@ export function AppointmentDetailDialog({
                 <AppointmentActions
                   appointmentId={appt.id}
                   currentStatus={appt.status}
+                  onActionComplete={() => onOpenChange(false)}
                 />
               </div>
             )}

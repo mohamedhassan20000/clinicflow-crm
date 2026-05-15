@@ -220,7 +220,6 @@ begin
   end loop;
 end;
 $$;
-
 create or replace function public.undo_appointment_billing(
   p_appointment_id uuid,
   p_target_status text
@@ -304,7 +303,6 @@ begin
   select (v_replacement).*;
 end;
 $$;
-
 create or replace function public.settle_patient_outstanding(
   p_patient_id uuid,
   p_appointment_id uuid default null,
@@ -486,7 +484,6 @@ begin
   end loop;
 end;
 $$;
-
 revoke all on function public.complete_appointment_billing(
   uuid, jsonb, numeric, text, numeric, text, numeric, numeric, text
 ) from public;
@@ -494,7 +491,6 @@ revoke all on function public.undo_appointment_billing(uuid, text) from public;
 revoke all on function public.settle_patient_outstanding(
   uuid, uuid, numeric, text, numeric, text, text
 ) from public;
-
 grant execute on function public.complete_appointment_billing(
   uuid, jsonb, numeric, text, numeric, text, numeric, numeric, text
 ) to authenticated;

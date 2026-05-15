@@ -33,6 +33,5 @@ begin
   end if;
 end;
 $$;
-
 revoke all on function public.clear_own_must_change_password() from public;
 grant execute on function public.clear_own_must_change_password() to authenticated;

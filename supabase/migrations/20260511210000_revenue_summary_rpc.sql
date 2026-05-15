@@ -136,9 +136,7 @@ begin
   return v_summary;
 end;
 $$;
-
 revoke all on function public.get_revenue_summary(timestamptz, timestamptz, uuid, uuid, uuid[])
 from public;
-
 grant execute on function public.get_revenue_summary(timestamptz, timestamptz, uuid, uuid, uuid[])
 to authenticated, service_role;

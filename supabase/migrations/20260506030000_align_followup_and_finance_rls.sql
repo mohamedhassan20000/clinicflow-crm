@@ -3,7 +3,6 @@
 
 drop policy if exists "follow_ups_select" on public.follow_ups;
 drop policy if exists "follow_ups_select_role_scoped" on public.follow_ups;
-
 create policy "follow_ups_select_role_scoped"
 on public.follow_ups
 for select
@@ -46,7 +45,6 @@ using (
     )
   )
 );
-
 drop policy if exists "follow_ups_staff_write" on public.follow_ups;
 create policy "follow_ups_staff_write"
 on public.follow_ups
@@ -58,7 +56,6 @@ with check (
     array['admin'::public.user_role, 'receptionist'::public.user_role]
   )
 );
-
 drop policy if exists "follow_ups_staff_update" on public.follow_ups;
 create policy "follow_ups_staff_update"
 on public.follow_ups
@@ -76,7 +73,6 @@ with check (
     array['admin'::public.user_role, 'receptionist'::public.user_role]
   )
 );
-
 drop policy if exists "follow_ups_staff_delete" on public.follow_ups;
 create policy "follow_ups_staff_delete"
 on public.follow_ups
@@ -88,7 +84,6 @@ using (
     array['admin'::public.user_role, 'receptionist'::public.user_role]
   )
 );
-
 drop policy if exists "patient_deposits_select" on public.patient_deposits;
 drop policy if exists "patient_deposits_select_staff" on public.patient_deposits;
 create policy "patient_deposits_select_staff"
@@ -105,7 +100,6 @@ using (
     ]
   )
 );
-
 drop policy if exists "settlements_select" on public.outstanding_settlements;
 drop policy if exists "settlements_select_staff" on public.outstanding_settlements;
 create policy "settlements_select_staff"
@@ -122,7 +116,6 @@ using (
     ]
   )
 );
-
 drop policy if exists "settlements_staff_write" on public.outstanding_settlements;
 create policy "settlements_staff_write"
 on public.outstanding_settlements

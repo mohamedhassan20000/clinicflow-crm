@@ -4,7 +4,6 @@
 alter table public.patients
   add column if not exists insurance_provider_id uuid,
   add column if not exists avatar_path text;
-
 do $$
 begin
   if not exists (
@@ -21,12 +20,10 @@ begin
   end if;
 end;
 $$;
-
 create index if not exists patients_insurance_provider_id_idx
 on public.patients using btree (clinic_id, insurance_provider_id)
 where is_deleted = false
   and insurance_provider_id is not null;
-
 insert into storage.buckets (
   id,
   name,
@@ -46,12 +43,10 @@ set
   public = false,
   file_size_limit = excluded.file_size_limit,
   allowed_mime_types = excluded.allowed_mime_types;
-
 drop policy if exists "patient_assets_avatar_select_scoped" on storage.objects;
 drop policy if exists "patient_assets_avatar_insert_staff" on storage.objects;
 drop policy if exists "patient_assets_avatar_update_staff" on storage.objects;
 drop policy if exists "patient_assets_avatar_delete_staff" on storage.objects;
-
 create policy "patient_assets_avatar_select_scoped"
 on storage.objects
 for select
@@ -88,7 +83,6 @@ using (
       )
   )
 );
-
 create policy "patient_assets_avatar_insert_staff"
 on storage.objects
 for insert
@@ -109,7 +103,6 @@ with check (
       and not p.is_deleted
   )
 );
-
 create policy "patient_assets_avatar_update_staff"
 on storage.objects
 for update
@@ -146,7 +139,6 @@ with check (
       and not p.is_deleted
   )
 );
-
 create policy "patient_assets_avatar_delete_staff"
 on storage.objects
 for delete

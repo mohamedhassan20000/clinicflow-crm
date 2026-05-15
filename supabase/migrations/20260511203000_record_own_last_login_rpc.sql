@@ -25,9 +25,7 @@ begin
   return found;
 end;
 $$;
-
 revoke all on function public.record_own_last_login()
 from public;
-
 grant execute on function public.record_own_last_login()
 to authenticated, service_role;

@@ -131,6 +131,5 @@ begin
   return next;
 end;
 $$;
-
 revoke all on function public.undo_appointment_billing_with_previous_settlement(uuid, text) from public;
 grant execute on function public.undo_appointment_billing_with_previous_settlement(uuid, text) to authenticated;

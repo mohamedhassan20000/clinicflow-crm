@@ -18,11 +18,9 @@ begin
   end if;
 end;
 $$;
-
 grant usage on type public.patient_document_category to authenticated;
 grant usage on type public.patient_document_category to service_role;
 revoke all on type public.patient_document_category from anon;
-
 create table if not exists public.patient_documents (
   id uuid primary key default gen_random_uuid(),
   clinic_id uuid not null references public.clinics(id) on delete cascade,
@@ -70,7 +68,6 @@ create table if not exists public.patient_documents (
     )
   )
 );
-
 create index if not exists patient_documents_patient_category_created_idx
 on public.patient_documents (
   clinic_id,
@@ -79,23 +76,18 @@ on public.patient_documents (
   created_at desc
 )
 where deleted_at is null;
-
 create index if not exists patient_documents_uploaded_by_idx
 on public.patient_documents (clinic_id, uploaded_by, created_at desc)
 where uploaded_by is not null;
-
 create unique index if not exists patient_documents_active_national_id_unique
 on public.patient_documents (clinic_id, patient_id)
 where category = 'national_id'::public.patient_document_category
   and deleted_at is null;
-
 create unique index if not exists patient_documents_active_insurance_unique
 on public.patient_documents (clinic_id, patient_id)
 where category = 'insurance'::public.patient_document_category
   and deleted_at is null;
-
 alter table public.patient_documents enable row level security;
-
 create or replace function public.prevent_patient_document_identity_update()
 returns trigger
 language plpgsql
@@ -121,14 +113,11 @@ begin
   return new;
 end;
 $$;
-
 revoke all on function public.prevent_patient_document_identity_update() from public;
-
 drop policy if exists "patient_documents_select_staff" on public.patient_documents;
 drop policy if exists "patient_documents_insert_staff" on public.patient_documents;
 drop policy if exists "patient_documents_update_staff" on public.patient_documents;
 drop policy if exists "patient_documents_delete_staff" on public.patient_documents;
-
 create policy "patient_documents_select_staff"
 on public.patient_documents
 for select
@@ -147,7 +136,6 @@ using (
       and not p.is_deleted
   )
 );
-
 create policy "patient_documents_insert_staff"
 on public.patient_documents
 for insert
@@ -170,7 +158,6 @@ with check (
       and not p.is_deleted
   )
 );
-
 create policy "patient_documents_update_staff"
 on public.patient_documents
 for update
@@ -202,29 +189,24 @@ with check (
       and not p.is_deleted
   )
 );
-
 drop trigger if exists trg_patient_documents_immutable on public.patient_documents;
 create trigger trg_patient_documents_immutable
 before update on public.patient_documents
 for each row
 execute function public.prevent_patient_document_identity_update();
-
 drop trigger if exists trg_patient_documents_updated_at on public.patient_documents;
 create trigger trg_patient_documents_updated_at
 before update on public.patient_documents
 for each row
 execute function public.set_updated_at();
-
 drop trigger if exists trg_audit_patient_documents on public.patient_documents;
 create trigger trg_audit_patient_documents
 after insert or delete or update on public.patient_documents
 for each row
 execute function public.write_audit_log();
-
 grant all on table public.patient_documents to authenticated;
 grant all on table public.patient_documents to service_role;
 revoke all on table public.patient_documents from anon;
-
 insert into storage.buckets (
   id,
   name,
@@ -249,12 +231,10 @@ set
   public = false,
   file_size_limit = excluded.file_size_limit,
   allowed_mime_types = excluded.allowed_mime_types;
-
 drop policy if exists "patient_assets_documents_select_staff" on storage.objects;
 drop policy if exists "patient_assets_documents_insert_staff" on storage.objects;
 drop policy if exists "patient_assets_documents_update_staff" on storage.objects;
 drop policy if exists "patient_assets_documents_delete_staff" on storage.objects;
-
 create policy "patient_assets_documents_select_staff"
 on storage.objects
 for select
@@ -279,7 +259,6 @@ using (
       and not p.is_deleted
   )
 );
-
 create policy "patient_assets_documents_insert_staff"
 on storage.objects
 for insert
@@ -304,7 +283,6 @@ with check (
       and not p.is_deleted
   )
 );
-
 create policy "patient_assets_documents_update_staff"
 on storage.objects
 for update
@@ -349,7 +327,6 @@ with check (
       and not p.is_deleted
   )
 );
-
 create policy "patient_assets_documents_delete_staff"
 on storage.objects
 for delete

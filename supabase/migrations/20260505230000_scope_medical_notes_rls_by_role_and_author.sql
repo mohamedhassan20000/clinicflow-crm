@@ -7,7 +7,6 @@ drop policy if exists "medical_notes_select_role_scoped" on public.medical_notes
 drop policy if exists "medical_notes_insert_role_scoped" on public.medical_notes;
 drop policy if exists "medical_notes_update_role_scoped" on public.medical_notes;
 drop policy if exists "medical_notes_delete_role_scoped" on public.medical_notes;
-
 create policy "medical_notes_select_role_scoped"
 on public.medical_notes
 for select
@@ -35,7 +34,6 @@ using (
       )
   )
 );
-
 create policy "medical_notes_insert_role_scoped"
 on public.medical_notes
 for insert
@@ -64,7 +62,6 @@ with check (
       )
   )
 );
-
 create policy "medical_notes_update_role_scoped"
 on public.medical_notes
 for update
@@ -101,7 +98,6 @@ with check (
       )
   )
 );
-
 create policy "medical_notes_delete_role_scoped"
 on public.medical_notes
 for delete

@@ -27,7 +27,6 @@ begin
   return new;
 end;
 $$;
-
 drop policy if exists "profiles_update_manager_staff" on public.profiles;
 create policy "profiles_update_manager_staff"
 on public.profiles
@@ -43,7 +42,6 @@ with check (
   and public.auth_role() = 'manager'::public.user_role
   and role <> 'admin'::public.user_role
 );
-
 drop policy if exists "medical_notes_update_role_scoped" on public.medical_notes;
 create policy "medical_notes_update_role_scoped"
 on public.medical_notes
@@ -81,7 +79,6 @@ with check (
       )
   )
 );
-
 drop policy if exists "medical_notes_delete_role_scoped" on public.medical_notes;
 create policy "medical_notes_delete_role_scoped"
 on public.medical_notes
@@ -103,5 +100,4 @@ using (
       )
   )
 );
-
 revoke all on function public.prevent_manager_profile_privilege_update() from public;

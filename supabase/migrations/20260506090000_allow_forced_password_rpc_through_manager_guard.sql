@@ -44,5 +44,4 @@ begin
   return new;
 end;
 $$;
-
 revoke all on function public.prevent_manager_profile_privilege_update() from public;

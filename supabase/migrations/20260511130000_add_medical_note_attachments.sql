@@ -43,7 +43,6 @@ create table if not exists public.medical_note_attachments (
     )
   )
 );
-
 create index if not exists medical_note_attachments_note_created_idx
 on public.medical_note_attachments (
   clinic_id,
@@ -52,13 +51,10 @@ on public.medical_note_attachments (
   created_at desc
 )
 where deleted_at is null;
-
 create index if not exists medical_note_attachments_uploaded_by_idx
 on public.medical_note_attachments (clinic_id, uploaded_by, created_at desc)
 where uploaded_by is not null;
-
 alter table public.medical_note_attachments enable row level security;
-
 create or replace function public.prevent_medical_note_attachment_identity_update()
 returns trigger
 language plpgsql
@@ -84,15 +80,12 @@ begin
   return new;
 end;
 $$;
-
 revoke all on function public.prevent_medical_note_attachment_identity_update()
 from public;
-
 drop policy if exists "medical_note_attachments_select_role_scoped" on public.medical_note_attachments;
 drop policy if exists "medical_note_attachments_insert_role_scoped" on public.medical_note_attachments;
 drop policy if exists "medical_note_attachments_update_role_scoped" on public.medical_note_attachments;
 drop policy if exists "medical_note_attachments_delete_role_scoped" on public.medical_note_attachments;
-
 create policy "medical_note_attachments_select_role_scoped"
 on public.medical_note_attachments
 for select
@@ -125,7 +118,6 @@ using (
       )
   )
 );
-
 create policy "medical_note_attachments_insert_role_scoped"
 on public.medical_note_attachments
 for insert
@@ -159,7 +151,6 @@ with check (
       )
   )
 );
-
 create policy "medical_note_attachments_update_role_scoped"
 on public.medical_note_attachments
 for update
@@ -207,7 +198,6 @@ with check (
       )
   )
 );
-
 create policy "medical_note_attachments_delete_role_scoped"
 on public.medical_note_attachments
 for delete
@@ -233,29 +223,24 @@ using (
       )
   )
 );
-
 drop trigger if exists trg_medical_note_attachments_immutable on public.medical_note_attachments;
 create trigger trg_medical_note_attachments_immutable
 before update on public.medical_note_attachments
 for each row
 execute function public.prevent_medical_note_attachment_identity_update();
-
 drop trigger if exists trg_medical_note_attachments_updated_at on public.medical_note_attachments;
 create trigger trg_medical_note_attachments_updated_at
 before update on public.medical_note_attachments
 for each row
 execute function public.set_updated_at();
-
 drop trigger if exists trg_audit_medical_note_attachments on public.medical_note_attachments;
 create trigger trg_audit_medical_note_attachments
 after insert or delete or update on public.medical_note_attachments
 for each row
 execute function public.write_audit_log();
-
 grant all on table public.medical_note_attachments to authenticated;
 grant all on table public.medical_note_attachments to service_role;
 revoke all on table public.medical_note_attachments from anon;
-
 insert into storage.buckets (
   id,
   name,
@@ -280,11 +265,9 @@ set
   public = false,
   file_size_limit = excluded.file_size_limit,
   allowed_mime_types = excluded.allowed_mime_types;
-
 drop policy if exists "patient_assets_medical_note_attachments_select" on storage.objects;
 drop policy if exists "patient_assets_medical_note_attachments_insert" on storage.objects;
 drop policy if exists "patient_assets_medical_note_attachments_delete" on storage.objects;
-
 create policy "patient_assets_medical_note_attachments_select"
 on storage.objects
 for select
@@ -320,7 +303,6 @@ using (
       )
   )
 );
-
 create policy "patient_assets_medical_note_attachments_insert"
 on storage.objects
 for insert
@@ -339,7 +321,6 @@ with check (
       and a.uploaded_by = auth.uid()
   )
 );
-
 create policy "patient_assets_medical_note_attachments_delete"
 on storage.objects
 for delete

@@ -16,7 +16,6 @@ as $$
     and p.deleted_at is null
   limit 1;
 $$;
-
 create or replace function public.auth_clinic_id()
 returns uuid
 language sql
@@ -26,7 +25,6 @@ set search_path = public
 as $$
   select ap.clinic_id from public.auth_profile() ap;
 $$;
-
 create or replace function public.auth_role()
 returns public.user_role
 language sql
@@ -36,7 +34,6 @@ set search_path = public
 as $$
   select ap.role from public.auth_profile() ap;
 $$;
-
 create or replace function public.write_audit_log()
 returns trigger
 language plpgsql
@@ -95,14 +92,12 @@ begin
   return coalesce(new, old);
 end;
 $$;
-
 revoke all on function public.auth_profile() from public;
 revoke all on function public.auth_clinic_id() from public;
 revoke all on function public.auth_role() from public;
 grant execute on function public.auth_profile() to authenticated, service_role;
 grant execute on function public.auth_clinic_id() to authenticated, service_role;
 grant execute on function public.auth_role() to authenticated, service_role;
-
 revoke all on function public.write_audit_log() from public;
 revoke all on function public.enforce_appointment_transition() from public;
 revoke all on function public.set_updated_at() from public;
@@ -111,7 +106,6 @@ revoke all on function public.prevent_profile_self_privilege_update() from publi
 revoke all on function public.prevent_manager_clinic_privilege_update() from public;
 revoke all on function public.prevent_manager_profile_privilege_update() from public;
 revoke all on function public.enforce_appointment_reference_integrity() from public;
-
 revoke all on table public.appointment_services from anon;
 revoke all on table public.appointments from anon;
 revoke all on table public.audit_logs from anon;
@@ -129,7 +123,6 @@ revoke all on table public.services from anon;
 revoke all on table public.staff_invitations from anon;
 revoke all on table public.user_customizations from anon;
 revoke all on table public.user_page_permissions from anon;
-
 alter default privileges for role postgres in schema public
 revoke all on tables from anon;
 alter default privileges for role postgres in schema public

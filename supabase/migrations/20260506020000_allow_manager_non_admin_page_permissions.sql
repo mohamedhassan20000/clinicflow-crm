@@ -5,7 +5,6 @@ drop policy if exists "Admins can manage clinic page permissions"
   on public.user_page_permissions;
 drop policy if exists "Admins and managers can manage clinic page permissions"
   on public.user_page_permissions;
-
 create policy "Admins and managers can manage clinic page permissions"
 on public.user_page_permissions
 for all

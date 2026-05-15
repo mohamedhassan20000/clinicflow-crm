@@ -57,7 +57,6 @@ begin
   return true;
 end;
 $$;
-
 create or replace function public.soft_delete_medical_note_attachment(
   p_attachment_id uuid,
   p_note_id uuid,
@@ -130,12 +129,10 @@ begin
   return true;
 end;
 $$;
-
 revoke all on function public.soft_delete_patient_document(uuid, uuid)
 from public;
 revoke all on function public.soft_delete_medical_note_attachment(uuid, uuid, uuid)
 from public;
-
 grant execute on function public.soft_delete_patient_document(uuid, uuid)
 to authenticated, service_role;
 grant execute on function public.soft_delete_medical_note_attachment(uuid, uuid, uuid)

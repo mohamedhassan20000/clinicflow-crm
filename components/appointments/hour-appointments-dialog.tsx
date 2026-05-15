@@ -124,7 +124,7 @@ function PopupAppointmentRow({
         </div>
 
         {/* Trash */}
-        {canEdit && appt.status !== "completed" && (
+        {canEdit && (appt.status === "pending" || appt.status === "confirmed") && (
           <Button
             variant="ghost"
             size="icon"

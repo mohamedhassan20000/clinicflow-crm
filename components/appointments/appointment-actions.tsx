@@ -38,11 +38,14 @@ const TERMINAL: Status[] = ["completed", "cancelled", "no_show"];
 function AppointmentActionsInner({
   appointmentId,
   currentStatus,
+  onActionComplete,
 }: {
   appointmentId: string;
   currentStatus: Status;
   /** @deprecated kept for back-compat */
   hasInsurance?: boolean;
+  /** Called after a terminal action (cancel, no-show) succeeds. */
+  onActionComplete?: () => void;
 }) {
   const [billingOpen, setBillingOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
@@ -217,6 +220,7 @@ function AppointmentActionsInner({
       } else {
         resetCancelState();
         setOptimisticStatus("cancelled");
+        onActionComplete?.();
         toast.success("Appointment cancelled.", {
           duration: 10000,
           action: {
@@ -242,6 +246,7 @@ function AppointmentActionsInner({
         setOptimisticStatus(null);
       } else {
         resetNoShowState();
+        onActionComplete?.();
         toast.success("Appointment marked as no-show.", {
           duration: 10000,
           action: {

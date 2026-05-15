@@ -7,10 +7,8 @@ create table if not exists public.user_page_permissions (
   updated_at timestamptz not null default now(),
   primary key (user_id, page_slug)
 );
-
 create index if not exists user_page_permissions_clinic_id_idx
   on public.user_page_permissions (clinic_id);
-
 create or replace function public.touch_user_page_permissions_updated_at()
 returns trigger
 language plpgsql
@@ -20,24 +18,19 @@ begin
   return new;
 end;
 $$;
-
 drop trigger if exists touch_user_page_permissions_updated_at
   on public.user_page_permissions;
-
 create trigger touch_user_page_permissions_updated_at
 before update on public.user_page_permissions
 for each row
 execute function public.touch_user_page_permissions_updated_at();
-
 alter table public.user_page_permissions enable row level security;
-
 drop policy if exists "Users can read own page permissions"
   on public.user_page_permissions;
 create policy "Users can read own page permissions"
   on public.user_page_permissions
   for select
   using (user_id = auth.uid());
-
 drop policy if exists "Admins can manage clinic page permissions"
   on public.user_page_permissions;
 create policy "Admins can manage clinic page permissions"

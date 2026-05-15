@@ -7,7 +7,6 @@
 -- already excludes cancelled, no_show, and soft-deleted rows.
 
 DROP INDEX IF EXISTS "appointments_doctor_active_slot_key";
-
 CREATE UNIQUE INDEX "appointments_doctor_active_slot_key"
   ON appointments (doctor_id, scheduled_at)
   WHERE status <> ALL (ARRAY['cancelled'::appointment_status, 'no_show'::appointment_status])

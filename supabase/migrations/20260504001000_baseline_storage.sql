@@ -25,11 +25,9 @@ values
     array['image/png', 'image/jpeg', 'image/webp', 'image/gif']::text[]
   )
 on conflict (id) do nothing;
-
 drop policy if exists "avatars_owner_delete" on storage.objects;
 drop policy if exists "avatars_owner_insert" on storage.objects;
 drop policy if exists "avatars_owner_update" on storage.objects;
-
 create policy "avatars_owner_delete"
 on storage.objects
 for delete
@@ -37,7 +35,6 @@ using (
   bucket_id = 'avatars'
   and auth.uid()::text = (storage.foldername(name))[1]
 );
-
 create policy "avatars_owner_insert"
 on storage.objects
 for insert
@@ -45,7 +42,6 @@ with check (
   bucket_id = 'avatars'
   and auth.uid()::text = (storage.foldername(name))[1]
 );
-
 create policy "avatars_owner_update"
 on storage.objects
 for update

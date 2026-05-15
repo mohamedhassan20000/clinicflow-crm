@@ -3,11 +3,9 @@
 
 alter table public.medical_notes
 add column if not exists deleted_at timestamptz;
-
 create index if not exists medical_notes_active_patient_created_idx
 on public.medical_notes (patient_id, created_at desc)
 where deleted_at is null;
-
 drop policy if exists "medical_notes_select_role_scoped" on public.medical_notes;
 create policy "medical_notes_select_role_scoped"
 on public.medical_notes
@@ -37,7 +35,6 @@ using (
       )
   )
 );
-
 drop policy if exists "patient_documents_update_staff" on public.patient_documents;
 create policy "patient_documents_update_staff"
 on public.patient_documents
@@ -69,7 +66,6 @@ with check (
       and not p.is_deleted
   )
 );
-
 drop policy if exists "medical_note_attachments_update_role_scoped" on public.medical_note_attachments;
 create policy "medical_note_attachments_update_role_scoped"
 on public.medical_note_attachments

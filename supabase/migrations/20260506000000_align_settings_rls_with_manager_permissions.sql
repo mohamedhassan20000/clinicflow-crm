@@ -25,13 +25,11 @@ begin
   return new;
 end;
 $$;
-
 drop trigger if exists prevent_manager_clinic_privilege_update on public.clinics;
 create trigger prevent_manager_clinic_privilege_update
 before update on public.clinics
 for each row
 execute function public.prevent_manager_clinic_privilege_update();
-
 create or replace function public.prevent_manager_profile_privilege_update()
 returns trigger
 language plpgsql
@@ -58,13 +56,11 @@ begin
   return new;
 end;
 $$;
-
 drop trigger if exists prevent_manager_profile_privilege_update on public.profiles;
 create trigger prevent_manager_profile_privilege_update
 before update on public.profiles
 for each row
 execute function public.prevent_manager_profile_privilege_update();
-
 drop policy if exists "clinics_update_admin" on public.clinics;
 drop policy if exists "clinics_update_admin_manager" on public.clinics;
 create policy "clinics_update_admin_manager"
@@ -83,7 +79,6 @@ with check (
     array['admin'::public.user_role, 'manager'::public.user_role]
   )
 );
-
 drop policy if exists "departments_write_admin" on public.departments;
 drop policy if exists "departments_write_admin_manager" on public.departments;
 create policy "departments_write_admin_manager"
@@ -101,7 +96,6 @@ with check (
     array['admin'::public.user_role, 'manager'::public.user_role]
   )
 );
-
 drop policy if exists "insurance_write_admin" on public.insurance_providers;
 drop policy if exists "insurance_write_admin_manager" on public.insurance_providers;
 create policy "insurance_write_admin_manager"
@@ -119,7 +113,6 @@ with check (
     array['admin'::public.user_role, 'manager'::public.user_role]
   )
 );
-
 drop policy if exists "services_admin_write" on public.services;
 drop policy if exists "services_write_admin_manager" on public.services;
 create policy "services_write_admin_manager"
@@ -137,7 +130,6 @@ with check (
     array['admin'::public.user_role, 'manager'::public.user_role]
   )
 );
-
 drop policy if exists "profiles_update_manager_staff" on public.profiles;
 drop policy if exists "profiles_insert_admin" on public.profiles;
 drop policy if exists "profiles_insert_admin_manager" on public.profiles;
@@ -155,7 +147,6 @@ with check (
     )
   )
 );
-
 create policy "profiles_update_manager_staff"
 on public.profiles
 for update
@@ -170,7 +161,6 @@ with check (
   and public.auth_role() = 'manager'::public.user_role
   and role <> 'admin'::public.user_role
 );
-
 drop policy if exists "Admins can manage clinic page permissions"
   on public.user_page_permissions;
 drop policy if exists "Admins and managers can manage clinic page permissions"

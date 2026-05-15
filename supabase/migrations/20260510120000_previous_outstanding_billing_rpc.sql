@@ -4,14 +4,11 @@
 
 alter table public.outstanding_settlements
 add column if not exists source_appointment_id uuid;
-
 comment on column public.outstanding_settlements.source_appointment_id is
   'Appointment invoice completion that created this settlement row. Nullable for legacy/manual settlements; intentionally not FK-constrained so rollback/undo flows that replace appointment rows do not erase provenance.';
-
 create index if not exists outstanding_settlements_source_appointment_idx
 on public.outstanding_settlements (clinic_id, source_appointment_id)
 where source_appointment_id is not null;
-
 create or replace function public.complete_appointment_billing_with_previous_settlement(
   p_appointment_id uuid,
   p_line_items jsonb,
@@ -345,11 +342,9 @@ begin
   return next;
 end;
 $$;
-
 revoke all on function public.complete_appointment_billing_with_previous_settlement(
   uuid, jsonb, numeric, text, numeric, text, numeric, numeric, text, numeric, text, text
 ) from public;
-
 grant execute on function public.complete_appointment_billing_with_previous_settlement(
   uuid, jsonb, numeric, text, numeric, text, numeric, numeric, text, numeric, text, text
 ) to authenticated;

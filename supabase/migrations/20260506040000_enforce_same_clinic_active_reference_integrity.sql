@@ -73,10 +73,8 @@ begin
   return new;
 end;
 $$;
-
 drop trigger if exists enforce_appointment_reference_integrity
   on public.appointments;
-
 create trigger enforce_appointment_reference_integrity
 before insert or update on public.appointments
 for each row

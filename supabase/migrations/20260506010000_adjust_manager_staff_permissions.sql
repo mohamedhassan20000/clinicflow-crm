@@ -26,7 +26,6 @@ begin
   return new;
 end;
 $$;
-
 drop policy if exists "profiles_update_manager_staff" on public.profiles;
 create policy "profiles_update_manager_staff"
 on public.profiles
@@ -40,7 +39,6 @@ with check (
   clinic_id = public.auth_clinic_id()
   and public.auth_role() = 'manager'::public.user_role
 );
-
 drop policy if exists "Admins and managers can manage clinic page permissions"
   on public.user_page_permissions;
 drop policy if exists "Admins can manage clinic page permissions"

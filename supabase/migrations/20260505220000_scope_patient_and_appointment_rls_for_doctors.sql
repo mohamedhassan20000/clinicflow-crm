@@ -16,13 +16,10 @@ as $$
     and deleted_at is null
   limit 1;
 $$;
-
 revoke all on function public.auth_department_id() from public;
 grant execute on function public.auth_department_id() to authenticated;
 grant execute on function public.auth_department_id() to service_role;
-
 drop policy if exists "patients_select_clinic" on public.patients;
-
 create policy "patients_select_role_scoped"
 on public.patients
 for select
@@ -50,9 +47,7 @@ using (
     )
   )
 );
-
 drop policy if exists "appointments_select_clinic" on public.appointments;
-
 create policy "appointments_select_role_scoped"
 on public.appointments
 for select

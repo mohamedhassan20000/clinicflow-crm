@@ -51,9 +51,7 @@ begin
   return true;
 end;
 $$;
-
 revoke all on function public.soft_delete_patient(uuid)
 from public;
-
 grant execute on function public.soft_delete_patient(uuid)
 to authenticated, service_role;

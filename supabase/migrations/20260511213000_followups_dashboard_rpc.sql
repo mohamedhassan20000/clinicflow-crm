@@ -4,7 +4,6 @@
 
 create index if not exists perf_follow_ups_clinic_outcome_recorded_idx
   on public.follow_ups (clinic_id, outcome, recorded_at desc);
-
 create or replace function public.get_followups_dashboard(
   p_start timestamptz,
   p_end timestamptz,
@@ -243,7 +242,6 @@ begin
   return v_payload;
 end;
 $$;
-
 revoke all on function public.get_followups_dashboard(
   timestamptz,
   timestamptz,
@@ -255,7 +253,6 @@ revoke all on function public.get_followups_dashboard(
   integer,
   integer
 ) from public;
-
 grant execute on function public.get_followups_dashboard(
   timestamptz,
   timestamptz,

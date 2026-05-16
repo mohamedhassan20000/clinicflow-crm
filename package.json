@@ -8,11 +8,13 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --exclude \"tests/unit/integration/**\"",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "db:types": "supabase gen types typescript --project-id tslylwruuntrqjdzreot --schema public > types/database.ts",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "test:integration": "vitest run tests/unit/integration",
+    "test:all": "vitest run"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

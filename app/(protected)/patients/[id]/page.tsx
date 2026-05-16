@@ -37,27 +37,68 @@ export default async function PatientDetailPage({ params }: PageProps) {
   const user = await requireUser();
   const supabase = await createClient();
 
-  const PATIENT_SELECT =
-    "id, full_name, file_number, national_id, phone, email, date_of_birth, blood_type, created_at, is_deleted, is_archived, deleted_at, archived_at, avatar_path, assigned_doctor_id, department_id, departments(id, name, color), assigned_doctor:profiles!assigned_doctor_id(id, full_name), insurance_providers(name)";
+  // Base columns: always available, no migration dependency.
+  const PATIENT_SELECT_BASE =
+    "id, full_name, file_number, national_id, phone, email, date_of_birth, blood_type, created_at, is_deleted, avatar_path, assigned_doctor_id, department_id, departments(id, name, color), assigned_doctor:profiles!assigned_doctor_id(id, full_name), insurance_providers(name)";
 
-  let { data: patient } = await supabase
-    .from("patients")
-    .select(PATIENT_SELECT)
-    .eq("id", id)
-    .eq("clinic_id", user.clinicId)
-    .single();
+  // Full columns: base + trash/archive fields added by migration 20260517100000.
+  // Only used in the admin fallback (which only runs for deleted/archived rows,
+  // which only exist after the migration is applied).
+  const PATIENT_SELECT_FULL = PATIENT_SELECT_BASE + ", is_archived, deleted_at, archived_at";
 
-  // RLS blocks deleted/archived rows for all roles. Admin and receptionist can
-  // still view the full patient history — fall back to the service-role client.
-  if (!patient && (user.role === "admin" || user.role === "receptionist")) {
-    const adminClient = createAdminClient();
-    const { data: adminPatient } = await adminClient
+  // Shape that covers both the regular query (base) and admin fallback (full).
+  // Archive/trash fields are optional — absent for active patients, present for deleted/archived.
+  type PatientData = {
+    id: string;
+    full_name: string;
+    file_number: string | null;
+    national_id: string | null;
+    phone: string;
+    email: string | null;
+    date_of_birth: string;
+    blood_type: string | null;
+    created_at: string;
+    is_deleted: boolean;
+    is_archived?: boolean | null;
+    deleted_at?: string | null;
+    archived_at?: string | null;
+    avatar_path: string | null;
+    assigned_doctor_id: string | null;
+    department_id: string | null;
+    departments: { id: string; name: string; color: string } | null;
+    assigned_doctor: { id: string; full_name: string | null } | null;
+    insurance_providers: { name: string } | null;
+  };
+
+  let patient: PatientData | null = null;
+  let patientError: { code: string } | null = null;
+
+  {
+    const result = await supabase
       .from("patients")
-      .select(PATIENT_SELECT)
+      .select(PATIENT_SELECT_BASE)
       .eq("id", id)
       .eq("clinic_id", user.clinicId)
       .single();
-    patient = adminPatient;
+    patient = result.data as PatientData | null;
+    patientError = result.error as { code: string } | null;
+  }
+
+  // Only use the admin fallback when RLS returned "no rows" (PGRST116), which
+  // means the patient exists but is deleted/archived. Other error codes (schema
+  // errors, auth) are not retried — they will correctly fall through to notFound().
+  if (
+    patientError?.code === "PGRST116" &&
+    (user.role === "admin" || user.role === "receptionist")
+  ) {
+    const adminClient = createAdminClient();
+    const { data: adminPatient } = await adminClient
+      .from("patients")
+      .select(PATIENT_SELECT_FULL)
+      .eq("id", id)
+      .eq("clinic_id", user.clinicId)
+      .single();
+    patient = adminPatient as PatientData | null;
   }
 
   if (!patient) notFound();

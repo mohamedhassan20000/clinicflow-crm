@@ -137,7 +137,7 @@ export function ClinicForm({ defaultValues, logoUrl: initialLogoUrl, readOnly = 
           )}
           <div className="space-y-1.5">
             <p className="text-sm text-muted-foreground">
-              PNG, JPEG, or SVG · max 500 KB
+              PNG, JPEG, or SVG · max 5 MB
             </p>
             <div className="flex items-center gap-2">
               <Button

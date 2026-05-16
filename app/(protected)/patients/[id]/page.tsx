@@ -2,10 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CLINIC_TZ } from "@/lib/datetime";
-import { AlertCircle, ChevronLeft, FileText, Pencil, Receipt } from "lucide-react";
+import { AlertCircle, Archive, CalendarPlus, ChevronLeft, FileText, Pencil, Receipt, Trash2 } from "lucide-react";
 import { StatusBadge } from "@/components/appointments/status-badge";
 import { requireUser } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import {
   MedicalNotesList,
   type MedicalNoteWithAttachments,
@@ -36,14 +37,69 @@ export default async function PatientDetailPage({ params }: PageProps) {
   const user = await requireUser();
   const supabase = await createClient();
 
-  const { data: patient } = await supabase
-    .from("patients")
-    .select(
-      "id, full_name, file_number, national_id, phone, email, date_of_birth, blood_type, created_at, is_deleted, avatar_path, assigned_doctor_id, department_id, departments(id, name, color), assigned_doctor:profiles!assigned_doctor_id(id, full_name), insurance_providers(name)",
-    )
-    .eq("id", id)
-    .eq("clinic_id", user.clinicId)
-    .single();
+  // Base columns: always available, no migration dependency.
+  const PATIENT_SELECT_BASE =
+    "id, full_name, file_number, national_id, phone, email, date_of_birth, blood_type, created_at, is_deleted, avatar_path, assigned_doctor_id, department_id, departments(id, name, color), assigned_doctor:profiles!assigned_doctor_id(id, full_name), insurance_providers(name)";
+
+  // Full columns: base + trash/archive fields added by migration 20260517100000.
+  // Only used in the admin fallback (which only runs for deleted/archived rows,
+  // which only exist after the migration is applied).
+  const PATIENT_SELECT_FULL = PATIENT_SELECT_BASE + ", is_archived, deleted_at, archived_at";
+
+  // Shape that covers both the regular query (base) and admin fallback (full).
+  // Archive/trash fields are optional — absent for active patients, present for deleted/archived.
+  type PatientData = {
+    id: string;
+    full_name: string;
+    file_number: string | null;
+    national_id: string | null;
+    phone: string;
+    email: string | null;
+    date_of_birth: string;
+    blood_type: string | null;
+    created_at: string;
+    is_deleted: boolean;
+    is_archived?: boolean | null;
+    deleted_at?: string | null;
+    archived_at?: string | null;
+    avatar_path: string | null;
+    assigned_doctor_id: string | null;
+    department_id: string | null;
+    departments: { id: string; name: string; color: string } | null;
+    assigned_doctor: { id: string; full_name: string | null } | null;
+    insurance_providers: { name: string } | null;
+  };
+
+  let patient: PatientData | null = null;
+  let patientError: { code: string } | null = null;
+
+  {
+    const result = await supabase
+      .from("patients")
+      .select(PATIENT_SELECT_BASE)
+      .eq("id", id)
+      .eq("clinic_id", user.clinicId)
+      .single();
+    patient = result.data as PatientData | null;
+    patientError = result.error as { code: string } | null;
+  }
+
+  // Only use the admin fallback when RLS returned "no rows" (PGRST116), which
+  // means the patient exists but is deleted/archived. Other error codes (schema
+  // errors, auth) are not retried — they will correctly fall through to notFound().
+  if (
+    patientError?.code === "PGRST116" &&
+    (user.role === "admin" || user.role === "receptionist")
+  ) {
+    const adminClient = createAdminClient();
+    const { data: adminPatient } = await adminClient
+      .from("patients")
+      .select(PATIENT_SELECT_FULL)
+      .eq("id", id)
+      .eq("clinic_id", user.clinicId)
+      .single();
+    patient = adminPatient as PatientData | null;
+  }
 
   if (!patient) notFound();
 
@@ -261,6 +317,44 @@ export default async function PatientDetailPage({ params }: PageProps) {
         </Link>
       </div>
 
+      {/* Status banner — shown for deleted / archived patients */}
+      {patient.is_archived && (
+        <div className="flex items-start gap-3 rounded-xl border border-amber-500/40 bg-amber-500/8 px-4 py-3">
+          <Archive className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-amber-800">Archived patient</p>
+            <p className="text-xs text-amber-700 mt-0.5">
+              This patient was archived on{" "}
+              {patient.archived_at
+                ? new Date(patient.archived_at).toLocaleDateString("en-GB", { dateStyle: "long" })
+                : "an unknown date"}
+              . Their full history is preserved below in read-only mode.
+            </p>
+          </div>
+          <Link href="/patients/archive" className="shrink-0 text-xs font-medium text-amber-700 hover:text-amber-900 underline underline-offset-2">
+            Archive
+          </Link>
+        </div>
+      )}
+      {patient.is_deleted && !patient.is_archived && (
+        <div className="flex items-start gap-3 rounded-xl border border-destructive/40 bg-destructive/8 px-4 py-3">
+          <Trash2 className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-destructive">Patient is in Trash</p>
+            <p className="text-xs text-destructive/80 mt-0.5">
+              Moved to trash on{" "}
+              {patient.deleted_at
+                ? new Date(patient.deleted_at).toLocaleDateString("en-GB", { dateStyle: "long" })
+                : "an unknown date"}
+              . Their full history is preserved below in read-only mode. Restore the patient to make edits.
+            </p>
+          </div>
+          <Link href="/patients/trash" className="shrink-0 text-xs font-medium text-destructive hover:text-destructive/80 underline underline-offset-2">
+            Trash
+          </Link>
+        </div>
+      )}
+
       {/* Header */}
       <div
         className="flex flex-wrap items-start justify-between gap-4"
@@ -305,6 +399,14 @@ export default async function PatientDetailPage({ params }: PageProps) {
         </div>
 
         <div className="flex items-center gap-2 print:hidden">
+          {!isDoctor && !patient.is_deleted && (
+            <Button asChild size="sm" className="gap-1.5">
+              <Link href={`/appointments/new?patient_id=${id}`}>
+                <CalendarPlus className="h-3.5 w-3.5" />
+                Book appointment
+              </Link>
+            </Button>
+          )}
           {canEdit && (
             <>
             <Button asChild variant="outline" size="sm" className="gap-1.5">

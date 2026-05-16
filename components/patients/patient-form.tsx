@@ -1,9 +1,19 @@
 "use client";
 
-import { startTransition, useActionState } from "react";
+import { startTransition, useActionState, useEffect, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Loader2, Save } from "lucide-react";
+import {
+  CheckCircle2,
+  FileImage,
+  Loader2,
+  Save,
+  Upload,
+  User,
+  X,
+} from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PatientPhoneInput } from "@/components/patients/patient-phone-input";
@@ -22,10 +32,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
 import { patientSchema, type PatientFormValues } from "@/lib/validations/patient";
 import type { ActionResult } from "@/actions/patients";
 import type { Tables } from "@/types/database";
 import { formatDoctorName } from "@/lib/format-doctor";
+import { uploadPatientAvatar } from "@/actions/patient-avatar";
+import { uploadPatientDocument } from "@/actions/patient-documents";
 
 const BLOOD_TYPES = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"] as const;
 
@@ -55,6 +68,215 @@ interface PatientFormProps {
   insuranceProviders?: InsuranceProvider[];
 }
 
+// ── Upload step after new patient creation ────────────────────────────────────
+
+function FileUploadRow({
+  label,
+  hint,
+  fileRef,
+  accept,
+  uploading,
+  uploaded,
+  onTrigger,
+  onClear,
+}: {
+  label: string;
+  hint: string;
+  fileRef: React.RefObject<HTMLInputElement | null>;
+  accept: string;
+  uploading: boolean;
+  uploaded: boolean;
+  onTrigger: () => void;
+  onClear: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-lg border border-border/40 bg-muted/20 p-3">
+      <div className="flex items-center gap-3 min-w-0">
+        <FileImage className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <div className="min-w-0">
+          <p className="text-sm font-medium">{label}</p>
+          <p className="text-xs text-muted-foreground">{hint}</p>
+        </div>
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        {uploaded ? (
+          <>
+            <span className="text-xs text-emerald-600 font-medium">Uploaded</span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="gap-1 text-destructive hover:text-destructive h-7 px-2"
+              onClick={onClear}
+            >
+              <X className="h-3 w-3" />
+            </Button>
+          </>
+        ) : (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-1.5 h-7"
+            disabled={uploading}
+            onClick={onTrigger}
+          >
+            {uploading ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <Upload className="h-3 w-3" />
+            )}
+            {uploading ? "Uploading…" : "Upload"}
+          </Button>
+        )}
+      </div>
+      <input ref={fileRef} type="file" accept={accept} className="hidden" />
+    </div>
+  );
+}
+
+function PatientFilesStep({
+  patientId,
+  autoUploadAvatar,
+  onDone,
+}: {
+  patientId: string;
+  autoUploadAvatar?: File | null;
+  onDone: () => void;
+}) {
+  const avatarRef = useRef<HTMLInputElement>(null);
+  const nationalIdRef = useRef<HTMLInputElement>(null);
+  const insuranceRef = useRef<HTMLInputElement>(null);
+
+  const [avatarUploaded, setAvatarUploaded] = useState(false);
+  const [nationalIdUploaded, setNationalIdUploaded] = useState(false);
+  const [insuranceUploaded, setInsuranceUploaded] = useState(false);
+
+  // Start as uploading if a pre-selected file was passed in
+  const [avatarUploading, setAvatarUploading] = useState(!!autoUploadAvatar);
+  const [nationalIdUploading, setNationalIdUploading] = useState(false);
+  const [insuranceUploading, setInsuranceUploading] = useState(false);
+
+  // Auto-upload avatar selected before patient creation (state is pre-set to uploading above)
+  useEffect(() => {
+    if (!autoUploadAvatar) return;
+    const fd = new FormData();
+    fd.set("avatar", autoUploadAvatar);
+    uploadPatientAvatar(patientId, fd).then((res) => {
+      setAvatarUploading(false);
+      if (res.error) {
+        toast.error(`Photo upload failed: ${res.error}. You can retry below.`);
+      } else {
+        setAvatarUploaded(true);
+      }
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function triggerFileInput(
+    ref: React.RefObject<HTMLInputElement | null>,
+    onFile: (file: File) => void,
+  ) {
+    if (!ref.current) return;
+    ref.current.value = "";
+    ref.current.onchange = () => {
+      const file = ref.current?.files?.[0];
+      if (file) onFile(file);
+    };
+    ref.current.click();
+  }
+
+  async function handleAvatarUpload(file: File) {
+    setAvatarUploading(true);
+    const fd = new FormData();
+    fd.set("avatar", file);
+    const res = await uploadPatientAvatar(patientId, fd);
+    setAvatarUploading(false);
+    if (res.error) toast.error(res.error);
+    else setAvatarUploaded(true);
+  }
+
+  async function handleDocUpload(
+    file: File,
+    category: "national_id" | "insurance",
+    setUploading: (v: boolean) => void,
+    setUploaded: (v: boolean) => void,
+  ) {
+    setUploading(true);
+    const fd = new FormData();
+    fd.set("file", file);
+    const res = await uploadPatientDocument(patientId, category, fd);
+    setUploading(false);
+    if (res.error) toast.error(res.error);
+    else setUploaded(true);
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-3">
+        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500/10">
+          <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+        </span>
+        <div>
+          <p className="text-sm font-semibold">Patient created successfully</p>
+          <p className="text-xs text-muted-foreground">
+            Optionally upload files below, then open the patient profile.
+          </p>
+        </div>
+      </div>
+
+      <Separator />
+
+      <div className="space-y-3">
+        <FileUploadRow
+          label="Profile photo"
+          hint="JPEG, PNG, or WebP · max 2 MB"
+          fileRef={avatarRef}
+          accept="image/jpeg,image/png,image/webp"
+          uploading={avatarUploading}
+          uploaded={avatarUploaded}
+          onTrigger={() => triggerFileInput(avatarRef, handleAvatarUpload)}
+          onClear={() => setAvatarUploaded(false)}
+        />
+        <FileUploadRow
+          label="National ID image"
+          hint="JPEG, PNG, WebP, or PDF · max 10 MB"
+          fileRef={nationalIdRef}
+          accept="image/jpeg,image/png,image/webp,application/pdf"
+          uploading={nationalIdUploading}
+          uploaded={nationalIdUploaded}
+          onTrigger={() =>
+            triggerFileInput(nationalIdRef, (f) =>
+              handleDocUpload(f, "national_id", setNationalIdUploading, setNationalIdUploaded),
+            )
+          }
+          onClear={() => setNationalIdUploaded(false)}
+        />
+        <FileUploadRow
+          label="Insurance card image"
+          hint="JPEG, PNG, WebP, or PDF · max 10 MB"
+          fileRef={insuranceRef}
+          accept="image/jpeg,image/png,image/webp,application/pdf"
+          uploading={insuranceUploading}
+          uploaded={insuranceUploaded}
+          onTrigger={() =>
+            triggerFileInput(insuranceRef, (f) =>
+              handleDocUpload(f, "insurance", setInsuranceUploading, setInsuranceUploaded),
+            )
+          }
+          onClear={() => setInsuranceUploaded(false)}
+        />
+      </div>
+
+      <Button className="w-full" onClick={onDone}>
+        Open patient profile
+      </Button>
+    </div>
+  );
+}
+
+// ── Main form ─────────────────────────────────────────────────────────────────
+
 export function PatientForm({
   action,
   defaultValues,
@@ -63,7 +285,16 @@ export function PatientForm({
   insuranceProviders = [],
   patient,
 }: PatientFormProps) {
+  const router = useRouter();
   const [state, formAction, isPending] = useActionState(action, null);
+  const [, startNav] = useTransition();
+
+  const [selectedAvatar, setSelectedAvatar] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const avatarPickerRef = useRef<HTMLInputElement>(null);
+
+  // When patientId is set the creation succeeded — show the file upload step
+  const createdPatientId = state?.patientId ?? null;
 
   const form = useForm<PatientFormValues>({
     resolver: zodResolver(patientSchema),
@@ -94,6 +325,22 @@ export function PatientForm({
     startTransition(() => formAction(fd));
   }
 
+  function navigateToProfile() {
+    if (!createdPatientId) return;
+    startNav(() => router.push(`/patients/${createdPatientId}`));
+  }
+
+  // After creation — show upload step
+  if (createdPatientId) {
+    return (
+      <PatientFilesStep
+        patientId={createdPatientId}
+        autoUploadAvatar={selectedAvatar}
+        onDone={navigateToProfile}
+      />
+    );
+  }
+
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
@@ -102,6 +349,65 @@ export function PatientForm({
             {state.error}
           </div>
         )}
+
+        {/* Optional profile photo picker */}
+        <div className="flex items-center gap-4 rounded-lg border border-border/40 bg-muted/20 p-3">
+          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-muted overflow-hidden">
+            {avatarPreview ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={avatarPreview} alt="Preview" className="h-full w-full object-cover" />
+            ) : (
+              <User className="h-7 w-7 text-muted-foreground" />
+            )}
+          </span>
+          <div className="flex flex-col gap-1.5 min-w-0">
+            <p className="text-sm font-medium leading-none">
+              Profile photo{" "}
+              <span className="text-xs font-normal text-muted-foreground">(optional)</span>
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="inline-flex h-7 items-center gap-1.5 rounded-md border border-input bg-background px-3 text-xs font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-50"
+                disabled={isPending}
+                onClick={() => avatarPickerRef.current?.click()}
+              >
+                <Upload className="h-3 w-3" />
+                {selectedAvatar ? "Change" : "Choose"}
+              </button>
+              {selectedAvatar && (
+                <button
+                  type="button"
+                  className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs text-muted-foreground transition-colors hover:text-destructive disabled:opacity-50"
+                  disabled={isPending}
+                  onClick={() => {
+                    setSelectedAvatar(null);
+                    setAvatarPreview(null);
+                  }}
+                >
+                  <X className="h-3.5 w-3.5" />
+                  Remove
+                </button>
+              )}
+            </div>
+            {selectedAvatar && (
+              <p className="truncate text-xs text-muted-foreground max-w-48">{selectedAvatar.name}</p>
+            )}
+          </div>
+          <input
+            ref={avatarPickerRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              setSelectedAvatar(file);
+              setAvatarPreview(URL.createObjectURL(file));
+              e.target.value = "";
+            }}
+          />
+        </div>
 
         <div className="grid gap-5 sm:grid-cols-2">
           <FormField

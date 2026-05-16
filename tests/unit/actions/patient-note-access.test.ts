@@ -83,13 +83,13 @@ describe("patient action permissions", () => {
       { data: { id: PATIENT_ID }, error: null },
     ];
 
-    await createPatient(null, patientForm());
+    const result = await createPatient(null, patientForm());
 
     expect(mocks.state.requireRole).toHaveBeenCalledWith([
       "admin",
       "receptionist",
     ]);
-    expect(mocks.state.redirect).toHaveBeenCalledWith(`/patients/${PATIENT_ID}`);
+    expect(result).toMatchObject({ success: true, patientId: PATIENT_ID });
   });
 
   it("normalizes Turkish patient phones before insert", async () => {
@@ -181,7 +181,19 @@ describe("patient action permissions", () => {
     expect(mocks.state.rpc).toHaveBeenCalledWith("soft_delete_patient", {
       p_patient_id: PATIENT_ID,
     });
-    expect(mocks.state.queryLog).toEqual([]);
+    // softDeletePatient now stamps deleted_at via adminClient — verify it only
+    // touches patients, not medical_notes, appointments, or other records.
+    const affectedTables = mocks.state.queryLog.map((q) => q.table);
+    for (const table of affectedTables) {
+      expect(table).toBe("patients");
+    }
+    expect(mocks.state.queryLog).toContainEqual(
+      expect.objectContaining({
+        table: "patients",
+        operation: "update",
+        args: [expect.objectContaining({ deleted_at: expect.any(String) })],
+      }),
+    );
     expect(mocks.state.storageLog).toEqual([]);
     expect(mocks.state.revalidatePath).toHaveBeenCalledWith("/patients");
     expect(mocks.state.redirect).toHaveBeenCalledWith("/patients");

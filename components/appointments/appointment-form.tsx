@@ -40,6 +40,7 @@ import {
   appointmentSchema,
   type AppointmentFormValues,
 } from "@/lib/validations/appointment";
+import type { ClinicWorkingHoursValues } from "@/lib/validations/settings";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -84,6 +85,7 @@ interface AppointmentFormProps {
   defaultDoctorId?: string;
   defaultDepartmentId?: string;
   defaultInsuranceId?: string;
+  clinicWorkingHours?: ClinicWorkingHoursValues;
   onPatientChange?: (patient: PatientWithDoctor | null) => void;
 }
 
@@ -137,6 +139,13 @@ function getAssignedDoctor(patient: PatientWithDoctor | undefined): Doctor | nul
   return Array.isArray(relation) ? (relation[0] ?? null) : relation;
 }
 
+const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] as const;
+
+function getClosedDaysOfWeek(clinicHours: ClinicWorkingHoursValues): Set<number> {
+  if (!clinicHours.some((d) => d.open)) return new Set();
+  return new Set(clinicHours.filter((d) => !d.open).map((d) => d.day_of_week));
+}
+
 export function AppointmentForm({
   action,
   patients,
@@ -147,8 +156,10 @@ export function AppointmentForm({
   defaultDoctorId,
   defaultDepartmentId,
   defaultInsuranceId,
+  clinicWorkingHours,
   onPatientChange,
 }: AppointmentFormProps) {
+  const closedDays = clinicWorkingHours ? getClosedDaysOfWeek(clinicWorkingHours) : new Set<number>();
   const { formatSlotTime } = useClinicSettings();
   const [state, formAction, isPending] = useActionState(action, null);
   const [patientOpen, setPatientOpen] = useState(false);
@@ -292,6 +303,20 @@ export function AppointmentForm({
         message: "Choose a future date and time for the appointment.",
       });
       return;
+    }
+
+    if (closedDays.size > 0) {
+      const dateStr = values.scheduled_at.split("T")[0];
+      if (dateStr) {
+        const dow = new Date(`${dateStr}T12:00:00`).getDay();
+        if (closedDays.has(dow)) {
+          form.setError("scheduled_at", {
+            type: "validate",
+            message: `The clinic is closed on ${DAY_NAMES[dow]}s. Please select a different date.`,
+          });
+          return;
+        }
+      }
     }
 
     const fd = buildFd(values);
@@ -511,6 +536,8 @@ export function AppointmentForm({
                 ? field.value.split("T")[1]?.slice(0, 5)
                 : "";
               const today = clinicNowParts().date;
+              const selectedDow = dateVal ? new Date(`${dateVal}T12:00:00`).getDay() : null;
+              const isClosedDay = selectedDow !== null && closedDays.has(selectedDow);
               return (
                 <FormItem>
                   <FormLabel>Date</FormLabel>
@@ -528,6 +555,11 @@ export function AppointmentForm({
                       }}
                     />
                   </FormControl>
+                  {isClosedDay && (
+                    <p className="text-sm text-destructive">
+                      The clinic is closed on {DAY_NAMES[selectedDow!]}s. Please select a different date.
+                    </p>
+                  )}
                   <FormMessage />
                 </FormItem>
               );

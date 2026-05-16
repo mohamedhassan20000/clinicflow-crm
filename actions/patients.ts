@@ -285,6 +285,14 @@ export async function softDeletePatient(id: string): Promise<ActionResult> {
     return { error: "Patient not found." };
   }
 
+  // Stamp deleted_at so trash page can show age and enforce 30-day rule.
+  const adminClient = createAdminClient();
+  await adminClient
+    .from("patients")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("clinic_id", user.clinicId);
+
   revalidatePath("/patients");
   redirect("/patients");
 }
@@ -292,10 +300,16 @@ export async function softDeletePatient(id: string): Promise<ActionResult> {
 export async function restorePatient(id: string): Promise<ActionResult> {
   const user = await requireRole("admin");
 
-  const supabase = await createClient();
-  const { error } = await supabase
+  const adminClient = createAdminClient();
+  const { error } = await adminClient
     .from("patients")
-    .update({ is_deleted: false, updated_by: user.id })
+    .update({
+      is_deleted: false,
+      is_archived: false,
+      deleted_at: null,
+      archived_at: null,
+      updated_by: user.id,
+    })
     .eq("id", id)
     .eq("clinic_id", user.clinicId);
 
@@ -305,7 +319,101 @@ export async function restorePatient(id: string): Promise<ActionResult> {
 
   revalidatePath(`/patients/${id}`);
   revalidatePath("/patients");
+  revalidatePath("/patients/trash");
+  revalidatePath("/patients/archive");
   return {};
+}
+
+// ── Trash & Archive ───────────────────────────────────────────────────────────
+
+export type PatientStub = {
+  id: string;
+  full_name: string;
+  file_number: string;
+  national_id: string;
+  phone: string;
+  department_id: string | null;
+  deleted_at: string | null;
+  archived_at: string | null;
+  departments: { id: string; name: string; color: string | null } | null;
+};
+
+export async function getTrashPatients(): Promise<{ data?: PatientStub[]; error?: string }> {
+  const user = await requireRole(["admin", "receptionist"]);
+  const adminClient = createAdminClient();
+
+  const { data, error } = await adminClient
+    .from("patients")
+    .select("id, full_name, file_number, national_id, phone, department_id, deleted_at, archived_at, departments(id, name, color)")
+    .eq("clinic_id", user.clinicId)
+    .eq("is_deleted", true)
+    .eq("is_archived", false)
+    .order("deleted_at", { ascending: false });
+
+  if (error) return { error: "Failed to load trash." };
+  return { data: (data ?? []) as PatientStub[] };
+}
+
+export async function getArchivePatients(): Promise<{ data?: PatientStub[]; error?: string }> {
+  const user = await requireRole(["admin", "receptionist"]);
+  const adminClient = createAdminClient();
+
+  const { data, error } = await adminClient
+    .from("patients")
+    .select("id, full_name, file_number, national_id, phone, department_id, deleted_at, archived_at, departments(id, name, color)")
+    .eq("clinic_id", user.clinicId)
+    .eq("is_archived", true)
+    .order("archived_at", { ascending: false });
+
+  if (error) return { error: "Failed to load archive." };
+  return { data: (data ?? []) as PatientStub[] };
+}
+
+export async function archivePatient(id: string): Promise<ActionResult> {
+  const user = await requireRole("admin");
+  const adminClient = createAdminClient();
+
+  const { error } = await adminClient
+    .from("patients")
+    .update({ is_archived: true, archived_at: new Date().toISOString(), updated_by: user.id })
+    .eq("id", id)
+    .eq("clinic_id", user.clinicId)
+    .eq("is_deleted", true)
+    .eq("is_archived", false);
+
+  if (error) return { error: "Failed to archive patient." };
+
+  revalidatePath("/patients/trash");
+  revalidatePath("/patients/archive");
+  return { success: true };
+}
+
+export async function archiveAllTrashPatients(olderThanDays?: number): Promise<ActionResult> {
+  const user = await requireRole("admin");
+  const adminClient = createAdminClient();
+
+  let query = adminClient
+    .from("patients")
+    .update({ is_archived: true, archived_at: new Date().toISOString(), updated_by: user.id })
+    .eq("clinic_id", user.clinicId)
+    .eq("is_deleted", true)
+    .eq("is_archived", false);
+
+  if (olderThanDays != null) {
+    const cutoff = new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000).toISOString();
+    query = query.lt("deleted_at", cutoff);
+  }
+
+  const { error } = await query;
+  if (error) return { error: "Failed to archive patients." };
+
+  revalidatePath("/patients/trash");
+  revalidatePath("/patients/archive");
+  return { success: true };
+}
+
+export async function restoreArchivedPatient(id: string): Promise<ActionResult> {
+  return restorePatient(id);
 }
 
 export async function addMedicalNote(

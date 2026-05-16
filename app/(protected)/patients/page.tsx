@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
+import Link from "next/link";
+import { Archive, Trash2 } from "lucide-react";
 import { requireUser } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
 import { PatientTable } from "@/components/patients/patient-table";
 import { PatientsFilterBar } from "@/components/patients/filter-bar";
 import { formatDoctorName } from "@/lib/format-doctor";
 import { PrintHeader } from "@/components/shared/print-header";
+import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = { title: "Patients" };
 
@@ -173,6 +176,22 @@ export default async function PatientsPage({ searchParams }: PageProps) {
             {activeDoctor && ` · ${formatDoctorName(activeDoctor.full_name)}`}.
           </p>
         </div>
+        {!isDoctor && user.role !== "doctor" && (
+          <div className="flex items-center gap-2 print:hidden">
+            <Button asChild variant="outline" size="sm" className="gap-1.5">
+              <Link href="/patients/trash">
+                <Trash2 className="h-3.5 w-3.5" />
+                Trash
+              </Link>
+            </Button>
+            <Button asChild variant="outline" size="sm" className="gap-1.5">
+              <Link href="/patients/archive">
+                <Archive className="h-3.5 w-3.5" />
+                Archive
+              </Link>
+            </Button>
+          </div>
+        )}
       </div>
 
       <div className="print:hidden">

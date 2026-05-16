@@ -2,10 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CLINIC_TZ } from "@/lib/datetime";
-import { AlertCircle, CalendarPlus, ChevronLeft, FileText, Pencil, Receipt } from "lucide-react";
+import { AlertCircle, Archive, CalendarPlus, ChevronLeft, FileText, Pencil, Receipt, Trash2 } from "lucide-react";
 import { StatusBadge } from "@/components/appointments/status-badge";
 import { requireUser } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import {
   MedicalNotesList,
   type MedicalNoteWithAttachments,
@@ -36,14 +37,28 @@ export default async function PatientDetailPage({ params }: PageProps) {
   const user = await requireUser();
   const supabase = await createClient();
 
-  const { data: patient } = await supabase
+  const PATIENT_SELECT =
+    "id, full_name, file_number, national_id, phone, email, date_of_birth, blood_type, created_at, is_deleted, is_archived, deleted_at, archived_at, avatar_path, assigned_doctor_id, department_id, departments(id, name, color), assigned_doctor:profiles!assigned_doctor_id(id, full_name), insurance_providers(name)";
+
+  let { data: patient } = await supabase
     .from("patients")
-    .select(
-      "id, full_name, file_number, national_id, phone, email, date_of_birth, blood_type, created_at, is_deleted, avatar_path, assigned_doctor_id, department_id, departments(id, name, color), assigned_doctor:profiles!assigned_doctor_id(id, full_name), insurance_providers(name)",
-    )
+    .select(PATIENT_SELECT)
     .eq("id", id)
     .eq("clinic_id", user.clinicId)
     .single();
+
+  // RLS blocks deleted/archived rows for all roles. Admin and receptionist can
+  // still view the full patient history — fall back to the service-role client.
+  if (!patient && (user.role === "admin" || user.role === "receptionist")) {
+    const adminClient = createAdminClient();
+    const { data: adminPatient } = await adminClient
+      .from("patients")
+      .select(PATIENT_SELECT)
+      .eq("id", id)
+      .eq("clinic_id", user.clinicId)
+      .single();
+    patient = adminPatient;
+  }
 
   if (!patient) notFound();
 
@@ -260,6 +275,44 @@ export default async function PatientDetailPage({ params }: PageProps) {
           Patients
         </Link>
       </div>
+
+      {/* Status banner — shown for deleted / archived patients */}
+      {patient.is_archived && (
+        <div className="flex items-start gap-3 rounded-xl border border-amber-500/40 bg-amber-500/8 px-4 py-3">
+          <Archive className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-amber-800">Archived patient</p>
+            <p className="text-xs text-amber-700 mt-0.5">
+              This patient was archived on{" "}
+              {patient.archived_at
+                ? new Date(patient.archived_at).toLocaleDateString("en-GB", { dateStyle: "long" })
+                : "an unknown date"}
+              . Their full history is preserved below in read-only mode.
+            </p>
+          </div>
+          <Link href="/patients/archive" className="shrink-0 text-xs font-medium text-amber-700 hover:text-amber-900 underline underline-offset-2">
+            Archive
+          </Link>
+        </div>
+      )}
+      {patient.is_deleted && !patient.is_archived && (
+        <div className="flex items-start gap-3 rounded-xl border border-destructive/40 bg-destructive/8 px-4 py-3">
+          <Trash2 className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-destructive">Patient is in Trash</p>
+            <p className="text-xs text-destructive/80 mt-0.5">
+              Moved to trash on{" "}
+              {patient.deleted_at
+                ? new Date(patient.deleted_at).toLocaleDateString("en-GB", { dateStyle: "long" })
+                : "an unknown date"}
+              . Their full history is preserved below in read-only mode. Restore the patient to make edits.
+            </p>
+          </div>
+          <Link href="/patients/trash" className="shrink-0 text-xs font-medium text-destructive hover:text-destructive/80 underline underline-offset-2">
+            Trash
+          </Link>
+        </div>
+      )}
 
       {/* Header */}
       <div

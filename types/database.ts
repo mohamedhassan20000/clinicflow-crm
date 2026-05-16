@@ -971,6 +971,9 @@ export type Database = {
           full_name: string
           id: string
           insurance_provider_id: string | null
+          archived_at: string | null
+          deleted_at: string | null
+          is_archived: boolean
           is_deleted: boolean
           national_id: string
           phone: string
@@ -978,6 +981,7 @@ export type Database = {
           updated_by: string | null
         }
         Insert: {
+          archived_at?: string | null
           assigned_doctor_id?: string | null
           avatar_path?: string | null
           blood_type?: Database["public"]["Enums"]["blood_type"] | null
@@ -985,12 +989,14 @@ export type Database = {
           created_at?: string
           created_by: string
           date_of_birth: string
+          deleted_at?: string | null
           department_id?: string | null
           email: string
           file_number: string
           full_name: string
           id?: string
           insurance_provider_id?: string | null
+          is_archived?: boolean
           is_deleted?: boolean
           national_id: string
           phone: string
@@ -998,6 +1004,7 @@ export type Database = {
           updated_by?: string | null
         }
         Update: {
+          archived_at?: string | null
           assigned_doctor_id?: string | null
           avatar_path?: string | null
           blood_type?: Database["public"]["Enums"]["blood_type"] | null
@@ -1005,12 +1012,14 @@ export type Database = {
           created_at?: string
           created_by?: string
           date_of_birth?: string
+          deleted_at?: string | null
           department_id?: string | null
           email?: string
           file_number?: string
           full_name?: string
           id?: string
           insurance_provider_id?: string | null
+          is_archived?: boolean
           is_deleted?: boolean
           national_id?: string
           phone?: string

@@ -215,7 +215,7 @@ export function RevenueReport({
           <div className="flex items-center gap-1.5">
             {clinicLogoUrl && (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={clinicLogoUrl} alt="" aria-hidden style={{ height: "32px", width: "auto", objectFit: "contain", flexShrink: 0 }} />
+              <img src={clinicLogoUrl} alt="" aria-hidden style={{ height: "22px", width: "auto", objectFit: "contain", flexShrink: 0 }} />
             )}
             <span style={{ fontSize: "11px", fontWeight: 600 }}>{clinicName}</span>
           </div>
@@ -230,7 +230,7 @@ export function RevenueReport({
           <div className="flex items-center gap-1.5">
             {clinicLogoUrl && (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={clinicLogoUrl} alt="" aria-hidden style={{ height: "32px", width: "auto", objectFit: "contain", flexShrink: 0 }} />
+              <img src={clinicLogoUrl} alt="" aria-hidden style={{ height: "22px", width: "auto", objectFit: "contain", flexShrink: 0 }} />
             )}
             <span style={{ fontSize: "11px", fontWeight: 600 }}>{clinicName}</span>
           </div>
@@ -316,7 +316,7 @@ export function RevenueReport({
             <div className="flex items-start gap-3">
               {clinicLogoUrl && (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={clinicLogoUrl} alt="" aria-hidden style={{ height: "128px", width: "auto", objectFit: "contain", flexShrink: 0 }} />
+                <img src={clinicLogoUrl} alt="" aria-hidden style={{ height: "64px", width: "auto", objectFit: "contain", flexShrink: 0 }} />
               )}
               <div>
                 <h1 className="text-lg font-semibold tracking-tight">{clinicName}</h1>
@@ -573,7 +573,7 @@ export function RevenueReport({
               <div className="flex items-start gap-3">
                 {clinicLogoUrl && (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={clinicLogoUrl} alt="" aria-hidden style={{ height: "128px", width: "auto", objectFit: "contain", flexShrink: 0 }} />
+                  <img src={clinicLogoUrl} alt="" aria-hidden style={{ height: "64px", width: "auto", objectFit: "contain", flexShrink: 0 }} />
                 )}
                 <div>
                   <h1 className="text-lg font-semibold tracking-tight">{clinicName}</h1>

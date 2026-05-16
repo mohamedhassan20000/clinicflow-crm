@@ -29,7 +29,7 @@ export function PrintHeader({
                 src={logoUrl}
                 alt=""
                 aria-hidden
-                style={{ height: "32px", width: "auto", objectFit: "contain", flexShrink: 0 }}
+                style={{ height: "22px", width: "auto", objectFit: "contain", flexShrink: 0 }}
               />
             )}
             <span style={{ fontSize: "11px", fontWeight: 600 }}>{clinicName}</span>
@@ -52,7 +52,7 @@ export function PrintHeader({
                 src={logoUrl}
                 alt=""
                 aria-hidden
-                style={{ height: "128px", width: "auto", objectFit: "contain", flexShrink: 0 }}
+                style={{ height: "64px", width: "auto", objectFit: "contain", flexShrink: 0 }}
               />
             )}
             <div>

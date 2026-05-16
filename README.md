@@ -2,7 +2,7 @@
 
 ![Status](https://img.shields.io/badge/status-production-success)
 ![License](https://img.shields.io/badge/license-MIT-blue)
-![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js)
+![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)
 ![Tests](https://img.shields.io/badge/tests-270%20passing-brightgreen)
 
 A **staff-only** clinic management system for small-to-medium private clinics. Built as a graduation project at Üsküdar University and deployed to production on Vercel + Supabase.
@@ -328,7 +328,7 @@ Replaces paper appointment books, phone scheduling, and Excel patient records wi
 
 | Layer | Technology |
 |---|---|
-| Framework | Next.js 16 (App Router) |
+| Framework | Next.js 16.2.4 (App Router) |
 | Language | TypeScript — strict mode |
 | Database | Supabase Postgres |
 | Auth | Supabase Auth + `@supabase/ssr` |

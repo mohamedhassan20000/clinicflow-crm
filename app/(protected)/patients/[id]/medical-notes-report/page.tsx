@@ -181,12 +181,48 @@ export default async function MedicalNotesReportPage({
         </div>
       )}
 
-      <MedicalNotesList
-        notes={notesWithAttachments}
-        patientId={id}
-        currentUserId={user.id}
-        canManageAllAttachments={isAdmin}
-      />
+      {/* Screen view */}
+      <div className="print:hidden">
+        <MedicalNotesList
+          notes={notesWithAttachments}
+          patientId={id}
+          currentUserId={user.id}
+          canManageAllAttachments={isAdmin}
+        />
+      </div>
+
+      {/* Print table — same black-border style as revenue */}
+      <div className="hidden print:block">
+        {notesWithAttachments.length === 0 ? (
+          <p className="text-sm">No medical notes.</p>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Doctor</th>
+                <th>Note</th>
+              </tr>
+            </thead>
+            <tbody>
+              {notesWithAttachments.map((note) => (
+                <tr key={note.id}>
+                  <td style={{ whiteSpace: "nowrap" }}>
+                    {new Date(note.created_at).toLocaleString("en-GB", {
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                    })}
+                  </td>
+                  <td style={{ whiteSpace: "nowrap" }}>
+                    {note.profiles?.full_name ?? "Unknown"}
+                  </td>
+                  <td>{note.note}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   );
 }

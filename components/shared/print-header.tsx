@@ -52,7 +52,7 @@ export function PrintHeader({
                 src={logoUrl}
                 alt=""
                 aria-hidden
-                style={{ height: "88px", width: "auto", objectFit: "contain", flexShrink: 0 }}
+                style={{ height: "64px", width: "auto", objectFit: "contain", flexShrink: 0 }}
               />
             )}
             <div>

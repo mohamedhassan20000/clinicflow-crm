@@ -159,16 +159,102 @@ export default async function AppointmentsReportPage({
 
       <ReportDateFilter from={from} to={to} />
 
+      {/* Screen view */}
       {isDoctor ? (
-        <DoctorApptList appts={appts} timeFormat={timeFormat} />
+        <div className="print:hidden">
+          <DoctorApptList appts={appts} timeFormat={timeFormat} />
+        </div>
       ) : (
-        <AppointmentsReportList
-          appointments={appts as AppointmentPaymentRowData[]}
-          settlementsByAppt={settlementsByAppt}
-        />
+        <div className="print:hidden">
+          <AppointmentsReportList
+            appointments={appts as AppointmentPaymentRowData[]}
+            settlementsByAppt={settlementsByAppt}
+          />
+        </div>
       )}
+
+      {/* Print table — same black-border style as revenue */}
+      <div className="hidden print:block">
+        {appts.length === 0 ? (
+          <p className="text-sm">No appointments match the selected date range.</p>
+        ) : isDoctor ? (
+          <table>
+            <thead>
+              <tr>
+                <th>Date &amp; Time</th>
+                <th>Doctor</th>
+                <th>Department</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {appts.map((a) => (
+                <tr key={a.id}>
+                  <td style={{ whiteSpace: "nowrap" }}>
+                    {new Date(a.scheduled_at).toLocaleString("en-GB", {
+                      timeZone: CLINIC_TZ,
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                    })}
+                  </td>
+                  <td>{formatDoctorName(a.profiles?.full_name)}</td>
+                  <td>{a.departments?.name ?? "—"}</td>
+                  <td style={{ textTransform: "capitalize" }}>{a.status.replace("_", " ")}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>Date &amp; Time</th>
+                <th>Doctor</th>
+                <th>Department</th>
+                <th>Status</th>
+                <th>Total</th>
+                <th>Paid</th>
+                <th>Outstanding</th>
+              </tr>
+            </thead>
+            <tbody>
+              {appts.map((a) => (
+                <tr key={a.id}>
+                  <td style={{ whiteSpace: "nowrap" }}>
+                    {new Date(a.scheduled_at).toLocaleString("en-GB", {
+                      timeZone: CLINIC_TZ,
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                    })}
+                  </td>
+                  <td>{formatDoctorName(a.profiles?.full_name)}</td>
+                  <td>{a.departments?.name ?? "—"}</td>
+                  <td style={{ textTransform: "capitalize" }}>{a.status.replace("_", " ")}</td>
+                  <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
+                    {fmtTRY(a.total_amount ?? 0)}
+                  </td>
+                  <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
+                    {fmtTRY((a.paid_amount ?? 0) + (a.insurance_amount ?? 0) + (a.secondary_amount ?? 0) + (a.deposit_amount ?? 0))}
+                  </td>
+                  <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
+                    {fmtTRY(a.outstanding_amount ?? 0)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   );
+}
+
+function fmtTRY(n: number) {
+  return new Intl.NumberFormat("en-GB", {
+    style: "currency",
+    currency: "TRY",
+    maximumFractionDigits: 2,
+  }).format(Number.isFinite(n) ? n : 0);
 }
 
 function DoctorApptList({

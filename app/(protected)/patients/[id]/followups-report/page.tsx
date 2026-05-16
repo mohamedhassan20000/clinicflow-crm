@@ -125,8 +125,56 @@ export default async function FollowupsReportPage({
 
       <ReportDateFilter from={from} to={to} />
 
-      <div className="overflow-hidden rounded-xl border border-border/50 bg-card">
+      {/* Screen view */}
+      <div className="overflow-hidden rounded-xl border border-border/50 bg-card print:hidden">
         <FollowupsList followups={rows} />
+      </div>
+
+      {/* Print table — same black-border style as revenue */}
+      <div className="hidden print:block">
+        {rows.length === 0 ? (
+          <p className="text-sm">No follow-up notes.</p>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>Date Recorded</th>
+                <th>Session Date</th>
+                <th>Department</th>
+                <th>Outcome</th>
+                <th>Notes</th>
+                <th>Recorded By</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((f) => (
+                <tr key={f.id}>
+                  <td>
+                    {new Date(f.recorded_at).toLocaleString("en-GB", {
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                    })}
+                  </td>
+                  <td>
+                    {f.appointment?.scheduled_at
+                      ? new Date(f.appointment.scheduled_at).toLocaleDateString("en-GB", { dateStyle: "medium" })
+                      : "—"}
+                  </td>
+                  <td>{f.appointment?.departments?.name ?? "—"}</td>
+                  <td>
+                    {f.outcome === "all_fine"
+                      ? "Everything fine"
+                      : f.outcome === "has_problem"
+                      ? "Reported problem"
+                      : "No response"}
+                  </td>
+                  <td>{f.notes ?? "—"}</td>
+                  <td>{f.recorded_by?.full_name ?? "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   );

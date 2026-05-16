@@ -12,6 +12,7 @@ export type ActionResult = {
   error?: string;
   fieldErrors?: Record<string, string[]>;
   success?: boolean;
+  patientId?: string;
 };
 
 type SupabaseErrorDetails = {
@@ -197,7 +198,7 @@ export async function createPatient(
   }
 
   revalidatePath("/patients");
-  redirect(`/patients/${insertedId}`);
+  return { success: true, patientId: insertedId };
 }
 
 async function generateFileNumber(clinicId: string): Promise<string> {

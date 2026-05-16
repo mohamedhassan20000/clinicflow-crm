@@ -15,6 +15,7 @@ import {
 } from "@/lib/validations/appointment";
 import type { Database, TablesUpdate } from "@/types/database";
 import { getPatientAccountBalance } from "@/actions/patients";
+import { getClinicWorkingHours } from "@/actions/settings";
 
 export type ActionResult = {
   error?: string;
@@ -179,6 +180,18 @@ export async function createAppointment(
 
   if (isPastScheduledAt(parsed.data.scheduled_at)) {
     return { error: "Choose a future date and time for the appointment." };
+  }
+
+  // Validate appointment is not on a clinic-closed day
+  const clinicHours = await getClinicWorkingHours();
+  if (clinicHours.some((d) => d.open)) {
+    const apptDate = new Date(parsed.data.scheduled_at);
+    const dow = apptDate.getDay();
+    const clinicDay = clinicHours.find((d) => d.day_of_week === dow);
+    if (!clinicDay?.open) {
+      const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+      return { error: `The clinic is closed on ${dayNames[dow]}s. Please select a different date.` };
+    }
   }
 
   const references = await validateAppointmentReferences(

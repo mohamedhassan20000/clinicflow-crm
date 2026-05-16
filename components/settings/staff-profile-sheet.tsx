@@ -34,6 +34,7 @@ import {
   uploadStaffCertificate,
   uploadStaffContract,
   uploadStaffOtherDoc,
+  uploadStaffPhoto,
   type StaffFile,
   type StaffFiles,
 } from "@/actions/staff-files";
@@ -94,6 +95,7 @@ export function StaffProfileSheet({ staff, open, onOpenChange, lastSeen, isAdmin
   const [files, setFiles] = useState<StaffFiles | null>(null);
   const [isPending, startTransition] = useTransition();
 
+  const photoRef = useRef<HTMLInputElement>(null);
   const contractRef = useRef<HTMLInputElement>(null);
   const certRef = useRef<HTMLInputElement>(null);
   const otherRef = useRef<HTMLInputElement>(null);
@@ -202,6 +204,7 @@ export function StaffProfileSheet({ staff, open, onOpenChange, lastSeen, isAdmin
         {/* ── Tabs ── */}
         <Tabs defaultValue="profile" className="flex flex-1 flex-col overflow-hidden">
           {/* Hidden inputs */}
+          <input ref={photoRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" />
           <input ref={contractRef} type="file" accept=".pdf,.doc,.docx,image/jpeg,image/png" className="hidden" />
           <input ref={certRef} type="file" accept=".pdf,.doc,.docx,image/jpeg,image/png" className="hidden" />
           <input ref={otherRef} type="file" accept=".pdf,.doc,.docx,image/jpeg,image/png" className="hidden" />
@@ -289,6 +292,56 @@ export function StaffProfileSheet({ staff, open, onOpenChange, lastSeen, isAdmin
               </div>
             ) : (
               <div className="space-y-8">
+                {/* Profile photo */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium">Profile photo</p>
+                      <p className="text-xs text-muted-foreground">JPEG, PNG, or WebP · max 2 MB</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5"
+                        disabled={isPending}
+                        onClick={() => triggerUpload(photoRef, uploadStaffPhoto)}
+                      >
+                        <Upload className="h-3.5 w-3.5" />
+                        {files?.photo ? "Change" : "Upload"}
+                      </Button>
+                      {files?.photo && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="gap-1.5 text-destructive hover:text-destructive"
+                          disabled={isPending}
+                          onClick={() => handleDelete(files.photo!.path)}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                          Remove
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                  {files?.photo && (
+                    <div className="flex items-center gap-3 rounded-lg border border-border/40 bg-muted/20 p-3">
+                      <Image
+                        src={files.photo.url}
+                        alt="Staff photo"
+                        width={48}
+                        height={48}
+                        className="h-12 w-12 rounded-full object-cover ring-2 ring-border"
+                      />
+                      <p className="text-xs text-muted-foreground truncate">{files.photo.name}</p>
+                    </div>
+                  )}
+                </div>
+
+                <Separator />
+
                 {/* Contract */}
                 <SingleFileSection
                   title="Employment contract"
@@ -399,6 +452,26 @@ function DoctorScheduleTab({
   function onSave() {
     if (!schedule) return;
     setSaveError(null);
+
+    // Client-side pre-validation against clinic hours
+    if (clinicHours.some((d) => d.open)) {
+      const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+      for (const day of schedule) {
+        if (!day.works || !day.start_time || !day.end_time) continue;
+        const clinicDay = clinicHours.find((c) => c.day_of_week === day.day_of_week);
+        if (!clinicDay?.open || clinicDay.shifts.length === 0) {
+          setSaveError(`${DAY_NAMES[day.day_of_week]} is a clinic closed day.`);
+          return;
+        }
+        const clinicOpen = clinicDay.shifts.reduce((min, s) => s.shift_start < min ? s.shift_start : min, clinicDay.shifts[0].shift_start);
+        const clinicClose = clinicDay.shifts.reduce((max, s) => s.shift_end > max ? s.shift_end : max, clinicDay.shifts[0].shift_end);
+        if (day.start_time < clinicOpen || day.end_time > clinicClose) {
+          setSaveError(`${DAY_NAMES[day.day_of_week]}: doctor hours (${day.start_time}–${day.end_time}) must be within clinic hours (${clinicOpen}–${clinicClose}).`);
+          return;
+        }
+      }
+    }
+
     const fd = new FormData();
     fd.set("schedule", JSON.stringify(schedule));
     startSave(async () => {

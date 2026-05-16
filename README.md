@@ -3,7 +3,7 @@
 ![Status](https://img.shields.io/badge/status-production-success)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js)
-![Tests](https://img.shields.io/badge/tests-249%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-270%20passing-brightgreen)
 
 A **staff-only** clinic management system for small-to-medium private clinics. Built as a graduation project at Üsküdar University and deployed to production on Vercel + Supabase.
 
@@ -461,7 +461,7 @@ The print preview is triggered directly from the report view. Printed output inc
 
 ## Testing
 
-**249 unit tests across 13 test files.** Tests use a `QueryBuilder` mock that intercepts all Supabase operations and logs them to a `queryLog` for assertion — no live database required.
+**270 unit tests across 46 test files.** Tests use a `QueryBuilder` mock that intercepts all Supabase operations and logs them to a `queryLog` for assertion — no live database required.
 
 Coverage includes:
 
@@ -557,7 +557,7 @@ The project deploys to **Vercel** as a Next.js App Router application. Vercel au
 
 **Supabase setup checklist:**
 
-- [ ] All 31 migrations applied (`supabase db push`)
+- [ ] All 41 migrations applied (`supabase db push`)
 - [ ] Email auth enabled in Authentication → Providers
 - [ ] Storage bucket `clinic-files` created with RLS policies
 - [ ] Admin account seeded
@@ -581,9 +581,9 @@ clinicflow-crm/
 │   ├── page-permissions.ts ← Role → accessible page slug mapping
 │   └── supabase/           ← Client factory functions (server / admin / client / middleware)
 ├── supabase/
-│   └── migrations/         ← 31 SQL migration files
+│   └── migrations/         ← 41 SQL migration files
 ├── tests/
-│   ├── unit/               ← Vitest — 249 tests, 13 files
+│   ├── unit/               ← Vitest — 270 tests, 46 files
 │   └── e2e/                ← Playwright specs
 ├── types/
 │   └── database.ts         ← Generated Supabase TypeScript types

@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useActionState, useRef, useState, useTransition } from "react";
+import { startTransition, useActionState, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -10,6 +10,7 @@ import {
   Loader2,
   Save,
   Upload,
+  UserCircle2,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -136,16 +137,18 @@ function FileUploadRow({
 
 function PatientFilesStep({
   patientId,
+  avatarAlreadyUploaded = false,
   onDone,
 }: {
   patientId: string;
+  avatarAlreadyUploaded?: boolean;
   onDone: () => void;
 }) {
   const avatarRef = useRef<HTMLInputElement>(null);
   const nationalIdRef = useRef<HTMLInputElement>(null);
   const insuranceRef = useRef<HTMLInputElement>(null);
 
-  const [avatarUploaded, setAvatarUploaded] = useState(false);
+  const [avatarUploaded, setAvatarUploaded] = useState(avatarAlreadyUploaded);
   const [nationalIdUploaded, setNationalIdUploaded] = useState(false);
   const [insuranceUploaded, setInsuranceUploaded] = useState(false);
 
@@ -269,8 +272,27 @@ export function PatientForm({
   const [state, formAction, isPending] = useActionState(action, null);
   const [, startNav] = useTransition();
 
-  // When patientId is set the creation succeeded — show the file upload step
+  // Avatar queued in the form before submission
+  const [queuedAvatar, setQueuedAvatar] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const avatarPickerRef = useRef<HTMLInputElement>(null);
+
+  // After creation — auto-upload queued avatar, then show doc upload step
   const createdPatientId = state?.patientId ?? null;
+  const [avatarAutoUploaded, setAvatarAutoUploaded] = useState(false);
+  const [avatarAutoUploading, setAvatarAutoUploading] = useState(false);
+
+  useEffect(() => {
+    if (!createdPatientId || !queuedAvatar || avatarAutoUploaded || avatarAutoUploading) return;
+    setAvatarAutoUploading(true);
+    const fd = new FormData();
+    fd.set("avatar", queuedAvatar);
+    uploadPatientAvatar(createdPatientId, fd).then((res) => {
+      setAvatarAutoUploading(false);
+      setAvatarAutoUploaded(true);
+      if (res.error) toast.error(`Photo upload failed: ${res.error}`);
+    });
+  }, [createdPatientId, queuedAvatar, avatarAutoUploaded, avatarAutoUploading]);
 
   const form = useForm<PatientFormValues>({
     resolver: zodResolver(patientSchema),
@@ -306,10 +328,31 @@ export function PatientForm({
     startNav(() => router.push(`/patients/${createdPatientId}`));
   }
 
-  // After creation — show upload step
+  function handleAvatarPick(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setQueuedAvatar(file);
+    const url = URL.createObjectURL(file);
+    setAvatarPreview(url);
+  }
+
+  // After creation — show upload step (avatar auto-uploads, skip if no queued file)
   if (createdPatientId) {
+    // Wait for auto-upload to settle before showing the step
+    if (queuedAvatar && avatarAutoUploading) {
+      return (
+        <div className="flex flex-col items-center gap-3 py-12 text-center">
+          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground">Uploading profile photo…</p>
+        </div>
+      );
+    }
     return (
-      <PatientFilesStep patientId={createdPatientId} onDone={navigateToProfile} />
+      <PatientFilesStep
+        patientId={createdPatientId}
+        avatarAlreadyUploaded={avatarAutoUploaded}
+        onDone={navigateToProfile}
+      />
     );
   }
 
@@ -319,6 +362,54 @@ export function PatientForm({
         {state?.error && (
           <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
             {state.error}
+          </div>
+        )}
+
+        {/* Avatar picker — only shown on new patient (no patient prop) */}
+        {!patient && (
+          <div className="flex items-center gap-4 rounded-xl border border-border/50 bg-muted/20 p-4">
+            <button
+              type="button"
+              onClick={() => { avatarPickerRef.current?.click(); }}
+              className="group relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-dashed border-border bg-muted transition hover:border-primary/60 hover:bg-muted/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label="Add profile photo"
+            >
+              {avatarPreview ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={avatarPreview} alt="Preview" className="h-full w-full object-cover" />
+              ) : (
+                <UserCircle2 className="h-7 w-7 text-muted-foreground group-hover:text-primary/70 transition" />
+              )}
+            </button>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium">Profile photo</p>
+              <p className="text-xs text-muted-foreground">Optional · JPEG, PNG, or WebP · max 2 MB</p>
+              <div className="mt-1.5 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => { avatarPickerRef.current?.click(); }}
+                  className="text-xs font-medium text-primary hover:underline"
+                >
+                  {queuedAvatar ? "Change photo" : "Add photo"}
+                </button>
+                {queuedAvatar && (
+                  <button
+                    type="button"
+                    onClick={() => { setQueuedAvatar(null); setAvatarPreview(null); if (avatarPickerRef.current) avatarPickerRef.current.value = ""; }}
+                    className="text-xs text-muted-foreground hover:text-destructive"
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+            </div>
+            <input
+              ref={avatarPickerRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={handleAvatarPick}
+            />
           </div>
         )}
 

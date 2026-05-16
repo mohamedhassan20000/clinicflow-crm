@@ -44,23 +44,23 @@ export function PrintHeader({
       {/* Full header — inline, naturally on page 1; covers compact header via higher z-index */}
       <div
         className="print-full-header hidden print:block"
-        style={{ borderBottom: "1px solid #cbd5e1", paddingBottom: "10px", marginBottom: "0" }}
+        style={{ borderBottom: "2px solid #cbd5e1", paddingBottom: "12px", marginBottom: "0" }}
       >
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-start gap-3">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
             {logoUrl && (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={logoUrl}
                 alt=""
                 aria-hidden
-                width={44}
-                height={44}
-                style={{ objectFit: "contain", flexShrink: 0 }}
+                width={72}
+                height={72}
+                style={{ objectFit: "contain", flexShrink: 0, width: "72px", height: "72px" }}
               />
             )}
             <div>
-              <p style={{ fontSize: "14px", fontWeight: 600, lineHeight: 1.2 }}>
+              <p style={{ fontSize: "18px", fontWeight: 700, lineHeight: 1.2, letterSpacing: "-0.01em" }}>
                 {clinicName}
               </p>
               {clinicAddress && (
@@ -68,13 +68,13 @@ export function PrintHeader({
                   style={{
                     display: "flex",
                     alignItems: "center",
-                    gap: "3px",
-                    fontSize: "10px",
-                    color: "#64748b",
-                    marginTop: "3px",
+                    gap: "4px",
+                    fontSize: "11px",
+                    color: "#475569",
+                    marginTop: "5px",
                   }}
                 >
-                  <MapPin size={9} aria-hidden />
+                  <MapPin size={10} aria-hidden />
                   {clinicAddress}
                 </p>
               )}
@@ -83,13 +83,13 @@ export function PrintHeader({
                   style={{
                     display: "flex",
                     alignItems: "center",
-                    gap: "3px",
-                    fontSize: "10px",
-                    color: "#64748b",
-                    marginTop: "2px",
+                    gap: "4px",
+                    fontSize: "11px",
+                    color: "#475569",
+                    marginTop: "3px",
                   }}
                 >
-                  <Phone size={9} aria-hidden />
+                  <Phone size={10} aria-hidden />
                   {clinicPhone}
                 </p>
               )}

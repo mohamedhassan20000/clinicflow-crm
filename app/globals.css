@@ -446,4 +446,36 @@
     display: none !important;
   }
 
+  /* ── Follow-ups page ───────────────────────────────────────────────────── */
+  /* Department section wrappers use inline color-mix borders — flatten them */
+  section[style] {
+    border-color: #cbd5e1 !important;
+    box-shadow: none !important;
+    background: #fff !important;
+  }
+  /* Department section headers use inline color-mix backgrounds — make clean */
+  section[style] > header[style] {
+    background-color: #f1f5f9 !important;
+    border-color: #cbd5e1 !important;
+  }
+  section[style] > header h3[style],
+  section[style] > header span[style] {
+    color: #1e293b !important;
+  }
+  /* Dot color badge inside section header */
+  section[style] > header span[aria-hidden][style] {
+    background-color: #64748b !important;
+  }
+  /* Summary strip — make clean white cards */
+  .grid .bg-card {
+    background: #fff !important;
+    border: 1px solid #cbd5e1 !important;
+  }
+  /* Outcome badges — strip colored chip backgrounds in print */
+  .inline-flex.items-center.rounded-md.border {
+    background: transparent !important;
+    border-color: #94a3b8 !important;
+    color: #1e293b !important;
+  }
+
 }

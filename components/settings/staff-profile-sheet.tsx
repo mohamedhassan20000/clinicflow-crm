@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   CalendarDays,
@@ -92,8 +93,11 @@ interface Props {
 }
 
 export function StaffProfileSheet({ staff, open, onOpenChange, lastSeen, isAdmin }: Props) {
+  const router = useRouter();
   const [files, setFiles] = useState<StaffFiles | null>(null);
   const [isPending, startTransition] = useTransition();
+  // undefined = use staff.avatar_url prop; null = cleared; string = new signed url
+  const [localAvatarUrl, setLocalAvatarUrl] = useState<string | null | undefined>(undefined);
 
   const photoRef = useRef<HTMLInputElement>(null);
   const contractRef = useRef<HTMLInputElement>(null);
@@ -118,6 +122,7 @@ export function StaffProfileSheet({ staff, open, onOpenChange, lastSeen, isAdmin
   function handleOpenChange(nextOpen: boolean) {
     if (!nextOpen) {
       setFiles(null);
+      setLocalAvatarUrl(undefined);
     }
     onOpenChange(nextOpen);
   }
@@ -125,6 +130,7 @@ export function StaffProfileSheet({ staff, open, onOpenChange, lastSeen, isAdmin
   function triggerUpload(
     ref: React.RefObject<HTMLInputElement | null>,
     action: (staffId: string, fd: FormData) => Promise<{ data?: StaffFiles; error?: string }>,
+    isPhoto = false,
   ) {
     if (!staff || !ref.current) return;
     ref.current.value = "";
@@ -136,7 +142,14 @@ export function StaffProfileSheet({ staff, open, onOpenChange, lastSeen, isAdmin
       startTransition(async () => {
         const res = await action(staff.id, fd);
         if (res.error) toast.error(res.error);
-        else { setFiles(res.data ?? null); toast.success("File uploaded."); }
+        else {
+          setFiles(res.data ?? null);
+          toast.success("File uploaded.");
+          if (isPhoto) {
+            setLocalAvatarUrl(res.data?.photo?.url ?? null);
+            router.refresh();
+          }
+        }
       });
     };
     ref.current.click();
@@ -147,7 +160,14 @@ export function StaffProfileSheet({ staff, open, onOpenChange, lastSeen, isAdmin
     startTransition(async () => {
       const res = await deleteStaffFile(staff.id, filePath);
       if (res.error) toast.error(res.error);
-      else { setFiles(res.data ?? null); toast.success("File removed."); }
+      else {
+        setFiles(res.data ?? null);
+        toast.success("File removed.");
+        if (filePath.includes("/photo.")) {
+          setLocalAvatarUrl(null);
+          router.refresh();
+        }
+      }
     });
   }
 
@@ -163,9 +183,9 @@ export function StaffProfileSheet({ staff, open, onOpenChange, lastSeen, isAdmin
         {/* ── Header ── */}
         <SheetHeader className="border-b border-border/50 px-8 py-5 pr-14">
           <div className="flex items-center gap-4">
-            {staff.avatar_url ? (
+            {(localAvatarUrl !== undefined ? localAvatarUrl : staff.avatar_url) ? (
               <Image
-                src={staff.avatar_url}
+                src={(localAvatarUrl !== undefined ? localAvatarUrl : staff.avatar_url)!}
                 alt={staff.full_name}
                 width={56}
                 height={56}
@@ -306,7 +326,7 @@ export function StaffProfileSheet({ staff, open, onOpenChange, lastSeen, isAdmin
                         size="sm"
                         className="gap-1.5"
                         disabled={isPending}
-                        onClick={() => triggerUpload(photoRef, uploadStaffPhoto)}
+                        onClick={() => triggerUpload(photoRef, uploadStaffPhoto, true)}
                       >
                         <Upload className="h-3.5 w-3.5" />
                         {files?.photo ? "Change" : "Upload"}

@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useActionState, useRef, useState, useTransition } from "react";
+import { startTransition, useActionState, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -10,6 +10,7 @@ import {
   Loader2,
   Save,
   Upload,
+  User,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -136,9 +137,11 @@ function FileUploadRow({
 
 function PatientFilesStep({
   patientId,
+  autoUploadAvatar,
   onDone,
 }: {
   patientId: string;
+  autoUploadAvatar?: File | null;
   onDone: () => void;
 }) {
   const avatarRef = useRef<HTMLInputElement>(null);
@@ -149,9 +152,26 @@ function PatientFilesStep({
   const [nationalIdUploaded, setNationalIdUploaded] = useState(false);
   const [insuranceUploaded, setInsuranceUploaded] = useState(false);
 
-  const [avatarUploading, setAvatarUploading] = useState(false);
+  // Start as uploading if a pre-selected file was passed in
+  const [avatarUploading, setAvatarUploading] = useState(!!autoUploadAvatar);
   const [nationalIdUploading, setNationalIdUploading] = useState(false);
   const [insuranceUploading, setInsuranceUploading] = useState(false);
+
+  // Auto-upload avatar selected before patient creation (state is pre-set to uploading above)
+  useEffect(() => {
+    if (!autoUploadAvatar) return;
+    const fd = new FormData();
+    fd.set("avatar", autoUploadAvatar);
+    uploadPatientAvatar(patientId, fd).then((res) => {
+      setAvatarUploading(false);
+      if (res.error) {
+        toast.error(`Photo upload failed: ${res.error}. You can retry below.`);
+      } else {
+        setAvatarUploaded(true);
+      }
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function triggerFileInput(
     ref: React.RefObject<HTMLInputElement | null>,
@@ -269,6 +289,10 @@ export function PatientForm({
   const [state, formAction, isPending] = useActionState(action, null);
   const [, startNav] = useTransition();
 
+  const [selectedAvatar, setSelectedAvatar] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const avatarPickerRef = useRef<HTMLInputElement>(null);
+
   // When patientId is set the creation succeeded — show the file upload step
   const createdPatientId = state?.patientId ?? null;
 
@@ -309,7 +333,11 @@ export function PatientForm({
   // After creation — show upload step
   if (createdPatientId) {
     return (
-      <PatientFilesStep patientId={createdPatientId} onDone={navigateToProfile} />
+      <PatientFilesStep
+        patientId={createdPatientId}
+        autoUploadAvatar={selectedAvatar}
+        onDone={navigateToProfile}
+      />
     );
   }
 
@@ -321,6 +349,65 @@ export function PatientForm({
             {state.error}
           </div>
         )}
+
+        {/* Optional profile photo picker */}
+        <div className="flex items-center gap-4 rounded-lg border border-border/40 bg-muted/20 p-3">
+          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-muted overflow-hidden">
+            {avatarPreview ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={avatarPreview} alt="Preview" className="h-full w-full object-cover" />
+            ) : (
+              <User className="h-7 w-7 text-muted-foreground" />
+            )}
+          </span>
+          <div className="flex flex-col gap-1.5 min-w-0">
+            <p className="text-sm font-medium leading-none">
+              Profile photo{" "}
+              <span className="text-xs font-normal text-muted-foreground">(optional)</span>
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="inline-flex h-7 items-center gap-1.5 rounded-md border border-input bg-background px-3 text-xs font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-50"
+                disabled={isPending}
+                onClick={() => avatarPickerRef.current?.click()}
+              >
+                <Upload className="h-3 w-3" />
+                {selectedAvatar ? "Change" : "Choose"}
+              </button>
+              {selectedAvatar && (
+                <button
+                  type="button"
+                  className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs text-muted-foreground transition-colors hover:text-destructive disabled:opacity-50"
+                  disabled={isPending}
+                  onClick={() => {
+                    setSelectedAvatar(null);
+                    setAvatarPreview(null);
+                  }}
+                >
+                  <X className="h-3.5 w-3.5" />
+                  Remove
+                </button>
+              )}
+            </div>
+            {selectedAvatar && (
+              <p className="truncate text-xs text-muted-foreground max-w-48">{selectedAvatar.name}</p>
+            )}
+          </div>
+          <input
+            ref={avatarPickerRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              setSelectedAvatar(file);
+              setAvatarPreview(URL.createObjectURL(file));
+              e.target.value = "";
+            }}
+          />
+        </div>
 
         <div className="grid gap-5 sm:grid-cols-2">
           <FormField

@@ -2,6 +2,10 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { StaffProfileSheet } from "@/components/settings/staff-profile-sheet";
 
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: vi.fn() }),
+}));
+
 vi.mock("sonner", () => ({
   toast: {
     error: vi.fn(),

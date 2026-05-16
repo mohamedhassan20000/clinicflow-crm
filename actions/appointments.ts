@@ -25,6 +25,10 @@ export type ActionResult = {
 type AppointmentStatus = Database["public"]["Enums"]["appointment_status"];
 export type InvoiceUndoStatus = Extract<AppointmentStatus, "pending" | "confirmed">;
 type AppointmentValues = AppointmentFormValues;
+type ValidatedAppointmentPackage = {
+  packageId: string | null;
+  packageSessionNumber: number | null;
+};
 
 function isPastScheduledAt(scheduledAt: string): boolean {
   const scheduledTime = new Date(scheduledAt).getTime();
@@ -100,6 +104,54 @@ async function validateAppointmentReferences(
   return {};
 }
 
+async function validateAppointmentPackage(
+  values: AppointmentValues,
+  clinicId: string,
+): Promise<
+  ActionResult & { data?: ValidatedAppointmentPackage }
+> {
+  if (!values.package_id) {
+    return { data: { packageId: null, packageSessionNumber: null } };
+  }
+
+  const supabase = await createClient();
+  const { data: pkg, error } = await supabase
+    .from("patient_packages")
+    .select("id, patient_id, clinic_id, is_active, total_sessions, used_sessions")
+    .eq("id", values.package_id)
+    .eq("clinic_id", clinicId)
+    .eq("patient_id", values.patient_id)
+    .maybeSingle();
+
+  if (error) {
+    return {
+      error: "Failed to validate package.",
+      fieldErrors: { package_id: ["Failed to validate package."] },
+    };
+  }
+
+  if (!pkg) {
+    return {
+      error: "Select an active package for this patient.",
+      fieldErrors: { package_id: ["Select an active package for this patient."] },
+    };
+  }
+
+  if (!pkg.is_active || Number(pkg.used_sessions) >= Number(pkg.total_sessions)) {
+    return {
+      error: "Selected package has no remaining sessions.",
+      fieldErrors: { package_id: ["Selected package has no remaining sessions."] },
+    };
+  }
+
+  return {
+    data: {
+      packageId: pkg.id,
+      packageSessionNumber: Number(pkg.used_sessions) + 1,
+    },
+  };
+}
+
 async function validateAppointmentSlot(
   values: AppointmentValues,
   clinicId: string,
@@ -168,6 +220,7 @@ export async function createAppointment(
     scheduled_at: formData.get("scheduled_at"),
     duration_minutes: durationRaw ? Number(durationRaw) : 30,
     insurance_provider_id: formData.get("insurance_provider_id") || null,
+    package_id: formData.get("package_id") || null,
     notes: formData.get("notes") || null,
   };
 
@@ -200,12 +253,17 @@ export async function createAppointment(
   );
   if (references.error) return references;
 
+  const selectedPackage = await validateAppointmentPackage(parsed.data, user.clinicId);
+  if (selectedPackage.error) return selectedPackage;
+
   const slot = await validateAppointmentSlot(parsed.data, user.clinicId);
   if (slot.error) return slot;
 
   const supabase = await createClient();
   const { error } = await supabase.from("appointments").insert({
     ...parsed.data,
+    package_id: selectedPackage.data?.packageId ?? null,
+    package_session_number: selectedPackage.data?.packageSessionNumber ?? null,
     clinic_id: user.clinicId,
     created_by: user.id,
   });
@@ -654,6 +712,14 @@ export interface BillingContext {
   departmentId: string | null;
   departmentName: string | null;
   departmentColor: string | null;
+  packageInfo: {
+    name: string;
+    totalSessions: number;
+    usedSessions: number;
+    remainingSessions: number;
+    sessionNumber: number | null;
+    pricePerSession: number | null;
+  } | null;
   services: { id: string; name: string; price: number; department_id: string }[];
 }
 
@@ -671,7 +737,7 @@ export async function getBillingContext(
   const { data: appt, error: apptError } = await supabase
     .from("appointments")
     .select(
-      "id, patient_id, department_id, insurance_provider_id, patients(full_name), departments(name, color), insurance_providers(name)",
+      "id, patient_id, department_id, insurance_provider_id, package_session_number, patients(full_name), departments(name, color), insurance_providers(name), patient_packages(name, total_sessions, used_sessions, price_per_session)",
     )
     .eq("id", appointmentId)
     .eq("clinic_id", user.clinicId)
@@ -734,6 +800,7 @@ export async function getBillingContext(
   const providerName = appt.insurance_providers?.name ?? null;
   const isSelfPay =
     !!providerName && /no\s*insurance|self[\s-]?pay/i.test(providerName);
+  const packageRow = appt.patient_packages;
 
   return {
     data: {
@@ -746,6 +813,22 @@ export async function getBillingContext(
       departmentId: appt.department_id,
       departmentName: appt.departments?.name ?? null,
       departmentColor: appt.departments?.color ?? null,
+      packageInfo: packageRow
+        ? {
+            name: packageRow.name,
+            totalSessions: Number(packageRow.total_sessions),
+            usedSessions: Number(packageRow.used_sessions),
+            remainingSessions: Math.max(
+              0,
+              Number(packageRow.total_sessions) - Number(packageRow.used_sessions),
+            ),
+            sessionNumber: appt.package_session_number ?? null,
+            pricePerSession:
+              packageRow.price_per_session == null
+                ? null
+                : Number(packageRow.price_per_session),
+          }
+        : null,
       services,
     },
   };

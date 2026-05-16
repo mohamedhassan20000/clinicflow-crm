@@ -3,7 +3,7 @@
 import { startTransition, useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Check, ChevronsUpDown, Loader2, CalendarPlus } from "lucide-react";
+import { Check, ChevronsUpDown, Loader2, CalendarPlus, Package } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -71,6 +71,10 @@ export type Doctor = Pick<Tables<"profiles">, "id" | "full_name" | "department_i
 type PatientDoctorRelation = Doctor | Doctor[] | null;
 export type Department = Pick<Tables<"departments">, "id" | "name">;
 export type InsuranceProvider = Pick<Tables<"insurance_providers">, "id" | "name">;
+export type AppointmentPackageOption = Pick<
+  Tables<"patient_packages">,
+  "id" | "patient_id" | "name" | "total_sessions" | "used_sessions" | "price_per_session"
+>;
 export type PatientWithDoctor = Patient & {
   assigned_doctor?: PatientDoctorRelation;
 };
@@ -81,6 +85,7 @@ interface AppointmentFormProps {
   doctors: Doctor[];
   departments: Department[];
   insuranceProviders: InsuranceProvider[];
+  packages?: AppointmentPackageOption[];
   defaultPatientId?: string;
   defaultDoctorId?: string;
   defaultDepartmentId?: string;
@@ -123,6 +128,14 @@ function timeToMinutes(time: string): number {
   return h * 60 + m;
 }
 
+function fmtTRY(value: number) {
+  return new Intl.NumberFormat("en-GB", {
+    style: "currency",
+    currency: "TRY",
+    maximumFractionDigits: 2,
+  }).format(Number.isFinite(value) ? value : 0);
+}
+
 function isPastClinicSlot(value: string): boolean {
   const date = value.split("T")[0] ?? "";
   const time = value.split("T")[1]?.slice(0, 5) ?? "";
@@ -152,6 +165,7 @@ export function AppointmentForm({
   doctors,
   departments,
   insuranceProviders,
+  packages = [],
   defaultPatientId,
   defaultDoctorId,
   defaultDepartmentId,
@@ -182,6 +196,7 @@ export function AppointmentForm({
       scheduled_at: "",
       duration_minutes: 30,
       insurance_provider_id: defaultInsuranceId ?? null,
+      package_id: null,
       notes: null,
     },
   });
@@ -224,8 +239,20 @@ export function AppointmentForm({
   }, []);
 
   const selectedPatientId = useWatch({ control: form.control, name: "patient_id" });
+  const selectedPackageId = useWatch({ control: form.control, name: "package_id" });
   const selectedDoctorId = useWatch({ control: form.control, name: "doctor_id" });
   const activeDept = useWatch({ control: form.control, name: "department_id" }) ?? null;
+  const previousPatientIdRef = useRef(defaultPatientId ?? "");
+  const availablePackages = useMemo(
+    () =>
+      packages.filter(
+        (pkg) =>
+          pkg.patient_id === selectedPatientId &&
+          Number(pkg.used_sessions) < Number(pkg.total_sessions),
+      ),
+    [packages, selectedPatientId],
+  );
+  const selectedPackage = availablePackages.find((pkg) => pkg.id === selectedPackageId) ?? null;
   const selectedPatientDoctor = getAssignedDoctor(
     patients.find((p) => p.id === selectedPatientId),
   );
@@ -243,6 +270,16 @@ export function AppointmentForm({
     }
     return [...base, selectedDoctor];
   }, [activeDept, doctors, selectedDoctorId, selectedPatientDoctor]);
+
+  useEffect(() => {
+    if (previousPatientIdRef.current !== selectedPatientId) {
+      previousPatientIdRef.current = selectedPatientId ?? "";
+      form.setValue("package_id", null, {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+    }
+  }, [form, selectedPatientId]);
 
   useEffect(() => {
     if (!selectedPatientId || doctorChangedRef.current) return;
@@ -288,6 +325,7 @@ export function AppointmentForm({
     fd.set("duration_minutes", String(values.duration_minutes));
     if (values.insurance_provider_id)
       fd.set("insurance_provider_id", values.insurance_provider_id);
+    if (values.package_id) fd.set("package_id", values.package_id);
     if (values.notes) fd.set("notes", values.notes);
     return fd;
   }
@@ -394,6 +432,10 @@ export function AppointmentForm({
                               doctorChangedRef.current = false;
                               doctorInteractedRef.current = false;
                               field.onChange(p.id);
+                              form.setValue("package_id", null, {
+                                shouldDirty: true,
+                                shouldValidate: true,
+                              });
                               setPatientOpen(false);
                               applyPatientDefaults(p);
                               onPatientChange?.(p);
@@ -402,6 +444,10 @@ export function AppointmentForm({
                               doctorChangedRef.current = false;
                               doctorInteractedRef.current = false;
                               field.onChange(p.id);
+                              form.setValue("package_id", null, {
+                                shouldDirty: true,
+                                shouldValidate: true,
+                              });
                               setPatientOpen(false);
                               applyPatientDefaults(p);
                               onPatientChange?.(p);
@@ -442,6 +488,75 @@ export function AppointmentForm({
             </FormItem>
           )}
         />
+
+        {selectedPatientId && (
+          <FormField
+            control={form.control}
+            name="package_id"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Package (optional)</FormLabel>
+                <Select
+                  value={field.value ?? "__none__"}
+                  onValueChange={(value) =>
+                    field.onChange(value === "__none__" ? null : value)
+                  }
+                  disabled={isPending}
+                >
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="No package" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="__none__">No package</SelectItem>
+                    {availablePackages.map((pkg) => {
+                      const remaining =
+                        Number(pkg.total_sessions) - Number(pkg.used_sessions);
+                      const nextSession = Number(pkg.used_sessions) + 1;
+                      return (
+                        <SelectItem key={pkg.id} value={pkg.id}>
+                          <span className="flex flex-col gap-0.5">
+                            <span className="font-medium">{pkg.name}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {remaining}/{pkg.total_sessions} remaining · session {nextSession}
+                              {pkg.price_per_session != null
+                                ? ` · ${fmtTRY(Number(pkg.price_per_session))}`
+                                : ""}
+                            </span>
+                          </span>
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+                {availablePackages.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    No active packages with remaining sessions for this patient.
+                  </p>
+                ) : selectedPackage ? (
+                  <div className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-400">
+                    <Package className="h-3.5 w-3.5" />
+                    <span className="font-medium">{selectedPackage.name}</span>
+                    <span>
+                      Session {Number(selectedPackage.used_sessions) + 1} of{" "}
+                      {selectedPackage.total_sessions}
+                    </span>
+                    <span>
+                      {Number(selectedPackage.total_sessions) -
+                        Number(selectedPackage.used_sessions)}{" "}
+                      remaining
+                    </span>
+                    {selectedPackage.price_per_session != null && (
+                      <span>{fmtTRY(Number(selectedPackage.price_per_session))}</span>
+                    )}
+                  </div>
+                ) : null}
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
 
         <div className="grid gap-5 sm:grid-cols-2">
           {/* Department */}

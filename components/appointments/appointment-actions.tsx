@@ -390,6 +390,7 @@ function AppointmentActionsInner({
         patientName={ctx?.patientName}
         departmentName={ctx?.departmentName ?? null}
         departmentColor={ctx?.departmentColor ?? null}
+        packageInfo={ctx?.packageInfo ?? null}
         initialPayload={invoiceDraft}
         draftKey={invoiceDraftKey}
       />

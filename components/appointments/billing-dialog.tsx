@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Banknote,
   CreditCard,
@@ -14,6 +14,7 @@ import {
   Wallet2,
   Clock3,
   Receipt,
+  Package,
 } from "lucide-react";
 import {
   Dialog,
@@ -71,6 +72,15 @@ export interface ServiceOption {
   department_id: string;
 }
 
+export interface BillingPackageInfo {
+  name: string;
+  totalSessions: number;
+  usedSessions: number;
+  remainingSessions: number;
+  sessionNumber: number | null;
+  pricePerSession: number | null;
+}
+
 const METHODS: {
   value: PaymentMethod;
   label: string;
@@ -102,6 +112,7 @@ interface BillingDialogProps {
   insuranceProviderName?: string | null;
   departmentName?: string | null;
   departmentColor?: string | null;
+  packageInfo?: BillingPackageInfo | null;
   initialPayload?: BillingPayload | null;
   draftKey?: number;
 }
@@ -137,6 +148,7 @@ export function BillingDialog({
   insuranceProviderName,
   departmentName,
   departmentColor,
+  packageInfo,
   initialPayload,
   draftKey = 0,
 }: BillingDialogProps) {
@@ -155,6 +167,7 @@ export function BillingDialog({
   const [previousSettlement, setPreviousSettlement] = useState("");
   const [previousMethod, setPreviousMethod] = useState<PaymentMethod | null>(null);
   const [previousNote, setPreviousNote] = useState("");
+  const didPrefillRef = useRef(false);
 
   const totalN = useMemo(
     () =>
@@ -268,6 +281,37 @@ export function BillingDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, draftKey]);
 
+  useEffect(() => {
+    if (!open) {
+      didPrefillRef.current = false;
+      return;
+    }
+    if (initialPayload || didPrefillRef.current || !packageInfo?.pricePerSession) {
+      return;
+    }
+    didPrefillRef.current = true;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setLines((current) =>
+        current.length > 0
+          ? current
+          : [
+              {
+                _key: uid(),
+                service_id: null,
+                name: `${packageInfo.name} session`,
+                price: Number(packageInfo.pricePerSession),
+                quantity: 1,
+              },
+            ],
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [initialPayload, open, packageInfo]);
+
   function addServiceById(serviceId: string) {
     const svc = services.find((s) => s.id === serviceId);
     if (!svc) return;
@@ -347,7 +391,10 @@ export function BillingDialog({
     <Dialog
       open={open}
       onOpenChange={(next) => {
-        if (!next) reset();
+        if (!next) {
+          didPrefillRef.current = false;
+          reset();
+        }
         onOpenChange(next);
       }}
     >
@@ -391,6 +438,21 @@ export function BillingDialog({
         )}
 
         <div className="space-y-5 py-1">
+          {packageInfo && (
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-800 dark:text-emerald-300">
+              <Package className="h-3.5 w-3.5" />
+              <span className="font-medium">{packageInfo.name}</span>
+              <span>
+                Session {packageInfo.sessionNumber ?? "—"} of{" "}
+                {packageInfo.totalSessions}
+              </span>
+              <span>{packageInfo.remainingSessions} remaining</span>
+              {packageInfo.pricePerSession != null && (
+                <span>{fmtTRY(packageInfo.pricePerSession)} / session</span>
+              )}
+            </div>
+          )}
+
           {/* Summary strip */}
           <div className="grid grid-cols-3 gap-2 rounded-lg border border-border/60 bg-muted/30 p-3 text-center">
             <div>

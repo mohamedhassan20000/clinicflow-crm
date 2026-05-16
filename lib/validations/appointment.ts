@@ -10,6 +10,7 @@ export const appointmentSchema = z.object({
     .refine((v) => !isNaN(Date.parse(v)), "Invalid date/time"),
   duration_minutes: z.number().int().min(15).max(240).default(30),
   insurance_provider_id: z.string().uuid().optional().nullable(),
+  package_id: z.string().uuid("Select a valid package").optional().nullable(),
   notes: z.string().max(1000).optional().nullable(),
 });
 

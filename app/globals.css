@@ -277,6 +277,12 @@
   }
 }
 
+/* ─── Dark-mode calendar picker icon — flip to white so it's visible on dark bg ─── */
+.dark input[type="date"]::-webkit-calendar-picker-indicator,
+:is(.dark *) input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+}
+
 /* ─── Print rules — used by /revenue statement ─── */
 @media print {
   /* Force light-mode design tokens so print is always readable regardless

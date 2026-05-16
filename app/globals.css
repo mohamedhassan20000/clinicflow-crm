@@ -460,4 +460,39 @@
     display: none !important;
   }
 
+  /* Reports page section printing. Toggled by components/reports print buttons. */
+  body[data-printing] [data-report-section] {
+    display: none !important;
+  }
+  body[data-printing="all"] [data-report-section],
+  body[data-printing="cancellation"] [data-report-section="cancellation"],
+  body[data-printing="no-show"] [data-report-section="no-show"],
+  body[data-printing="revenue"] [data-report-section="revenue"],
+  body[data-printing="followups"] [data-report-section="followups"],
+  body[data-printing="doctor-performance"] [data-report-section="doctor-performance"],
+  body[data-printing="receptionist-performance"] [data-report-section="receptionist-performance"] {
+    display: block !important;
+  }
+  [data-report-section] {
+    background: #fff !important;
+    color: #000 !important;
+    box-shadow: none !important;
+    page-break-inside: auto;
+    margin-bottom: 10mm;
+  }
+  [data-report-section] * {
+    border-color: #000 !important;
+    color: #000 !important;
+    box-shadow: none !important;
+  }
+  [data-report-section] [data-slot="card"] {
+    border: 0 !important;
+    background: #fff !important;
+  }
+  [data-report-section] [data-slot="card-content"],
+  [data-report-section] [data-slot="card-header"] {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
 }

@@ -5,6 +5,14 @@ export type ReportDateRangePreset = DateRangePreset;
 export type ReportDateRange = ResolvedDateRange;
 export type ReportRpcArgs = { p_start: string; p_end: string };
 
+export type ClinicPrintMeta = {
+  clinicName: string;
+  clinicAddress: string | null;
+  clinicPhone: string | null;
+  clinicLogoUrl: string | null;
+  generatedAt: string;
+};
+
 export type ReportRole = Extract<
   Database["public"]["Enums"]["user_role"],
   "admin" | "manager" | "receptionist" | "doctor"

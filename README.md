@@ -368,7 +368,7 @@ Browser
 
 **Key design points:**
 
-- **RLS as primary guard** — Row-Level Security on all 16 tables is the outermost security layer. Middleware and server-side RBAC are secondary.
+- **RLS as primary guard** — Row-Level Security on all 18 tables is the outermost security layer. Middleware and server-side RBAC are secondary.
 - **Server Actions only** — all mutations go through Next.js Server Actions. No writable API routes exist.
 - **Session caching** — a `cf_page_visibility` cookie (httpOnly, 1h TTL) caches accessible page slugs to avoid a DB round-trip on every navigation.
 - **Postgres-native billing** — billing RPCs are `SECURITY DEFINER` functions so they are atomic and cannot partially succeed.
@@ -448,7 +448,7 @@ The print preview is triggered directly from the report view. Printed output inc
 
 ## Security
 
-- **RLS on all 16 tables** — `clinic_id` column on every core table, enforced by Row-Level Security. Cross-clinic data leakage is impossible at the database layer.
+- **RLS on all 18 tables** — `clinic_id` column on every core table, enforced by Row-Level Security. Cross-clinic data leakage is impossible at the database layer.
 - **HTTP security headers** — CSP, HSTS (`max-age=63072000; includeSubDomains; preload`), `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Permissions-Policy` — set globally in `next.config.ts`.
 - **Server Actions only** — no writable API routes. All mutations require a valid server-side session.
 - **Input validation** — Zod schemas validate all server action inputs before any database call. Invalid input returns field-level errors without touching the database.

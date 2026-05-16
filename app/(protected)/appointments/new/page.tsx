@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCachedDepartments, getCachedInsuranceProviders, getCachedStaff } from "@/lib/cache/reference-data";
 import { NewAppointmentLayout } from "@/components/appointments/new-appointment-layout";
 import { createAppointment } from "@/actions/appointments";
+import { getClinicWorkingHours } from "@/actions/settings";
 
 export const metadata: Metadata = { title: "New Appointment" };
 
@@ -23,7 +24,7 @@ export default async function NewAppointmentPage({ searchParams }: PageProps) {
   const { patient_id, doctor_id, dept_id, insurance_id } = await searchParams;
   const supabase = await createClient();
 
-  const [{ data: patients }, cachedStaff, cachedDepartments, cachedInsurance] =
+  const [{ data: patients }, cachedStaff, cachedDepartments, cachedInsurance, clinicWorkingHours] =
     await Promise.all([
       supabase
         .from("patients")
@@ -36,6 +37,7 @@ export default async function NewAppointmentPage({ searchParams }: PageProps) {
       getCachedStaff(user.clinicId),
       getCachedDepartments(user.clinicId),
       getCachedInsuranceProviders(user.clinicId),
+      getClinicWorkingHours(),
     ]);
 
   const doctors = cachedStaff
@@ -77,6 +79,7 @@ export default async function NewAppointmentPage({ searchParams }: PageProps) {
         defaultDoctorId={doctor_id}
         defaultDepartmentId={dept_id}
         defaultInsuranceId={insurance_id}
+        clinicWorkingHours={clinicWorkingHours}
       />
     </div>
   );

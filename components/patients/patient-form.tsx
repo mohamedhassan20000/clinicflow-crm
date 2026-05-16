@@ -1,9 +1,18 @@
 "use client";
 
-import { startTransition, useActionState } from "react";
+import { startTransition, useActionState, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Loader2, Save } from "lucide-react";
+import {
+  CheckCircle2,
+  FileImage,
+  Loader2,
+  Save,
+  Upload,
+  X,
+} from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PatientPhoneInput } from "@/components/patients/patient-phone-input";
@@ -22,10 +31,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
 import { patientSchema, type PatientFormValues } from "@/lib/validations/patient";
 import type { ActionResult } from "@/actions/patients";
 import type { Tables } from "@/types/database";
 import { formatDoctorName } from "@/lib/format-doctor";
+import { uploadPatientAvatar } from "@/actions/patient-avatar";
+import { uploadPatientDocument } from "@/actions/patient-documents";
 
 const BLOOD_TYPES = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"] as const;
 
@@ -55,6 +67,196 @@ interface PatientFormProps {
   insuranceProviders?: InsuranceProvider[];
 }
 
+// ── Upload step after new patient creation ────────────────────────────────────
+
+function FileUploadRow({
+  label,
+  hint,
+  fileRef,
+  accept,
+  uploading,
+  uploaded,
+  onTrigger,
+  onClear,
+}: {
+  label: string;
+  hint: string;
+  fileRef: React.RefObject<HTMLInputElement | null>;
+  accept: string;
+  uploading: boolean;
+  uploaded: boolean;
+  onTrigger: () => void;
+  onClear: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-lg border border-border/40 bg-muted/20 p-3">
+      <div className="flex items-center gap-3 min-w-0">
+        <FileImage className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <div className="min-w-0">
+          <p className="text-sm font-medium">{label}</p>
+          <p className="text-xs text-muted-foreground">{hint}</p>
+        </div>
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        {uploaded ? (
+          <>
+            <span className="text-xs text-emerald-600 font-medium">Uploaded</span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="gap-1 text-destructive hover:text-destructive h-7 px-2"
+              onClick={onClear}
+            >
+              <X className="h-3 w-3" />
+            </Button>
+          </>
+        ) : (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-1.5 h-7"
+            disabled={uploading}
+            onClick={onTrigger}
+          >
+            {uploading ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <Upload className="h-3 w-3" />
+            )}
+            {uploading ? "Uploading…" : "Upload"}
+          </Button>
+        )}
+      </div>
+      <input ref={fileRef} type="file" accept={accept} className="hidden" />
+    </div>
+  );
+}
+
+function PatientFilesStep({
+  patientId,
+  onDone,
+}: {
+  patientId: string;
+  onDone: () => void;
+}) {
+  const avatarRef = useRef<HTMLInputElement>(null);
+  const nationalIdRef = useRef<HTMLInputElement>(null);
+  const insuranceRef = useRef<HTMLInputElement>(null);
+
+  const [avatarUploaded, setAvatarUploaded] = useState(false);
+  const [nationalIdUploaded, setNationalIdUploaded] = useState(false);
+  const [insuranceUploaded, setInsuranceUploaded] = useState(false);
+
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [nationalIdUploading, setNationalIdUploading] = useState(false);
+  const [insuranceUploading, setInsuranceUploading] = useState(false);
+
+  function triggerFileInput(
+    ref: React.RefObject<HTMLInputElement | null>,
+    onFile: (file: File) => void,
+  ) {
+    if (!ref.current) return;
+    ref.current.value = "";
+    ref.current.onchange = () => {
+      const file = ref.current?.files?.[0];
+      if (file) onFile(file);
+    };
+    ref.current.click();
+  }
+
+  async function handleAvatarUpload(file: File) {
+    setAvatarUploading(true);
+    const fd = new FormData();
+    fd.set("avatar", file);
+    const res = await uploadPatientAvatar(patientId, fd);
+    setAvatarUploading(false);
+    if (res.error) toast.error(res.error);
+    else setAvatarUploaded(true);
+  }
+
+  async function handleDocUpload(
+    file: File,
+    category: "national_id" | "insurance",
+    setUploading: (v: boolean) => void,
+    setUploaded: (v: boolean) => void,
+  ) {
+    setUploading(true);
+    const fd = new FormData();
+    fd.set("file", file);
+    const res = await uploadPatientDocument(patientId, category, fd);
+    setUploading(false);
+    if (res.error) toast.error(res.error);
+    else setUploaded(true);
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-3">
+        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500/10">
+          <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+        </span>
+        <div>
+          <p className="text-sm font-semibold">Patient created successfully</p>
+          <p className="text-xs text-muted-foreground">
+            Optionally upload files below, then open the patient profile.
+          </p>
+        </div>
+      </div>
+
+      <Separator />
+
+      <div className="space-y-3">
+        <FileUploadRow
+          label="Profile photo"
+          hint="JPEG, PNG, or WebP · max 2 MB"
+          fileRef={avatarRef}
+          accept="image/jpeg,image/png,image/webp"
+          uploading={avatarUploading}
+          uploaded={avatarUploaded}
+          onTrigger={() => triggerFileInput(avatarRef, handleAvatarUpload)}
+          onClear={() => setAvatarUploaded(false)}
+        />
+        <FileUploadRow
+          label="National ID image"
+          hint="JPEG, PNG, WebP, or PDF · max 10 MB"
+          fileRef={nationalIdRef}
+          accept="image/jpeg,image/png,image/webp,application/pdf"
+          uploading={nationalIdUploading}
+          uploaded={nationalIdUploaded}
+          onTrigger={() =>
+            triggerFileInput(nationalIdRef, (f) =>
+              handleDocUpload(f, "national_id", setNationalIdUploading, setNationalIdUploaded),
+            )
+          }
+          onClear={() => setNationalIdUploaded(false)}
+        />
+        <FileUploadRow
+          label="Insurance card image"
+          hint="JPEG, PNG, WebP, or PDF · max 10 MB"
+          fileRef={insuranceRef}
+          accept="image/jpeg,image/png,image/webp,application/pdf"
+          uploading={insuranceUploading}
+          uploaded={insuranceUploaded}
+          onTrigger={() =>
+            triggerFileInput(insuranceRef, (f) =>
+              handleDocUpload(f, "insurance", setInsuranceUploading, setInsuranceUploaded),
+            )
+          }
+          onClear={() => setInsuranceUploaded(false)}
+        />
+      </div>
+
+      <Button className="w-full" onClick={onDone}>
+        Open patient profile
+      </Button>
+    </div>
+  );
+}
+
+// ── Main form ─────────────────────────────────────────────────────────────────
+
 export function PatientForm({
   action,
   defaultValues,
@@ -63,7 +265,12 @@ export function PatientForm({
   insuranceProviders = [],
   patient,
 }: PatientFormProps) {
+  const router = useRouter();
   const [state, formAction, isPending] = useActionState(action, null);
+  const [, startNav] = useTransition();
+
+  // When patientId is set the creation succeeded — show the file upload step
+  const createdPatientId = state?.patientId ?? null;
 
   const form = useForm<PatientFormValues>({
     resolver: zodResolver(patientSchema),
@@ -92,6 +299,18 @@ export function PatientForm({
       if (v != null) fd.set(k, String(v));
     });
     startTransition(() => formAction(fd));
+  }
+
+  function navigateToProfile() {
+    if (!createdPatientId) return;
+    startNav(() => router.push(`/patients/${createdPatientId}`));
+  }
+
+  // After creation — show upload step
+  if (createdPatientId) {
+    return (
+      <PatientFilesStep patientId={createdPatientId} onDone={navigateToProfile} />
+    );
   }
 
   return (

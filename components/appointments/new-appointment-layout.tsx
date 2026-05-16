@@ -10,6 +10,7 @@ import type {
   InsuranceProvider,
 } from "./appointment-form";
 import type { ActionResult } from "@/actions/appointments";
+import type { ClinicWorkingHoursValues } from "@/lib/validations/settings";
 
 interface NewAppointmentLayoutProps {
   action: (prev: ActionResult | null, fd: FormData) => Promise<ActionResult>;
@@ -21,6 +22,7 @@ interface NewAppointmentLayoutProps {
   defaultDoctorId?: string;
   defaultDepartmentId?: string;
   defaultInsuranceId?: string;
+  clinicWorkingHours?: ClinicWorkingHoursValues;
 }
 
 function getInitials(name: string): string {
@@ -135,6 +137,7 @@ export function NewAppointmentLayout({
   defaultDoctorId,
   defaultDepartmentId,
   defaultInsuranceId,
+  clinicWorkingHours,
 }: NewAppointmentLayoutProps) {
   const [selectedPatient, setSelectedPatient] =
     useState<PatientWithDoctor | null>(
@@ -156,6 +159,7 @@ export function NewAppointmentLayout({
           defaultDoctorId={defaultDoctorId}
           defaultDepartmentId={defaultDepartmentId}
           defaultInsuranceId={defaultInsuranceId}
+          clinicWorkingHours={clinicWorkingHours}
           onPatientChange={setSelectedPatient}
         />
       </div>

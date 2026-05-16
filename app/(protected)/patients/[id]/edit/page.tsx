@@ -76,7 +76,7 @@ export default async function EditPatientPage({ params }: PageProps) {
         </p>
       </div>
 
-      <div className="max-w-2xl rounded-xl border border-border/50 bg-card p-6">
+      <div className="max-w-2xl mx-auto rounded-xl border border-border/50 bg-card p-6">
         <PatientForm
           action={action}
           departments={departments ?? []}

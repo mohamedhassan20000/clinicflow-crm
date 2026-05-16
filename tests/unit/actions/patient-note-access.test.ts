@@ -83,13 +83,13 @@ describe("patient action permissions", () => {
       { data: { id: PATIENT_ID }, error: null },
     ];
 
-    await createPatient(null, patientForm());
+    const result = await createPatient(null, patientForm());
 
     expect(mocks.state.requireRole).toHaveBeenCalledWith([
       "admin",
       "receptionist",
     ]);
-    expect(mocks.state.redirect).toHaveBeenCalledWith(`/patients/${PATIENT_ID}`);
+    expect(result).toMatchObject({ success: true, patientId: PATIENT_ID });
   });
 
   it("normalizes Turkish patient phones before insert", async () => {

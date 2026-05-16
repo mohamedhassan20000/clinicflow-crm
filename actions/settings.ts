@@ -710,8 +710,8 @@ export async function uploadClinicLogo(fd: FormData): Promise<ActionResult & { u
   const file = fd.get("logo") as File | null;
   if (!file || file.size === 0) return { error: "No file provided." };
 
-  const MAX_SIZE = 500 * 1024; // 500 KB
-  if (file.size > MAX_SIZE) return { error: "File must be under 500 KB." };
+  const MAX_SIZE = 5 * 1024 * 1024; // 5 MB
+  if (file.size > MAX_SIZE) return { error: "File must be under 5 MB." };
 
   const allowedTypes = ["image/png", "image/jpeg", "image/svg+xml"];
   if (!allowedTypes.includes(file.type)) {
@@ -1017,6 +1017,30 @@ export async function upsertDoctorSchedule(
   const result = doctorScheduleSchema.safeParse(parsed);
   if (!result.success) {
     return { error: result.error.issues[0]?.message ?? "Validation error." };
+  }
+
+  // Validate each working day against clinic working hours
+  const clinicHours = await getClinicWorkingHours();
+  const clinicHasConfig = clinicHours.some((d) => d.open);
+
+  if (clinicHasConfig) {
+    const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    for (const day of result.data) {
+      if (!day.works || !day.start_time || !day.end_time) continue;
+      const clinicDay = clinicHours.find((c) => c.day_of_week === day.day_of_week);
+      if (!clinicDay?.open || clinicDay.shifts.length === 0) {
+        return {
+          error: `${DAY_NAMES[day.day_of_week]} is a clinic closed day. The doctor cannot work on a clinic closed day.`,
+        };
+      }
+      const clinicOpen = clinicDay.shifts.reduce((min, s) => s.shift_start < min ? s.shift_start : min, clinicDay.shifts[0].shift_start);
+      const clinicClose = clinicDay.shifts.reduce((max, s) => s.shift_end > max ? s.shift_end : max, clinicDay.shifts[0].shift_end);
+      if (day.start_time < clinicOpen || day.end_time > clinicClose) {
+        return {
+          error: `${DAY_NAMES[day.day_of_week]}: doctor hours (${day.start_time}–${day.end_time}) must be within clinic hours (${clinicOpen}–${clinicClose}).`,
+        };
+      }
+    }
   }
 
   const rows = result.data

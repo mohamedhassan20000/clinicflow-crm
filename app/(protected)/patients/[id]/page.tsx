@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CLINIC_TZ } from "@/lib/datetime";
-import { AlertCircle, ChevronLeft, FileText, Pencil, Receipt } from "lucide-react";
+import { AlertCircle, CalendarPlus, ChevronLeft, FileText, Pencil, Receipt } from "lucide-react";
 import { StatusBadge } from "@/components/appointments/status-badge";
 import { requireUser } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
@@ -305,6 +305,14 @@ export default async function PatientDetailPage({ params }: PageProps) {
         </div>
 
         <div className="flex items-center gap-2 print:hidden">
+          {!isDoctor && !patient.is_deleted && (
+            <Button asChild size="sm" className="gap-1.5">
+              <Link href={`/appointments/new?patient_id=${id}`}>
+                <CalendarPlus className="h-3.5 w-3.5" />
+                Book appointment
+              </Link>
+            </Button>
+          )}
           {canEdit && (
             <>
             <Button asChild variant="outline" size="sm" className="gap-1.5">

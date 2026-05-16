@@ -49,7 +49,7 @@ describe("createPatient", () => {
     vi.restoreAllMocks();
   });
 
-  it("creates a patient, assigns a file number, and redirects to the patient page", async () => {
+  it("creates a patient, assigns a file number, and returns the patient ID", async () => {
     const { createPatient, mocks } = await loadPatientActions();
     // First call: generateFileNumber (select from patients)
     // Second call: insert().select("id").single() — resolves as "select" in mock
@@ -58,9 +58,10 @@ describe("createPatient", () => {
       { data: { id: PATIENT_ID }, error: null },
     ];
 
-    await createPatient(null, patientForm());
+    const result = await createPatient(null, patientForm());
 
-    expect(mocks.state.redirect).toHaveBeenCalledWith(`/patients/${PATIENT_ID}`);
+    expect(result).toMatchObject({ success: true, patientId: PATIENT_ID });
+    expect(mocks.state.redirect).not.toHaveBeenCalled();
     expect(mocks.state.revalidatePath).toHaveBeenCalledWith("/patients");
     expect(mocks.state.queryLog).toContainEqual(
       expect.objectContaining({

@@ -13,6 +13,7 @@ const PROTECTED_PREFIXES = [
   "/appointments",
   "/followups",
   "/revenue",
+  "/reports",
   "/settings",
   "/profile",
 ];

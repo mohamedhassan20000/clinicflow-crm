@@ -11,6 +11,7 @@ import {
   Settings,
   LogOut,
   Wallet,
+  BarChart3,
   PhoneCall,
   ChevronLeft,
   ChevronRight,
@@ -45,6 +46,7 @@ const ICONS: Record<PageSlug, typeof LayoutDashboard> = {
   appointments: CalendarDays,
   followups: PhoneCall,
   revenue: Wallet,
+  reports: BarChart3,
   settings: Settings,
 };
 

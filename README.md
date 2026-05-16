@@ -2,7 +2,7 @@
 
 ![Status](https://img.shields.io/badge/status-production-success)
 ![License](https://img.shields.io/badge/license-MIT-blue)
-![Next.js](https://img.shields.io/badge/Next.js-16.2.4-black?logo=next.js)
+![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)
 ![Tests](https://img.shields.io/badge/tests-270%20passing-brightgreen)
 
 A **staff-only** clinic management system for small-to-medium private clinics. Built as a graduation project at Üsküdar University and deployed to production on Vercel + Supabase.
@@ -84,243 +84,301 @@ Replaces paper appointment books, phone scheduling, and Excel patient records wi
 
 ## Screenshots
 
-### Login
+<details>
+<summary>Authentication</summary>
 
 | Light | Dark |
 |---|---|
-| ![Login](docs/screenshots/auth/login.png) | ![Login Dark](docs/screenshots/auth/login-2.png) |
+| ![Login](public/screenshots/00_Login/login_page.png) | ![Login Dark](public/screenshots/00_Login/login_Dark_page.png) |
 
----
+</details>
 
-### Dashboard
+<details>
+<summary>Navigation — Sidebar</summary>
+
+| Expanded Light | Expanded Dark |
+|---|---|
+| ![Sidebar Expanded](public/screenshots/01_Admin/02_Sidebar/sidebar_expanded_light.png) | ![Sidebar Expanded Dark](public/screenshots/01_Admin/02_Sidebar/sidebar_expanded_dark.png) |
+
+| Collapsed Light | Collapsed Dark |
+|---|---|
+| ![Sidebar Collapsed](public/screenshots/01_Admin/02_Sidebar/sidebar_collapsed_light.png) | ![Sidebar Collapsed Dark](public/screenshots/01_Admin/02_Sidebar/sidebar_collapsed_dark.png) |
+
+</details>
+
+<details>
+<summary>Dashboards</summary>
 
 **Admin Dashboard**
 
 | Light | Dark |
 |---|---|
-| ![Dashboard](docs/screenshots/dashboard/dashboard.png) | ![Dashboard Dark](docs/screenshots/dashboard/dashboard-dark.png) |
+| ![Admin Dashboard](public/screenshots/01_Admin/01_Dashboard/admin_dashboard_light.png) | ![Admin Dashboard Dark](public/screenshots/01_Admin/01_Dashboard/admin_dashboard_dark.png) |
 
 **Admin Analytics**
 
 | Light | Dark |
 |---|---|
-| ![Analytics](docs/screenshots/dashboard/dashboard-analytics.png) | ![Analytics Dark](docs/screenshots/dashboard/dashboard-analytics-dark.png) |
-
-**Doctor Dashboard**
-
-| Light | Dark |
-|---|---|
-| ![Doctor Dashboard](docs/screenshots/dashboard/doctor-dashboard.png) | ![Doctor Dashboard Dark](docs/screenshots/dashboard/doctor-dashboard-dark.png) |
+| ![Admin Analytics](public/screenshots/01_Admin/01_Dashboard/admin_analytics_light.png) | ![Admin Analytics Dark](public/screenshots/01_Admin/01_Dashboard/admin_analytics_dark.png) |
 
 **Manager Analytics**
 
 | Light | Dark |
 |---|---|
-| ![Manager Analytics](docs/screenshots/dashboard/manager-analytics.png) | ![Manager Analytics Dark](docs/screenshots/dashboard/manager-analytics-dark.png) |
+| ![Manager Analytics](public/screenshots/02_Manager/01_Dashboard/manager_analytics_light.png) | ![Manager Analytics Dark](public/screenshots/02_Manager/01_Dashboard/manager_analytics_dark.png) |
 
 **Receptionist Dashboard**
 
-![Receptionist Dashboard](docs/screenshots/dashboard/receptionist-dashboard.png)
+| Light | Dark |
+|---|---|
+| ![Reception Dashboard](public/screenshots/03_Reception/01_Dashboard/reception_dashboard_light.png) | ![Reception Dashboard Dark](public/screenshots/03_Reception/01_Dashboard/reception_dashboard_dark.png) |
 
----
-
-### Appointment Calendar
-
-**Week View**
-
-![Appointments Week View](docs/screenshots/appointments/appointments-week-view.png)
-
-**Day View**
+**Doctor Dashboard**
 
 | Light | Dark |
 |---|---|
-| ![Day View](docs/screenshots/appointments/appointments-day-view.png) | ![Day View Dark](docs/screenshots/appointments/appointments-day-view-dark.png) |
+| ![Doctor Dashboard](public/screenshots/04_Doctor/01_Dashboard/doctor_dashboard_light.png) | ![Doctor Dashboard Dark](public/screenshots/04_Doctor/01_Dashboard/doctor_dashboard_dark.png) |
+
+</details>
+
+<details>
+<summary>Appointment Calendar</summary>
+
+**Week View**
+
+![Calendar Week Dark](public/screenshots/01_Admin/03_Appointments/calendar_week_dark.png)
 
 **Month View**
 
 | Light | Dark |
 |---|---|
-| ![Month View](docs/screenshots/appointments/appointments-month-view.png) | ![Month View Dark](docs/screenshots/appointments/appointments-month-view-dark.png) |
+| ![Calendar Month](public/screenshots/01_Admin/03_Appointments/calendar_month_light.png) | ![Calendar Month Dark](public/screenshots/01_Admin/03_Appointments/calendar_month_dark.png) |
 
----
-
-### Appointment Details & Actions
-
-**Appointment Detail — Pending**
+**Timeslot Popup**
 
 | Light | Dark |
 |---|---|
-| ![Appointment Detail](docs/screenshots/appointments/appointment-detail-pending.png) | ![Appointment Detail Dark](docs/screenshots/appointments/appointment-detail-pending-dark.png) |
+| ![Timeslot Popup](public/screenshots/01_Admin/03_Appointments/timeslot_popup_light.png) | ![Timeslot Popup Dark](public/screenshots/01_Admin/03_Appointments/timeslot_popup_dark.png) |
 
-**Appointment Detail — Completed**
+</details>
 
-![Appointment Completed Dark](docs/screenshots/appointments/appointment-detail-completed-dark.png)
+<details>
+<summary>Appointment Cards by Status</summary>
 
-**Appointment Card Popup**
+**Confirmed**
 
-![Appointment Card Popup](docs/screenshots/appointments/appointment-card-popup.png)
+| Light | Dark |
+|---|---|
+| ![Confirmed](public/screenshots/01_Admin/03_Appointments/card_confirmed_light.png) | ![Confirmed Dark](public/screenshots/01_Admin/03_Appointments/card_confirmed_dark.png) |
 
-**Status Actions**
+**Completed**
 
-![Appointment Actions Dark](docs/screenshots/appointments/appointment-actions-dark.png)
+| Light | Dark |
+|---|---|
+| ![Completed](public/screenshots/01_Admin/03_Appointments/card_completed_light.png) | ![Completed Dark](public/screenshots/01_Admin/03_Appointments/card_completed_dark.png) |
+
+**Cancelled**
+
+| Light | Dark |
+|---|---|
+| ![Cancelled](public/screenshots/01_Admin/03_Appointments/card_cancelled_light.png) | ![Cancelled Dark](public/screenshots/01_Admin/03_Appointments/card_cancelled_dark.png) |
+
+**No-Show**
+
+| Light | Dark |
+|---|---|
+| ![No-Show](public/screenshots/01_Admin/03_Appointments/card_noshow_light.png) | ![No-Show Dark](public/screenshots/01_Admin/03_Appointments/card_noshow_dark.png) |
+
+</details>
+
+<details>
+<summary>Appointment Actions & Modals</summary>
 
 **New Appointment Form**
 
 | Light | Dark |
 |---|---|
-| ![New Appointment](docs/screenshots/appointments/new-appointment-form.png) | ![New Appointment Dark](docs/screenshots/appointments/new-appointment-form-dark.png) |
+| ![New Appointment](public/screenshots/01_Admin/03_Appointments/new_appointment_form_light.png) | ![New Appointment Dark](public/screenshots/01_Admin/03_Appointments/new_appointment_form_dark.png) |
 
-**Cancel & No-Show Modals**
+**Displaced Appointments**
 
-| Cancel | No-Show |
+| Light | Dark |
 |---|---|
-| ![Cancel Modal Dark](docs/screenshots/appointments/cancel-appointment-modal-dark.png) | ![No-Show Modal Dark](docs/screenshots/appointments/noshow-modal-dark.png) |
+| ![Displaced](public/screenshots/01_Admin/03_Appointments/displaced_appointments_light.png) | ![Displaced Dark](public/screenshots/01_Admin/03_Appointments/displaced_appointments_dark.png) |
 
----
+**Cancel Modal**
 
-### Patient Management
+| Light | Dark |
+|---|---|
+| ![Cancel Modal](public/screenshots/01_Admin/03_Appointments/cancel_modal_light.png) | ![Cancel Modal Dark](public/screenshots/01_Admin/03_Appointments/cancel_modal_dark.png) |
+
+**No-Show Modal**
+
+| Light | Dark |
+|---|---|
+| ![No-Show Modal](public/screenshots/01_Admin/03_Appointments/noshow_modal_light.png) | ![No-Show Modal Dark](public/screenshots/01_Admin/03_Appointments/noshow_modal_dark.png) |
+
+**Billing Invoice Modal**
+
+| Light | Dark |
+|---|---|
+| ![Invoice Modal](public/screenshots/01_Admin/03_Appointments/invoice_modal_light.png) | ![Invoice Modal Dark](public/screenshots/01_Admin/03_Appointments/invoice_modal_dark.png) |
+
+**Appointment Recycle Bin**
+
+| Light | Dark |
+|---|---|
+| ![Recycle Bin](public/screenshots/01_Admin/03_Appointments/recycle_bin_light.png) | ![Recycle Bin Dark](public/screenshots/01_Admin/03_Appointments/recycle_bin_dark.png) |
+
+</details>
+
+<details>
+<summary>Patient Management</summary>
 
 **Patient List**
 
 | Light | Dark |
 |---|---|
-| ![Patients List](docs/screenshots/patients/patients-list.png) | ![Patients List Dark](docs/screenshots/patients/patients-list-dark.png) |
+| ![Patients List](public/screenshots/01_Admin/04_Patients/patients_list_light.png) | ![Patients List Dark](public/screenshots/01_Admin/04_Patients/patients_list_dark.png) |
+
+**Archive & Trash**
+
+| Archive (Dark) | Trash Light | Trash Dark |
+|---|---|---|
+| ![Archive](public/screenshots/01_Admin/04_Patients/patients_archive_dark.png) | ![Trash](public/screenshots/01_Admin/04_Patients/patients_trash_light.png) | ![Trash Dark](public/screenshots/01_Admin/04_Patients/patients_trash_dark.png) |
 
 **Patient Profile**
 
-| Light | Dark |
-|---|---|
-| ![Patient Profile](docs/screenshots/patients/patient-profile.png) | ![Patient Profile Dark](docs/screenshots/patients/patient-profile-dark.png) |
-
-**Patient Profile with Medical Records**
-
-![Patient Profile with Records](docs/screenshots/patients/patient-profile-with-records.png)
+![Patient Profile](public/screenshots/01_Admin/04_Patients/patient_profile_light.png)
 
 **New Patient Form**
 
-![New Patient Form Dark](docs/screenshots/patients/new-patient-form-dark.png)
-
-**Patient Appointments Section**
-
-![Patient Appointments Dark](docs/screenshots/patients/patient-appointments-section-dark.png)
-
-**Patient Invoice Detail**
-
-| Collapsed | Full Detail |
+| Light | Dark |
 |---|---|
-| ![Invoice Collapsed](docs/screenshots/patients/patient-appointment-invoice-dark.png) | ![Invoice Detail](docs/screenshots/patients/patient-appointment-invoice-detail.png) |
+| ![New Patient](public/screenshots/01_Admin/04_Patients/new_patient_form_light.png) | ![New Patient Dark](public/screenshots/01_Admin/04_Patients/new_patient_form_dark.png) |
+
+**Patient Appointments Report**
+
+| Light | Dark |
+|---|---|
+| ![Appointments Report](public/screenshots/01_Admin/04_Patients/patient_appointments_report_light.png) | ![Appointments Report Dark](public/screenshots/01_Admin/04_Patients/patient_appointments_report_dark.png) |
+
+**Patient Follow-up Report**
+
+| Light | Dark |
+|---|---|
+| ![Follow-up Report](public/screenshots/01_Admin/04_Patients/patient_followup_report_light.png) | ![Follow-up Report Dark](public/screenshots/01_Admin/04_Patients/patient_followup_report_dark.png) |
 
 **Medical Notes**
 
-![Medical Notes Dark](docs/screenshots/patients/medical-notes-dark.png)
+| Light | Dark |
+|---|---|
+| ![Medical Notes](public/screenshots/01_Admin/04_Patients/patient_medical_notes_light.png) | ![Medical Notes Dark](public/screenshots/01_Admin/04_Patients/patient_medical_notes_dark.png) |
 
----
-
-### Billing & Revenue
-
-**Billing Invoice Modal**
-
-![Billing Invoice Modal](docs/screenshots/billing/billing-invoice-modal.png)
-
-**Revenue & Transactions**
+**Add Deposit Modal**
 
 | Light | Dark |
 |---|---|
-| ![Revenue](docs/screenshots/billing/revenue-transactions.png) | ![Revenue Dark](docs/screenshots/billing/revenue-transactions-dark.png) |
+| ![Add Deposit](public/screenshots/01_Admin/04_Patients/add_deposit_modal_light.png) | ![Add Deposit Dark](public/screenshots/01_Admin/04_Patients/add_deposit_modal_dark.png) |
 
----
+</details>
 
-### Follow-ups
+<details>
+<summary>Follow-ups</summary>
 
-**Pending Follow-ups**
-
-| Light | Dark |
-|---|---|
-| ![Follow-ups](docs/screenshots/followups/followups.png) | ![Follow-ups Dark](docs/screenshots/followups/followups-dark.png) |
-
-**Completed Follow-ups**
+**Follow-ups Page**
 
 | Light | Dark |
 |---|---|
-| ![Completed Follow-ups](docs/screenshots/followups/completed-followups.png) | ![Completed Follow-ups Dark](docs/screenshots/followups/completed-followups-dark.png) |
+| ![Follow-ups](public/screenshots/01_Admin/05_Followups/followups_page_light.png) | ![Follow-ups Dark](public/screenshots/01_Admin/05_Followups/followups_page_dark.png) |
 
-**Record Follow-up Modal**
-
-| Light | Dark |
-|---|---|
-| ![Record Follow-up](docs/screenshots/followups/record-followup-modal.png) | ![Record Follow-up Dark](docs/screenshots/followups/record-followup-modal-dark.png) |
-
----
-
-### Reports & Printing
-
-**Appointments Report**
-
-![Appointments Report](docs/screenshots/reports/appointments-report.png)
-
-**Expanded Report View**
-
-![Appointments Report Expanded](docs/screenshots/reports/appointments-report-expanded.png)
-
-**Print Preview**
-
-![Print Preview](docs/screenshots/reports/print-preview-report.png)
-
----
-
-### Staff Management
-
-**Staff Settings**
+**Edit Follow-up Modal**
 
 | Light | Dark |
 |---|---|
-| ![Staff Settings](docs/screenshots/settings/settings-staff.png) | ![Staff Settings Dark](docs/screenshots/settings/settings-staff-dark.png) |
+| ![Edit Follow-up](public/screenshots/01_Admin/05_Followups/edit_followup_modal_light.png) | ![Edit Follow-up Dark](public/screenshots/01_Admin/05_Followups/edit_followup_modal_dark.png) |
 
-**Staff Member Profile**
+</details>
+
+<details>
+<summary>Revenue</summary>
+
+![Revenue Transactions](public/screenshots/01_Admin/06_Revenue/revenue_transactions_dark.png)
+
+</details>
+
+<details>
+<summary>Settings — Staff</summary>
+
+**Staff List**
 
 | Light | Dark |
 |---|---|
-| ![Staff Profile](docs/screenshots/staff/staff-member-profile.png) | ![Staff Profile Dark](docs/screenshots/staff/staff-member-profile-dark.png) |
+| ![Staff List](public/screenshots/01_Admin/07_Settings/staff_list_light.png) | ![Staff List Dark](public/screenshots/01_Admin/07_Settings/staff_list_dark.png) |
 
-**Staff Member Documents**
+**Staff Profile**
 
 | Light | Dark |
 |---|---|
-| ![Staff Documents](docs/screenshots/staff/staff-member-documents.png) | ![Staff Documents Dark](docs/screenshots/staff/staff-member-documents-dark.png) |
+| ![Staff Profile](public/screenshots/01_Admin/07_Settings/staff_profile_admin_light.png) | ![Staff Profile Dark](public/screenshots/01_Admin/07_Settings/staff_profile_admin_dark.png) |
 
----
+**Staff Documents**
 
-### Settings
+| Light | Dark |
+|---|---|
+| ![Staff Documents](public/screenshots/01_Admin/07_Settings/staff_documents_admin_light.png) | ![Staff Documents Dark](public/screenshots/01_Admin/07_Settings/staff_documents_admin_dark.png) |
+
+**Staff Schedule**
+
+| Light | Dark |
+|---|---|
+| ![Staff Schedule](public/screenshots/01_Admin/07_Settings/staff_schedule_doctor_light.png) | ![Staff Schedule Dark](public/screenshots/01_Admin/07_Settings/staff_schedule_doctor_dark.png) |
+
+</details>
+
+<details>
+<summary>Settings — Clinic Configuration</summary>
 
 **Departments**
 
 | Light | Dark |
 |---|---|
-| ![Departments](docs/screenshots/settings/settings-departments.png) | ![Departments Dark](docs/screenshots/settings/settings-departments-dark.png) |
+| ![Departments](public/screenshots/01_Admin/07_Settings/departments_light.png) | ![Departments Dark](public/screenshots/01_Admin/07_Settings/departments_dark.png) |
 
 **Insurance Providers**
 
 | Light | Dark |
 |---|---|
-| ![Insurance](docs/screenshots/settings/settings-insurance.png) | ![Insurance Dark](docs/screenshots/settings/settings-insurance-dark.png) |
+| ![Insurance](public/screenshots/01_Admin/07_Settings/insurance_providers_light.png) | ![Insurance Dark](public/screenshots/01_Admin/07_Settings/insurance_providers_dark.png) |
 
-**Services Catalog**
-
-| Light | Dark |
-|---|---|
-| ![Services](docs/screenshots/settings/settings-services.png) | ![Services Dark](docs/screenshots/settings/settings-services-dark.png) |
-
-**Clinic Profile**
+**Services & Pricing**
 
 | Light | Dark |
 |---|---|
-| ![Clinic Settings](docs/screenshots/settings/settings-clinic.png) | ![Clinic Settings Dark](docs/screenshots/settings/settings-clinic-dark.png) |
+| ![Services](public/screenshots/01_Admin/07_Settings/services_pricing_light.png) | ![Services Dark](public/screenshots/01_Admin/07_Settings/services_pricing_dark.png) |
 
-**UI Customization**
+**Clinic Info**
 
 | Light | Dark |
 |---|---|
-| ![Customize](docs/screenshots/settings/settings-customize.png) | ![Customize Dark](docs/screenshots/settings/settings-customize-dark.png) |
+| ![Clinic Info](public/screenshots/01_Admin/07_Settings/clinic_info_light.png) | ![Clinic Info Dark](public/screenshots/01_Admin/07_Settings/clinic_info_dark.png) |
+
+**Page Visibility Customization**
+
+| Light | Dark |
+|---|---|
+| ![Customize](public/screenshots/01_Admin/07_Settings/customize_visibility_light.png) | ![Customize Dark](public/screenshots/01_Admin/07_Settings/customize_visibility_dark.png) |
+
+</details>
+
+<details>
+<summary>My Profile</summary>
+
+| Light | Dark |
+|---|---|
+| ![My Profile](public/screenshots/01_Admin/08_My_Profile/my_profile_light.png) | ![My Profile Dark](public/screenshots/01_Admin/08_My_Profile/my_profile_dark.png) |
+
+</details>
 
 ---
 

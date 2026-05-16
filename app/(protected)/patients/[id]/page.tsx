@@ -20,6 +20,12 @@ import { SettleOutstandingDialog } from "@/components/patients/settle-outstandin
 import { AddDepositDialog } from "@/components/patients/add-deposit-dialog";
 import { PatientAvatarControls } from "@/components/patients/patient-avatar-controls";
 import { PatientDocumentsSection } from "@/components/patients/patient-documents-section";
+import {
+  PatientPackagesSection,
+  type PatientPackageDepartment,
+  type PatientPackageItem,
+  type PatientPackageService,
+} from "@/components/patients/patient-packages-section";
 import { FollowupsList, type FollowupItem } from "@/components/patients/followups-list";
 import { PatientAvatarPreview } from "@/components/patients/patient-avatar-preview";
 import { listPatientDocuments, type PatientDocumentsData } from "@/actions/patient-documents";
@@ -125,6 +131,9 @@ export default async function PatientDetailPage({ params }: PageProps) {
     { data: notes },
     appointmentsResult,
     { data: followups },
+    { data: packageRows },
+    { data: packageDepartments },
+    { data: packageServices },
   ] = await Promise.all([
     supabase
       .from("medical_notes")
@@ -153,10 +162,37 @@ export default async function PatientDetailPage({ params }: PageProps) {
       .eq("clinic_id", user.clinicId)
       .order("recorded_at", { ascending: false })
       .limit(3),
+    supabase
+      .from("patient_packages")
+      .select(
+        "id, patient_id, department_id, service_id, name, total_sessions, used_sessions, price_per_session, notes, is_active, departments(id, name, color), services(id, name)",
+      )
+      .eq("patient_id", id)
+      .eq("clinic_id", user.clinicId)
+      .order("is_active", { ascending: false })
+      .order("updated_at", { ascending: false }),
+    supabase
+      .from("departments")
+      .select("id, name, color")
+      .eq("clinic_id", user.clinicId)
+      .eq("is_active", true)
+      .is("deleted_at", null)
+      .order("name", { ascending: true }),
+    supabase
+      .from("services")
+      .select("id, name, department_id")
+      .eq("clinic_id", user.clinicId)
+      .eq("is_active", true)
+      .is("deleted_at", null)
+      .order("name", { ascending: true }),
   ]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const appointments = appointmentsResult.data as any[] | null;
+  const patientPackages = (packageRows ?? []) as PatientPackageItem[];
+  const packageDepartmentOptions = (packageDepartments ??
+    []) as PatientPackageDepartment[];
+  const packageServiceOptions = (packageServices ?? []) as PatientPackageService[];
   const noteRows = (notes ?? []) as MedicalNoteWithAttachments[];
   const noteIds = noteRows.map((note) => note.id);
   const attachmentsByNote = new Map<string, MedicalNoteAttachmentItem[]>();
@@ -574,6 +610,14 @@ export default async function PatientDetailPage({ params }: PageProps) {
               hasLoadError={patientDocumentsLoadFailed}
             />
           )}
+
+          <PatientPackagesSection
+            patientId={id}
+            packages={patientPackages}
+            departments={packageDepartmentOptions}
+            services={packageServiceOptions}
+            canManage={canEdit}
+          />
 
           {/* Appointments */}
           <div className="space-y-3">

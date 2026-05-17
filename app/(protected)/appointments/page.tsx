@@ -25,8 +25,21 @@ import {
 } from "@/actions/appointments";
 import { getClinicWorkingHours } from "@/actions/settings";
 import { THIRTY_DAYS_MS } from "@/lib/constants";
+import type { Database } from "@/types/database";
 
 export const metadata: Metadata = { title: "Appointments" };
+
+type AppointmentStatus = Database["public"]["Enums"]["appointment_status"];
+
+const APPOINTMENT_STATUSES: AppointmentStatus[] = [
+  "pending",
+  "confirmed",
+  "arrived",
+  "in_session",
+  "completed",
+  "cancelled",
+  "no_show",
+];
 
 interface PageProps {
   searchParams: Promise<{
@@ -34,6 +47,7 @@ interface PageProps {
     week?: string;
     date?: string;
     month?: string;
+    status?: string;
     doctor?: string;
     dept?: string;
     file?: string;
@@ -73,6 +87,7 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
     week,
     date,
     month,
+    status,
     doctor,
     dept,
     file,
@@ -83,6 +98,11 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
 
   const view: CalendarView =
     viewParam === "day" || viewParam === "month" ? viewParam : "week";
+  const statusFilter = APPOINTMENT_STATUSES.includes(
+    status as AppointmentStatus,
+  )
+    ? (status as AppointmentStatus)
+    : null;
 
   // Compute range [rangeStart, rangeEnd) based on view
   let rangeStart: Date;
@@ -181,6 +201,7 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
   if (isDoctor) query = query.eq("doctor_id", user.id);
   else if (doctor) query = query.eq("doctor_id", doctor);
   if (dept) query = query.eq("department_id", dept);
+  if (statusFilter) query = query.eq("status", statusFilter);
   if (patientIds) query = query.in("patient_id", patientIds);
 
   const { data: appointments } = await query;
@@ -248,7 +269,8 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
     Number(!!file) +
     Number(!!nat) +
     Number(!!phone) +
-    Number(!!name);
+    Number(!!name) +
+    Number(!!statusFilter);
 
   const rangeLabel =
     view === "day"

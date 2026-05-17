@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/rbac";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import {
   createPackageTemplateSchema,
@@ -25,6 +26,11 @@ function firstError(error: unknown) {
     return error.message;
   }
   return "Something went wrong. Please try again.";
+}
+
+function templateCreateError(error: unknown) {
+  const detail = firstError(error);
+  return `Failed to create template: ${detail}`;
 }
 
 async function ensureDepartmentInClinic(
@@ -91,7 +97,7 @@ export async function createPackageTemplate(
     );
     if (deptError) return deptError;
 
-    const supabase = await createClient();
+    const supabase = createAdminClient();
     const { error } = await supabase.from("package_templates").insert({
       clinic_id: user.clinicId,
       department_id: parsed.data.department_id,
@@ -104,7 +110,7 @@ export async function createPackageTemplate(
       is_active: true,
     });
 
-    if (error) return { error: "Failed to create template. Please try again." };
+    if (error) return { error: templateCreateError(error) };
 
     revalidateSettings();
     return { success: true };

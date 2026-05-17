@@ -49,11 +49,24 @@ export type PatientPackageItem = {
   services: { id: string; name: string } | null;
 };
 
+export type PatientPackageTemplate = {
+  id: string;
+  department_id: string;
+  name: string;
+  total_sessions: number;
+  price_per_session: number | null;
+  total_price: number | null;
+  notes: string | null;
+  is_active: boolean;
+};
+
 interface PatientPackagesSectionProps {
   patientId: string;
   packages: PatientPackageItem[];
   departments: PatientPackageDepartment[];
   services: PatientPackageService[];
+  packageTemplates: PatientPackageTemplate[];
+  patientDepartmentId: string | null;
   canManage: boolean;
 }
 
@@ -71,6 +84,8 @@ export function PatientPackagesSection({
   packages,
   departments,
   services,
+  packageTemplates,
+  patientDepartmentId,
   canManage,
 }: PatientPackagesSectionProps) {
   const activeCount = packages.filter((pkg) => pkg.is_active).length;
@@ -95,6 +110,8 @@ export function PatientPackagesSection({
             patientId={patientId}
             departments={departments}
             services={services}
+            packageTemplates={packageTemplates}
+            patientDepartmentId={patientDepartmentId}
           />
         )}
       </div>

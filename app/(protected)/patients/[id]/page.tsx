@@ -25,6 +25,7 @@ import {
   type PatientPackageDepartment,
   type PatientPackageItem,
   type PatientPackageService,
+  type PatientPackageTemplate,
 } from "@/components/patients/patient-packages-section";
 import { FollowupsList, type FollowupItem } from "@/components/patients/followups-list";
 import { PatientAvatarPreview } from "@/components/patients/patient-avatar-preview";
@@ -132,6 +133,7 @@ export default async function PatientDetailPage({ params }: PageProps) {
     appointmentsResult,
     { data: followups },
     { data: packageRows },
+    { data: packageTemplates },
     { data: packageDepartments },
     { data: packageServices },
   ] = await Promise.all([
@@ -172,6 +174,14 @@ export default async function PatientDetailPage({ params }: PageProps) {
       .order("is_active", { ascending: false })
       .order("updated_at", { ascending: false }),
     supabase
+      .from("package_templates")
+      .select(
+        "id, department_id, name, total_sessions, price_per_session, total_price, notes, is_active",
+      )
+      .eq("clinic_id", user.clinicId)
+      .eq("is_active", true)
+      .order("name", { ascending: true }),
+    supabase
       .from("departments")
       .select("id, name, color")
       .eq("clinic_id", user.clinicId)
@@ -190,6 +200,8 @@ export default async function PatientDetailPage({ params }: PageProps) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const appointments = appointmentsResult.data as any[] | null;
   const patientPackages = (packageRows ?? []) as PatientPackageItem[];
+  const activePackageTemplates = (packageTemplates ??
+    []) as PatientPackageTemplate[];
   const packageDepartmentOptions = (packageDepartments ??
     []) as PatientPackageDepartment[];
   const packageServiceOptions = (packageServices ?? []) as PatientPackageService[];
@@ -616,6 +628,8 @@ export default async function PatientDetailPage({ params }: PageProps) {
             packages={patientPackages}
             departments={packageDepartmentOptions}
             services={packageServiceOptions}
+            packageTemplates={activePackageTemplates}
+            patientDepartmentId={patient.department_id}
             canManage={canEdit}
           />
 

@@ -105,6 +105,8 @@ interface Props {
   appointments: Appointment[];
   date: Date;
   canEdit: boolean;
+  currentUserId?: string;
+  currentUserRole?: "admin" | "receptionist" | "manager" | "doctor";
   clinicHours?: ClinicWorkingHoursValues;
 }
 
@@ -112,6 +114,8 @@ export function DayCalendar({
   appointments,
   date,
   canEdit,
+  currentUserId,
+  currentUserRole,
   clinicHours = [],
 }: Props) {
   const { formatSlotTime } = useClinicSettings();
@@ -233,6 +237,8 @@ export function DayCalendar({
                       appts={appts}
                       bucketMin={hMin}
                       canEdit={canEdit}
+                      currentUserId={currentUserId}
+                      currentUserRole={currentUserRole}
                     />
                   );
                 })}
@@ -263,10 +269,14 @@ function DayBucketCell({
   appts,
   bucketMin,
   canEdit,
+  currentUserId,
+  currentUserRole,
 }: {
   appts: Appointment[];
   bucketMin: number;
   canEdit: boolean;
+  currentUserId?: string;
+  currentUserRole?: "admin" | "receptionist" | "manager" | "doctor";
 }) {
   const [showAllOpen, setShowAllOpen] = useState(false);
   const hasMore = appts.length > 3;
@@ -279,7 +289,13 @@ function DayBucketCell({
     >
       {visible.map((appt) => (
         <div key={appt.id} style={{ height: CARD_H_PX }} className="min-w-0 shrink-0">
-          <AppointmentCard appt={appt} canEdit={canEdit} compact />
+          <AppointmentCard
+            appt={appt}
+            canEdit={canEdit}
+            currentUserId={currentUserId}
+            currentUserRole={currentUserRole}
+            compact
+          />
         </div>
       ))}
       {hasMore && (
@@ -297,6 +313,8 @@ function DayBucketCell({
           open={showAllOpen}
           onOpenChange={setShowAllOpen}
           canEdit={canEdit}
+          currentUserId={currentUserId}
+          currentUserRole={currentUserRole}
         />
       )}
     </div>

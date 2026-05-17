@@ -34,17 +34,20 @@ Replaces paper appointment books, phone scheduling, and Excel patient records wi
 ## Features
 
 **Patient Management**
+
 - Create, edit, and soft-delete patient records with auto-assigned file numbers (`CF-0001`, `CF-0002`, …)
 - Patient profile with full appointment history, medical notes, and billing records
 - Recycle bin with restore and permanent-delete
 
 **Appointment Scheduling**
+
 - Day, week, and month calendar views
 - Conflict handling for confirmed appointments with pending overlap and displacement support
 - Database-enforced appointment status state machine (`pending → confirmed → completed / cancelled / no-show`)
 - Appointment detail modal with inline status transitions
 
 **Billing & Revenue**
+
 - Service line items per appointment
 - Insurance settlement workflows with outstanding settlement tracking
 - Transactional Postgres RPCs — billing cannot partially succeed
@@ -52,20 +55,24 @@ Replaces paper appointment books, phone scheduling, and Excel patient records wi
 - Revenue dashboard with transaction history
 
 **Follow-ups**
+
 - Post-appointment follow-up scheduling
 - Pending and completed follow-up views
 - Quick-record follow-up modal from any appointment
 
 **Medical Notes**
+
 - Doctor-authored clinical notes per patient
 - File attachments per note
 - Author and role-scoped access control
 
 **Role-Scoped Dashboards**
+
 - Admin, Receptionist, Doctor, and Manager each have a tailored dashboard with relevant KPIs
 - Charts powered by Recharts
 
 **Settings & Staff Management**
+
 - Staff management with role assignment and per-user page visibility overrides
 - Departments with color coding
 - Insurance provider catalog
@@ -74,6 +81,7 @@ Replaces paper appointment books, phone scheduling, and Excel patient records wi
 - Per-user UI customization
 
 **UX & Reliability**
+
 - Dark and light mode
 - Responsive layout (optimized for desktop clinic workstations)
 - Confirmation dialogs on all destructive actions
@@ -87,8 +95,8 @@ Replaces paper appointment books, phone scheduling, and Excel patient records wi
 <details>
 <summary>Authentication</summary>
 
-| Light | Dark |
-|---|---|
+| Light                                                | Dark                                                           |
+| ---------------------------------------------------- | -------------------------------------------------------------- |
 | ![Login](public/screenshots/00_Login/login_page.png) | ![Login Dark](public/screenshots/00_Login/login_Dark_page.png) |
 
 </details>
@@ -96,12 +104,12 @@ Replaces paper appointment books, phone scheduling, and Excel patient records wi
 <details>
 <summary>Navigation — Sidebar</summary>
 
-| Expanded Light | Expanded Dark |
-|---|---|
+| Expanded Light                                                                         | Expanded Dark                                                                              |
+| -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
 | ![Sidebar Expanded](public/screenshots/01_Admin/02_Sidebar/sidebar_expanded_light.png) | ![Sidebar Expanded Dark](public/screenshots/01_Admin/02_Sidebar/sidebar_expanded_dark.png) |
 
-| Collapsed Light | Collapsed Dark |
-|---|---|
+| Collapsed Light                                                                          | Collapsed Dark                                                                               |
+| ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
 | ![Sidebar Collapsed](public/screenshots/01_Admin/02_Sidebar/sidebar_collapsed_light.png) | ![Sidebar Collapsed Dark](public/screenshots/01_Admin/02_Sidebar/sidebar_collapsed_dark.png) |
 
 </details>
@@ -111,32 +119,32 @@ Replaces paper appointment books, phone scheduling, and Excel patient records wi
 
 **Admin Dashboard**
 
-| Light | Dark |
-|---|---|
+| Light                                                                                  | Dark                                                                                       |
+| -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
 | ![Admin Dashboard](public/screenshots/01_Admin/01_Dashboard/admin_dashboard_light.png) | ![Admin Dashboard Dark](public/screenshots/01_Admin/01_Dashboard/admin_dashboard_dark.png) |
 
 **Admin Analytics**
 
-| Light | Dark |
-|---|---|
+| Light                                                                                  | Dark                                                                                       |
+| -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
 | ![Admin Analytics](public/screenshots/01_Admin/01_Dashboard/admin_analytics_light.png) | ![Admin Analytics Dark](public/screenshots/01_Admin/01_Dashboard/admin_analytics_dark.png) |
 
 **Manager Analytics**
 
-| Light | Dark |
-|---|---|
+| Light                                                                                        | Dark                                                                                             |
+| -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
 | ![Manager Analytics](public/screenshots/02_Manager/01_Dashboard/manager_analytics_light.png) | ![Manager Analytics Dark](public/screenshots/02_Manager/01_Dashboard/manager_analytics_dark.png) |
 
 **Receptionist Dashboard**
 
-| Light | Dark |
-|---|---|
+| Light                                                                                              | Dark                                                                                                   |
+| -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | ![Reception Dashboard](public/screenshots/03_Reception/01_Dashboard/reception_dashboard_light.png) | ![Reception Dashboard Dark](public/screenshots/03_Reception/01_Dashboard/reception_dashboard_dark.png) |
 
 **Doctor Dashboard**
 
-| Light | Dark |
-|---|---|
+| Light                                                                                     | Dark                                                                                          |
+| ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | ![Doctor Dashboard](public/screenshots/04_Doctor/01_Dashboard/doctor_dashboard_light.png) | ![Doctor Dashboard Dark](public/screenshots/04_Doctor/01_Dashboard/doctor_dashboard_dark.png) |
 
 </details>
@@ -150,14 +158,14 @@ Replaces paper appointment books, phone scheduling, and Excel patient records wi
 
 **Month View**
 
-| Light | Dark |
-|---|---|
+| Light                                                                                   | Dark                                                                                        |
+| --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
 | ![Calendar Month](public/screenshots/01_Admin/03_Appointments/calendar_month_light.png) | ![Calendar Month Dark](public/screenshots/01_Admin/03_Appointments/calendar_month_dark.png) |
 
 **Timeslot Popup**
 
-| Light | Dark |
-|---|---|
+| Light                                                                                   | Dark                                                                                        |
+| --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
 | ![Timeslot Popup](public/screenshots/01_Admin/03_Appointments/timeslot_popup_light.png) | ![Timeslot Popup Dark](public/screenshots/01_Admin/03_Appointments/timeslot_popup_dark.png) |
 
 </details>
@@ -167,26 +175,26 @@ Replaces paper appointment books, phone scheduling, and Excel patient records wi
 
 **Confirmed**
 
-| Light | Dark |
-|---|---|
+| Light                                                                              | Dark                                                                                   |
+| ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | ![Confirmed](public/screenshots/01_Admin/03_Appointments/card_confirmed_light.png) | ![Confirmed Dark](public/screenshots/01_Admin/03_Appointments/card_confirmed_dark.png) |
 
 **Completed**
 
-| Light | Dark |
-|---|---|
+| Light                                                                              | Dark                                                                                   |
+| ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | ![Completed](public/screenshots/01_Admin/03_Appointments/card_completed_light.png) | ![Completed Dark](public/screenshots/01_Admin/03_Appointments/card_completed_dark.png) |
 
 **Cancelled**
 
-| Light | Dark |
-|---|---|
+| Light                                                                              | Dark                                                                                   |
+| ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | ![Cancelled](public/screenshots/01_Admin/03_Appointments/card_cancelled_light.png) | ![Cancelled Dark](public/screenshots/01_Admin/03_Appointments/card_cancelled_dark.png) |
 
 **No-Show**
 
-| Light | Dark |
-|---|---|
+| Light                                                                         | Dark                                                                              |
+| ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | ![No-Show](public/screenshots/01_Admin/03_Appointments/card_noshow_light.png) | ![No-Show Dark](public/screenshots/01_Admin/03_Appointments/card_noshow_dark.png) |
 
 </details>
@@ -196,38 +204,38 @@ Replaces paper appointment books, phone scheduling, and Excel patient records wi
 
 **New Appointment Form**
 
-| Light | Dark |
-|---|---|
+| Light                                                                                          | Dark                                                                                               |
+| ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
 | ![New Appointment](public/screenshots/01_Admin/03_Appointments/new_appointment_form_light.png) | ![New Appointment Dark](public/screenshots/01_Admin/03_Appointments/new_appointment_form_dark.png) |
 
 **Displaced Appointments**
 
-| Light | Dark |
-|---|---|
+| Light                                                                                      | Dark                                                                                           |
+| ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
 | ![Displaced](public/screenshots/01_Admin/03_Appointments/displaced_appointments_light.png) | ![Displaced Dark](public/screenshots/01_Admin/03_Appointments/displaced_appointments_dark.png) |
 
 **Cancel Modal**
 
-| Light | Dark |
-|---|---|
+| Light                                                                               | Dark                                                                                    |
+| ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | ![Cancel Modal](public/screenshots/01_Admin/03_Appointments/cancel_modal_light.png) | ![Cancel Modal Dark](public/screenshots/01_Admin/03_Appointments/cancel_modal_dark.png) |
 
 **No-Show Modal**
 
-| Light | Dark |
-|---|---|
+| Light                                                                                | Dark                                                                                     |
+| ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
 | ![No-Show Modal](public/screenshots/01_Admin/03_Appointments/noshow_modal_light.png) | ![No-Show Modal Dark](public/screenshots/01_Admin/03_Appointments/noshow_modal_dark.png) |
 
 **Billing Invoice Modal**
 
-| Light | Dark |
-|---|---|
+| Light                                                                                 | Dark                                                                                      |
+| ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
 | ![Invoice Modal](public/screenshots/01_Admin/03_Appointments/invoice_modal_light.png) | ![Invoice Modal Dark](public/screenshots/01_Admin/03_Appointments/invoice_modal_dark.png) |
 
 **Appointment Recycle Bin**
 
-| Light | Dark |
-|---|---|
+| Light                                                                             | Dark                                                                                  |
+| --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
 | ![Recycle Bin](public/screenshots/01_Admin/03_Appointments/recycle_bin_light.png) | ![Recycle Bin Dark](public/screenshots/01_Admin/03_Appointments/recycle_bin_dark.png) |
 
 </details>
@@ -237,14 +245,14 @@ Replaces paper appointment books, phone scheduling, and Excel patient records wi
 
 **Patient List**
 
-| Light | Dark |
-|---|---|
+| Light                                                                             | Dark                                                                                  |
+| --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
 | ![Patients List](public/screenshots/01_Admin/04_Patients/patients_list_light.png) | ![Patients List Dark](public/screenshots/01_Admin/04_Patients/patients_list_dark.png) |
 
 **Archive & Trash**
 
-| Archive (Dark) | Trash Light | Trash Dark |
-|---|---|---|
+| Archive (Dark)                                                                | Trash Light                                                                | Trash Dark                                                                     |
+| ----------------------------------------------------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
 | ![Archive](public/screenshots/01_Admin/04_Patients/patients_archive_dark.png) | ![Trash](public/screenshots/01_Admin/04_Patients/patients_trash_light.png) | ![Trash Dark](public/screenshots/01_Admin/04_Patients/patients_trash_dark.png) |
 
 **Patient Profile**
@@ -253,32 +261,32 @@ Replaces paper appointment books, phone scheduling, and Excel patient records wi
 
 **New Patient Form**
 
-| Light | Dark |
-|---|---|
+| Light                                                                              | Dark                                                                                   |
+| ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | ![New Patient](public/screenshots/01_Admin/04_Patients/new_patient_form_light.png) | ![New Patient Dark](public/screenshots/01_Admin/04_Patients/new_patient_form_dark.png) |
 
 **Patient Appointments Report**
 
-| Light | Dark |
-|---|---|
+| Light                                                                                                 | Dark                                                                                                      |
+| ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
 | ![Appointments Report](public/screenshots/01_Admin/04_Patients/patient_appointments_report_light.png) | ![Appointments Report Dark](public/screenshots/01_Admin/04_Patients/patient_appointments_report_dark.png) |
 
 **Patient Follow-up Report**
 
-| Light | Dark |
-|---|---|
+| Light                                                                                          | Dark                                                                                               |
+| ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
 | ![Follow-up Report](public/screenshots/01_Admin/04_Patients/patient_followup_report_light.png) | ![Follow-up Report Dark](public/screenshots/01_Admin/04_Patients/patient_followup_report_dark.png) |
 
 **Medical Notes**
 
-| Light | Dark |
-|---|---|
+| Light                                                                                     | Dark                                                                                          |
+| ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | ![Medical Notes](public/screenshots/01_Admin/04_Patients/patient_medical_notes_light.png) | ![Medical Notes Dark](public/screenshots/01_Admin/04_Patients/patient_medical_notes_dark.png) |
 
 **Add Deposit Modal**
 
-| Light | Dark |
-|---|---|
+| Light                                                                               | Dark                                                                                    |
+| ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | ![Add Deposit](public/screenshots/01_Admin/04_Patients/add_deposit_modal_light.png) | ![Add Deposit Dark](public/screenshots/01_Admin/04_Patients/add_deposit_modal_dark.png) |
 
 </details>
@@ -288,14 +296,14 @@ Replaces paper appointment books, phone scheduling, and Excel patient records wi
 
 **Follow-ups Page**
 
-| Light | Dark |
-|---|---|
+| Light                                                                            | Dark                                                                                 |
+| -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
 | ![Follow-ups](public/screenshots/01_Admin/05_Followups/followups_page_light.png) | ![Follow-ups Dark](public/screenshots/01_Admin/05_Followups/followups_page_dark.png) |
 
 **Edit Follow-up Modal**
 
-| Light | Dark |
-|---|---|
+| Light                                                                                     | Dark                                                                                          |
+| ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | ![Edit Follow-up](public/screenshots/01_Admin/05_Followups/edit_followup_modal_light.png) | ![Edit Follow-up Dark](public/screenshots/01_Admin/05_Followups/edit_followup_modal_dark.png) |
 
 </details>
@@ -312,26 +320,26 @@ Replaces paper appointment books, phone scheduling, and Excel patient records wi
 
 **Staff List**
 
-| Light | Dark |
-|---|---|
+| Light                                                                       | Dark                                                                            |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
 | ![Staff List](public/screenshots/01_Admin/07_Settings/staff_list_light.png) | ![Staff List Dark](public/screenshots/01_Admin/07_Settings/staff_list_dark.png) |
 
 **Staff Profile**
 
-| Light | Dark |
-|---|---|
+| Light                                                                                   | Dark                                                                                        |
+| --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
 | ![Staff Profile](public/screenshots/01_Admin/07_Settings/staff_profile_admin_light.png) | ![Staff Profile Dark](public/screenshots/01_Admin/07_Settings/staff_profile_admin_dark.png) |
 
 **Staff Documents**
 
-| Light | Dark |
-|---|---|
+| Light                                                                                       | Dark                                                                                            |
+| ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | ![Staff Documents](public/screenshots/01_Admin/07_Settings/staff_documents_admin_light.png) | ![Staff Documents Dark](public/screenshots/01_Admin/07_Settings/staff_documents_admin_dark.png) |
 
 **Staff Schedule**
 
-| Light | Dark |
-|---|---|
+| Light                                                                                      | Dark                                                                                           |
+| ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
 | ![Staff Schedule](public/screenshots/01_Admin/07_Settings/staff_schedule_doctor_light.png) | ![Staff Schedule Dark](public/screenshots/01_Admin/07_Settings/staff_schedule_doctor_dark.png) |
 
 </details>
@@ -341,32 +349,32 @@ Replaces paper appointment books, phone scheduling, and Excel patient records wi
 
 **Departments**
 
-| Light | Dark |
-|---|---|
+| Light                                                                         | Dark                                                                              |
+| ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | ![Departments](public/screenshots/01_Admin/07_Settings/departments_light.png) | ![Departments Dark](public/screenshots/01_Admin/07_Settings/departments_dark.png) |
 
 **Insurance Providers**
 
-| Light | Dark |
-|---|---|
+| Light                                                                               | Dark                                                                                    |
+| ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | ![Insurance](public/screenshots/01_Admin/07_Settings/insurance_providers_light.png) | ![Insurance Dark](public/screenshots/01_Admin/07_Settings/insurance_providers_dark.png) |
 
 **Services & Pricing**
 
-| Light | Dark |
-|---|---|
+| Light                                                                           | Dark                                                                                |
+| ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
 | ![Services](public/screenshots/01_Admin/07_Settings/services_pricing_light.png) | ![Services Dark](public/screenshots/01_Admin/07_Settings/services_pricing_dark.png) |
 
 **Clinic Info**
 
-| Light | Dark |
-|---|---|
+| Light                                                                         | Dark                                                                              |
+| ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | ![Clinic Info](public/screenshots/01_Admin/07_Settings/clinic_info_light.png) | ![Clinic Info Dark](public/screenshots/01_Admin/07_Settings/clinic_info_dark.png) |
 
 **Page Visibility Customization**
 
-| Light | Dark |
-|---|---|
+| Light                                                                                | Dark                                                                                     |
+| ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
 | ![Customize](public/screenshots/01_Admin/07_Settings/customize_visibility_light.png) | ![Customize Dark](public/screenshots/01_Admin/07_Settings/customize_visibility_dark.png) |
 
 </details>
@@ -374,9 +382,71 @@ Replaces paper appointment books, phone scheduling, and Excel patient records wi
 <details>
 <summary>My Profile</summary>
 
-| Light | Dark |
-|---|---|
+| Light                                                                         | Dark                                                                              |
+| ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | ![My Profile](public/screenshots/01_Admin/08_My_Profile/my_profile_light.png) | ![My Profile Dark](public/screenshots/01_Admin/08_My_Profile/my_profile_dark.png) |
+
+</details>
+<details>
+<summary>Reports</summary>
+
+**Reports Overview**
+
+| Light                                                              | Dark                                                                   |
+| ------------------------------------------------------------------ | ---------------------------------------------------------------------- |
+| ![Reports Overview](SCREENS/01_Reports/reports_overview_light.png) | ![Reports Overview Dark](SCREENS/01_Reports/reports_overview_dark.png) |
+
+**Revenue Report**
+
+| Light                                                                | Dark                                                                     |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| ![Revenue Report](SCREENS/01_Reports/report_revenue_sales_light.png) | ![Revenue Report Dark](SCREENS/01_Reports/report_revenue_sales_dark.png) |
+
+**Doctor Performance Report**
+
+| Light                                                                    | Dark                                                                         |
+| ------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
+| ![Doctor Report](SCREENS/01_Reports/report_doctor_performance_light.png) | ![Doctor Report Dark](SCREENS/01_Reports/report_doctor_performance_dark.png) |
+
+**Receptionist Performance Report**
+
+| Light                                                                                | Dark                                                                                     |
+| ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| ![Receptionist Report](SCREENS/01_Reports/report_receptionist_performance_light.png) | ![Receptionist Report Dark](SCREENS/01_Reports/report_receptionist_performance_dark.png) |
+
+**Cancellation Report**
+
+| Light                                                                    | Dark                                                                         |
+| ------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
+| ![Cancellation Report](SCREENS/01_Reports/report_cancellation_light.png) | ![Cancellation Report Dark](SCREENS/01_Reports/report_cancellation_dark.png) |
+
+**No-show Report**
+
+| Light                                                         | Dark                                                              |
+| ------------------------------------------------------------- | ----------------------------------------------------------------- |
+| ![No-show Report](SCREENS/01_Reports/report_noshow_light.png) | ![No-show Report Dark](SCREENS/01_Reports/report_noshow_dark.png) |
+
+**Follow-ups Report**
+
+| Light                                                              | Dark                                                                   |
+| ------------------------------------------------------------------ | ---------------------------------------------------------------------- |
+| ![Followups Report](SCREENS/01_Reports/report_followups_light.png) | ![Followups Report Dark](SCREENS/01_Reports/report_followups_dark.png) |
+
+</details>
+
+<details>
+<summary>Settings — Package Templates</summary>
+
+| Light                                                              | Dark                                                             |
+| ------------------------------------------------------------------ | ---------------------------------------------------------------- |
+| ![Packages Light](SCREENS/02_Settings/settings_packages_light.png) | ![Packages Dark](SCREENS/02_Settings/settings_packages_dark.png) |
+
+</details>
+
+<details>
+<summary>Appointments — Arrived Status</summary>
+
+![Arrived Appointment](SCREENS/03_Appointments/appointment_card_arrived_dark.png)
 
 </details>
 
@@ -384,21 +454,21 @@ Replaces paper appointment books, phone scheduling, and Excel patient records wi
 
 ## Tech Stack
 
-| Layer | Technology |
-|---|---|
-| Framework | Next.js 16.2.4 (App Router) |
-| Language | TypeScript — strict mode |
-| Database | Supabase Postgres |
-| Auth | Supabase Auth + `@supabase/ssr` |
-| Storage | Supabase Storage |
-| Styling | Tailwind CSS + shadcn/ui |
-| Forms | React Hook Form + Zod v4 |
-| Tables | TanStack Table v8 |
-| Charts | Recharts |
-| Error Tracking | Sentry (optional) |
-| Email | Resend |
-| Testing | Vitest v4 + Playwright 1.59 |
-| Deployment | Vercel |
+| Layer          | Technology                      |
+| -------------- | ------------------------------- |
+| Framework      | Next.js 16.2.4 (App Router)     |
+| Language       | TypeScript — strict mode        |
+| Database       | Supabase Postgres               |
+| Auth           | Supabase Auth + `@supabase/ssr` |
+| Storage        | Supabase Storage                |
+| Styling        | Tailwind CSS + shadcn/ui        |
+| Forms          | React Hook Form + Zod v4        |
+| Tables         | TanStack Table v8               |
+| Charts         | Recharts                        |
+| Error Tracking | Sentry (optional)               |
+| Email          | Resend                          |
+| Testing        | Vitest v4 + Playwright 1.59     |
+| Deployment     | Vercel                          |
 
 ---
 
@@ -436,12 +506,12 @@ Browser
 
 ## User Roles
 
-| Role | Dashboard | Patients | Appointments | Medical Notes | Revenue | Settings |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|
-| `admin` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `receptionist` | ✓ | ✓ | ✓ | — | — | — |
-| `doctor` | ✓ | ✓ | ✓ | ✓ | — | — |
-| `manager` | ✓ | — | — | — | ✓ | — |
+| Role           | Dashboard | Patients | Appointments | Medical Notes | Revenue | Settings |
+| -------------- | :-------: | :------: | :----------: | :-----------: | :-----: | :------: |
+| `admin`        |     ✓     |    ✓     |      ✓       |       ✓       |    ✓    |    ✓     |
+| `receptionist` |     ✓     |    ✓     |      ✓       |       —       |    —    |    —     |
+| `doctor`       |     ✓     |    ✓     |      ✓       |       ✓       |    —    |    —     |
+| `manager`      |     ✓     |    —     |      —       |       —       |    ✓    |    —     |
 
 Admins can grant **per-user page visibility overrides** through Settings → Staff — allowing, for example, a receptionist to access revenue pages without a full role change.
 
@@ -465,12 +535,12 @@ Invalid status transitions are rejected at the database level. Appointments with
 
 Billing operations are handled by Postgres RPCs for atomicity:
 
-| RPC | Purpose |
-|---|---|
-| `complete_appointment_billing` | Direct payment — sets paid fields, records services, debits deposits, writes audit |
-| `complete_appointment_billing_with_previous_settlement` | Same as above + closes an outstanding insurance settlement |
-| `undo_appointment_billing` | Full reversal in a single transaction |
-| `undo_appointment_billing_with_previous_settlement` | Undo variant for settlement-linked appointments |
+| RPC                                                     | Purpose                                                                            |
+| ------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `complete_appointment_billing`                          | Direct payment — sets paid fields, records services, debits deposits, writes audit |
+| `complete_appointment_billing_with_previous_settlement` | Same as above + closes an outstanding insurance settlement                         |
+| `undo_appointment_billing`                              | Full reversal in a single transaction                                              |
+| `undo_appointment_billing_with_previous_settlement`     | Undo variant for settlement-linked appointments                                    |
 
 ### Follow-ups
 
@@ -495,6 +565,7 @@ Staff are invited via email tokens. Admins can assign roles, set department memb
 The reports module provides filterable appointment reports with expandable detail rows. Reports can be printed or exported — the print preview renders a clean, clinic-branded layout stripped of navigation chrome.
 
 Available filters:
+
 - Date range
 - Doctor
 - Status (`pending`, `confirmed`, `completed`, `cancelled`, `no_show`)
@@ -594,14 +665,14 @@ Open [http://localhost:3000](http://localhost:3000) — the root redirects to `/
 
 ### Environment Variables
 
-| Variable | Required | Purpose |
-|---|:---:|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | ✓ | Supabase project URL |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | ✓ | Supabase public anon key |
-| `SUPABASE_SERVICE_ROLE_KEY` | ✓ | Service role key — server-only, never expose to browser |
-| `NEXT_PUBLIC_SENTRY_DSN` | — | Sentry DSN; Sentry is a no-op if omitted |
-| `SENTRY_AUTH_TOKEN` | — | Source map upload during build (optional) |
-| `RESEND_API_KEY` | — | Transactional email |
+| Variable                        | Required | Purpose                                                 |
+| ------------------------------- | :------: | ------------------------------------------------------- |
+| `NEXT_PUBLIC_SUPABASE_URL`      |    ✓     | Supabase project URL                                    |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` |    ✓     | Supabase public anon key                                |
+| `SUPABASE_SERVICE_ROLE_KEY`     |    ✓     | Service role key — server-only, never expose to browser |
+| `NEXT_PUBLIC_SENTRY_DSN`        |    —     | Sentry DSN; Sentry is a no-op if omitted                |
+| `SENTRY_AUTH_TOKEN`             |    —     | Source map upload during build (optional)               |
+| `RESEND_API_KEY`                |    —     | Transactional email                                     |
 
 ---
 

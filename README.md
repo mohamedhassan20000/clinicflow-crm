@@ -469,11 +469,7 @@ Replaces paper appointment books, phone scheduling, and Excel patient records wi
 
 | Layer          | Technology                      |
 | -------------- | ------------------------------- |
-<<<<<<< HEAD
 | Framework      | Next.js 16.2.6 (App Router)     |
-=======
-| Framework      | Next.js 16.2.4 (App Router)     |
->>>>>>> 98412acca29b451bf8c5b82e116b1fffb94194d1
 | Language       | TypeScript — strict mode        |
 | Database       | Supabase Postgres               |
 | Auth           | Supabase Auth + `@supabase/ssr` |
@@ -523,21 +519,12 @@ Browser
 
 ## User Roles
 
-<<<<<<< HEAD
 | Role           | Dashboard | Patients | Appointments | Medical Notes | Revenue | Reports | Settings |
 | -------------- | :-------: | :------: | :----------: | :-----------: | :-----: | :-----: | :------: |
 | `admin`        |     ✓     |    ✓     |      ✓       |       ✓       |    ✓    |    ✓    |    ✓     |
 | `receptionist` |     ✓     |    ✓     |      ✓       |   read-only   |    —    |    ✓    |    —     |
 | `doctor`       |     ✓     |    ✓     |      ✓       |       ✓       |    —    |    —    |    —     |
 | `manager`      |     ✓     |    —     |      —       |       —       |    ✓    |    ✓    |    ✓     |
-=======
-| Role           | Dashboard | Patients | Appointments | Medical Notes | Revenue | Settings |
-| -------------- | :-------: | :------: | :----------: | :-----------: | :-----: | :------: |
-| `admin`        |     ✓     |    ✓     |      ✓       |       ✓       |    ✓    |    ✓     |
-| `receptionist` |     ✓     |    ✓     |      ✓       |       —       |    —    |    —     |
-| `doctor`       |     ✓     |    ✓     |      ✓       |       ✓       |    —    |    —     |
-| `manager`      |     ✓     |    —     |      —       |       —       |    ✓    |    —     |
->>>>>>> 98412acca29b451bf8c5b82e116b1fffb94194d1
 
 Doctor-facing performance reports (`/reports/doctors`, `/reports/receptionists`) are restricted to `admin` and `manager`. Admins can grant **per-user page visibility overrides** through Settings → Staff — allowing, for example, a receptionist to access revenue pages without a full role change.
 
@@ -561,7 +548,13 @@ pending ──► confirmed ──► arrived ──► in_session ──► com
 
 Reception can also charge a walk-in or same-day booking with a direct `pending → completed` shortcut. Backwards steps (`arrived → confirmed`, `in_session → arrived`) are routed through the `undo_appointment_status` RPC so slot uniqueness is preserved.
 
-Invalid status transitions are rejected at the database level. Appointments with any billing data (`paid_at`, `paid_amount`, `total_amount`) or that are currently `arrived` / `in_session` cannot be soft-deleted — preventing audit trail gaps and accidental loss of in-progress visits.
+# Invalid status transitions are rejected at the database level. Appointments with any billing data (`paid_at`, `paid_amount`, `total_amount`) or that are currently `arrived` / `in_session` cannot be soft-deleted — preventing audit trail gaps and accidental loss of in-progress visits.
+
+Reception can also charge a walk-in directly with `pending → completed`. Backwards steps (`arrived → confirmed`, `in_session → arrived`) are routed through the `undo_appointment_status` RPC so slot uniqueness is preserved.
+
+Invalid status transitions are rejected at the database level. Appointments with any billing data (`paid_at`, `paid_amount`, `total_amount`) cannot be soft-deleted — preventing audit trail gaps.
+
+> > > > > > > abdcc7f (Refresh README to match current implementation)
 
 ### Billing
 
@@ -600,23 +593,14 @@ Staff are invited via email tokens. Admins can assign roles, set department memb
 
 The reports module lives under `/reports` and is open to `admin`, `manager`, and `receptionist`. Each report is backed by a dedicated `security invoker` Postgres RPC scoped to the caller's clinic, so the same access rules that protect raw tables also protect the reports.
 
-<<<<<<< HEAD
-| Report | Route | Backing RPC | Access |
-| --- | --- | --- | :---: |
-| Cancellations | `/reports/cancellations` | `get_cancellation_report` | admin, manager, receptionist |
-| No-shows | `/reports/no-shows` | `get_no_show_report` | admin, manager, receptionist |
-| Doctor performance | `/reports/doctors` | `get_doctor_performance_report` | admin, manager |
-| Receptionist performance | `/reports/receptionists` | `get_receptionist_performance_report` | admin, manager |
-| Follow-ups | `/reports/follow-ups` | follow-ups dashboard query | admin, manager, receptionist |
-| Revenue summary | `/reports/revenue` | `revenue_summary` | admin, manager, receptionist |
-=======
-Available filters:
-
-- Date range
-- Doctor
-- Status (`pending`, `confirmed`, `completed`, `cancelled`, `no_show`)
-- Patient
->>>>>>> 98412acca29b451bf8c5b82e116b1fffb94194d1
+| Report                   | Route                    | Backing RPC                           |            Access            |
+| ------------------------ | ------------------------ | ------------------------------------- | :--------------------------: |
+| Cancellations            | `/reports/cancellations` | `get_cancellation_report`             | admin, manager, receptionist |
+| No-shows                 | `/reports/no-shows`      | `get_no_show_report`                  | admin, manager, receptionist |
+| Doctor performance       | `/reports/doctors`       | `get_doctor_performance_report`       |        admin, manager        |
+| Receptionist performance | `/reports/receptionists` | `get_receptionist_performance_report` |        admin, manager        |
+| Follow-ups               | `/reports/follow-ups`    | follow-ups dashboard query            | admin, manager, receptionist |
+| Revenue summary          | `/reports/revenue`       | `revenue_summary`                     | admin, manager, receptionist |
 
 Each report has a date-range filter and report-specific filters (doctor, outcome, etc.). A **Print** action on every report opens a clinic-branded print layout stripped of navigation chrome.
 

@@ -35,6 +35,8 @@ interface MedicalNotesListProps {
   patientId: string;
   currentUserId: string;
   canManageAllAttachments: boolean;
+  canMutateNotes?: boolean;
+  canUploadAttachments?: boolean;
 }
 
 export function MedicalNotesList({
@@ -42,6 +44,8 @@ export function MedicalNotesList({
   patientId,
   currentUserId,
   canManageAllAttachments,
+  canMutateNotes = true,
+  canUploadAttachments = true,
 }: MedicalNotesListProps) {
   const router = useRouter();
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
@@ -78,33 +82,35 @@ export function MedicalNotesList({
                 })}
               </time>
             </div>
-            <div className="flex items-center gap-1 print:hidden">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-7 gap-1 px-2 text-xs"
-                disabled={isPending}
-                onClick={() => {
-                  setEditingId(note.id);
-                  setDraft(note.note);
-                }}
-              >
-                <Pencil className="h-3.5 w-3.5" />
-                Edit
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-7 gap-1 px-2 text-xs text-destructive hover:text-destructive"
-                disabled={isPending}
-                onClick={() => setConfirmDeleteId(note.id)}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                Delete
-              </Button>
-            </div>
+            {canMutateNotes && (
+              <div className="flex items-center gap-1 print:hidden">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 gap-1 px-2 text-xs"
+                  disabled={isPending}
+                  onClick={() => {
+                    setEditingId(note.id);
+                    setDraft(note.note);
+                  }}
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                  Edit
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 gap-1 px-2 text-xs text-destructive hover:text-destructive"
+                  disabled={isPending}
+                  onClick={() => setConfirmDeleteId(note.id)}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Delete
+                </Button>
+              </div>
+            )}
           </div>
           {editingId === note.id ? (
             <div className="space-y-2">
@@ -156,6 +162,7 @@ export function MedicalNotesList({
             noteAuthorId={note.created_by}
             currentUserId={currentUserId}
             canManageAllAttachments={canManageAllAttachments}
+            canUploadAttachments={canUploadAttachments}
             initialAttachments={note.attachments ?? []}
           />
         </div>

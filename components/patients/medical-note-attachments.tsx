@@ -65,6 +65,7 @@ interface MedicalNoteAttachmentsProps {
   noteAuthorId: string | null;
   currentUserId: string;
   canManageAllAttachments: boolean;
+  canUploadAttachments?: boolean;
   initialAttachments: MedicalNoteAttachmentItem[];
 }
 
@@ -74,6 +75,7 @@ export function MedicalNoteAttachments({
   noteAuthorId,
   currentUserId,
   canManageAllAttachments,
+  canUploadAttachments = true,
   initialAttachments,
 }: MedicalNoteAttachmentsProps) {
   const [attachments, setAttachments] = useState(initialAttachments);
@@ -83,9 +85,10 @@ export function MedicalNoteAttachments({
 
   function canDelete(attachment: MedicalNoteAttachmentItem) {
     return (
-      canManageAllAttachments ||
-      attachment.uploadedById === currentUserId ||
-      noteAuthorId === currentUserId
+      canUploadAttachments &&
+      (canManageAllAttachments ||
+        attachment.uploadedById === currentUserId ||
+        noteAuthorId === currentUserId)
     );
   }
 
@@ -180,29 +183,33 @@ export function MedicalNoteAttachments({
             {attachments.length !== 1 ? "s" : ""}
           </span>
         </div>
-        <input
-          ref={inputRef}
-          type="file"
-          aria-label="Upload medical note attachment"
-          accept={ACCEPTED_ATTACHMENTS}
-          className="hidden"
-          onChange={onUpload}
-        />
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-7 gap-1.5 px-2 text-xs"
-          disabled={isPending}
-          onClick={() => inputRef.current?.click()}
-        >
-          {pendingKey === "upload" ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <Upload className="h-3.5 w-3.5" />
-          )}
-          Attach file
-        </Button>
+        {canUploadAttachments && (
+          <>
+            <input
+              ref={inputRef}
+              type="file"
+              aria-label="Upload medical note attachment"
+              accept={ACCEPTED_ATTACHMENTS}
+              className="hidden"
+              onChange={onUpload}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 gap-1.5 px-2 text-xs"
+              disabled={isPending}
+              onClick={() => inputRef.current?.click()}
+            >
+              {pendingKey === "upload" ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Upload className="h-3.5 w-3.5" />
+              )}
+              Attach file
+            </Button>
+          </>
+        )}
       </div>
 
       {attachments.length > 0 && (

@@ -112,8 +112,11 @@ export default async function PatientDetailPage({ params }: PageProps) {
 
   const isDoctor = user.role === "doctor";
   const isAdmin = user.role === "admin";
+  const isReceptionist = user.role === "receptionist";
+  const canManageMedicalNotes = isAdmin || isDoctor;
+  const canViewMedicalNotes = canManageMedicalNotes || isReceptionist;
   const canViewDocuments =
-    (isAdmin || user.role === "receptionist") && !patient.is_deleted;
+    (isAdmin || isReceptionist) && !patient.is_deleted;
   const doctorCanAccessPatient =
     patient.assigned_doctor_id === user.id ||
     (!!user.departmentId && patient.department_id === user.departmentId);
@@ -209,7 +212,7 @@ export default async function PatientDetailPage({ params }: PageProps) {
   const noteIds = noteRows.map((note) => note.id);
   const attachmentsByNote = new Map<string, MedicalNoteAttachmentItem[]>();
 
-  if ((isAdmin || isDoctor) && noteIds.length > 0) {
+  if (canViewMedicalNotes && noteIds.length > 0) {
     const { data: attachmentRows } = await supabase
       .from("medical_note_attachments")
       .select(
@@ -713,7 +716,7 @@ export default async function PatientDetailPage({ params }: PageProps) {
               <span className="text-xs text-muted-foreground">
                 {notes?.length ?? 0} note{notes?.length !== 1 ? "s" : ""}
               </span>
-              {(isAdmin || isDoctor) && (
+              {canViewMedicalNotes && (
                 <Button asChild variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs">
                   <Link href={`/patients/${id}/medical-notes-report`}>
                     <FileText className="h-3 w-3" />
@@ -724,24 +727,26 @@ export default async function PatientDetailPage({ params }: PageProps) {
             </div>
           </div>
 
-          {(isAdmin || isDoctor) && !patient.is_deleted && (
+          {canManageMedicalNotes && !patient.is_deleted && (
             <div className="rounded-xl border border-border/50 bg-card p-4">
               <NoteComposer patientId={id} />
             </div>
           )}
 
-          {!isAdmin && !isDoctor && (
+          {!canViewMedicalNotes && (
             <div className="rounded-lg border border-border/30 bg-muted/20 px-4 py-3 text-xs text-muted-foreground">
-              Medical notes are visible to admins and doctors only.
+              Medical notes are visible to clinical and reception staff only.
             </div>
           )}
 
-          {(isAdmin || isDoctor) && (
+          {canViewMedicalNotes && (
             <MedicalNotesList
               notes={notesWithAttachments}
               patientId={id}
               currentUserId={user.id}
               canManageAllAttachments={isAdmin}
+              canMutateNotes={canManageMedicalNotes}
+              canUploadAttachments={canManageMedicalNotes}
             />
           )}
         </div>

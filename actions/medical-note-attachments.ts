@@ -206,7 +206,7 @@ export async function listMedicalNoteAttachments(
   patientId: string,
   noteId: string,
 ): Promise<MedicalNoteAttachmentResult<MedicalNoteAttachmentItem[]>> {
-  const user = await requireRole(["admin", "doctor"]);
+  const user = await requireRole(["admin", "doctor", "receptionist"]);
   const supabase = await createClient();
   const note = await getAccessibleNote(supabase, noteId, patientId);
   if (!note) return { error: "Medical note not found." };
@@ -296,7 +296,7 @@ export async function getMedicalNoteAttachmentSignedUrl(
   noteId: string,
   attachmentId: string,
 ): Promise<MedicalNoteAttachmentResult<{ url: string }>> {
-  const user = await requireRole(["admin", "doctor"]);
+  const user = await requireRole(["admin", "doctor", "receptionist"]);
   const supabase = await createClient();
 
   const note = await getAccessibleNote(supabase, noteId, patientId);

@@ -464,7 +464,6 @@
   body[data-printing] [data-report-section] {
     display: none !important;
   }
-  body[data-printing="all"] [data-report-section],
   body[data-printing="cancellation"] [data-report-section="cancellation"],
   body[data-printing="no-show"] [data-report-section="no-show"],
   body[data-printing="revenue"] [data-report-section="revenue"],

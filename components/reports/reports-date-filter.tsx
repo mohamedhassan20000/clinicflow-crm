@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTransition } from "react";
 import { CalendarDays } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,7 @@ const PRESETS: { value: ReportDateRangePreset; label: string }[] = [
 
 export function ReportsDateFilter({ range }: { range: ReportDateRange }) {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const [, startTransition] = useTransition();
 
@@ -28,7 +29,7 @@ export function ReportsDateFilter({ range }: { range: ReportDateRange }) {
       else params.set(key, value);
     }
     const qs = params.toString();
-    startTransition(() => router.push(qs ? `/reports?${qs}` : "/reports"));
+    startTransition(() => router.push(qs ? `${pathname}?${qs}` : pathname));
   }
 
   function setPreset(preset: ReportDateRangePreset) {

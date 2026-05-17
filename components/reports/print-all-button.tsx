@@ -4,7 +4,6 @@ import { Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export type ReportPrintSection =
-  | "all"
   | "cancellation"
   | "no-show"
   | "revenue"
@@ -29,20 +28,11 @@ export function printReportSection(section: ReportPrintSection) {
   });
 }
 
-export function PrintAllButton() {
-  return (
-    <Button type="button" onClick={() => printReportSection("all")} className="print:hidden">
-      <Printer className="h-4 w-4" aria-hidden />
-      Print all
-    </Button>
-  );
-}
-
 export function PrintSectionButton({
   section,
   label = "Print",
 }: {
-  section: Exclude<ReportPrintSection, "all">;
+  section: ReportPrintSection;
   label?: string;
 }) {
   return (

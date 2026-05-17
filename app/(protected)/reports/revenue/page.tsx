@@ -1,0 +1,64 @@
+import type { Metadata } from "next";
+import { requireRole } from "@/lib/rbac";
+import {
+  ALL_FILTER_VALUE,
+  cleanFilter,
+  getClinicPrintMeta,
+  getDepartmentOptions,
+  getDoctorOptions,
+  getRevenueSummaryData,
+  resolveReportsRange,
+  type ReportsSearchParams,
+} from "@/lib/reports/data";
+import { ReportPageHeader } from "@/components/reports/report-page-header";
+import { ReportSelectFilter } from "@/components/reports/report-select-filter";
+import { ReportsDateFilter } from "@/components/reports/reports-date-filter";
+import { RevenueSummaryReport } from "@/components/reports/revenue-summary-report";
+
+export const metadata: Metadata = { title: "Revenue / Sales Report" };
+
+type PageProps = {
+  searchParams: Promise<ReportsSearchParams>;
+};
+
+export default async function RevenueReportPage({ searchParams }: PageProps) {
+  const user = await requireRole(["admin", "manager", "receptionist"]);
+  const sp = await searchParams;
+  const range = resolveReportsRange(sp);
+  const doctorId = cleanFilter(sp.doctor);
+  const departmentId = cleanFilter(sp.department);
+
+  const [clinic, doctors, departments, data] = await Promise.all([
+    getClinicPrintMeta(user),
+    getDoctorOptions(user),
+    getDepartmentOptions(user),
+    getRevenueSummaryData(range, doctorId, departmentId),
+  ]);
+
+  return (
+    <div className="space-y-6">
+      <ReportPageHeader
+        title="Revenue / Sales Report"
+        description="Collected payments, deposits, settlements, and outstanding balances."
+      />
+      <ReportsDateFilter range={range} />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <ReportSelectFilter
+          name="doctor"
+          label="Doctor"
+          value={doctorId ?? ALL_FILTER_VALUE}
+          allLabel="All doctors"
+          options={doctors}
+        />
+        <ReportSelectFilter
+          name="department"
+          label="Department"
+          value={departmentId ?? ALL_FILTER_VALUE}
+          allLabel="All departments"
+          options={departments}
+        />
+      </div>
+      <RevenueSummaryReport data={data} range={range} clinic={clinic} />
+    </div>
+  );
+}

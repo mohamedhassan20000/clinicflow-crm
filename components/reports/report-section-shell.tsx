@@ -21,7 +21,7 @@ export function ReportSectionShell({
   clinic,
   children,
 }: {
-  section: Exclude<ReportPrintSection, "all">;
+  section: ReportPrintSection;
   title: string;
   description: string;
   rangeLabel: string;
@@ -35,7 +35,7 @@ export function ReportSectionShell({
         clinicAddress={clinic.clinicAddress}
         clinicPhone={clinic.clinicPhone}
         logoUrl={clinic.clinicLogoUrl}
-        documentName="Reports"
+        documentName={title}
         generatedAt={clinic.generatedAt}
       />
       <Card className="rounded-xl border border-border/50 shadow-sm print:rounded-none print:border-none print:shadow-none">

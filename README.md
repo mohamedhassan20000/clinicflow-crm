@@ -554,8 +554,6 @@ Reception can also charge a walk-in directly with `pending → completed`. Backw
 
 Invalid status transitions are rejected at the database level. Appointments with any billing data (`paid_at`, `paid_amount`, `total_amount`) cannot be soft-deleted — preventing audit trail gaps.
 
-> > > > > > > abdcc7f (Refresh README to match current implementation)
-
 ### Billing
 
 Billing operations are handled by Postgres RPCs for atomicity:

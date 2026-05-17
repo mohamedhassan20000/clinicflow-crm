@@ -43,7 +43,8 @@ Replaces paper appointment books, phone scheduling, and Excel patient records wi
 
 - Day, week, and month calendar views
 - Conflict handling for confirmed appointments with pending overlap and displacement support
-- Database-enforced appointment status state machine (`pending → confirmed → completed / cancelled / no-show`)
+- Database-enforced appointment status state machine (`pending → confirmed → arrived → in_session → completed`, with `cancelled` / `no_show` exits and reception walk-in shortcut `pending → completed`)
+- In-visit tracking (`arrived`, `in_session`) with safe back-steps via `undo_appointment_status`
 - Appointment detail modal with inline status transitions
 
 **Billing & Revenue**
@@ -64,7 +65,19 @@ Replaces paper appointment books, phone scheduling, and Excel patient records wi
 
 - Doctor-authored clinical notes per patient
 - File attachments per note
-- Author and role-scoped access control
+- Role-scoped access (doctors see notes for patients they authored, are assigned to, or share a department with; receptionists have read/print access; admins see all)
+
+**Patient Packages**
+
+- Multi-session packages tracked per patient with used/total session counts
+- Reusable per-department package templates under `Settings → Packages`
+- Appointments link to a specific package and session number
+
+**Operational Reports**
+
+- Cancellations, no-shows, doctor performance, receptionist performance, follow-ups, and revenue summary
+- Backed by `security invoker` Postgres RPCs scoped to the caller's clinic
+- Print-ready layouts with clinic branding
 
 **Role-Scoped Dashboards**
 
@@ -456,7 +469,7 @@ Replaces paper appointment books, phone scheduling, and Excel patient records wi
 
 | Layer          | Technology                      |
 | -------------- | ------------------------------- |
-| Framework      | Next.js 16.2.4 (App Router)     |
+| Framework      | Next.js 16.2.6 (App Router)     |
 | Language       | TypeScript — strict mode        |
 | Database       | Supabase Postgres               |
 | Auth           | Supabase Auth + `@supabase/ssr` |
@@ -496,7 +509,7 @@ Browser
 
 **Key design points:**
 
-- **RLS as primary guard** — Row-Level Security on all 18 tables is the outermost security layer. Middleware and server-side RBAC are secondary.
+- **RLS as primary guard** — Row-Level Security on all 23 tables is the outermost security layer. Middleware and server-side RBAC are secondary.
 - **Server Actions only** — all mutations go through Next.js Server Actions. No writable API routes exist.
 - **Session caching** — a `cf_page_visibility` cookie (httpOnly, 1h TTL) caches accessible page slugs to avoid a DB round-trip on every navigation.
 - **Postgres-native billing** — billing RPCs are `SECURITY DEFINER` functions so they are atomic and cannot partially succeed.
@@ -506,14 +519,14 @@ Browser
 
 ## User Roles
 
-| Role           | Dashboard | Patients | Appointments | Medical Notes | Revenue | Settings |
-| -------------- | :-------: | :------: | :----------: | :-----------: | :-----: | :------: |
-| `admin`        |     ✓     |    ✓     |      ✓       |       ✓       |    ✓    |    ✓     |
-| `receptionist` |     ✓     |    ✓     |      ✓       |       —       |    —    |    —     |
-| `doctor`       |     ✓     |    ✓     |      ✓       |       ✓       |    —    |    —     |
-| `manager`      |     ✓     |    —     |      —       |       —       |    ✓    |    —     |
+| Role           | Dashboard | Patients | Appointments | Medical Notes | Revenue | Reports | Settings |
+| -------------- | :-------: | :------: | :----------: | :-----------: | :-----: | :-----: | :------: |
+| `admin`        |     ✓     |    ✓     |      ✓       |       ✓       |    ✓    |    ✓    |    ✓     |
+| `receptionist` |     ✓     |    ✓     |      ✓       |   read-only   |    —    |    ✓    |    —     |
+| `doctor`       |     ✓     |    ✓     |      ✓       |       ✓       |    —    |    —    |    —     |
+| `manager`      |     ✓     |    —     |      —       |       —       |    ✓    |    ✓    |    ✓     |
 
-Admins can grant **per-user page visibility overrides** through Settings → Staff — allowing, for example, a receptionist to access revenue pages without a full role change.
+Doctor-facing performance reports (`/reports/doctors`, `/reports/receptionists`) are restricted to `admin` and `manager`. Admins can grant **per-user page visibility overrides** through Settings → Staff — allowing, for example, a receptionist to access revenue pages without a full role change.
 
 ---
 
@@ -521,15 +534,21 @@ Admins can grant **per-user page visibility overrides** through Settings → Sta
 
 ### Appointments
 
-The appointment lifecycle is enforced by a database-level trigger:
+The appointment lifecycle is enforced by a database-level trigger (`enforce_appointment_transition`):
 
 ```
-pending ──► confirmed ──► completed
-   │             │
-   └──► cancelled ◄──► no_show
+pending ──► confirmed ──► arrived ──► in_session ──► completed
+   │            │            │             │
+   │            ├────────────┴─────────────┴──► cancelled
+   │            │            │             │
+   │            └────────────┴─────────────┴──► no_show
+   │
+   └──► cancelled
 ```
 
-Invalid status transitions are rejected at the database level. Appointments with any billing data (`paid_at`, `paid_amount`, `total_amount`) cannot be soft-deleted — preventing audit trail gaps.
+Reception can also charge a walk-in or same-day booking with a direct `pending → completed` shortcut. Backwards steps (`arrived → confirmed`, `in_session → arrived`) are routed through the `undo_appointment_status` RPC so slot uniqueness is preserved.
+
+Invalid status transitions are rejected at the database level. Appointments with any billing data (`paid_at`, `paid_amount`, `total_amount`) or that are currently `arrived` / `in_session` cannot be soft-deleted — preventing audit trail gaps and accidental loss of in-progress visits.
 
 ### Billing
 
@@ -548,11 +567,15 @@ Scheduled after appointments. Displayed in pending and completed views. Staff ca
 
 ### Medical Notes
 
-Doctor-authored notes attached to patient records. Each note can carry file attachments stored in Supabase Storage. Access is scoped to the note author and admin users.
+Doctor-authored notes attached to patient records. Each note can carry file attachments stored in Supabase Storage. RLS scopes read access to the note's author, doctors assigned to the patient, doctors in the same department, admins, and read-only access for receptionists; create/edit/delete remain admin- and doctor-only.
 
 ### Patient Management
 
-Every patient receives an auto-assigned file number (`CF-NNNN`). Soft-deleted patients go to a recycle bin with restore capability. The patient profile aggregates appointments, billing history, medical notes, and documents in a single view.
+Every patient receives an auto-assigned file number (`CF-NNNN`). Soft-deleted patients go to a recycle bin with restore capability. The patient profile aggregates appointments, billing history, medical notes, documents, and active packages in a single view.
+
+### Patient Packages
+
+Patients can hold multi-session packages tracked by `patient_packages` (with `total_sessions` / `used_sessions` and an optional per-session price). Admins and managers maintain reusable per-department package templates under `Settings → Packages`, and appointments may reference a specific package and session number.
 
 ### Staff Management
 
@@ -562,22 +585,24 @@ Staff are invited via email tokens. Admins can assign roles, set department memb
 
 ## Reports & Printing
 
-The reports module provides filterable appointment reports with expandable detail rows. Reports can be printed or exported — the print preview renders a clean, clinic-branded layout stripped of navigation chrome.
+The reports module lives under `/reports` and is open to `admin`, `manager`, and `receptionist`. Each report is backed by a dedicated `security invoker` Postgres RPC scoped to the caller's clinic, so the same access rules that protect raw tables also protect the reports.
 
-Available filters:
+| Report | Route | Backing RPC | Access |
+| --- | --- | --- | :---: |
+| Cancellations | `/reports/cancellations` | `get_cancellation_report` | admin, manager, receptionist |
+| No-shows | `/reports/no-shows` | `get_no_show_report` | admin, manager, receptionist |
+| Doctor performance | `/reports/doctors` | `get_doctor_performance_report` | admin, manager |
+| Receptionist performance | `/reports/receptionists` | `get_receptionist_performance_report` | admin, manager |
+| Follow-ups | `/reports/follow-ups` | follow-ups dashboard query | admin, manager, receptionist |
+| Revenue summary | `/reports/revenue` | `revenue_summary` | admin, manager, receptionist |
 
-- Date range
-- Doctor
-- Status (`pending`, `confirmed`, `completed`, `cancelled`, `no_show`)
-- Patient
-
-The print preview is triggered directly from the report view. Printed output includes clinic branding, patient name, service breakdown, and billing totals.
+Each report has a date-range filter and report-specific filters (doctor, outcome, etc.). A **Print** action on every report opens a clinic-branded print layout stripped of navigation chrome.
 
 ---
 
 ## Security
 
-- **RLS on all 18 tables** — `clinic_id` column on every core table, enforced by Row-Level Security. Cross-clinic data leakage is impossible at the database layer.
+- **RLS on all 23 tables** — `clinic_id` column on every core table, enforced by Row-Level Security. Cross-clinic data leakage is impossible at the database layer.
 - **HTTP security headers** — CSP, HSTS (`max-age=63072000; includeSubDomains; preload`), `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Permissions-Policy` — set globally in `next.config.ts`.
 - **Server Actions only** — no writable API routes. All mutations require a valid server-side session.
 - **Input validation** — Zod schemas validate all server action inputs before any database call. Invalid input returns field-level errors without touching the database.
@@ -686,13 +711,11 @@ The project deploys to **Vercel** as a Next.js App Router application. Vercel au
 
 **Supabase setup checklist:**
 
-- [ ] All 41 migrations applied (`supabase db push`)
+- [ ] All 50 migrations applied (`supabase db push`)
 - [ ] Email auth enabled in Authentication → Providers
 - [ ] Storage bucket `clinic-files` created with RLS policies
 - [ ] Admin account seeded
 - [ ] `SUPABASE_SERVICE_ROLE_KEY` not committed to git
-
-**Full pre-deploy checklist:** [docs/deployment-checklist.md](docs/deployment-checklist.md)
 
 ---
 
@@ -703,23 +726,21 @@ clinicflow-crm/
 ├── app/
 │   ├── (auth)/             ← Login, password reset, email confirmation
 │   └── (protected)/        ← All authenticated pages (role-gated)
-├── actions/                ← Server Actions — all mutations live here (14 files)
+├── actions/                ← Server Actions — all mutations live here (18 files)
 ├── components/             ← React components organized by domain
 ├── lib/
 │   ├── rbac.ts             ← Session validation & role enforcement
 │   ├── page-permissions.ts ← Role → accessible page slug mapping
 │   └── supabase/           ← Client factory functions (server / admin / client / middleware)
 ├── supabase/
-│   └── migrations/         ← 41 SQL migration files
+│   └── migrations/         ← 50 SQL migration files
 ├── tests/
 │   ├── unit/               ← Vitest — 270 tests, 46 files
 │   └── e2e/                ← Playwright specs
 ├── types/
 │   └── database.ts         ← Generated Supabase TypeScript types
-├── docs/
-│   ├── screenshots/        ← Organized UI screenshots by module
-│   ├── raw-screenshots/    ← Original unorganized screenshots
-│   └── deployment-checklist.md
+├── public/screenshots/     ← UI screenshots used in this README (admin, manager, reception, doctor)
+├── SCREENS/                ← Additional screenshots (reports, settings, in-visit statuses)
 ├── middleware.ts            ← Session refresh + page visibility guard
 └── next.config.ts          ← Security headers, Sentry config
 ```

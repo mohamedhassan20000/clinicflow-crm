@@ -10,11 +10,12 @@ ClinicFlow is a **staff-only** web-based management system for small-to-medium p
 
 Patients are data records only — they have no accounts, do not log in, and do not interact with the system in any way. All data entry and scheduling is performed exclusively by clinic staff.
 
-The system covers five core operations:
+The system covers six core operations:
 
 - Patient record management with soft-delete and file tracking
-- Appointment scheduling with conflict detection and billing
-- Role-scoped dashboards with clinic KPIs
+- Appointment scheduling with conflict detection, in-visit status tracking, and billing
+- Patient session packages with reusable per-department package templates
+- Role-scoped dashboards with clinic KPIs and operational reports
 - Insurance provider tracking and settlement workflows
 - Staff access management with per-user page visibility overrides
 
@@ -26,7 +27,7 @@ The system covers five core operations:
 
 | Layer | Technology |
 |---|---|
-| Framework | Next.js 16.2.4 (App Router) |
+| Framework | Next.js 16.2.6 (App Router) |
 | Runtime | React 19.2.4 |
 | Database | Supabase Postgres |
 | Auth | Supabase Auth |
@@ -65,12 +66,20 @@ app/
 │   │   └── new/
 │   ├── followups/
 │   ├── revenue/
+│   ├── reports/
+│   │   ├── cancellations/
+│   │   ├── no-shows/
+│   │   ├── doctors/
+│   │   ├── receptionists/
+│   │   ├── follow-ups/
+│   │   └── revenue/
 │   ├── profile/
 │   └── settings/
 │       ├── staff/
 │       ├── departments/
 │       ├── insurance/
 │       ├── services/
+│       ├── packages/
 │       ├── clinic/
 │       └── customize/
 ├── auth/confirm/      ← Supabase email confirmation callback
@@ -85,18 +94,22 @@ All data mutations are implemented as Next.js Server Actions in `actions/`. Ther
 actions/
 ├── appointments.ts          ← Scheduling, status transitions, billing, trash
 ├── auth.ts                  ← Login, logout, password reset
-├── doctor-dashboard.ts      ← Doctor-specific KPI queries
+├── doctor-dashboard.ts      ← Doctor-specific KPI and queue queries
 ├── followups.ts             ← Follow-up management
 ├── manager-dashboard.ts     ← Manager KPI queries
 ├── medical-note-attachments.ts
+├── package-templates.ts     ← Per-department reusable package templates
 ├── page-permissions.ts      ← Per-user page visibility overrides
 ├── patient-avatar.ts        ← Avatar upload/delete
 ├── patient-documents.ts     ← Document upload/delete
+├── patient-packages.ts      ← Patient session packages
 ├── patients.ts              ← Patient CRUD, file numbers, soft delete/restore
 ├── profile.ts               ← Profile updates, avatar
+├── receptionist-dashboard.ts ← Receptionist KPI and in-session board queries
 ├── settings.ts              ← Staff, departments, insurance, services, clinic
 ├── staff-files.ts           ← Staff document management
-└── theme.ts                 ← UI theme preference
+├── theme.ts                 ← UI theme preference
+└── time-slots.ts            ← Doctor availability and working-hour slot queries
 ```
 
 ---
@@ -113,12 +126,14 @@ actions/
 
 ### User Roles
 
-| Role | Dashboard | Patients | Appointments | Medical Notes | Revenue | Settings |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|
-| `admin` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `receptionist` | ✓ | ✓ | ✓ | — | — | — |
-| `doctor` | ✓ | ✓ | ✓ | ✓ | — | — |
-| `manager` | ✓ | — | — | — | ✓ | — |
+| Role | Dashboard | Patients | Appointments | Medical Notes | Revenue | Reports | Settings |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| `admin` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `receptionist` | ✓ | ✓ | ✓ | read-only | — | ✓ | — |
+| `doctor` | ✓ | ✓ | ✓ | ✓ | — | — | — |
+| `manager` | ✓ | — | — | — | ✓ | ✓ | ✓ |
+
+Receptionists can read and print medical notes for active patients in their clinic (enforced by RLS in `medical_notes_select_role_scoped`); creation, edit, and delete remain admin/doctor only. Doctors see medical notes for patients they authored, are assigned to, or who share their department.
 
 Admins can grant per-user page visibility overrides through Settings → Staff, allowing a receptionist to see revenue pages without a full role change.
 
@@ -138,11 +153,13 @@ Admins can grant per-user page visibility overrides through Settings → Staff, 
 
 ### Schema
 
-31 migrations under `supabase/migrations/`. The schema contains 16 tables:
+50 migrations under `supabase/migrations/`. The schema contains 23 public tables:
 
 | Table | Purpose |
 |---|---|
 | `clinics` | Clinic settings and branding |
+| `clinic_working_hours` | Weekly clinic operating hours |
+| `doctor_schedules` | Per-doctor working-hour overrides |
 | `profiles` | User accounts linked to Supabase Auth |
 | `patients` | Patient demographic records |
 | `appointments` | Appointment scheduling and billing |
@@ -151,13 +168,18 @@ Admins can grant per-user page visibility overrides through Settings → Staff, 
 | `departments` | Clinic departments with color coding |
 | `insurance_providers` | Insurance company records |
 | `medical_notes` | Doctor-authored clinical notes |
+| `medical_note_attachments` | File attachments per medical note |
 | `feedback` | Appointment feedback records |
 | `follow_ups` | Post-appointment follow-up scheduling |
 | `outstanding_settlements` | Insurance settlement tracking |
 | `patient_deposits` | Pre-paid deposit balances |
+| `patient_documents` | General patient file uploads |
+| `patient_packages` | Patient-purchased session packages |
+| `package_templates` | Reusable per-department package definitions |
 | `audit_logs` | Immutable log of all sensitive operations |
 | `staff_invitations` | Pending staff invite tokens |
 | `user_customizations` | Per-user UI preferences |
+| `user_page_permissions` | Per-user page visibility overrides |
 
 Every core table carries a `clinic_id` column for multi-tenant data isolation, enforced at the RLS layer.
 
@@ -176,12 +198,18 @@ Core Postgres helper functions (all `SECURITY DEFINER`, called only in RLS polic
 Transitions are enforced by a database-level trigger (`enforce_appointment_transition`):
 
 ```
-pending ──► confirmed ──► completed
-   │             │
-   └──► cancelled ◄──► no_show
+pending ──► confirmed ──► arrived ──► in_session ──► completed
+   │            │            │             │
+   │            ├────────────┴─────────────┴──► cancelled
+   │            │            │             │
+   │            └────────────┴─────────────┴──► no_show
+   │
+   └──► cancelled
 ```
 
-Invalid transitions (e.g. completed → pending) are rejected at the database level before any application logic runs.
+In addition, `pending` may transition directly to `completed` when reception charges a walk-in or same-day booking. `arrived` and `in_session` can also step back (`arrived → confirmed`, `in_session → arrived`) via the `undo_appointment_status` RPC, which preserves slot constraints. Terminal states (`completed`, `cancelled`, `no_show`) have no outgoing transitions.
+
+Invalid transitions (e.g. `completed → pending`) are rejected at the database level before any application logic runs.
 
 ### Key Database Functions / RPCs
 
@@ -192,6 +220,11 @@ Invalid transitions (e.g. completed → pending) are rejected at the database le
 | `complete_appointment_billing_with_previous_settlement(...)` | Billing variant that closes an outstanding insurance settlement |
 | `undo_appointment_billing(...)` | Reverses a completed billing in a single transaction |
 | `undo_appointment_billing_with_previous_settlement(...)` | Undo variant for settlement-linked appointments |
+| `undo_appointment_status(...)` | Steps an appointment back to a prior non-terminal status while preserving slot constraints |
+| `get_cancellation_report(...)` | Aggregates cancellation counts, reasons, and ratios for a date range |
+| `get_no_show_report(...)` | Aggregates no-show counts and rates per doctor for a date range |
+| `get_doctor_performance_report(...)` | Doctor throughput, completion, and cancellation metrics for a date range |
+| `get_receptionist_performance_report(...)` | Receptionist booking and confirmation metrics for a date range |
 
 ---
 
@@ -205,9 +238,14 @@ Invalid transitions (e.g. completed → pending) are rejected at the database le
 
 ### Status Transitions
 
-Staff update status via `AppointmentActions` component. Allowed transitions per role:
-- Receptionist/admin can move pending → confirmed, confirmed → completed, confirmed → cancelled
-- Completing an appointment opens the billing dialog
+Staff update status via the `AppointmentActions` component. The allowed graph is defined in `STATUS_TRANSITIONS` (`lib/validations/appointment.ts`) and enforced again by the database trigger:
+
+- `pending → confirmed | completed | cancelled`
+- `confirmed → arrived | completed | cancelled | no_show`
+- `arrived → in_session | completed | confirmed | cancelled | no_show`
+- `in_session → completed | arrived | cancelled | no_show`
+
+Receptionists and admins can drive the workflow through all of these states; completing an appointment opens the billing dialog. Backwards steps (`arrived → confirmed`, `in_session → arrived`) route through `undo_appointment_status` so slot uniqueness is preserved. Appointments in `arrived` or `in_session` are protected from deletion at the database level (`protect_in_visit_appointment_deletion`).
 
 ### Billing & Settlement
 
@@ -222,13 +260,13 @@ Appointment billing is handled by Postgres RPCs for atomicity:
 `softDeleteAppointment` enforces a hard block before soft-deleting:
 
 ```
-blocked if: status === "completed"
+blocked if: status IN ("completed", "arrived", "in_session")
          OR paid_at IS NOT NULL
          OR paid_amount > 0
          OR total_amount > 0
 ```
 
-Any appointment with billing data attached cannot be trashed. This prevents audit trail gaps.
+Any appointment that has been billed, or that is currently in the visit workflow (`arrived` or `in_session`), cannot be trashed. The same guard is mirrored at the database level by `protect_in_visit_appointment_deletion`. This prevents audit trail gaps and accidental loss of in-progress visits.
 
 ---
 
@@ -248,6 +286,33 @@ Patients use an `is_deleted` boolean flag rather than a `deleted_at` timestamp. 
 - **Patient documents** — general file uploads per patient, managed via `patient-documents.ts`
 - **Patient avatars** — uploaded to Storage; managed via `patient-avatar.ts`
 - **Staff files** — staff profile documents, separate storage path
+
+---
+
+## Patient Packages
+
+Patients may purchase multi-session packages (e.g. a 10-session physiotherapy plan), tracked in the `patient_packages` table with `total_sessions`, `used_sessions`, and an optional `price_per_session`. A check constraint guarantees `used_sessions <= total_sessions`.
+
+- **Package templates** (`package_templates`, managed via `actions/package-templates.ts` and `/settings/packages`) define reusable per-department defaults — name, session count, and pricing — that admins/managers can re-apply when creating new patient packages.
+- **Appointment linkage** — `appointments.package_id` and `appointments.package_session_number` attach a scheduled visit to a specific package and session index.
+- **RLS** — all package access is scoped by `clinic_id`; mutation policies follow the same role rules as the rest of the schema and are covered by `patient_packages_rls` and `package_templates_rls` migrations.
+
+---
+
+## Reports Module
+
+A read-only operational reporting module is exposed under `/reports`, accessible to `admin`, `manager`, and `receptionist`. Doctor-facing performance reports (`/reports/doctors`, `/reports/receptionists`) are restricted to `admin` and `manager` via `canSeePerformanceReports` (`types/reports.ts`).
+
+| Route | Backing RPC | Purpose |
+|---|---|---|
+| `/reports/cancellations` | `get_cancellation_report` | Cancellation counts, top reasons, per-doctor breakdown |
+| `/reports/no-shows` | `get_no_show_report` | No-show counts and rates per doctor |
+| `/reports/doctors` | `get_doctor_performance_report` | Doctor throughput, completion, cancellation metrics |
+| `/reports/receptionists` | `get_receptionist_performance_report` | Receptionist booking and confirmation metrics |
+| `/reports/follow-ups` | `followups` dashboard query | Follow-up outcomes and pending workload |
+| `/reports/revenue` | `revenue_summary` RPC | Revenue, payments by method, and settlements |
+
+All report RPCs run with `security invoker`, derive `clinic_id` from `auth_clinic_id()`, and reject doctor callers explicitly.
 
 ---
 
@@ -320,7 +385,7 @@ tests/
 │   ├── mocks/
 │   │   └── server-only.ts
 │   ├── setup.ts
-│   └── actions/                     ← 13 test files, 249 passing tests
+│   └── actions/                     ← 14 server-action test files
 │       ├── appointment-deletion-safety.test.ts
 │       ├── appointment-form-autofill.test.tsx
 │       ├── appointment-validation-conflicts.test.ts
@@ -332,9 +397,12 @@ tests/
 │       ├── patient-crud.test.ts
 │       ├── patient-documents.test.ts
 │       ├── patient-note-access.test.ts
+│       ├── patient-trash.test.ts
 │       ├── profile-avatar.test.ts
 │       └── staff-files.test.ts
 └── e2e/                             ← Playwright specs (require live Supabase)
+
+Total suite: 46 test files, 270 passing tests (Vitest v4).
 ```
 
 ### Mock Architecture
@@ -400,7 +468,7 @@ clinicflow-crm/
 │   ├── (auth)/             ← Login, password reset
 │   ├── (protected)/        ← All authenticated pages
 │   └── auth/confirm/       ← Email confirmation callback
-├── actions/                ← Server Actions (14 files)
+├── actions/                ← Server Actions (18 files)
 ├── components/
 │   ├── appointments/       ← Calendar views, booking form, status controls
 │   ├── patients/           ← Patient list, detail, forms, medical notes
@@ -418,9 +486,9 @@ clinicflow-crm/
 │   │   └── middleware.ts   ← Session refresh + page visibility check
 │   └── ...
 ├── supabase/
-│   └── migrations/         ← 31 migration files
+│   └── migrations/         ← 50 migration files
 ├── tests/
-│   ├── unit/               ← 249 tests across 13 test files
+│   ├── unit/               ← 270 tests across 46 test files
 │   └── e2e/                ← Playwright specs
 ├── types/
 │   └── database.ts         ← Generated Supabase types
@@ -447,14 +515,14 @@ clinicflow-crm/
 |---|---|
 | Authentication & session security | Complete |
 | Role-based access control | Complete |
-| RLS policies on all 16 tables | Complete |
+| RLS policies on all 23 tables | Complete |
 | HTTP security headers (CSP, HSTS, X-Frame-Options) | Complete |
 | Input validation (Zod) on all server actions | Complete |
 | Audit logging for sensitive operations | Complete |
 | Soft-delete with recycle bin UI | Complete |
 | Billing deletion guard | Complete |
 | Confirmation dialogs on all destructive actions | Complete |
-| 249 passing unit tests | Complete |
+| 270 passing unit tests | Complete |
 | Sentry error tracking (optional) | Complete |
 | Vercel deployment config | Complete |
-| Database migrations (31 total) | Complete |
+| Database migrations (50 total) | Complete |

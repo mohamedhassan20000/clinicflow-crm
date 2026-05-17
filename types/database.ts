@@ -1677,6 +1677,8 @@ export type Database = {
       appointment_status:
         | "pending"
         | "confirmed"
+        | "arrived"
+        | "in_session"
         | "completed"
         | "cancelled"
         | "no_show"
@@ -1820,6 +1822,8 @@ export const Constants = {
       appointment_status: [
         "pending",
         "confirmed",
+        "arrived",
+        "in_session",
         "completed",
         "cancelled",
         "no_show",

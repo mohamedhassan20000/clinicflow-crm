@@ -23,7 +23,7 @@ export type ActionResult = {
   success?: boolean;
 };
 type AppointmentStatus = Database["public"]["Enums"]["appointment_status"];
-export type InvoiceUndoStatus = Extract<AppointmentStatus, "pending" | "confirmed">;
+export type InvoiceUndoStatus = Extract<AppointmentStatus, "pending" | "confirmed" | "arrived" | "in_session">;
 type AppointmentValues = AppointmentFormValues;
 type ValidatedAppointmentPackage = {
   packageId: string | null;
@@ -170,7 +170,7 @@ async function validateAppointmentSlot(
     .eq("doctor_id", values.doctor_id)
     .eq("clinic_id", clinicId)
     .is("deleted_at", null)
-    .eq("status", "confirmed")
+    .in("status", ["confirmed", "arrived", "in_session"])
     .gte("scheduled_at", dayStart.toISOString())
     .lte("scheduled_at", dayEnd.toISOString());
 
@@ -550,7 +550,7 @@ async function deleteAppointmentDependents(
 
 export async function undoAppointmentStatus(
   id: string,
-  targetStatus: "pending" | "confirmed",
+  targetStatus: Extract<AppointmentStatus, "pending" | "confirmed" | "arrived" | "in_session">,
 ): Promise<ActionResult> {
   const user = await requireRole(["admin", "receptionist"]);
   const supabase = await createClient();

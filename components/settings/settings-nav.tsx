@@ -8,6 +8,7 @@ const NAV = [
   { href: "/settings/staff", label: "Staff" },
   { href: "/settings/departments", label: "Departments" },
   { href: "/settings/services", label: "Services" },
+  { href: "/settings/packages", label: "Packages" },
   { href: "/settings/insurance", label: "Insurance" },
   { href: "/settings/clinic", label: "Clinic" },
   { href: "/settings/customize", label: "Customize", adminOnly: true },

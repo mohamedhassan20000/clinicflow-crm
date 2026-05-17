@@ -113,7 +113,9 @@ export const STATUS_TRANSITIONS: Record<string, string[]> = {
   // Allow direct pending → completed so reception can charge a walk-in or a
   // same-day booking without first clicking Confirm.
   pending: ["confirmed", "completed", "cancelled"],
-  confirmed: ["completed", "cancelled", "no_show"],
+  confirmed: ["arrived", "completed", "cancelled", "no_show"],
+  arrived: ["in_session", "completed", "confirmed", "cancelled", "no_show"],
+  in_session: ["completed", "arrived", "cancelled", "no_show"],
   completed: [],
   cancelled: [],
   no_show: [],

@@ -24,6 +24,10 @@ export type ActionResult = {
 };
 type AppointmentStatus = Database["public"]["Enums"]["appointment_status"];
 export type InvoiceUndoStatus = Extract<AppointmentStatus, "pending" | "confirmed" | "arrived" | "in_session">;
+export type StartAppointmentSessionResult = ActionResult & {
+  redirectTo?: string;
+  patientId?: string;
+};
 type AppointmentValues = AppointmentFormValues;
 type ValidatedAppointmentPackage = {
   packageId: string | null;
@@ -326,8 +330,7 @@ export async function updateAppointmentStatus(
   }
   if (
     completingWithInvoice &&
-    appt.status !== "pending" &&
-    appt.status !== "confirmed"
+    !["pending", "confirmed", "arrived", "in_session"].includes(appt.status)
   ) {
     return { error: `Cannot transition from ${appt.status} to ${newStatus}.` };
   }
@@ -470,14 +473,14 @@ export async function softDeleteAppointment(id: string): Promise<ActionResult> {
   if (fetchError || !appt) return { error: "Appointment not found." };
 
   if (
-    appt.status === "completed" ||
+    ["arrived", "in_session", "completed"].includes(appt.status) ||
     appt.paid_at !== null ||
     (appt.paid_amount !== null && appt.paid_amount > 0) ||
     (appt.total_amount !== null && appt.total_amount > 0)
   ) {
     return {
       error:
-        "Completed or charged appointments cannot be deleted. Please use the billing undo option immediately after charging if you need to correct the invoice.",
+        "Arrived, in-session, completed, or charged appointments cannot be deleted.",
     };
   }
 
@@ -552,17 +555,25 @@ export async function undoAppointmentStatus(
   id: string,
   targetStatus: Extract<AppointmentStatus, "pending" | "confirmed" | "arrived" | "in_session">,
 ): Promise<ActionResult> {
-  const user = await requireRole(["admin", "receptionist"]);
+  const user = await requireRole(["admin", "receptionist", "doctor"]);
   const supabase = await createClient();
 
   const { data: appt } = await supabase
     .from("appointments")
-    .select("patient_id")
+    .select("patient_id, doctor_id, status")
     .eq("id", id)
     .eq("clinic_id", user.clinicId)
     .single();
 
   if (!appt) return { error: "Appointment not found." };
+  if (user.role === "doctor") {
+    if (appt.doctor_id !== user.id) {
+      return { error: "You can only update your own appointments." };
+    }
+    if (targetStatus !== "arrived" || appt.status !== "in_session") {
+      return { error: "Doctors can only undo a session start." };
+    }
+  }
 
   const { error } = await supabase.rpc("undo_appointment_status", {
     p_appointment_id: id,
@@ -574,6 +585,80 @@ export async function undoAppointmentStatus(
   revalidatePath("/appointments");
   revalidatePath(`/patients/${appt.patient_id}`);
   return {};
+}
+
+export async function arriveAppointment(id: string): Promise<ActionResult> {
+  const user = await requireRole(["admin", "receptionist"]);
+  const supabase = await createClient();
+
+  const { data: appt } = await supabase
+    .from("appointments")
+    .select("status, patient_id")
+    .eq("id", id)
+    .eq("clinic_id", user.clinicId)
+    .single();
+
+  if (!appt) return { error: "Appointment not found." };
+  if (appt.status !== "confirmed") {
+    return { error: `Cannot transition from ${appt.status} to arrived.` };
+  }
+
+  const { error } = await supabase
+    .from("appointments")
+    .update({
+      status: "arrived",
+      updated_by: user.id,
+    } as TablesUpdate<"appointments">)
+    .eq("id", id)
+    .eq("clinic_id", user.clinicId)
+    .eq("status", "confirmed");
+
+  if (error) return { error: "Failed to mark appointment as arrived." };
+
+  revalidatePath("/appointments");
+  revalidatePath(`/patients/${appt.patient_id}`);
+  return { success: true };
+}
+
+export async function startAppointmentSession(
+  id: string,
+): Promise<StartAppointmentSessionResult> {
+  const user = await requireRole(["doctor"]);
+  const supabase = await createClient();
+
+  const { data: appt } = await supabase
+    .from("appointments")
+    .select("status, patient_id, doctor_id")
+    .eq("id", id)
+    .eq("clinic_id", user.clinicId)
+    .single();
+
+  if (!appt) return { error: "Appointment not found." };
+  if (appt.doctor_id !== user.id) {
+    return { error: "You can only start sessions assigned to you." };
+  }
+  if (appt.status !== "arrived") {
+    return { error: `Cannot transition from ${appt.status} to in_session.` };
+  }
+
+  const { error } = await supabase
+    .from("appointments")
+    .update({
+      status: "in_session",
+      updated_by: user.id,
+    } as TablesUpdate<"appointments">)
+    .eq("id", id)
+    .eq("clinic_id", user.clinicId)
+    .eq("doctor_id", user.id)
+    .eq("status", "arrived");
+
+  if (error) return { error: "Failed to start appointment session." };
+
+  const redirectTo = `/patients/${appt.patient_id}/medical-notes-report`;
+  revalidatePath("/appointments");
+  revalidatePath(`/patients/${appt.patient_id}`);
+  revalidatePath(redirectTo);
+  return { success: true, patientId: appt.patient_id, redirectTo };
 }
 
 export async function undoInvoiceCompletion(

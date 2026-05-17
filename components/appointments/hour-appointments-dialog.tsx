@@ -26,10 +26,14 @@ import { useClinicSettings } from "@/contexts/clinic-settings-context";
 function PopupAppointmentRow({
   appt,
   canEdit,
+  currentUserId,
+  currentUserRole,
   onDeleted,
 }: {
   appt: AppointmentForDetail;
   canEdit: boolean;
+  currentUserId?: string;
+  currentUserRole?: "admin" | "receptionist" | "manager" | "doctor";
   onDeleted: (id: string) => void;
 }) {
   const { formatTime } = useClinicSettings();
@@ -112,11 +116,15 @@ function PopupAppointmentRow({
               : "Unassigned"}
           </div>
           <StatusBadge status={appt.status} />
-          {canEdit && (
+          {(canEdit || currentUserRole === "doctor") && (
             <div className="pt-0.5" onClick={(e) => e.stopPropagation()}>
               <AppointmentActions
                 appointmentId={appt.id}
                 currentStatus={appt.status}
+                patientId={appt.patient_id}
+                doctorId={appt.doctor_id}
+                currentUserId={currentUserId}
+                currentUserRole={currentUserRole}
                 hasInsurance={Boolean(appt.insurance_provider_id)}
               />
             </div>
@@ -146,6 +154,8 @@ function PopupAppointmentRow({
         open={detailOpen}
         onOpenChange={setDetailOpen}
         canEdit={canEdit}
+        currentUserId={currentUserId}
+        currentUserRole={currentUserRole}
         onDeleted={() => onDeleted(appt.id)}
       />
       <DeleteConfirmDialog
@@ -166,12 +176,16 @@ export function HourAppointmentsDialog({
   open,
   onOpenChange,
   canEdit,
+  currentUserId,
+  currentUserRole,
 }: {
   appointments: AppointmentForDetail[];
   bucketMin: number;
   open: boolean;
   onOpenChange: (v: boolean) => void;
   canEdit: boolean;
+  currentUserId?: string;
+  currentUserRole?: "admin" | "receptionist" | "manager" | "doctor";
 }) {
   const { formatSlotTime } = useClinicSettings();
   const [appointments, setAppointments] = useState(initialAppointments);
@@ -210,6 +224,8 @@ export function HourAppointmentsDialog({
                 key={appt.id}
                 appt={appt}
                 canEdit={canEdit}
+                currentUserId={currentUserId}
+                currentUserRole={currentUserRole}
                 onDeleted={handleDeleted}
               />
             ))

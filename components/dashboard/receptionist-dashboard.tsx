@@ -171,6 +171,9 @@ export function ReceptionistDashboard({
                     <AppointmentActions
                       appointmentId={appt.id}
                       currentStatus={appt.status}
+                      patientId={appt.patient_id}
+                      doctorId={appt.doctor_id}
+                      currentUserRole="receptionist"
                       hasInsurance={Boolean(appt.insurance_provider_id)}
                     />
                   </div>
@@ -215,6 +218,9 @@ export function ReceptionistDashboard({
                   <AppointmentActions
                     appointmentId={appt.id}
                     currentStatus={appt.status}
+                    patientId={appt.patient_id}
+                    doctorId={appt.doctor_id}
+                    currentUserRole="receptionist"
                     hasInsurance={Boolean(appt.insurance_provider_id)}
                   />
                 </div>

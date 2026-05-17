@@ -169,7 +169,7 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
   let query = supabase
     .from("appointments")
     .select(
-      "id, scheduled_at, status, insurance_provider_id, notes, duration_minutes, package_id, package_session_number, patients(full_name, phone, file_number), profiles!doctor_id(full_name), departments(name, color), patient_packages(name, total_sessions, used_sessions, price_per_session)",
+      "id, patient_id, doctor_id, scheduled_at, status, insurance_provider_id, notes, duration_minutes, package_id, package_session_number, patients(full_name, phone, file_number), profiles!doctor_id(full_name), departments(name, color), patient_packages(name, total_sessions, used_sessions, price_per_session)",
     )
     .eq("clinic_id", user.clinicId)
     .is("deleted_at", null)
@@ -282,6 +282,8 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
           appointments={appts}
           date={dayAnchor}
           canEdit={canEditAppointments}
+          currentUserId={user.id}
+          currentUserRole={user.role}
           clinicHours={clinicHours}
         />
       ) : view === "month" ? (
@@ -296,6 +298,8 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
           appointments={appts}
           weekStart={weekStart}
           canEdit={canEditAppointments}
+          currentUserId={user.id}
+          currentUserRole={user.role}
           clinicHours={clinicHours}
         />
       )}

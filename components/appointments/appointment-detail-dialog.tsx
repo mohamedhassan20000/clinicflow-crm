@@ -21,6 +21,8 @@ import { useClinicSettings } from "@/contexts/clinic-settings-context";
 export type AppointmentForDetail = Pick<
   Tables<"appointments">,
   | "id"
+  | "patient_id"
+  | "doctor_id"
   | "scheduled_at"
   | "status"
   | "insurance_provider_id"
@@ -49,6 +51,8 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   canEdit: boolean;
+  currentUserId?: string;
+  currentUserRole?: "admin" | "receptionist" | "manager" | "doctor";
   onDeleted?: () => void;
 }
 
@@ -67,6 +71,8 @@ export function AppointmentDetailDialog({
   open,
   onOpenChange,
   canEdit,
+  currentUserId,
+  currentUserRole,
   onDeleted,
 }: Props) {
   const { formatTime } = useClinicSettings();
@@ -241,11 +247,15 @@ export function AppointmentDetailDialog({
             )}
 
             {/* Status actions */}
-            {canEdit && (
+            {(canEdit || currentUserRole === "doctor") && (
               <div className="pt-1" onClick={(e) => e.stopPropagation()}>
                 <AppointmentActions
                   appointmentId={appt.id}
                   currentStatus={appt.status}
+                  patientId={appt.patient_id}
+                  doctorId={appt.doctor_id}
+                  currentUserId={currentUserId}
+                  currentUserRole={currentUserRole}
                   onActionComplete={() => onOpenChange(false)}
                 />
               </div>

@@ -14,9 +14,11 @@ import { Button } from "@/components/ui/button";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { StatusBadge } from "@/components/appointments/status-badge";
 import { AppointmentActions } from "@/components/appointments/appointment-actions";
+import { ReceptionistInSessionBoard } from "@/components/dashboard/receptionist-in-session-board";
 import type { Tables } from "@/types/database";
 import { formatDoctorName } from "@/lib/format-doctor";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
+import type { ReceptionInSessionGroup } from "@/actions/receptionist-dashboard";
 
 type Appointment = Tables<"appointments"> & {
   patients: { full_name: string } | null;
@@ -31,6 +33,7 @@ interface ReceptionistDashboardProps {
   todayAppointments: Appointment[];
   pendingAppointments: Appointment[];
   nextTwoHoursAppointments: Appointment[];
+  inSessionGroups: ReceptionInSessionGroup[];
   // Widget visibility
   showKpiToday?: boolean;
   showKpiPendingConfirmations?: boolean;
@@ -48,6 +51,7 @@ export function ReceptionistDashboard({
   todayAppointments,
   pendingAppointments,
   nextTwoHoursAppointments,
+  inSessionGroups,
   showKpiToday = true,
   showKpiPendingConfirmations = true,
   showKpiConfirmedToday = true,
@@ -56,6 +60,10 @@ export function ReceptionistDashboard({
   showPendingConfirmationsList = true,
 }: ReceptionistDashboardProps) {
   const { formatTime } = useClinicSettings();
+  const inSessionBoardKey = inSessionGroups
+    .flatMap((group) => group.items.map((item) => `${item.id}:${item.updatedAt}`))
+    .join("|");
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -81,6 +89,11 @@ export function ReceptionistDashboard({
           </Button>
         </div>
       </div>
+
+      <ReceptionistInSessionBoard
+        key={inSessionBoardKey}
+        initialGroups={inSessionGroups}
+      />
 
       {/* KPIs */}
       {(showKpiToday || showKpiPendingConfirmations || showKpiConfirmedToday) && (

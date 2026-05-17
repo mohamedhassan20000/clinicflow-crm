@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { KpiCard } from "@/components/dashboard/kpi-card";
+import { DoctorQueue } from "@/components/dashboard/doctor-queue";
 import { fetchDoctorDashboardStats, type DoctorDashboardStats } from "@/actions/doctor-dashboard";
 import { formatDoctorName } from "@/lib/format-doctor";
 
@@ -155,6 +156,8 @@ export function DoctorDashboard({
           </p>
         </div>
       </div>
+
+      <DoctorQueue />
 
       {/* KPI cards */}
       <div className="grid gap-4 sm:grid-cols-3">

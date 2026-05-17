@@ -92,6 +92,8 @@ export type Database = {
           no_showed_by: string | null
           notes: string | null
           outstanding_amount: number | null
+          package_id: string | null
+          package_session_number: number | null
           paid_amount: number | null
           paid_at: string | null
           patient_id: string
@@ -131,6 +133,8 @@ export type Database = {
           no_showed_by?: string | null
           notes?: string | null
           outstanding_amount?: number | null
+          package_id?: string | null
+          package_session_number?: number | null
           paid_amount?: number | null
           paid_at?: string | null
           patient_id: string
@@ -170,6 +174,8 @@ export type Database = {
           no_showed_by?: string | null
           notes?: string | null
           outstanding_amount?: number | null
+          package_id?: string | null
+          package_session_number?: number | null
           paid_amount?: number | null
           paid_at?: string | null
           patient_id?: string
@@ -242,6 +248,13 @@ export type Database = {
             columns: ["no_showed_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointments_package_id_fkey"
+            columns: ["package_id"]
+            isOneToOne: false
+            referencedRelation: "patient_packages"
             referencedColumns: ["id"]
           },
           {
@@ -956,6 +969,160 @@ export type Database = {
           },
         ]
       }
+      package_templates: {
+        Row: {
+          clinic_id: string
+          created_at: string
+          created_by: string | null
+          department_id: string
+          id: string
+          is_active: boolean
+          name: string
+          notes: string | null
+          price_per_session: number | null
+          total_price: number | null
+          total_sessions: number
+          updated_at: string
+        }
+        Insert: {
+          clinic_id: string
+          created_at?: string
+          created_by?: string | null
+          department_id: string
+          id?: string
+          is_active?: boolean
+          name: string
+          notes?: string | null
+          price_per_session?: number | null
+          total_price?: number | null
+          total_sessions: number
+          updated_at?: string
+        }
+        Update: {
+          clinic_id?: string
+          created_at?: string
+          created_by?: string | null
+          department_id?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          notes?: string | null
+          price_per_session?: number | null
+          total_price?: number | null
+          total_sessions?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "package_templates_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "package_templates_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "package_templates_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      patient_packages: {
+        Row: {
+          clinic_id: string
+          created_at: string
+          created_by: string | null
+          department_id: string | null
+          id: string
+          is_active: boolean
+          name: string
+          notes: string | null
+          patient_id: string
+          price_per_session: number | null
+          service_id: string | null
+          total_sessions: number
+          updated_at: string
+          used_sessions: number
+        }
+        Insert: {
+          clinic_id: string
+          created_at?: string
+          created_by?: string | null
+          department_id?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          notes?: string | null
+          patient_id: string
+          price_per_session?: number | null
+          service_id?: string | null
+          total_sessions: number
+          updated_at?: string
+          used_sessions?: number
+        }
+        Update: {
+          clinic_id?: string
+          created_at?: string
+          created_by?: string | null
+          department_id?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          notes?: string | null
+          patient_id?: string
+          price_per_session?: number | null
+          service_id?: string | null
+          total_sessions?: number
+          updated_at?: string
+          used_sessions?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "patient_packages_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patient_packages_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patient_packages_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patient_packages_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patient_packages_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       patients: {
         Row: {
           assigned_doctor_id: string | null
@@ -1412,6 +1579,34 @@ export type Database = {
         }
         Returns: Json
       }
+      get_cancellation_report: {
+        Args: {
+          p_end: string
+          p_start: string
+        }
+        Returns: Json
+      }
+      get_doctor_performance_report: {
+        Args: {
+          p_end: string
+          p_start: string
+        }
+        Returns: Json
+      }
+      get_no_show_report: {
+        Args: {
+          p_end: string
+          p_start: string
+        }
+        Returns: Json
+      }
+      get_receptionist_performance_report: {
+        Args: {
+          p_end: string
+          p_start: string
+        }
+        Returns: Json
+      }
       get_revenue_summary: {
         Args: {
           p_department_id?: string
@@ -1482,6 +1677,8 @@ export type Database = {
       appointment_status:
         | "pending"
         | "confirmed"
+        | "arrived"
+        | "in_session"
         | "completed"
         | "cancelled"
         | "no_show"
@@ -1625,6 +1822,8 @@ export const Constants = {
       appointment_status: [
         "pending",
         "confirmed",
+        "arrived",
+        "in_session",
         "completed",
         "cancelled",
         "no_show",

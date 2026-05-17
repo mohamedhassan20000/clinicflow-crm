@@ -57,8 +57,8 @@ export default async function AppointmentsReportPage({
     .from("appointments")
     .select(
       isDoctor
-        ? "id, scheduled_at, status, cancellation_reason, cancelled_at, profiles!doctor_id(full_name), departments(name, color)"
-        : "id, scheduled_at, status, payment_method, paid_at, total_amount, paid_amount, insurance_amount, secondary_amount, deposit_amount, outstanding_amount, secondary_payment_method, payment_note, cancellation_reason, cancelled_at, profiles!doctor_id(full_name), departments(name, color), insurance_providers(name), appointment_services(id, name, price, quantity)",
+        ? "id, scheduled_at, status, cancellation_reason, cancelled_at, package_id, package_session_number, profiles!doctor_id(full_name), departments(name, color), patient_packages(name, total_sessions, used_sessions, price_per_session)"
+        : "id, scheduled_at, status, payment_method, paid_at, total_amount, paid_amount, insurance_amount, secondary_amount, deposit_amount, outstanding_amount, secondary_payment_method, payment_note, cancellation_reason, cancelled_at, package_id, package_session_number, profiles!doctor_id(full_name), departments(name, color), insurance_providers(name), patient_packages(name, total_sessions, used_sessions, price_per_session), appointment_services(id, name, price, quantity)",
     )
     .eq("patient_id", id)
     .eq("clinic_id", user.clinicId)
@@ -165,7 +165,7 @@ export default async function AppointmentsReportPage({
           <DoctorApptList appts={appts} timeFormat={timeFormat} />
         </div>
       ) : (
-        <div className="print:hidden">
+        <div>
           <AppointmentsReportList
             appointments={appts as AppointmentPaymentRowData[]}
             settlementsByAppt={settlementsByAppt}
@@ -175,86 +175,95 @@ export default async function AppointmentsReportPage({
 
       {/* Print table — same black-border style as revenue */}
       <div className="hidden print:block">
-        {appts.length === 0 ? (
+        {isDoctor && appts.length === 0 ? (
           <p className="text-sm">No appointments match the selected date range.</p>
         ) : isDoctor ? (
-          <table>
-            <thead>
-              <tr>
-                <th>Date &amp; Time</th>
-                <th>Doctor</th>
-                <th>Department</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {appts.map((a) => (
-                <tr key={a.id}>
-                  <td style={{ whiteSpace: "nowrap" }}>
-                    {new Date(a.scheduled_at).toLocaleString("en-GB", {
-                      timeZone: CLINIC_TZ,
-                      dateStyle: "medium",
-                      timeStyle: "short",
-                    })}
-                  </td>
-                  <td>{formatDoctorName(a.profiles?.full_name)}</td>
-                  <td>{a.departments?.name ?? "—"}</td>
-                  <td style={{ textTransform: "capitalize" }}>{a.status.replace("_", " ")}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Date &amp; Time</th>
-                <th>Doctor</th>
-                <th>Department</th>
-                <th>Status</th>
-                <th>Total</th>
-                <th>Paid</th>
-                <th>Outstanding</th>
-              </tr>
-            </thead>
-            <tbody>
-              {appts.map((a) => (
-                <tr key={a.id}>
-                  <td style={{ whiteSpace: "nowrap" }}>
-                    {new Date(a.scheduled_at).toLocaleString("en-GB", {
-                      timeZone: CLINIC_TZ,
-                      dateStyle: "medium",
-                      timeStyle: "short",
-                    })}
-                  </td>
-                  <td>{formatDoctorName(a.profiles?.full_name)}</td>
-                  <td>{a.departments?.name ?? "—"}</td>
-                  <td style={{ textTransform: "capitalize" }}>{a.status.replace("_", " ")}</td>
-                  <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
-                    {fmtTRY(a.total_amount ?? 0)}
-                  </td>
-                  <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
-                    {fmtTRY((a.paid_amount ?? 0) + (a.insurance_amount ?? 0) + (a.secondary_amount ?? 0) + (a.deposit_amount ?? 0))}
-                  </td>
-                  <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
-                    {fmtTRY(a.outstanding_amount ?? 0)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+          <DoctorApptPrintTable appts={appts} />
+        ) : null}
       </div>
     </div>
   );
 }
 
-function fmtTRY(n: number) {
-  return new Intl.NumberFormat("en-GB", {
-    style: "currency",
-    currency: "TRY",
-    maximumFractionDigits: 2,
-  }).format(Number.isFinite(n) ? n : 0);
+function formatPackagePrintLine(a: {
+  package_session_number?: number | null;
+  patient_packages?: {
+    name: string;
+    total_sessions: number;
+    used_sessions: number;
+  } | null;
+}) {
+  const pkg = a.patient_packages;
+  if (!pkg) return null;
+
+  const remaining = Math.max(
+    0,
+    Number(pkg.total_sessions ?? 0) - Number(pkg.used_sessions ?? 0),
+  );
+  const details = [
+    a.package_session_number
+      ? `Session ${a.package_session_number} of ${pkg.total_sessions}`
+      : `Total ${pkg.total_sessions}`,
+    `Remaining ${remaining}`,
+  ];
+
+  return `Package: ${pkg.name} (${details.join(" · ")})`;
+}
+
+function DoctorApptPrintTable({
+  appts,
+}: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  appts: any[];
+}) {
+  return (
+    <table>
+      <thead>
+        <tr>
+          <th>Date &amp; Time</th>
+          <th>Doctor</th>
+          <th>Department</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {appts.map((a) => {
+          const packageLine = formatPackagePrintLine(a);
+
+          return (
+            <tr key={a.id}>
+              <td style={{ whiteSpace: "nowrap" }}>
+                {new Date(a.scheduled_at).toLocaleString("en-GB", {
+                  timeZone: CLINIC_TZ,
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                })}
+              </td>
+              <td>{formatDoctorName(a.profiles?.full_name)}</td>
+              <td>
+                <div>{a.departments?.name ?? "—"}</div>
+                {packageLine && (
+                  <div
+                    style={{
+                      marginTop: 2,
+                      fontSize: 9,
+                      lineHeight: 1.35,
+                      color: "#000",
+                    }}
+                  >
+                    {packageLine}
+                  </div>
+                )}
+              </td>
+              <td style={{ textTransform: "capitalize" }}>
+                {a.status.replace("_", " ")}
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
 }
 
 function DoctorApptList({

@@ -8,6 +8,7 @@ import { ReceptionistDashboard } from "@/components/dashboard/receptionist-dashb
 import { ManagerDashboard } from "@/components/dashboard/manager-dashboard";
 import { DoctorDashboard } from "@/components/dashboard/doctor-dashboard";
 import { fetchDoctorDashboardStats } from "@/actions/doctor-dashboard";
+import { fetchReceptionInSessionBoard } from "@/actions/receptionist-dashboard";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -478,6 +479,7 @@ export default async function DashboardPage() {
       { data: todayAppts },
       { data: pendingAppts },
       { data: next2hAppts },
+      inSessionGroups,
     ] = await Promise.all([
       supabase
         .from("appointments")
@@ -519,6 +521,7 @@ export default async function DashboardPage() {
         .lte("scheduled_at", next2h.end)
         .not("status", "in", '("cancelled","completed")')
         .order("scheduled_at"),
+      fetchReceptionInSessionBoard(),
     ]);
 
     return (
@@ -530,6 +533,7 @@ export default async function DashboardPage() {
         todayAppointments={(todayAppts ?? []) as Parameters<typeof ReceptionistDashboard>[0]["todayAppointments"]}
         pendingAppointments={(pendingAppts ?? []) as Parameters<typeof ReceptionistDashboard>[0]["pendingAppointments"]}
         nextTwoHoursAppointments={(next2hAppts ?? []) as Parameters<typeof ReceptionistDashboard>[0]["nextTwoHoursAppointments"]}
+        inSessionGroups={inSessionGroups}
       />
     );
   }

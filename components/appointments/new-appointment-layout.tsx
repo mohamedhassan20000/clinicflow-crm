@@ -8,6 +8,7 @@ import type {
   Doctor,
   Department,
   InsuranceProvider,
+  AppointmentPackageOption,
 } from "./appointment-form";
 import type { ActionResult } from "@/actions/appointments";
 import type { ClinicWorkingHoursValues } from "@/lib/validations/settings";
@@ -18,6 +19,7 @@ interface NewAppointmentLayoutProps {
   doctors: Doctor[];
   departments: Department[];
   insuranceProviders: InsuranceProvider[];
+  packages: AppointmentPackageOption[];
   defaultPatientId?: string;
   defaultDoctorId?: string;
   defaultDepartmentId?: string;
@@ -133,6 +135,7 @@ export function NewAppointmentLayout({
   doctors,
   departments,
   insuranceProviders,
+  packages,
   defaultPatientId,
   defaultDoctorId,
   defaultDepartmentId,
@@ -155,6 +158,7 @@ export function NewAppointmentLayout({
           doctors={doctors}
           departments={departments}
           insuranceProviders={insuranceProviders}
+          packages={packages}
           defaultPatientId={defaultPatientId}
           defaultDoctorId={defaultDoctorId}
           defaultDepartmentId={defaultDepartmentId}

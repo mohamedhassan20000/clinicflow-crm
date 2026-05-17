@@ -24,7 +24,7 @@ export default async function NewAppointmentPage({ searchParams }: PageProps) {
   const { patient_id, doctor_id, dept_id, insurance_id } = await searchParams;
   const supabase = await createClient();
 
-  const [{ data: patients }, cachedStaff, cachedDepartments, cachedInsurance, clinicWorkingHours] =
+  const [{ data: patients }, { data: packageRows }, cachedStaff, cachedDepartments, cachedInsurance, clinicWorkingHours] =
     await Promise.all([
       supabase
         .from("patients")
@@ -34,6 +34,12 @@ export default async function NewAppointmentPage({ searchParams }: PageProps) {
         .eq("clinic_id", user.clinicId)
         .eq("is_deleted", false)
         .order("full_name"),
+      supabase
+        .from("patient_packages")
+        .select("id, patient_id, name, total_sessions, used_sessions, price_per_session")
+        .eq("clinic_id", user.clinicId)
+        .eq("is_active", true)
+        .order("updated_at", { ascending: false }),
       getCachedStaff(user.clinicId),
       getCachedDepartments(user.clinicId),
       getCachedInsuranceProviders(user.clinicId),
@@ -49,6 +55,9 @@ export default async function NewAppointmentPage({ searchParams }: PageProps) {
   const insurance = cachedInsurance
     .filter((p) => !p.deleted_at && p.is_active)
     .map((p) => ({ id: p.id, name: p.name }));
+  const packages = (packageRows ?? []).filter(
+    (pkg) => Number(pkg.used_sessions) < Number(pkg.total_sessions),
+  );
 
   return (
     <div className="space-y-6">
@@ -75,6 +84,7 @@ export default async function NewAppointmentPage({ searchParams }: PageProps) {
         doctors={doctors ?? []}
         departments={departments ?? []}
         insuranceProviders={insurance ?? []}
+        packages={packages}
         defaultPatientId={patient_id}
         defaultDoctorId={doctor_id}
         defaultDepartmentId={dept_id}

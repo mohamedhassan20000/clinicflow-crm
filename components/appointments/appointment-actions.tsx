@@ -1,11 +1,14 @@
 "use client";
 
 import { memo, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
+  arriveAppointment,
   getBillingContext,
+  startAppointmentSession,
   updateAppointmentStatus,
   undoAppointmentStatus,
   undoInvoiceCompletion,
@@ -25,9 +28,12 @@ import { NoShowDialog } from "@/components/appointments/noshow-dialog";
 import { SettleOutstandingDialog } from "@/components/patients/settle-outstanding-dialog";
 
 type Status = Database["public"]["Enums"]["appointment_status"];
-type RestorableStatus = Extract<Status, "pending" | "confirmed">;
+type UserRole = "admin" | "receptionist" | "manager" | "doctor";
+type RestorableStatus = Extract<Status, "pending" | "confirmed" | "arrived" | "in_session">;
 type PendingAction =
   | "confirm"
+  | "arrive"
+  | "start_session"
   | "complete"
   | "cancel"
   | "no_show"
@@ -38,15 +44,24 @@ const TERMINAL: Status[] = ["completed", "cancelled", "no_show"];
 function AppointmentActionsInner({
   appointmentId,
   currentStatus,
+  patientId,
+  doctorId,
+  currentUserId,
+  currentUserRole = "receptionist",
   onActionComplete,
 }: {
   appointmentId: string;
   currentStatus: Status;
+  patientId?: string;
+  doctorId?: string;
+  currentUserId?: string;
+  currentUserRole?: UserRole;
   /** @deprecated kept for back-compat */
   hasInsurance?: boolean;
   /** Called after a terminal action (cancel, no-show) succeeds. */
   onActionComplete?: () => void;
 }) {
+  const router = useRouter();
   const [billingOpen, setBillingOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
@@ -67,6 +82,13 @@ function AppointmentActionsInner({
   const effectiveStatus = optimisticStatus ?? currentStatus;
   const isTerminal = TERMINAL.includes(effectiveStatus);
   const hasPendingAction = pendingAction !== null;
+  const isFrontDesk =
+    currentUserRole === "admin" || currentUserRole === "receptionist";
+  const isAssignedDoctor =
+    currentUserRole === "doctor" &&
+    effectiveStatus === "arrived" &&
+    Boolean(currentUserId) &&
+    doctorId === currentUserId;
 
   useEffect(() => {
     if (!billingOpen) return;
@@ -136,7 +158,12 @@ function AppointmentActionsInner({
 
   function doUndo(targetStatus: Status, fallbackStatus: Status) {
     if (pendingActionRef.current) return;
-    if (targetStatus !== "pending" && targetStatus !== "confirmed") {
+    if (
+      targetStatus !== "pending" &&
+      targetStatus !== "confirmed" &&
+      targetStatus !== "arrived" &&
+      targetStatus !== "in_session"
+    ) {
       toast.error("This appointment cannot be restored to its previous status.");
       return;
     }
@@ -177,6 +204,90 @@ function AppointmentActionsInner({
             action: {
               label: "Undo",
               onClick: () => doUndo(prevStatus, newStatus),
+            },
+          });
+        }
+      })
+      .finally(() => {
+        setActionPending(null);
+      });
+  }
+
+  function runArrive() {
+    if (pendingActionRef.current) return;
+    const prevStatus = effectiveStatus;
+    setActionPending("arrive");
+    setOptimisticStatus("arrived");
+
+    arriveAppointment(appointmentId)
+      .then((result) => {
+        if (result.error) {
+          toast.error(result.error);
+          setOptimisticStatus(null);
+        } else {
+          toast.success("Appointment marked as arrived.", {
+            duration: 10000,
+            action: {
+              label: "Undo",
+              onClick: () => doUndo(prevStatus, "arrived"),
+            },
+          });
+        }
+      })
+      .finally(() => {
+        setActionPending(null);
+      });
+  }
+
+  function runStartSession() {
+    if (pendingActionRef.current) return;
+    setActionPending("start_session");
+    setOptimisticStatus("in_session");
+
+    startAppointmentSession(appointmentId)
+      .then((result) => {
+        if (result.error) {
+          toast.error(result.error);
+          setOptimisticStatus(null);
+          return;
+        }
+
+        const targetPatientId = result.patientId ?? patientId;
+        const redirectTo =
+          result.redirectTo ??
+          (targetPatientId
+            ? `/patients/${targetPatientId}/medical-notes-report`
+            : null);
+
+        toast.success("Session started.", {
+          duration: 10000,
+          action: {
+            label: "Undo",
+            onClick: () => {
+              doUndo("arrived", "in_session");
+              if (
+                redirectTo &&
+                typeof window !== "undefined" &&
+                window.location.pathname === redirectTo
+              ) {
+                router.back();
+              }
+            },
+          },
+        });
+
+        if (!redirectTo) {
+          toast.message("Open the patient profile to view medical notes.");
+          return;
+        }
+
+        try {
+          router.push(redirectTo);
+        } catch {
+          toast.message("Session is in progress.", {
+            action: {
+              label: "Open notes",
+              onClick: () => router.push(redirectTo),
             },
           });
         }
@@ -262,7 +373,10 @@ function AppointmentActionsInner({
     if (pendingActionRef.current) return;
     const prevStatus = effectiveStatus;
     const undoTarget: InvoiceUndoStatus =
-      prevStatus === "pending" || prevStatus === "confirmed"
+      prevStatus === "pending" ||
+      prevStatus === "confirmed" ||
+      prevStatus === "arrived" ||
+      prevStatus === "in_session"
         ? prevStatus
         : "confirmed";
     setInvoiceDraft(payload);
@@ -300,11 +414,36 @@ function AppointmentActionsInner({
     });
   }
 
-  const showConfirm = effectiveStatus === "pending";
-  const showComplete = effectiveStatus === "confirmed";
+  const showConfirm = isFrontDesk && effectiveStatus === "pending";
+  const showArrive = isFrontDesk && effectiveStatus === "confirmed";
+  const showComplete =
+    isFrontDesk &&
+    (effectiveStatus === "confirmed" ||
+      effectiveStatus === "arrived" ||
+      effectiveStatus === "in_session");
   const showCancel =
-    effectiveStatus === "confirmed" || effectiveStatus === "pending";
-  const showNoShow = effectiveStatus === "confirmed";
+    isFrontDesk &&
+    (effectiveStatus === "pending" ||
+      effectiveStatus === "confirmed" ||
+      effectiveStatus === "arrived" ||
+      effectiveStatus === "in_session");
+  const showNoShow =
+    isFrontDesk &&
+    (effectiveStatus === "confirmed" ||
+      effectiveStatus === "arrived" ||
+      effectiveStatus === "in_session");
+  const showStartSession = isAssignedDoctor;
+
+  if (
+    !showConfirm &&
+    !showArrive &&
+    !showComplete &&
+    !showCancel &&
+    !showNoShow &&
+    !showStartSession
+  ) {
+    return null;
+  }
 
   return (
     <>
@@ -318,6 +457,31 @@ function AppointmentActionsInner({
             onClick={handleConfirmClick}
           >
             Confirm
+          </Button>
+        )}
+        {showArrive && (
+          <Button
+            size="sm"
+            variant="default"
+            className="h-6 px-2 text-[10px] font-semibold"
+            disabled={hasPendingAction}
+            onClick={runArrive}
+          >
+            Arrive
+          </Button>
+        )}
+        {showStartSession && (
+          <Button
+            size="sm"
+            variant="default"
+            className={cn(
+              "h-6 px-2 text-[10px] font-semibold",
+              "bg-violet-600 text-white hover:bg-violet-700 dark:bg-violet-500 dark:hover:bg-violet-600 shadow-sm",
+            )}
+            disabled={hasPendingAction}
+            onClick={runStartSession}
+          >
+            Start Session
           </Button>
         )}
         {showComplete && (
@@ -390,6 +554,7 @@ function AppointmentActionsInner({
         patientName={ctx?.patientName}
         departmentName={ctx?.departmentName ?? null}
         departmentColor={ctx?.departmentColor ?? null}
+        packageInfo={ctx?.packageInfo ?? null}
         initialPayload={invoiceDraft}
         draftKey={invoiceDraftKey}
       />

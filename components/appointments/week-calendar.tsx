@@ -103,6 +103,8 @@ interface WeekCalendarProps {
   appointments: Appointment[];
   weekStart: Date;
   canEdit: boolean;
+  currentUserId?: string;
+  currentUserRole?: "admin" | "receptionist" | "manager" | "doctor";
   clinicHours?: ClinicWorkingHoursValues;
 }
 
@@ -139,6 +141,8 @@ export function WeekCalendar({
   appointments,
   weekStart,
   canEdit,
+  currentUserId,
+  currentUserRole,
   clinicHours = [],
 }: WeekCalendarProps) {
   const allDays = Array.from({ length: 7 }, (_, i) => ({
@@ -296,6 +300,8 @@ export function WeekCalendar({
                         appts={appts}
                         bucketMin={hMin}
                         canEdit={canEdit}
+                        currentUserId={currentUserId}
+                        currentUserRole={currentUserRole}
                       />
                     );
                   })}
@@ -317,10 +323,14 @@ function HourBucketRow({
   appts,
   bucketMin,
   canEdit,
+  currentUserId,
+  currentUserRole,
 }: {
   appts: Appointment[];
   bucketMin: number;
   canEdit: boolean;
+  currentUserId?: string;
+  currentUserRole?: "admin" | "receptionist" | "manager" | "doctor";
 }) {
   const [showAllOpen, setShowAllOpen] = useState(false);
   const hasMore = appts.length > MAX_VISIBLE;
@@ -333,7 +343,13 @@ function HourBucketRow({
     >
       {visibleAppts.map((appt) => (
         <div key={appt.id} style={{ height: CARD_H_PX }} className="min-w-0 shrink-0">
-          <AppointmentCard appt={appt} canEdit={canEdit} compact />
+          <AppointmentCard
+            appt={appt}
+            canEdit={canEdit}
+            currentUserId={currentUserId}
+            currentUserRole={currentUserRole}
+            compact
+          />
         </div>
       ))}
       {hasMore && (
@@ -351,6 +367,8 @@ function HourBucketRow({
           open={showAllOpen}
           onOpenChange={setShowAllOpen}
           canEdit={canEdit}
+          currentUserId={currentUserId}
+          currentUserRole={currentUserRole}
         />
       )}
     </div>
@@ -362,10 +380,14 @@ function HourBucketRow({
 export function AppointmentCard({
   appt,
   canEdit,
+  currentUserId,
+  currentUserRole,
   compact = false,
 }: {
   appt: Appointment;
   canEdit: boolean;
+  currentUserId?: string;
+  currentUserRole?: "admin" | "receptionist" | "manager" | "doctor";
   compact?: boolean;
 }) {
   const { formatTime } = useClinicSettings();
@@ -499,11 +521,15 @@ export function AppointmentCard({
 
           {!compact && <StatusBadge status={appt.status} />}
 
-          {canEdit && !compact && (
+          {(canEdit || currentUserRole === "doctor") && !compact && (
             <div className="pt-0.5" onClick={(e) => e.stopPropagation()}>
               <AppointmentActions
                 appointmentId={appt.id}
                 currentStatus={appt.status}
+                patientId={appt.patient_id}
+                doctorId={appt.doctor_id}
+                currentUserId={currentUserId}
+                currentUserRole={currentUserRole}
                 hasInsurance={Boolean(appt.insurance_provider_id)}
               />
             </div>
@@ -516,6 +542,8 @@ export function AppointmentCard({
         open={detailOpen}
         onOpenChange={setDetailOpen}
         canEdit={canEdit}
+        currentUserId={currentUserId}
+        currentUserRole={currentUserRole}
         onDeleted={() => setDeleted(true)}
       />
       <DeleteConfirmDialog

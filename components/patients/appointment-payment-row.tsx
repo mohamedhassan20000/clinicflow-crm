@@ -7,6 +7,7 @@ import {
   ChevronDown,
   CreditCard,
   Landmark,
+  Package,
   ShieldCheck,
   Wallet,
   XCircle,
@@ -54,6 +55,14 @@ export interface AppointmentPaymentRowData {
   profiles: { full_name: string } | null;
   departments: { name: string; color: string } | null;
   insurance_providers: { name: string } | null;
+  package_id?: string | null;
+  package_session_number?: number | null;
+  patient_packages?: {
+    name: string;
+    total_sessions: number;
+    used_sessions: number;
+    price_per_session: number | null;
+  } | null;
   appointment_services?: {
     id: string;
     name: string;
@@ -157,6 +166,13 @@ export function AppointmentPaymentRow({
                 }}
               >
                 {a.departments.name}
+              </span>
+            )}
+            {a.patient_packages && (
+              <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-700 bg-emerald-500/10 dark:text-emerald-400">
+                <Package className="h-3 w-3" />
+                {a.patient_packages.name}
+                {a.package_session_number ? ` #${a.package_session_number}` : ""}
               </span>
             )}
           </div>

@@ -10,6 +10,7 @@ export const appointmentSchema = z.object({
     .refine((v) => !isNaN(Date.parse(v)), "Invalid date/time"),
   duration_minutes: z.number().int().min(15).max(240).default(30),
   insurance_provider_id: z.string().uuid().optional().nullable(),
+  package_id: z.string().uuid("Select a valid package").optional().nullable(),
   notes: z.string().max(1000).optional().nullable(),
 });
 
@@ -112,7 +113,9 @@ export const STATUS_TRANSITIONS: Record<string, string[]> = {
   // Allow direct pending → completed so reception can charge a walk-in or a
   // same-day booking without first clicking Confirm.
   pending: ["confirmed", "completed", "cancelled"],
-  confirmed: ["completed", "cancelled", "no_show"],
+  confirmed: ["arrived", "completed", "cancelled", "no_show"],
+  arrived: ["in_session", "completed", "confirmed", "cancelled", "no_show"],
+  in_session: ["completed", "arrived", "cancelled", "no_show"],
   completed: [],
   cancelled: [],
   no_show: [],

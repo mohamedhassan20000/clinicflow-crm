@@ -20,6 +20,13 @@ import { SettleOutstandingDialog } from "@/components/patients/settle-outstandin
 import { AddDepositDialog } from "@/components/patients/add-deposit-dialog";
 import { PatientAvatarControls } from "@/components/patients/patient-avatar-controls";
 import { PatientDocumentsSection } from "@/components/patients/patient-documents-section";
+import {
+  PatientPackagesSection,
+  type PatientPackageDepartment,
+  type PatientPackageItem,
+  type PatientPackageService,
+  type PatientPackageTemplate,
+} from "@/components/patients/patient-packages-section";
 import { FollowupsList, type FollowupItem } from "@/components/patients/followups-list";
 import { PatientAvatarPreview } from "@/components/patients/patient-avatar-preview";
 import { listPatientDocuments, type PatientDocumentsData } from "@/actions/patient-documents";
@@ -105,8 +112,11 @@ export default async function PatientDetailPage({ params }: PageProps) {
 
   const isDoctor = user.role === "doctor";
   const isAdmin = user.role === "admin";
+  const isReceptionist = user.role === "receptionist";
+  const canManageMedicalNotes = isAdmin || isDoctor;
+  const canViewMedicalNotes = canManageMedicalNotes || isReceptionist;
   const canViewDocuments =
-    (isAdmin || user.role === "receptionist") && !patient.is_deleted;
+    (isAdmin || isReceptionist) && !patient.is_deleted;
   const doctorCanAccessPatient =
     patient.assigned_doctor_id === user.id ||
     (!!user.departmentId && patient.department_id === user.departmentId);
@@ -125,6 +135,10 @@ export default async function PatientDetailPage({ params }: PageProps) {
     { data: notes },
     appointmentsResult,
     { data: followups },
+    { data: packageRows },
+    { data: packageTemplates },
+    { data: packageDepartments },
+    { data: packageServices },
   ] = await Promise.all([
     supabase
       .from("medical_notes")
@@ -136,7 +150,7 @@ export default async function PatientDetailPage({ params }: PageProps) {
     supabase
       .from("appointments")
       .select(
-        "id, scheduled_at, status, payment_method, paid_at, total_amount, paid_amount, insurance_amount, secondary_amount, deposit_amount, outstanding_amount, secondary_payment_method, payment_note, cancellation_reason, cancelled_at, profiles!doctor_id(full_name), departments(name, color), insurance_providers(name), appointment_services(id, name, price, quantity)",
+        "id, scheduled_at, status, payment_method, paid_at, total_amount, paid_amount, insurance_amount, secondary_amount, deposit_amount, outstanding_amount, secondary_payment_method, payment_note, cancellation_reason, cancelled_at, package_id, package_session_number, profiles!doctor_id(full_name), departments(name, color), insurance_providers(name), patient_packages(name, total_sessions, used_sessions, price_per_session), appointment_services(id, name, price, quantity)",
       )
       .eq("patient_id", id)
       .eq("clinic_id", user.clinicId)
@@ -153,15 +167,52 @@ export default async function PatientDetailPage({ params }: PageProps) {
       .eq("clinic_id", user.clinicId)
       .order("recorded_at", { ascending: false })
       .limit(3),
+    supabase
+      .from("patient_packages")
+      .select(
+        "id, patient_id, department_id, service_id, name, total_sessions, used_sessions, price_per_session, notes, is_active, departments(id, name, color), services(id, name)",
+      )
+      .eq("patient_id", id)
+      .eq("clinic_id", user.clinicId)
+      .order("is_active", { ascending: false })
+      .order("updated_at", { ascending: false }),
+    supabase
+      .from("package_templates")
+      .select(
+        "id, department_id, name, total_sessions, price_per_session, total_price, notes, is_active",
+      )
+      .eq("clinic_id", user.clinicId)
+      .eq("is_active", true)
+      .order("name", { ascending: true }),
+    supabase
+      .from("departments")
+      .select("id, name, color")
+      .eq("clinic_id", user.clinicId)
+      .eq("is_active", true)
+      .is("deleted_at", null)
+      .order("name", { ascending: true }),
+    supabase
+      .from("services")
+      .select("id, name, department_id")
+      .eq("clinic_id", user.clinicId)
+      .eq("is_active", true)
+      .is("deleted_at", null)
+      .order("name", { ascending: true }),
   ]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const appointments = appointmentsResult.data as any[] | null;
+  const patientPackages = (packageRows ?? []) as PatientPackageItem[];
+  const activePackageTemplates = (packageTemplates ??
+    []) as PatientPackageTemplate[];
+  const packageDepartmentOptions = (packageDepartments ??
+    []) as PatientPackageDepartment[];
+  const packageServiceOptions = (packageServices ?? []) as PatientPackageService[];
   const noteRows = (notes ?? []) as MedicalNoteWithAttachments[];
   const noteIds = noteRows.map((note) => note.id);
   const attachmentsByNote = new Map<string, MedicalNoteAttachmentItem[]>();
 
-  if ((isAdmin || isDoctor) && noteIds.length > 0) {
+  if (canViewMedicalNotes && noteIds.length > 0) {
     const { data: attachmentRows } = await supabase
       .from("medical_note_attachments")
       .select(
@@ -575,6 +626,16 @@ export default async function PatientDetailPage({ params }: PageProps) {
             />
           )}
 
+          <PatientPackagesSection
+            patientId={id}
+            packages={patientPackages}
+            departments={packageDepartmentOptions}
+            services={packageServiceOptions}
+            packageTemplates={activePackageTemplates}
+            patientDepartmentId={patient.department_id}
+            canManage={canEdit}
+          />
+
           {/* Appointments */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
@@ -655,7 +716,7 @@ export default async function PatientDetailPage({ params }: PageProps) {
               <span className="text-xs text-muted-foreground">
                 {notes?.length ?? 0} note{notes?.length !== 1 ? "s" : ""}
               </span>
-              {(isAdmin || isDoctor) && (
+              {canViewMedicalNotes && (
                 <Button asChild variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs">
                   <Link href={`/patients/${id}/medical-notes-report`}>
                     <FileText className="h-3 w-3" />
@@ -666,24 +727,26 @@ export default async function PatientDetailPage({ params }: PageProps) {
             </div>
           </div>
 
-          {(isAdmin || isDoctor) && !patient.is_deleted && (
+          {canManageMedicalNotes && !patient.is_deleted && (
             <div className="rounded-xl border border-border/50 bg-card p-4">
               <NoteComposer patientId={id} />
             </div>
           )}
 
-          {!isAdmin && !isDoctor && (
+          {!canViewMedicalNotes && (
             <div className="rounded-lg border border-border/30 bg-muted/20 px-4 py-3 text-xs text-muted-foreground">
-              Medical notes are visible to admins and doctors only.
+              Medical notes are visible to clinical and reception staff only.
             </div>
           )}
 
-          {(isAdmin || isDoctor) && (
+          {canViewMedicalNotes && (
             <MedicalNotesList
               notes={notesWithAttachments}
               patientId={id}
               currentUserId={user.id}
               canManageAllAttachments={isAdmin}
+              canMutateNotes={canManageMedicalNotes}
+              canUploadAttachments={canManageMedicalNotes}
             />
           )}
         </div>

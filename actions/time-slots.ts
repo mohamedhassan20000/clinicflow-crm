@@ -91,26 +91,26 @@ export async function getAvailableTimeSlots(
     windows = [{ start: 8 * 60, end: 18 * 60 }];
   }
 
-  // ── Fetch confirmed appointments for this doctor on this date ─────────────
+  // ── Fetch active appointments for this doctor on this date ────────────────
   const dayStartIso = `${dateIso}T00:00:00+03:00`;
   const dayEndIso   = `${dateIso}T23:59:59+03:00`;
 
-  const { data: confirmedAppts } = doctorId
+  const { data: activeAppts } = doctorId
     ? await supabase
         .from("appointments")
         .select("scheduled_at, duration_minutes, status")
         .eq("doctor_id", doctorId)
         .eq("clinic_id", user.clinicId)
-        .eq("status", "confirmed")
+        .in("status", ["confirmed", "arrived", "in_session"])
         .is("deleted_at", null)
         .gte("scheduled_at", dayStartIso)
         .lte("scheduled_at", dayEndIso)
     : { data: [] };
 
-  // ── Build blocked ranges (confirmed + 15-min buffer) ─────────────────────
+  // ── Build blocked ranges (active appointments + 15-min buffer) ───────────
   const BUFFER_MIN = 15;
   type BlockedRange = { start: number; end: number };
-  const blockedRanges: BlockedRange[] = (confirmedAppts ?? []).map((a) => {
+  const blockedRanges: BlockedRange[] = (activeAppts ?? []).map((a) => {
     const apptStart = timeStrToMinutes(
       new Date(a.scheduled_at)
         .toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: CLINIC_TZ }),

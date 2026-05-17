@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Phone, Stethoscope, Calendar, Clock, FileText, Hash, Trash2 } from "lucide-react";
+import { Phone, Stethoscope, Calendar, Clock, FileText, Hash, Trash2, Package } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -20,7 +20,16 @@ import { useClinicSettings } from "@/contexts/clinic-settings-context";
 
 export type AppointmentForDetail = Pick<
   Tables<"appointments">,
-  "id" | "scheduled_at" | "status" | "insurance_provider_id" | "notes" | "duration_minutes"
+  | "id"
+  | "patient_id"
+  | "doctor_id"
+  | "scheduled_at"
+  | "status"
+  | "insurance_provider_id"
+  | "notes"
+  | "duration_minutes"
+  | "package_id"
+  | "package_session_number"
 > & {
   patients: {
     full_name: string;
@@ -29,6 +38,12 @@ export type AppointmentForDetail = Pick<
   } | null;
   profiles: { full_name: string } | null;
   departments: { name: string; color: string } | null;
+  patient_packages: {
+    name: string;
+    total_sessions: number;
+    used_sessions: number;
+    price_per_session: number | null;
+  } | null;
 };
 
 interface Props {
@@ -36,6 +51,8 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   canEdit: boolean;
+  currentUserId?: string;
+  currentUserRole?: "admin" | "receptionist" | "manager" | "doctor";
   onDeleted?: () => void;
 }
 
@@ -54,6 +71,8 @@ export function AppointmentDetailDialog({
   open,
   onOpenChange,
   canEdit,
+  currentUserId,
+  currentUserRole,
   onDeleted,
 }: Props) {
   const { formatTime } = useClinicSettings();
@@ -65,6 +84,10 @@ export function AppointmentDetailDialog({
   const deptColor = appt.departments?.color ?? "#94a3b8";
   const patientName = appt.patients?.full_name ?? "Unknown patient";
   const apptId = appt.id;
+  const packageInfo = appt.patient_packages;
+  const packageRemaining = packageInfo
+    ? Math.max(0, Number(packageInfo.total_sessions) - Number(packageInfo.used_sessions))
+    : 0;
 
   function handleDelete() {
     startDelete(async () => {
@@ -188,6 +211,26 @@ export function AppointmentDetailDialog({
               </div>
             </section>
 
+            {packageInfo && (
+              <section className="space-y-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Package
+                </p>
+                <div className="flex items-start gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-3 text-sm">
+                  <Package className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-700 dark:text-emerald-400" />
+                  <div className="min-w-0 space-y-1">
+                    <p className="font-medium text-emerald-800 dark:text-emerald-300">
+                      {packageInfo.name}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Session {appt.package_session_number ?? "—"} of{" "}
+                      {packageInfo.total_sessions} · {packageRemaining} remaining
+                    </p>
+                  </div>
+                </div>
+              </section>
+            )}
+
             {/* Notes */}
             {appt.notes && (
               <section className="space-y-2">
@@ -204,11 +247,15 @@ export function AppointmentDetailDialog({
             )}
 
             {/* Status actions */}
-            {canEdit && (
+            {(canEdit || currentUserRole === "doctor") && (
               <div className="pt-1" onClick={(e) => e.stopPropagation()}>
                 <AppointmentActions
                   appointmentId={appt.id}
                   currentStatus={appt.status}
+                  patientId={appt.patient_id}
+                  doctorId={appt.doctor_id}
+                  currentUserId={currentUserId}
+                  currentUserRole={currentUserRole}
                   onActionComplete={() => onOpenChange(false)}
                 />
               </div>

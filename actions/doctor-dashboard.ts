@@ -2,6 +2,28 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { CLINIC_TZ } from "@/lib/datetime";
+import { requireRole } from "@/lib/rbac";
+import type { Database } from "@/types/database";
+
+type AppointmentStatus = Database["public"]["Enums"]["appointment_status"];
+
+export interface DoctorQueueItem {
+  id: string;
+  patientId: string;
+  patientName: string;
+  scheduledAt: string;
+  updatedAt: string;
+  serviceName: string | null;
+  departmentName: string | null;
+  status: Extract<AppointmentStatus, "confirmed" | "arrived" | "in_session">;
+}
+
+export interface DoctorDashboardQueue {
+  inSession: DoctorQueueItem[];
+  arrived: DoctorQueueItem[];
+  confirmedToday: DoctorQueueItem[];
+  confirmedTomorrow: DoctorQueueItem[];
+}
 
 export interface DoctorDashboardStats {
   todayAppts: number;
@@ -49,6 +71,104 @@ function buildDateRange(mode: "today" | "week" | "month", tz = CLINIC_TZ) {
   const start = new Date(y, m, 1, 0, 0, 0, 0);
   const end = new Date(y, m + 1, 0, 23, 59, 59, 999);
   return { start: start.toISOString(), end: end.toISOString() };
+}
+
+function buildDayRange(offsetDays: number, tz = CLINIC_TZ) {
+  const now = new Date(new Date().toLocaleString("en-US", { timeZone: tz }));
+  const y = now.getFullYear();
+  const m = now.getMonth();
+  const d = now.getDate() + offsetDays;
+  const start = new Date(y, m, d, 0, 0, 0, 0);
+  const end = new Date(y, m, d, 23, 59, 59, 999);
+  return { start: start.toISOString(), end: end.toISOString() };
+}
+
+type QueueAppointmentRow = {
+  id: string;
+  patient_id: string;
+  scheduled_at: string;
+  updated_at: string;
+  status: AppointmentStatus;
+  patients: { full_name: string } | { full_name: string }[] | null;
+  services: { name: string } | { name: string }[] | null;
+  departments: { name: string } | { name: string }[] | null;
+};
+
+function firstRelation<T>(value: T | T[] | null): T | null {
+  if (Array.isArray(value)) return value[0] ?? null;
+  return value;
+}
+
+function toQueueItem(row: QueueAppointmentRow): DoctorQueueItem {
+  const patient = firstRelation(row.patients);
+  const service = firstRelation(row.services);
+  const department = firstRelation(row.departments);
+
+  return {
+    id: row.id,
+    patientId: row.patient_id,
+    patientName: patient?.full_name ?? "Unknown patient",
+    scheduledAt: row.scheduled_at,
+    updatedAt: row.updated_at,
+    serviceName: service?.name ?? null,
+    departmentName: department?.name ?? null,
+    status: row.status as DoctorQueueItem["status"],
+  };
+}
+
+export async function fetchDoctorDashboardQueue(): Promise<DoctorDashboardQueue> {
+  const user = await requireRole("doctor");
+  const supabase = await createClient();
+
+  const today = buildDayRange(0);
+  const tomorrow = buildDayRange(1);
+
+  const { data, error } = await supabase
+    .from("appointments")
+    .select(
+      "id, patient_id, scheduled_at, updated_at, status, patients(full_name), services(name), departments(name)",
+    )
+    .eq("clinic_id", user.clinicId)
+    .eq("doctor_id", user.id)
+    .is("deleted_at", null)
+    .gte("scheduled_at", today.start)
+    .lte("scheduled_at", tomorrow.end)
+    .in("status", ["confirmed", "arrived", "in_session"]);
+
+  if (error) {
+    console.error("[doctor-dashboard] Failed to fetch queue", error);
+    return {
+      inSession: [],
+      arrived: [],
+      confirmedToday: [],
+      confirmedTomorrow: [],
+    };
+  }
+
+  const rows = ((data ?? []) as QueueAppointmentRow[]).map(toQueueItem);
+  const isToday = (item: DoctorQueueItem) =>
+    item.scheduledAt >= today.start && item.scheduledAt <= today.end;
+  const isTomorrow = (item: DoctorQueueItem) =>
+    item.scheduledAt >= tomorrow.start && item.scheduledAt <= tomorrow.end;
+  const byScheduledAsc = (a: DoctorQueueItem, b: DoctorQueueItem) =>
+    new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime();
+  const byUpdatedDesc = (a: DoctorQueueItem, b: DoctorQueueItem) =>
+    new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+
+  return {
+    inSession: rows
+      .filter((item) => item.status === "in_session" && isToday(item))
+      .sort(byUpdatedDesc),
+    arrived: rows
+      .filter((item) => item.status === "arrived" && isToday(item))
+      .sort(byUpdatedDesc),
+    confirmedToday: rows
+      .filter((item) => item.status === "confirmed" && isToday(item))
+      .sort(byScheduledAsc),
+    confirmedTomorrow: rows
+      .filter((item) => item.status === "confirmed" && isTomorrow(item))
+      .sort(byScheduledAsc),
+  };
 }
 
 export async function fetchDoctorDashboardStats(

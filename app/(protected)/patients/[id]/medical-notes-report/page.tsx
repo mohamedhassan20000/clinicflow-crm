@@ -30,8 +30,11 @@ export default async function MedicalNotesReportPage({
   const user = await requireUser();
   const isDoctor = user.role === "doctor";
   const isAdmin = user.role === "admin";
+  const isReceptionist = user.role === "receptionist";
+  const canManageMedicalNotes = isAdmin || isDoctor;
+  const canViewMedicalNotes = canManageMedicalNotes || isReceptionist;
 
-  if (!isAdmin && !isDoctor) notFound();
+  if (!canViewMedicalNotes) notFound();
 
   const supabase = await createClient();
 
@@ -175,7 +178,7 @@ export default async function MedicalNotesReportPage({
 
       <ReportDateFilter from={from} to={to} />
 
-      {!patient.is_deleted && (
+      {canManageMedicalNotes && !patient.is_deleted && (
         <div className="rounded-xl border border-border/50 bg-card p-4 print:hidden">
           <NoteComposer patientId={id} />
         </div>
@@ -188,6 +191,8 @@ export default async function MedicalNotesReportPage({
           patientId={id}
           currentUserId={user.id}
           canManageAllAttachments={isAdmin}
+          canMutateNotes={canManageMedicalNotes}
+          canUploadAttachments={canManageMedicalNotes}
         />
       </div>
 

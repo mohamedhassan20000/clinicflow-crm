@@ -474,7 +474,7 @@ export function RevenueReport({
             </tbody>
             {summary.transactionCount > 0 && (
               <tbody className="bg-muted/30 font-semibold print:break-inside-avoid">
-                <tr className="border-t-2 border-border/60 print:border-gray-300">
+                <tr className="border-t border-border/60 print:border-black">
                   <td className="px-4 py-3 text-xs uppercase tracking-wider text-muted-foreground" colSpan={3}>
                     Totals
                   </td>
@@ -650,7 +650,7 @@ export function RevenueReport({
                 ))}
               </tbody>
               <tbody className="bg-muted/30 font-semibold print:bg-transparent">
-                <tr className="border-t-2 border-border/60 print:border-black print:[&>td]:border-t-2 print:[&>td]:border-black">
+                <tr className="border-t border-border/60 print:border-black">
                   <td
                     className="px-4 py-3 text-xs uppercase tracking-wider text-muted-foreground"
                     colSpan={4}

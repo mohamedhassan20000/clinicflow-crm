@@ -1657,6 +1657,13 @@ export type Database = {
         Args: { p_document_id: string; p_patient_id: string }
         Returns: boolean
       }
+      start_appointment_session: {
+        Args: { p_appointment_id: string }
+        Returns: {
+          patient_id: string
+          status: Database["public"]["Enums"]["appointment_status"]
+        }[]
+      }
       undo_appointment_billing: {
         Args: { p_appointment_id: string; p_target_status: string }
         Returns: undefined

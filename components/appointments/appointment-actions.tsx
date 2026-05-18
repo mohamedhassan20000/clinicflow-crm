@@ -424,14 +424,8 @@ function AppointmentActionsInner({
   const showCancel =
     isFrontDesk &&
     (effectiveStatus === "pending" ||
-      effectiveStatus === "confirmed" ||
-      effectiveStatus === "arrived" ||
-      effectiveStatus === "in_session");
-  const showNoShow =
-    isFrontDesk &&
-    (effectiveStatus === "confirmed" ||
-      effectiveStatus === "arrived" ||
-      effectiveStatus === "in_session");
+      effectiveStatus === "confirmed");
+  const showNoShow = isFrontDesk && effectiveStatus === "confirmed";
   const showStartSession = isAssignedDoctor;
 
   if (

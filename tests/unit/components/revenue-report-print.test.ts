@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 describe("RevenueReport settlement print styling", () => {
-  it("prints the settlement total row as part of the table with a black top border", () => {
+  it("prints the settlement total row with normalized black table borders", () => {
     const source = readFileSync(
       join(process.cwd(), "components/revenue/revenue-report.tsx"),
       "utf8",
@@ -11,7 +11,6 @@ describe("RevenueReport settlement print styling", () => {
 
     expect(source).toContain("Total settled");
     expect(source).toContain("print:border-black");
-    expect(source).toContain("print:[&>td]:border-t-2");
-    expect(source).toContain("print:[&>td]:border-black");
+    expect(source).not.toContain("print:[&>td]:border-t-2");
   });
 });

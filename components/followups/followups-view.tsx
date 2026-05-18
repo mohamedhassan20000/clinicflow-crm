@@ -413,6 +413,7 @@ export function FollowupsView({
               const name = g.dept?.name ?? "Unassigned";
               return (
                 <section
+                  data-print-table-section
                   key={g.dept?.id ?? UNASSIGNED_KEY}
                   className="overflow-hidden rounded-xl border bg-card shadow-sm"
                   style={{
@@ -694,6 +695,7 @@ export function FollowupsView({
               const gp = Math.min(donePageFor(groupKey), totalPages);
               return (
                 <section
+                  data-print-table-section
                   key={groupKey}
                   className="overflow-hidden rounded-xl border bg-card shadow-sm"
                   style={{

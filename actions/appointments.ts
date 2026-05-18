@@ -626,39 +626,39 @@ export async function startAppointmentSession(
   const user = await requireRole(["doctor"]);
   const supabase = await createClient();
 
-  const { data: appt } = await supabase
+  const { data: appt, error: readError } = await supabase
     .from("appointments")
-    .select("status, patient_id, doctor_id")
+    .select("id, status, patient_id, doctor_id, clinic_id")
     .eq("id", id)
-    .eq("clinic_id", user.clinicId)
-    .single();
+    .maybeSingle();
 
+  if (readError) return { error: readError.message };
   if (!appt) return { error: "Appointment not found." };
+  if (appt.clinic_id !== user.clinicId) {
+    return { error: "Appointment not found." };
+  }
   if (appt.doctor_id !== user.id) {
-    return { error: "You can only start sessions assigned to you." };
+    return { error: "Only the assigned doctor can start this session." };
   }
   if (appt.status !== "arrived") {
-    return { error: `Cannot transition from ${appt.status} to in_session.` };
+    return { error: "This appointment is no longer arrived." };
   }
 
-  const { error } = await supabase
-    .from("appointments")
-    .update({
-      status: "in_session",
-      updated_by: user.id,
-    } as TablesUpdate<"appointments">)
-    .eq("id", id)
-    .eq("clinic_id", user.clinicId)
-    .eq("doctor_id", user.id)
-    .eq("status", "arrived");
+  const { data: startedSession, error } = await supabase
+    .rpc("start_appointment_session", { p_appointment_id: id })
+    .single();
 
-  if (error) return { error: "Failed to start appointment session." };
+  if (error) return { error: error.message };
+  if (startedSession.status !== "in_session") {
+    return { error: "Could not verify the updated session status." };
+  }
 
-  const redirectTo = `/patients/${appt.patient_id}/medical-notes-report`;
+  const redirectTo = `/patients/${startedSession.patient_id}/medical-notes-report`;
   revalidatePath("/appointments");
-  revalidatePath(`/patients/${appt.patient_id}`);
+  revalidatePath("/dashboard");
+  revalidatePath(`/patients/${startedSession.patient_id}`);
   revalidatePath(redirectTo);
-  return { success: true, patientId: appt.patient_id, redirectTo };
+  return { success: true, patientId: startedSession.patient_id, redirectTo };
 }
 
 export async function undoInvoiceCompletion(

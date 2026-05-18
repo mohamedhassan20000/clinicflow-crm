@@ -313,11 +313,11 @@
 
   @page {
     size: A4 landscape;
-    margin: 10mm;
+    margin: 18mm 10mm 10mm;
   }
   @page patient-profile {
     size: A4 portrait;
-    margin: 14mm;
+    margin: 18mm 14mm 14mm;
   }
   html, body {
     background: #fff !important;
@@ -326,6 +326,18 @@
     min-width: 0 !important;
     max-width: none !important;
     overflow: visible !important;
+  }
+  *,
+  *::before,
+  *::after {
+    --tw-shadow: 0 0 #0000 !important;
+    --tw-shadow-colored: 0 0 #0000 !important;
+    --tw-ring-shadow: 0 0 #0000 !important;
+    --tw-ring-offset-shadow: 0 0 #0000 !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+    filter: none !important;
+    backdrop-filter: none !important;
   }
   /* Hide app chrome — any element marked hidden-in-print */
   header, nav, aside,
@@ -362,9 +374,12 @@
     table-layout: auto;
     font-size: 10px !important;
     page-break-inside: auto;
-    /* Schematic grid — every cell gets a visible border in print. */
     border-collapse: collapse !important;
-    border: 1px solid #000 !important;
+    border-spacing: 0 !important;
+    border: 0 !important;
+    background: #fff !important;
+    color: #000 !important;
+    box-shadow: none !important;
   }
   table th,
   table td {
@@ -373,28 +388,35 @@
     border: 1px solid #000 !important;
     background: #fff !important;
     color: #000 !important;
+    box-shadow: none !important;
   }
   table thead th {
-    background: #f1f5f9 !important; /* slate-100 */
+    background: #fff !important;
     color: #000 !important;
     font-weight: 600 !important;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    border-bottom: 1.5px solid #000 !important;
+    border: 1px solid #000 !important;
   }
   table tfoot td {
-    background: #f1f5f9 !important;
+    background: #fff !important;
     font-weight: 700 !important;
-    border-top: 1.5px solid #000 !important;
+    border: 1px solid #000 !important;
   }
-  /* Zebra striping for legibility on paper */
-  table tbody tr:nth-child(even) td {
-    background: #fafafa !important;
-  }
-  /* Strip decorative on-screen badges/chips that hurt print legibility */
+  table tr,
+  table thead,
+  table tbody,
+  table tfoot,
+  table .rounded-md,
   table .rounded-full,
   table [class*="bg-"] {
-    background: transparent !important;
+    background: #fff !important;
+    color: #000 !important;
+    border-color: #000 !important;
+    box-shadow: none !important;
+  }
+  table svg {
+    color: #000 !important;
   }
   [data-patient-roster-section],
   [data-patient-roster-section] * {
@@ -411,6 +433,14 @@
   }
   [data-patient-name-dot] {
     display: none !important;
+  }
+  [data-print-table-section],
+  [data-print-table-section] * {
+    background: #fff !important;
+    background-image: none !important;
+    border-color: #000 !important;
+    color: #000 !important;
+    box-shadow: none !important;
   }
   tr    { page-break-inside: avoid; page-break-after: auto; }
   thead { display: table-header-group; }
@@ -482,6 +512,8 @@
   [data-report-section] * {
     border-color: #000 !important;
     color: #000 !important;
+    background-color: #fff !important;
+    background-image: none !important;
     box-shadow: none !important;
   }
   [data-report-section] [data-slot="card"] {

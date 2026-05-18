@@ -2,19 +2,32 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { ExternalLink, RefreshCcw, Volume2, VolumeX } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ExternalLink, Play, RefreshCcw, Volume2, VolumeX } from "lucide-react";
+import { toast } from "sonner";
+import { startAppointmentSession } from "@/actions/appointments";
 import {
   fetchDoctorDashboardQueue,
   type DoctorDashboardQueue,
   type DoctorQueueItem,
 } from "@/actions/doctor-dashboard";
 import { StatusBadge } from "@/components/appointments/status-badge";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 const EMPTY_QUEUE: DoctorDashboardQueue = {
   inSession: [],
+  completedToday: [],
   arrived: [],
   confirmedToday: [],
   confirmedTomorrow: [],
@@ -100,13 +113,12 @@ export function DoctorQueue() {
   const previousArrivedIdsRef = useRef<Set<string> | null>(null);
   const { enabled, setEnabled, play } = useArrivalChime();
 
-  const refreshQueue = useCallback(() => {
-    startTransition(async () => {
-      const next = await fetchDoctorDashboardQueue();
+  const applyQueue = useCallback(
+    (next: DoctorDashboardQueue, playArrivalSound = true) => {
       const nextArrivedIds = new Set(next.arrived.map((item) => item.id));
       const previousArrivedIds = previousArrivedIdsRef.current;
 
-      if (previousArrivedIds) {
+      if (playArrivalSound && previousArrivedIds) {
         const hasNewArrival = next.arrived.some((item) => !previousArrivedIds.has(item.id));
         if (hasNewArrival) play();
       }
@@ -114,8 +126,23 @@ export function DoctorQueue() {
       previousArrivedIdsRef.current = nextArrivedIds;
       setQueue(next);
       setHasLoaded(true);
+    },
+    [play],
+  );
+
+  const loadQueue = useCallback(
+    async ({ playArrivalSound = true }: { playArrivalSound?: boolean } = {}) => {
+      const next = await fetchDoctorDashboardQueue();
+      applyQueue(next, playArrivalSound);
+    },
+    [applyQueue],
+  );
+
+  const refreshQueue = useCallback(() => {
+    startTransition(async () => {
+      await loadQueue();
     });
-  }, [play]);
+  }, [loadQueue]);
 
   useEffect(() => {
     refreshQueue();
@@ -138,6 +165,7 @@ export function DoctorQueue() {
   const total = useMemo(
     () =>
       queue.inSession.length +
+      queue.completedToday.length +
       queue.arrived.length +
       queue.confirmedToday.length +
       queue.confirmedTomorrow.length,
@@ -150,7 +178,7 @@ export function DoctorQueue() {
         <div>
           <h2 className="text-lg font-semibold tracking-tight">My Queue</h2>
           <p className="text-xs text-muted-foreground">
-            {hasLoaded ? `${total} active appointment${total === 1 ? "" : "s"}` : "Loading queue..."}
+            {hasLoaded ? `${total} queue appointment${total === 1 ? "" : "s"}` : "Loading queue..."}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -185,23 +213,34 @@ export function DoctorQueue() {
             items={queue.inSession}
             loading={!hasLoaded}
             variant="inSession"
+            onQueueRefresh={() => loadQueue({ playArrivalSound: false })}
+          />
+          <QueueCard
+            title="Completed Today"
+            items={queue.completedToday}
+            loading={!hasLoaded}
+            variant="completed"
+            onQueueRefresh={() => loadQueue({ playArrivalSound: false })}
           />
           <QueueCard
             title="Arrived"
             items={queue.arrived}
             loading={!hasLoaded}
             variant="arrived"
+            onQueueRefresh={() => loadQueue({ playArrivalSound: false })}
           />
           <QueueCard
             title="Confirmed Today"
             items={queue.confirmedToday}
             loading={!hasLoaded}
+            onQueueRefresh={() => loadQueue({ playArrivalSound: false })}
           />
         </div>
         <QueueCard
           title="Tomorrow Confirmed"
           items={queue.confirmedTomorrow}
           loading={!hasLoaded}
+          onQueueRefresh={() => loadQueue({ playArrivalSound: false })}
         />
       </div>
     </section>
@@ -213,11 +252,13 @@ function QueueCard({
   items,
   loading,
   variant = "default",
+  onQueueRefresh,
 }: {
   title: string;
   items: DoctorQueueItem[];
   loading: boolean;
-  variant?: "default" | "arrived" | "inSession";
+  variant?: "default" | "arrived" | "inSession" | "completed";
+  onQueueRefresh: () => Promise<void>;
 }) {
   return (
     <div
@@ -226,6 +267,8 @@ function QueueCard({
         variant === "arrived" && "border-sky-200 bg-sky-50/40 dark:border-sky-900/50 dark:bg-sky-950/10",
         variant === "inSession" &&
           "border-violet-200 bg-violet-50/50 dark:border-violet-900/50 dark:bg-violet-950/10",
+        variant === "completed" &&
+          "border-emerald-200 bg-emerald-50/40 dark:border-emerald-900/50 dark:bg-emerald-950/10",
       )}
     >
       <div className="mb-3 flex items-center justify-between gap-3">
@@ -247,7 +290,12 @@ function QueueCard({
       ) : (
         <div className="space-y-2">
           {items.map((item) => (
-            <QueueRow key={item.id} item={item} highlighted={variant === "inSession"} />
+            <QueueRow
+              key={item.id}
+              item={item}
+              highlighted={variant === "inSession"}
+              onQueueRefresh={onQueueRefresh}
+            />
           ))}
         </div>
       )}
@@ -255,7 +303,54 @@ function QueueCard({
   );
 }
 
-function QueueRow({ item, highlighted }: { item: DoctorQueueItem; highlighted: boolean }) {
+function QueueRow({
+  item,
+  highlighted,
+  onQueueRefresh,
+}: {
+  item: DoctorQueueItem;
+  highlighted: boolean;
+  onQueueRefresh: () => Promise<void>;
+}) {
+  const router = useRouter();
+  const [isStartingSession, setIsStartingSession] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const canStartSession = item.status === "arrived";
+
+  async function handleStartSession() {
+    if (isStartingSession) return;
+    setIsStartingSession(true);
+
+    try {
+      const result = await startAppointmentSession(item.id);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+
+      const redirectTo =
+        result.redirectTo ??
+        (result.patientId || item.patientId
+          ? `/patients/${result.patientId ?? item.patientId}/medical-notes-report`
+          : null);
+
+      if (!redirectTo) {
+        toast.error("Session started, but the patient notes page could not be opened.");
+        router.refresh();
+        return;
+      }
+
+      await onQueueRefresh();
+      setConfirmOpen(false);
+      router.refresh();
+      router.push(redirectTo);
+    } catch {
+      toast.error("Failed to start appointment session.");
+    } finally {
+      setIsStartingSession(false);
+    }
+  }
+
   return (
     <div
       className={cn(
@@ -274,12 +369,42 @@ function QueueRow({ item, highlighted }: { item: DoctorQueueItem; highlighted: b
           {item.departmentName ? ` · ${item.departmentName}` : ""}
         </p>
       </div>
-      <Button asChild variant="outline" size="sm" className="self-start sm:self-center">
-        <Link href={`/patients/${item.patientId}`}>
-          Open patient
-          <ExternalLink className="h-3.5 w-3.5" />
-        </Link>
-      </Button>
+      <div className="flex flex-wrap items-center gap-2 self-start sm:self-center">
+        {canStartSession ? (
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => setConfirmOpen(true)}
+            disabled={isStartingSession}
+          >
+            <Play className="h-3.5 w-3.5" />
+            {isStartingSession ? "Starting..." : "Start Session"}
+          </Button>
+        ) : null}
+        <Button asChild variant={canStartSession ? "ghost" : "outline"} size="sm">
+          <Link href={`/patients/${item.patientId}`}>
+            Open patient
+            <ExternalLink className="h-3.5 w-3.5" />
+          </Link>
+        </Button>
+      </div>
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Start this session?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to start this session? Duration: {item.durationMinutes}{" "}
+              {item.durationMinutes === 1 ? "minute" : "minutes"}.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isStartingSession}>Cancel</AlertDialogCancel>
+            <Button type="button" onClick={handleStartSession} disabled={isStartingSession}>
+              {isStartingSession ? "Starting..." : "Start Session"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

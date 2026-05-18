@@ -13,13 +13,15 @@ export interface DoctorQueueItem {
   patientName: string;
   scheduledAt: string;
   updatedAt: string;
+  durationMinutes: number;
   serviceName: string | null;
   departmentName: string | null;
-  status: Extract<AppointmentStatus, "confirmed" | "arrived" | "in_session">;
+  status: Extract<AppointmentStatus, "confirmed" | "arrived" | "in_session" | "completed">;
 }
 
 export interface DoctorDashboardQueue {
   inSession: DoctorQueueItem[];
+  completedToday: DoctorQueueItem[];
   arrived: DoctorQueueItem[];
   confirmedToday: DoctorQueueItem[];
   confirmedTomorrow: DoctorQueueItem[];
@@ -88,6 +90,7 @@ type QueueAppointmentRow = {
   patient_id: string;
   scheduled_at: string;
   updated_at: string;
+  duration_minutes: number;
   status: AppointmentStatus;
   patients: { full_name: string } | { full_name: string }[] | null;
   services: { name: string } | { name: string }[] | null;
@@ -110,6 +113,7 @@ function toQueueItem(row: QueueAppointmentRow): DoctorQueueItem {
     patientName: patient?.full_name ?? "Unknown patient",
     scheduledAt: row.scheduled_at,
     updatedAt: row.updated_at,
+    durationMinutes: row.duration_minutes,
     serviceName: service?.name ?? null,
     departmentName: department?.name ?? null,
     status: row.status as DoctorQueueItem["status"],
@@ -123,29 +127,46 @@ export async function fetchDoctorDashboardQueue(): Promise<DoctorDashboardQueue>
   const today = buildDayRange(0);
   const tomorrow = buildDayRange(1);
 
-  const { data, error } = await supabase
-    .from("appointments")
-    .select(
-      "id, patient_id, scheduled_at, updated_at, status, patients(full_name), services(name), departments(name)",
-    )
-    .eq("clinic_id", user.clinicId)
-    .eq("doctor_id", user.id)
-    .is("deleted_at", null)
-    .gte("scheduled_at", today.start)
-    .lte("scheduled_at", tomorrow.end)
-    .in("status", ["confirmed", "arrived", "in_session"]);
+  const selectColumns =
+    "id, patient_id, scheduled_at, updated_at, duration_minutes, status, patients(full_name), services(name), departments(name)";
 
-  if (error) {
-    console.error("[doctor-dashboard] Failed to fetch queue", error);
+  const [activeResult, completedResult] = await Promise.all([
+    supabase
+      .from("appointments")
+      .select(selectColumns)
+      .eq("clinic_id", user.clinicId)
+      .eq("doctor_id", user.id)
+      .is("deleted_at", null)
+      .gte("scheduled_at", today.start)
+      .lte("scheduled_at", tomorrow.end)
+      .in("status", ["confirmed", "arrived", "in_session"]),
+    supabase
+      .from("appointments")
+      .select(selectColumns)
+      .eq("clinic_id", user.clinicId)
+      .eq("doctor_id", user.id)
+      .is("deleted_at", null)
+      .gte("scheduled_at", today.start)
+      .lte("scheduled_at", today.end)
+      .eq("status", "completed"),
+  ]);
+
+  if (activeResult.error || completedResult.error) {
+    console.error(
+      "[doctor-dashboard] Failed to fetch queue",
+      activeResult.error ?? completedResult.error,
+    );
     return {
       inSession: [],
+      completedToday: [],
       arrived: [],
       confirmedToday: [],
       confirmedTomorrow: [],
     };
   }
 
-  const rows = ((data ?? []) as QueueAppointmentRow[]).map(toQueueItem);
+  const rows = ((activeResult.data ?? []) as QueueAppointmentRow[]).map(toQueueItem);
+  const completedRows = ((completedResult.data ?? []) as QueueAppointmentRow[]).map(toQueueItem);
   const isToday = (item: DoctorQueueItem) =>
     item.scheduledAt >= today.start && item.scheduledAt <= today.end;
   const isTomorrow = (item: DoctorQueueItem) =>
@@ -158,6 +179,9 @@ export async function fetchDoctorDashboardQueue(): Promise<DoctorDashboardQueue>
   return {
     inSession: rows
       .filter((item) => item.status === "in_session" && isToday(item))
+      .sort(byUpdatedDesc),
+    completedToday: completedRows
+      .filter((item) => item.status === "completed" && isToday(item))
       .sort(byUpdatedDesc),
     arrived: rows
       .filter((item) => item.status === "arrived" && isToday(item))

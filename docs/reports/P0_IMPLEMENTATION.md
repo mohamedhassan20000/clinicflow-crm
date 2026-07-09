@@ -242,3 +242,12 @@ No P1 or later scope was implemented during review fixes. There is still no sign
 - **Tests added or updated:** None; this is CI/local integration environment wiring only.
 - **Verification performed:** `pnpm lint` passed with 4 existing warnings and 0 errors. `pnpm typecheck` passed. `pnpm test` passed: 52 files, 286 tests. Local integration execution still depends on Docker/local Supabase availability; CI now sources the keys produced by its local Supabase instance.
 - **No P1+ confirmation:** No application behavior, migrations, RLS logic, billing, onboarding, messaging, AI, WhatsApp, or entitlements work was implemented.
+
+## Integration Fixture Reliability Fix
+
+- **Failure:** CI integration tests ran with real local Supabase and exposed fixture issues: previous-outstanding billing tests could carry completed appointment state between cases, and the RLS suite's other-clinic appointment fixture could fail seeding because it referenced same-clinic staff.
+- **What was changed:** The previous-outstanding fixture now fails fast on cleanup/seed errors and uses deterministic upserts for fixed seed rows. The RLS fixture now creates a real other-clinic doctor profile for other-clinic patient, appointment, document, and note rows, and critical cleanup/seed operations now fail fast instead of silently continuing with missing rows.
+- **Files modified:** `tests/unit/integration/previous-outstanding-billing-rpc.test.ts`, `tests/unit/integration/rls-security.test.ts`, `docs/reports/P0_IMPLEMENTATION.md`.
+- **Tests added or updated:** Updated integration fixtures only; no tests were skipped, deleted, or weakened.
+- **Verification performed:** `pnpm lint` passed with 4 existing warnings and 0 errors. `pnpm typecheck` passed. `pnpm test` passed: 52 files, 286 tests. `supabase status -o env` was attempted locally and failed because Docker daemon is not running, so `pnpm test:integration` must be verified in CI/local Docker.
+- **No P1+ confirmation:** No application behavior, migrations, RLS logic, billing, onboarding, messaging, AI, WhatsApp, or entitlements work was implemented.

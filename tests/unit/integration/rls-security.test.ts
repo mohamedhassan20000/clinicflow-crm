@@ -19,7 +19,8 @@ type TestUserKey =
   | "receptionist"
   | "manager"
   | "doctor"
-  | "otherDoctor";
+  | "otherDoctor"
+  | "otherClinicDoctor";
 
 const ids = {
   clinic: "10000000-0000-4000-8000-000000000001",
@@ -56,6 +57,7 @@ const emails: Record<TestUserKey, string> = {
   manager: `${suffix}-manager@example.com`,
   doctor: `${suffix}-doctor@example.com`,
   otherDoctor: `${suffix}-other-doctor@example.com`,
+  otherClinicDoctor: `${suffix}-other-clinic-doctor@example.com`,
 };
 
 const userIds = {} as Record<TestUserKey, string>;
@@ -71,6 +73,16 @@ const service = createClient<Database>(
     },
   },
 );
+
+function assertNoError<T extends { error: { message: string } | null }>(
+  result: T,
+  context: string,
+): T {
+  if (result.error) {
+    throw new Error(`${context}: ${result.error.message}`);
+  }
+  return result;
+}
 
 const storagePaths = {
   patientDocument: `documents/${ids.clinic}/${ids.allowedPatient}/national_id/${ids.patientDocument}.pdf`,
@@ -133,92 +145,139 @@ async function cleanupSeedData() {
       ? service.storage.from("clinic-assets").remove([staffStoragePath()])
       : Promise.resolve({ data: null, error: null }),
   ]);
-  await service.from("user_page_permissions").delete().eq("clinic_id", ids.clinic);
-  await service.from("patient_documents").delete().in("clinic_id", [
-    ids.clinic,
-    ids.otherClinic,
-  ]);
-  await service.from("medical_notes").delete().in("id", [
-    ids.allowedNote,
-    ids.deptNote,
-    ids.unrelatedNote,
-    ids.otherClinicNote,
-    ids.authoredNote,
-  ]);
-  await service.from("patient_deposits").delete().eq("id", ids.deposit);
-  await service.from("outstanding_settlements").delete().eq("id", ids.settlement);
-  await service.from("appointments").delete().in("id", [
-    ids.allowedAppointment,
-    ids.unrelatedAppointment,
-    ids.otherClinicAppointment,
-  ]);
-  await service.from("patients").delete().in("id", [
-    ids.allowedPatient,
-    ids.deptPatient,
-    ids.unrelatedPatient,
-    ids.otherClinicPatient,
-  ]);
-  await service.from("profiles").delete().in("clinic_id", [
-    ids.clinic,
-    ids.otherClinic,
-  ]);
-  await service.from("departments").delete().in("id", [
-    ids.dept,
-    ids.otherDept,
-    ids.otherClinicDept,
-  ]);
-  await service.from("clinics").delete().in("id", [ids.clinic, ids.otherClinic]);
+  assertNoError(
+    await service.from("user_page_permissions").delete().eq("clinic_id", ids.clinic),
+    "cleanup page permissions",
+  );
+  assertNoError(
+    await service.from("patient_documents").delete().in("clinic_id", [
+      ids.clinic,
+      ids.otherClinic,
+    ]),
+    "cleanup patient documents",
+  );
+  assertNoError(
+    await service.from("medical_notes").delete().in("id", [
+      ids.allowedNote,
+      ids.deptNote,
+      ids.unrelatedNote,
+      ids.otherClinicNote,
+      ids.authoredNote,
+    ]),
+    "cleanup medical notes",
+  );
+  assertNoError(
+    await service.from("patient_deposits").delete().eq("id", ids.deposit),
+    "cleanup patient deposits",
+  );
+  assertNoError(
+    await service.from("outstanding_settlements").delete().eq("id", ids.settlement),
+    "cleanup outstanding settlements",
+  );
+  assertNoError(
+    await service.from("appointments").delete().in("id", [
+      ids.allowedAppointment,
+      ids.unrelatedAppointment,
+      ids.otherClinicAppointment,
+    ]),
+    "cleanup appointments",
+  );
+  assertNoError(
+    await service.from("patients").delete().in("id", [
+      ids.allowedPatient,
+      ids.deptPatient,
+      ids.unrelatedPatient,
+      ids.otherClinicPatient,
+    ]),
+    "cleanup patients",
+  );
+  assertNoError(
+    await service.from("profiles").delete().in("clinic_id", [
+      ids.clinic,
+      ids.otherClinic,
+    ]),
+    "cleanup profiles",
+  );
+  assertNoError(
+    await service.from("departments").delete().in("id", [
+      ids.dept,
+      ids.otherDept,
+      ids.otherClinicDept,
+    ]),
+    "cleanup departments",
+  );
+  assertNoError(
+    await service.from("clinics").delete().in("id", [ids.clinic, ids.otherClinic]),
+    "cleanup clinics",
+  );
 }
 
 async function seedRlsData() {
-  await service.from("clinics").insert([
-    { id: ids.clinic, name: `RLS Clinic ${suffix}` },
-    { id: ids.otherClinic, name: `RLS Other Clinic ${suffix}` },
-  ]);
-  await service.from("departments").insert([
-    { id: ids.dept, clinic_id: ids.clinic, name: `RLS Dept ${suffix}` },
-    { id: ids.otherDept, clinic_id: ids.clinic, name: `RLS Other Dept ${suffix}` },
-    {
-      id: ids.otherClinicDept,
-      clinic_id: ids.otherClinic,
-      name: `RLS Other Clinic Dept ${suffix}`,
-    },
-  ]);
-  await service.from("profiles").insert([
-    {
-      id: userIds.admin,
-      clinic_id: ids.clinic,
-      full_name: "RLS Admin",
-      role: "admin",
-    },
-    {
-      id: userIds.receptionist,
-      clinic_id: ids.clinic,
-      full_name: "RLS Receptionist",
-      role: "receptionist",
-    },
-    {
-      id: userIds.manager,
-      clinic_id: ids.clinic,
-      full_name: "RLS Manager",
-      role: "manager",
-    },
-    {
-      id: userIds.doctor,
-      clinic_id: ids.clinic,
-      department_id: ids.dept,
-      full_name: "RLS Doctor",
-      role: "doctor",
-    },
-    {
-      id: userIds.otherDoctor,
-      clinic_id: ids.clinic,
-      department_id: ids.otherDept,
-      full_name: "RLS Other Doctor",
-      role: "doctor",
-    },
-  ]);
-  await service.from("patients").insert([
+  assertNoError(
+    await service.from("clinics").insert([
+      { id: ids.clinic, name: `RLS Clinic ${suffix}` },
+      { id: ids.otherClinic, name: `RLS Other Clinic ${suffix}` },
+    ]),
+    "seed clinics",
+  );
+  assertNoError(
+    await service.from("departments").insert([
+      { id: ids.dept, clinic_id: ids.clinic, name: `RLS Dept ${suffix}` },
+      { id: ids.otherDept, clinic_id: ids.clinic, name: `RLS Other Dept ${suffix}` },
+      {
+        id: ids.otherClinicDept,
+        clinic_id: ids.otherClinic,
+        name: `RLS Other Clinic Dept ${suffix}`,
+      },
+    ]),
+    "seed departments",
+  );
+  assertNoError(
+    await service.from("profiles").insert([
+      {
+        id: userIds.admin,
+        clinic_id: ids.clinic,
+        full_name: "RLS Admin",
+        role: "admin",
+      },
+      {
+        id: userIds.receptionist,
+        clinic_id: ids.clinic,
+        full_name: "RLS Receptionist",
+        role: "receptionist",
+      },
+      {
+        id: userIds.manager,
+        clinic_id: ids.clinic,
+        full_name: "RLS Manager",
+        role: "manager",
+      },
+      {
+        id: userIds.doctor,
+        clinic_id: ids.clinic,
+        department_id: ids.dept,
+        full_name: "RLS Doctor",
+        role: "doctor",
+      },
+      {
+        id: userIds.otherDoctor,
+        clinic_id: ids.clinic,
+        department_id: ids.otherDept,
+        full_name: "RLS Other Doctor",
+        role: "doctor",
+      },
+      {
+        id: userIds.otherClinicDoctor,
+        clinic_id: ids.otherClinic,
+        department_id: ids.otherClinicDept,
+        full_name: "RLS Other Clinic Doctor",
+        role: "doctor",
+      },
+    ]),
+    "seed profiles",
+  );
+  assertNoError(
+    await service.from("patients").insert([
     {
       id: ids.allowedPatient,
       clinic_id: ids.clinic,
@@ -265,14 +324,17 @@ async function seedRlsData() {
       date_of_birth: "1993-01-01",
       phone: "05551234570",
       email: `${suffix}-other-clinic@example.com`,
-      created_by: userIds.admin,
+      created_by: userIds.otherClinicDoctor,
       department_id: ids.otherClinicDept,
       national_id: `${suffix}O`,
       file_number: `${suffix}-O`,
-      assigned_doctor_id: userIds.otherDoctor,
+      assigned_doctor_id: userIds.otherClinicDoctor,
     },
-  ]);
-  await service.from("patient_documents").insert([
+    ]),
+    "seed patients",
+  );
+  assertNoError(
+    await service.from("patient_documents").insert([
     {
       id: ids.patientDocument,
       clinic_id: ids.clinic,
@@ -305,9 +367,11 @@ async function seedRlsData() {
       mime_type: "application/pdf",
       size_bytes: 3,
       storage_path: storagePaths.otherClinicDocument,
-      uploaded_by: userIds.admin,
+      uploaded_by: userIds.otherClinicDoctor,
     },
-  ]);
+    ]),
+    "seed patient documents",
+  );
   await Promise.all([
     service.storage
       .from("patient-assets")
@@ -346,7 +410,8 @@ async function seedRlsData() {
         upsert: true,
       }),
   ]);
-  await service.from("appointments").insert([
+  assertNoError(
+    await service.from("appointments").insert([
     {
       id: ids.allowedAppointment,
       clinic_id: ids.clinic,
@@ -371,31 +436,40 @@ async function seedRlsData() {
       id: ids.otherClinicAppointment,
       clinic_id: ids.otherClinic,
       patient_id: ids.otherClinicPatient,
-      doctor_id: userIds.otherDoctor,
+      doctor_id: userIds.otherClinicDoctor,
       department_id: ids.otherClinicDept,
       scheduled_at: "2099-05-01T11:00:00.000Z",
       duration_minutes: 30,
-      created_by: userIds.admin,
+      created_by: userIds.otherClinicDoctor,
     },
-  ]);
-  await service.from("patient_deposits").insert({
-    id: ids.deposit,
-    clinic_id: ids.clinic,
-    patient_id: ids.allowedPatient,
-    amount: 25,
-    payment_method: "cash",
-    created_by: userIds.admin,
-  });
-  await service.from("outstanding_settlements").insert({
-    id: ids.settlement,
-    clinic_id: ids.clinic,
-    patient_id: ids.allowedPatient,
-    appointment_id: ids.allowedAppointment,
-    amount: 10,
-    payment_method: "cash",
-    created_by: userIds.admin,
-  });
-  await service.from("medical_notes").insert([
+    ]),
+    "seed appointments",
+  );
+  assertNoError(
+    await service.from("patient_deposits").insert({
+      id: ids.deposit,
+      clinic_id: ids.clinic,
+      patient_id: ids.allowedPatient,
+      amount: 25,
+      payment_method: "cash",
+      created_by: userIds.admin,
+    }),
+    "seed patient deposit",
+  );
+  assertNoError(
+    await service.from("outstanding_settlements").insert({
+      id: ids.settlement,
+      clinic_id: ids.clinic,
+      patient_id: ids.allowedPatient,
+      appointment_id: ids.allowedAppointment,
+      amount: 10,
+      payment_method: "cash",
+      created_by: userIds.admin,
+    }),
+    "seed outstanding settlement",
+  );
+  assertNoError(
+    await service.from("medical_notes").insert([
     {
       id: ids.allowedNote,
       patient_id: ids.allowedPatient,
@@ -420,11 +494,13 @@ async function seedRlsData() {
     {
       id: ids.otherClinicNote,
       patient_id: ids.otherClinicPatient,
-      doctor_id: userIds.otherDoctor,
-      created_by: userIds.otherDoctor,
+      doctor_id: userIds.otherClinicDoctor,
+      created_by: userIds.otherClinicDoctor,
       note: "Other clinic note",
     },
-  ]);
+    ]),
+    "seed medical notes",
+  );
 }
 
 beforeAll(async () => {

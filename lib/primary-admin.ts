@@ -1,11 +1,11 @@
 import "server-only";
 
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createClinicScopedAdminClient } from "@/lib/supabase/admin";
 
 export async function getPrimaryClinicAdminId(
   clinicId: string,
 ): Promise<string | null> {
-  const adminClient = createAdminClient();
+  const adminClient = createClinicScopedAdminClient(clinicId);
   const { data, error } = await adminClient
     .from("profiles")
     .select("id")

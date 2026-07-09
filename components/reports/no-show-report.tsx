@@ -3,6 +3,7 @@
 import type { ClinicPrintMeta, NoShowReportResponse, ReportDateRange } from "@/types/reports";
 import { EmptyReportState, MetricGrid, ReportSectionShell } from "@/components/reports/report-section-shell";
 import { formatDateRangeLabel, formatNumber, formatPercent } from "@/components/reports/report-formatters";
+import { useClinicSettings } from "@/contexts/clinic-settings-context";
 
 export function NoShowReport({
   data,
@@ -13,6 +14,7 @@ export function NoShowReport({
   range: ReportDateRange;
   clinic: ClinicPrintMeta;
 }) {
+  const { locale } = useClinicSettings();
   const hasRows = data.totalAppointments > 0 || data.byDoctor.length > 0;
 
   return (
@@ -20,14 +22,14 @@ export function NoShowReport({
       section="no-show"
       title="No-show Report"
       description="No-show appointments by doctor."
-      rangeLabel={formatDateRangeLabel(range.from, range.to)}
+      rangeLabel={formatDateRangeLabel(range.from, range.to, locale)}
       clinic={clinic}
     >
       <MetricGrid
         items={[
-          { label: "Appointments", value: formatNumber(data.totalAppointments) },
-          { label: "No-shows", value: formatNumber(data.noShowCount) },
-          { label: "No-show rate", value: formatPercent(data.noShowRate) },
+          { label: "Appointments", value: formatNumber(data.totalAppointments, locale) },
+          { label: "No-shows", value: formatNumber(data.noShowCount, locale) },
+          { label: "No-show rate", value: formatPercent(data.noShowRate, locale) },
         ]}
       />
 
@@ -55,9 +57,9 @@ export function NoShowReport({
                 data.byDoctor.map((row) => (
                   <tr key={row.doctorId} className="border-t border-border/50">
                     <td className="px-3 py-2 font-medium">{row.doctorName || "Unknown doctor"}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{formatNumber(row.total)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{formatNumber(row.noShow)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{formatPercent(row.rate)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{formatNumber(row.total, locale)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{formatNumber(row.noShow, locale)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{formatPercent(row.rate, locale)}</td>
                   </tr>
                 ))
               )}

@@ -1,29 +1,31 @@
 import type { Metadata } from "next";
 import { requireRole } from "@/lib/rbac";
+import { createClient } from "@/lib/supabase/server";
 import { getCachedDepartments, getCachedServices } from "@/lib/cache/reference-data";
 import { AddServiceDialog } from "@/components/settings/add-service-dialog";
 import { ServiceRowActions } from "@/components/settings/service-row-actions";
 import { SettingsTrashSection, type TrashItem } from "@/components/settings/settings-trash-section";
 import { restoreService, deleteService, emptyServicesTrash } from "@/actions/settings";
 import { THIRTY_DAYS_MS } from "@/lib/constants";
+import { clinicLocaleFromRow, formatClinicCurrency } from "@/lib/datetime";
 
 export const metadata: Metadata = { title: "Services" };
 
-function fmtTRY(n: number) {
-  return new Intl.NumberFormat("en-GB", {
-    style: "currency",
-    currency: "TRY",
-    maximumFractionDigits: 2,
-  }).format(Number.isFinite(n) ? n : 0);
-}
-
 export default async function ServicesSettingsPage() {
   const user = await requireRole(["admin", "manager"]);
+  const supabase = await createClient();
 
-  const [allDepartments, allServices] = await Promise.all([
+  const [allDepartments, allServices, { data: clinic }] = await Promise.all([
     getCachedDepartments(user.clinicId),
     getCachedServices(user.clinicId),
+    supabase
+      .from("clinics")
+      .select("time_format, timezone, currency, locale, country, week_start, digits")
+      .eq("id", user.clinicId)
+      .single(),
   ]);
+  const clinicLocale = clinicLocaleFromRow(clinic);
+  const fmtMoney = (n: number) => formatClinicCurrency(n, clinicLocale);
 
   const deptList = allDepartments.filter((d) => !d.deleted_at && d.is_active);
   const cutoff = new Date(new Date().getTime() - THIRTY_DAYS_MS).toISOString();
@@ -127,7 +129,7 @@ export default async function ServicesSettingsPage() {
                     <tr key={s.id} className="hover:bg-muted/20 transition-colors">
                       <td className="px-4 py-2.5 font-medium">{s.name}</td>
                       <td className="px-4 py-2.5 text-right tabular-nums">
-                        {fmtTRY(Number(s.price))}
+                        {fmtMoney(Number(s.price))}
                       </td>
                       <td className="px-4 py-2 text-right">
                         <ServiceRowActions

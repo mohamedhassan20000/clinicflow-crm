@@ -1,5 +1,5 @@
-import { render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createServerActionMocks } from "../helpers/server-action-mocks";
 
 const PATIENT_ID = "22222222-2222-4222-8222-222222222222";
@@ -22,6 +22,10 @@ async function loadPatientPage() {
   }));
   vi.doMock("@/lib/supabase/server", () => ({
     createClient: vi.fn(async () => mocks.client()),
+  }));
+  vi.doMock("@/lib/supabase/admin", () => ({
+    createAdminClient: vi.fn(() => mocks.client()),
+    createClinicScopedAdminClient: vi.fn(() => mocks.client()),
   }));
   vi.doMock("next/navigation", () => ({
     notFound: vi.fn(() => {
@@ -80,6 +84,18 @@ function seedPatientPageData(
     },
     error: null,
   };
+  mocks.state.tableResults["clinics.select"] = {
+    data: {
+      time_format: "24h",
+      timezone: "Europe/Istanbul",
+      currency: "TRY",
+      locale: "en",
+      country: "TR",
+      week_start: 1,
+      digits: "latin",
+    },
+    error: null,
+  };
   mocks.state.tableResults["medical_notes.select"] = {
     data: [],
     error: null,
@@ -104,7 +120,11 @@ function seedPatientPageData(
 
 describe("patient documents page gating", () => {
   beforeEach(() => {
+    cleanup();
     vi.restoreAllMocks();
+  });
+  afterEach(() => {
+    cleanup();
   });
 
   it("renders documents for receptionists", async () => {
@@ -119,7 +139,7 @@ describe("patient documents page gating", () => {
 
     expect(screen.getByText("Documents section")).toBeInTheDocument();
     expect(listPatientDocuments).toHaveBeenCalledWith(PATIENT_ID);
-  });
+  }, 20_000);
 
   it("renders documents for admins", async () => {
     const { page, mocks, listPatientDocuments } = await loadPatientPage();

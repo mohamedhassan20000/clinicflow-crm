@@ -67,6 +67,7 @@ async function loadAuthActions() {
   }));
   vi.doMock("@/lib/supabase/admin", () => ({
     createAdminClient: vi.fn(() => mocks.client()),
+    createClinicScopedAdminClient: vi.fn(() => mocks.client()),
   }));
   vi.doMock("@supabase/supabase-js", () => ({
     createClient: vi.fn(),
@@ -92,6 +93,7 @@ async function loadSettingsActions() {
   }));
   vi.doMock("@/lib/supabase/admin", () => ({
     createAdminClient: vi.fn(() => mocks.client()),
+    createClinicScopedAdminClient: vi.fn(() => mocks.client()),
   }));
   vi.doMock("@/actions/page-permissions", () => ({
     ensureDefaultPagePermissions: vi.fn(async () => ({ success: true })),

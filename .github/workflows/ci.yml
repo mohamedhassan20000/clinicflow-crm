@@ -39,7 +39,26 @@ jobs:
         run: pnpm typecheck
 
       - name: Unit tests
-        run: pnpm vitest run tests/unit/actions tests/unit/components tests/unit/db tests/unit/lib tests/unit/pages tests/unit/sanity.test.ts
+        run: pnpm vitest run tests/unit/actions tests/unit/components tests/unit/db tests/unit/lib tests/unit/pages tests/unit/security tests/unit/sanity.test.ts
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start local Supabase
+        run: supabase start
+
+      - name: Export local Supabase test env
+        shell: bash
+        run: |
+          supabase status -o env > /tmp/supabase-env
+          echo "LOCAL_SUPABASE_URL=http://127.0.0.1:54321" >> "$GITHUB_ENV"
+          grep '^ANON_KEY=' /tmp/supabase-env | sed 's/^ANON_KEY=/LOCAL_SUPABASE_PUBLISHABLE_KEY=/' >> "$GITHUB_ENV"
+          grep '^SERVICE_ROLE_KEY=' /tmp/supabase-env | sed 's/^SERVICE_ROLE_KEY=/LOCAL_SUPABASE_SECRET_KEY=/' >> "$GITHUB_ENV"
+
+      - name: Integration tests
+        run: pnpm test:integration
 
       - name: Build (smoke)
         env:

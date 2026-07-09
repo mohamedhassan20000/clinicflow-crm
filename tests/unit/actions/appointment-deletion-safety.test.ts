@@ -22,6 +22,7 @@ async function loadActions() {
   }));
   vi.doMock("@/lib/supabase/admin", () => ({
     createAdminClient: vi.fn(() => mocks.client()),
+    createClinicScopedAdminClient: vi.fn(() => mocks.client()),
   }));
   vi.doMock("@/actions/patients", () => ({
     getPatientAccountBalance: vi.fn(async () => 0),
@@ -177,6 +178,10 @@ describe("permanentDeleteAppointment", () => {
 
   it("hard-deletes a trashed appointment and its dependents", async () => {
     const { permanentDeleteAppointment, mocks } = await loadActions();
+    mocks.state.tableResults["appointments.select"] = {
+      data: { id: APPOINTMENT_ID },
+      error: null,
+    };
 
     const result = await permanentDeleteAppointment(APPOINTMENT_ID);
 
@@ -189,6 +194,10 @@ describe("permanentDeleteAppointment", () => {
 
   it("propagates errors from dependent table cleanup", async () => {
     const { permanentDeleteAppointment, mocks } = await loadActions();
+    mocks.state.tableResults["appointments.select"] = {
+      data: { id: APPOINTMENT_ID },
+      error: null,
+    };
     mocks.state.tableResults["appointment_services.delete"] = {
       data: null,
       error: { message: "cannot delete due to constraint" },
@@ -199,6 +208,24 @@ describe("permanentDeleteAppointment", () => {
     expect(result.error).toBe("cannot delete due to constraint");
     expect(mocks.state.queryLog).not.toContainEqual(
       expect.objectContaining({ table: "appointments", operation: "delete" }),
+    );
+  });
+
+  it("does not cascade dependent deletes when the appointment is outside the clinic", async () => {
+    const { permanentDeleteAppointment, mocks } = await loadActions();
+    mocks.state.tableResults["appointments.select"] = {
+      data: null,
+      error: null,
+    };
+
+    const result = await permanentDeleteAppointment(APPOINTMENT_ID);
+
+    expect(result.error).toBe("Appointment not found.");
+    expect(mocks.state.queryLog).not.toContainEqual(
+      expect.objectContaining({ table: "feedback", operation: "delete" }),
+    );
+    expect(mocks.state.queryLog).not.toContainEqual(
+      expect.objectContaining({ table: "appointment_services", operation: "delete" }),
     );
   });
 });

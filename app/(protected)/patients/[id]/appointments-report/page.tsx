@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CLINIC_TZ } from "@/lib/datetime";
+import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
 import { ChevronLeft, FileText } from "lucide-react";
 import { requireUser } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
@@ -234,7 +234,7 @@ function DoctorApptPrintTable({
             <tr key={a.id}>
               <td style={{ whiteSpace: "nowrap" }}>
                 {new Date(a.scheduled_at).toLocaleString("en-GB", {
-                  timeZone: CLINIC_TZ,
+                  timeZone: DEFAULT_TIME_ZONE,
                   dateStyle: "medium",
                   timeStyle: "short",
                 })}
@@ -303,7 +303,7 @@ function DoctorApptList({
               <div className="min-w-0 flex-1 space-y-0.5">
                 <div className="text-sm font-medium">
                   {new Date(a.scheduled_at).toLocaleDateString("en-GB", {
-                    timeZone: CLINIC_TZ,
+                    timeZone: DEFAULT_TIME_ZONE,
                     day: "2-digit",
                     month: "short",
                     year: "numeric",

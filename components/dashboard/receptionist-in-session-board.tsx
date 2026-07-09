@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { formatDoctorName } from "@/lib/format-doctor";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
+import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
 
 function formatElapsed(startIso: string, now: number) {
   const elapsedMinutes = Math.max(
@@ -27,7 +28,7 @@ function formatElapsed(startIso: string, now: number) {
 
 function appointmentDayLink(iso: string) {
   const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "Europe/Istanbul",
+    timeZone: DEFAULT_TIME_ZONE,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",

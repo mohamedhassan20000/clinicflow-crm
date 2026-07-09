@@ -30,6 +30,7 @@ import {
   type ReceptionistStat,
   type FollowUpOutcomes,
 } from "@/actions/manager-dashboard";
+import { useClinicSettings } from "@/contexts/clinic-settings-context";
 
 // ── Exported types (re-exported through analytics-section.tsx) ────────────────
 
@@ -127,8 +128,22 @@ function ChartTooltip({ active, payload, label }: any) {
   );
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function RevenueTooltip({ active, payload, label }: any) {
+type RevenueTooltipPayload = {
+  color: string;
+  value: number;
+};
+
+function RevenueTooltip({
+  active,
+  payload,
+  label,
+  formatAmount,
+}: {
+  active?: boolean;
+  payload?: RevenueTooltipPayload[];
+  label?: string;
+  formatAmount: (value: number) => string;
+}) {
   if (!active || !payload?.length) return null;
   const p = payload[0];
   return (
@@ -137,7 +152,7 @@ function RevenueTooltip({ active, payload, label }: any) {
       <p className="text-xs" style={{ color: p.color }}>
         Revenue:{" "}
         <span className="font-semibold text-foreground">
-          ₺{(p.value as number).toLocaleString()}
+          {formatAmount(p.value as number)}
         </span>
       </p>
     </div>
@@ -387,15 +402,18 @@ function HBarChart({ data, yWidth = 110, children }: { data: object[]; yWidth?: 
 }
 
 function HBarChartRevenue({ data, yWidth = 110 }: { data: object[]; yWidth?: number }) {
+  const { formatCurrency } = useClinicSettings();
+  const fmtMoney = (value: number) =>
+    formatCurrency(value, { maximumFractionDigits: 0 });
   const h = Math.max(220, data.length * 48);
   return (
     <ResponsiveContainer width="100%" height={h}>
       <BarChart data={data} layout="vertical" margin={{ top: 0, right: 16, bottom: 0, left: 0 }}>
         <CartesianGrid horizontal={false} {...GRID_PROPS} />
-        <XAxis type="number" allowDecimals={false} tick={TICK} tickLine={false} axisLine={false} tickFormatter={(v) => `₺${v.toLocaleString()}`} />
+        <XAxis type="number" allowDecimals={false} tick={TICK} tickLine={false} axisLine={false} tickFormatter={(v) => fmtMoney(Number(v))} />
         <YAxis type="category" dataKey="name" width={yWidth} tick={TICK} tickLine={false} axisLine={false} />
-        <Tooltip content={<RevenueTooltip />} />
-        <Bar dataKey="revenue" name="Revenue (₺)" fill={C.amber} radius={[0, 4, 4, 0]} maxBarSize={22} />
+        <Tooltip content={<RevenueTooltip formatAmount={fmtMoney} />} />
+        <Bar dataKey="revenue" name="Revenue" fill={C.amber} radius={[0, 4, 4, 0]} maxBarSize={22} />
       </BarChart>
     </ResponsiveContainer>
   );

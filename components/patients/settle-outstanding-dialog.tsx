@@ -27,6 +27,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { settleOutstanding } from "@/actions/patients";
+import { useClinicSettings } from "@/contexts/clinic-settings-context";
 
 type PaymentMethod =
   | "cash"
@@ -47,14 +48,6 @@ const METHODS: {
   { value: "insurance", label: "Insurance", icon: ShieldCheck },
 ];
 
-function fmtTRY(n: number) {
-  return new Intl.NumberFormat("en-GB", {
-    style: "currency",
-    currency: "TRY",
-    maximumFractionDigits: 2,
-  }).format(Number.isFinite(n) ? n : 0);
-}
-
 interface Props {
   patientId: string;
   outstanding: number;
@@ -68,6 +61,8 @@ export function SettleOutstandingDialog({
   patientName,
   triggerLabel = "Settle outstanding",
 }: Props) {
+  const { formatCurrency } = useClinicSettings();
+  const fmtMoney = (n: number) => formatCurrency(n);
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState<string>("");
   const [method, setMethod] = useState<PaymentMethod>("cash");
@@ -141,7 +136,7 @@ export function SettleOutstandingDialog({
               Record a partial or full payment against {patientName}&apos;s
               outstanding balance of{" "}
               <span className="font-semibold tabular-nums text-foreground">
-                {fmtTRY(outstanding)}
+                {fmtMoney(outstanding)}
               </span>
               .
             </DialogDescription>
@@ -167,7 +162,7 @@ export function SettleOutstandingDialog({
 
             <div className="space-y-1.5">
               <Label htmlFor="settle-amount" className="text-xs">
-                Amount (₺)
+                Amount
               </Label>
               <Input
                 id="settle-amount"
@@ -184,7 +179,7 @@ export function SettleOutstandingDialog({
                 autoFocus
               />
               <p className="text-[11px] text-muted-foreground">
-                Max {fmtTRY(outstanding)}
+                Max {fmtMoney(outstanding)}
                 {showSplit && totalN > outstanding + 0.001 && (
                   <span className="ml-2 text-destructive">
                     Combined total exceeds outstanding.
@@ -255,7 +250,7 @@ export function SettleOutstandingDialog({
               <>
                 <div className="space-y-1.5">
                   <Label htmlFor="settle-secondary" className="text-xs">
-                    Second amount (₺)
+                    Second amount
                   </Label>
                   <Input
                     id="settle-secondary"
@@ -271,9 +266,9 @@ export function SettleOutstandingDialog({
                   <p className="text-[11px] text-muted-foreground">
                     Total against outstanding:{" "}
                     <span className="tabular-nums font-medium text-foreground">
-                      {fmtTRY(totalN)}
+                      {fmtMoney(totalN)}
                     </span>{" "}
-                    / {fmtTRY(outstanding)}
+                    / {fmtMoney(outstanding)}
                   </p>
                 </div>
 

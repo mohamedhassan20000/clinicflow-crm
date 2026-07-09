@@ -12,6 +12,7 @@ import { AppointmentCard } from "@/components/appointments/week-calendar";
 import { HourAppointmentsDialog } from "@/components/appointments/hour-appointments-dialog";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
 import type { ClinicWorkingHoursValues } from "@/lib/validations/settings";
+import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
 
 type Appointment = AppointmentForDetail;
 
@@ -29,7 +30,7 @@ function apptStartMin(appt: Appointment): number {
     new Date(appt.scheduled_at).toLocaleTimeString("en-GB", {
       hour: "2-digit",
       minute: "2-digit",
-      timeZone: "Europe/Istanbul",
+      timeZone: DEFAULT_TIME_ZONE,
     }),
   );
 }

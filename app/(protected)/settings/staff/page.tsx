@@ -6,7 +6,7 @@ import { AddStaffDialog } from "@/components/settings/add-staff-dialog";
 import { SettingsTrashSection, type TrashItem } from "@/components/settings/settings-trash-section";
 import { restoreStaff, deleteStaff, emptyStaffTrash } from "@/actions/settings";
 import { isPrimaryClinicAdmin } from "@/lib/primary-admin";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createClinicScopedAdminClient } from "@/lib/supabase/admin";
 import { THIRTY_DAYS_MS } from "@/lib/constants";
 
 export const metadata: Metadata = { title: "Staff" };
@@ -21,7 +21,7 @@ export default async function StaffSettingsPage() {
       ? isPrimaryClinicAdmin(user.id, user.clinicId)
       : Promise.resolve(false),
     user.role === "admin"
-      ? createAdminClient()
+      ? createClinicScopedAdminClient(user.clinicId)
           .auth.admin.listUsers({ perPage: 1000 })
           .then(({ data }) => {
             const map: Record<string, string | null> = {};

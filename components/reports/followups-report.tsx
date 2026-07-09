@@ -3,6 +3,7 @@
 import type { ClinicPrintMeta, FollowupsReportResponse, ReportDateRange } from "@/types/reports";
 import { EmptyReportState, MetricGrid, ReportSectionShell } from "@/components/reports/report-section-shell";
 import { formatDateRangeLabel, formatNumber, formatPercent } from "@/components/reports/report-formatters";
+import { useClinicSettings } from "@/contexts/clinic-settings-context";
 
 export function FollowupsReport({
   data,
@@ -13,6 +14,7 @@ export function FollowupsReport({
   range: ReportDateRange;
   clinic: ClinicPrintMeta;
 }) {
+  const { locale } = useClinicSettings();
   const total = data.completedCount;
   const allFineRate = total === 0 ? 0 : (data.allFineCount / total) * 100;
   const hasProblemRate = total === 0 ? 0 : (data.hasProblemCount / total) * 100;
@@ -28,15 +30,15 @@ export function FollowupsReport({
       section="followups"
       title="Follow-ups Report"
       description="Completed follow-up outcomes."
-      rangeLabel={formatDateRangeLabel(range.from, range.to)}
+      rangeLabel={formatDateRangeLabel(range.from, range.to, locale)}
       clinic={clinic}
     >
       <MetricGrid
         items={[
-          { label: "Completed follow-ups", value: formatNumber(data.completedCount) },
-          { label: "All fine", value: formatNumber(data.allFineCount) },
-          { label: "Has problem", value: formatNumber(data.hasProblemCount) },
-          { label: "No response", value: formatNumber(data.noResponseCount) },
+          { label: "Completed follow-ups", value: formatNumber(data.completedCount, locale) },
+          { label: "All fine", value: formatNumber(data.allFineCount, locale) },
+          { label: "Has problem", value: formatNumber(data.hasProblemCount, locale) },
+          { label: "No response", value: formatNumber(data.noResponseCount, locale) },
         ]}
       />
 
@@ -57,8 +59,8 @@ export function FollowupsReport({
               {rows.map((row) => (
                 <tr key={row.label} className="border-t border-border/50">
                   <td className="px-3 py-2 font-medium">{row.label}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatNumber(row.count)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatPercent(row.rate)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{formatNumber(row.count, locale)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{formatPercent(row.rate, locale)}</td>
                   <td className="px-3 py-2 print:hidden">
                     <div className="h-2 overflow-hidden rounded-full bg-muted">
                       <div

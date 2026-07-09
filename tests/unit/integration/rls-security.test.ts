@@ -33,6 +33,7 @@ const ids = {
   otherClinicPatient: "30000000-0000-4000-8000-000000000004",
   allowedAppointment: "40000000-0000-4000-8000-000000000001",
   unrelatedAppointment: "40000000-0000-4000-8000-000000000002",
+  otherClinicAppointment: "40000000-0000-4000-8000-000000000003",
   allowedNote: "50000000-0000-4000-8000-000000000001",
   deptNote: "50000000-0000-4000-8000-000000000002",
   unrelatedNote: "50000000-0000-4000-8000-000000000003",
@@ -149,6 +150,7 @@ async function cleanupSeedData() {
   await service.from("appointments").delete().in("id", [
     ids.allowedAppointment,
     ids.unrelatedAppointment,
+    ids.otherClinicAppointment,
   ]);
   await service.from("patients").delete().in("id", [
     ids.allowedPatient,
@@ -365,6 +367,16 @@ async function seedRlsData() {
       duration_minutes: 30,
       created_by: userIds.admin,
     },
+    {
+      id: ids.otherClinicAppointment,
+      clinic_id: ids.otherClinic,
+      patient_id: ids.otherClinicPatient,
+      doctor_id: userIds.otherDoctor,
+      department_id: ids.otherClinicDept,
+      scheduled_at: "2099-05-01T11:00:00.000Z",
+      duration_minutes: 30,
+      created_by: userIds.admin,
+    },
   ]);
   await service.from("patient_deposits").insert({
     id: ids.deposit,
@@ -445,6 +457,49 @@ afterAll(async () => {
 });
 
 describe("RLS security integration", () => {
+  it("scopes clinic root rows and blocks authenticated clinic inserts", async () => {
+    const select = await clients.admin
+      .from("clinics")
+      .select("id")
+      .in("id", [ids.clinic, ids.otherClinic]);
+    const insert = await clients.admin.from("clinics").insert({
+      name: `Illicit Clinic ${suffix}`,
+    });
+
+    expect(select.error).toBeNull();
+    expect(select.data).toEqual([{ id: ids.clinic }]);
+    expect(insert.error).not.toBeNull();
+  });
+
+  it("denies clinic admins reads across patient, appointment, note, and storage boundaries", async () => {
+    const [patients, appointments, notes, documentDownload] = await Promise.all([
+      clients.admin
+        .from("patients")
+        .select("id")
+        .eq("id", ids.otherClinicPatient),
+      clients.admin
+        .from("appointments")
+        .select("id")
+        .eq("id", ids.otherClinicAppointment),
+      clients.admin
+        .from("medical_notes")
+        .select("id")
+        .eq("id", ids.otherClinicNote),
+      clients.admin
+        .storage
+        .from("patient-assets")
+        .download(storagePaths.otherClinicDocument),
+    ]);
+
+    expect(patients.error).toBeNull();
+    expect(patients.data).toEqual([]);
+    expect(appointments.error).toBeNull();
+    expect(appointments.data).toEqual([]);
+    expect(notes.error).toBeNull();
+    expect(notes.data).toEqual([]);
+    expect(documentDownload.error).not.toBeNull();
+  });
+
   it("prevents anon clients from reading app table rows", async () => {
     const anon = client();
 

@@ -1,33 +1,48 @@
 "use client";
 
-export function formatNumber(value: number | null | undefined) {
+import {
+  DEFAULT_CLINIC_LOCALE,
+  formatClinicCurrency,
+  formatClinicNumber,
+  formatClinicPercent,
+  toNumberingLocale,
+  type ClinicLocale,
+} from "@/lib/datetime";
+
+export function formatNumber(
+  value: number | null | undefined,
+  locale?: Partial<ClinicLocale>,
+) {
   const n = Number(value ?? 0);
-  return new Intl.NumberFormat("en-GB", {
+  return formatClinicNumber(n, locale, {
     maximumFractionDigits: Number.isInteger(n) ? 0 : 1,
-  }).format(Number.isFinite(n) ? n : 0);
+  });
 }
 
-export function formatPercent(value: number | null | undefined) {
-  const n = Number(value ?? 0);
-  return `${new Intl.NumberFormat("en-GB", {
-    maximumFractionDigits: 1,
-  }).format(Number.isFinite(n) ? n : 0)}%`;
+export function formatPercent(
+  value: number | null | undefined,
+  locale?: Partial<ClinicLocale>,
+) {
+  return formatClinicPercent(value, locale);
 }
 
-export function formatCurrency(value: number | null | undefined) {
-  const n = Number(value ?? 0);
-  return new Intl.NumberFormat("en-GB", {
-    style: "currency",
-    currency: "TRY",
-    maximumFractionDigits: 2,
-  }).format(Number.isFinite(n) ? n : 0);
+export function formatCurrency(
+  value: number | null | undefined,
+  locale?: Partial<ClinicLocale>,
+) {
+  return formatClinicCurrency(value, locale);
 }
 
-export function formatDateRangeLabel(from: string, to: string) {
-  const format = new Intl.DateTimeFormat("en-GB", {
+export function formatDateRangeLabel(
+  from: string,
+  to: string,
+  locale?: Partial<ClinicLocale>,
+) {
+  const format = new Intl.DateTimeFormat(toNumberingLocale(locale), {
     day: "2-digit",
     month: "short",
     year: "numeric",
+    timeZone: locale?.timeZone ?? DEFAULT_CLINIC_LOCALE.timeZone,
   });
 
   return `${format.format(new Date(`${from}T00:00:00`))} - ${format.format(

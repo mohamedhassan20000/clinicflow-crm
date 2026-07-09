@@ -3,6 +3,7 @@
 import type { CancellationReportResponse, ClinicPrintMeta, ReportDateRange } from "@/types/reports";
 import { EmptyReportState, MetricGrid, ReportSectionShell } from "@/components/reports/report-section-shell";
 import { formatDateRangeLabel, formatNumber, formatPercent } from "@/components/reports/report-formatters";
+import { useClinicSettings } from "@/contexts/clinic-settings-context";
 
 export function CancellationReport({
   data,
@@ -13,6 +14,7 @@ export function CancellationReport({
   range: ReportDateRange;
   clinic: ClinicPrintMeta;
 }) {
+  const { locale } = useClinicSettings();
   const hasRows = data.totalAppointments > 0 || data.byDoctor.length > 0 || data.byReason.length > 0;
 
   return (
@@ -20,14 +22,14 @@ export function CancellationReport({
       section="cancellation"
       title="Cancellation Report"
       description="Cancelled appointments by doctor and reason."
-      rangeLabel={formatDateRangeLabel(range.from, range.to)}
+      rangeLabel={formatDateRangeLabel(range.from, range.to, locale)}
       clinic={clinic}
     >
       <MetricGrid
         items={[
-          { label: "Appointments", value: formatNumber(data.totalAppointments) },
-          { label: "Cancelled", value: formatNumber(data.cancelledCount) },
-          { label: "Cancellation rate", value: formatPercent(data.cancellationRate) },
+          { label: "Appointments", value: formatNumber(data.totalAppointments, locale) },
+          { label: "Cancelled", value: formatNumber(data.cancelledCount, locale) },
+          { label: "Cancellation rate", value: formatPercent(data.cancellationRate, locale) },
         ]}
       />
 
@@ -56,9 +58,9 @@ export function CancellationReport({
                   data.byDoctor.map((row) => (
                     <tr key={row.doctorId} className="border-t border-border/50">
                       <td className="px-3 py-2 font-medium">{row.doctorName || "Unknown doctor"}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">{formatNumber(row.total)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">{formatNumber(row.cancelled)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">{formatPercent(row.rate)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{formatNumber(row.total, locale)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{formatNumber(row.cancelled, locale)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{formatPercent(row.rate, locale)}</td>
                     </tr>
                   ))
                 )}
@@ -80,7 +82,7 @@ export function CancellationReport({
                   <li key={row.reason} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
                     <span className="min-w-0 truncate">{row.reason}</span>
                     <span className="tabular-nums text-muted-foreground print:text-black">
-                      {formatNumber(row.count)}
+                      {formatNumber(row.count, locale)}
                     </span>
                   </li>
                 ))}

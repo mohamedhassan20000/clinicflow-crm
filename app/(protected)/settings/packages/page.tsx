@@ -7,24 +7,16 @@ import {
   PackageTemplateRowActions,
   type PackageTemplateRowData,
 } from "@/components/settings/packages/package-template-row-actions";
+import { clinicLocaleFromRow, formatClinicCurrency } from "@/lib/datetime";
 
 export const metadata: Metadata = { title: "Package templates" };
-
-function fmtTRY(n: number | null | undefined) {
-  if (n === null || n === undefined) return "—";
-  return new Intl.NumberFormat("en-GB", {
-    style: "currency",
-    currency: "TRY",
-    maximumFractionDigits: 2,
-  }).format(Number.isFinite(n) ? n : 0);
-}
 
 export default async function PackagesSettingsPage() {
   const user = await requireRole(["admin", "manager"]);
   const canMutate = user.role === "admin";
 
   const supabase = await createClient();
-  const [allDepartments, { data: templates }] = await Promise.all([
+  const [allDepartments, { data: templates }, { data: clinic }] = await Promise.all([
     getCachedDepartments(user.clinicId),
     supabase
       .from("package_templates")
@@ -33,7 +25,15 @@ export default async function PackagesSettingsPage() {
       )
       .eq("clinic_id", user.clinicId)
       .order("name"),
+    supabase
+      .from("clinics")
+      .select("time_format, timezone, currency, locale, country, week_start, digits")
+      .eq("id", user.clinicId)
+      .single(),
   ]);
+  const clinicLocale = clinicLocaleFromRow(clinic);
+  const fmtMoney = (n: number | null | undefined) =>
+    n === null || n === undefined ? "—" : formatClinicCurrency(n, clinicLocale);
 
   const deptList = allDepartments.filter((d) => !d.deleted_at && d.is_active);
   const rows = (templates ?? []) as PackageTemplateRowData[];
@@ -158,14 +158,14 @@ export default async function PackagesSettingsPage() {
                         {t.total_sessions}
                       </td>
                       <td className="px-4 py-2.5 text-right tabular-nums">
-                        {fmtTRY(
+                        {fmtMoney(
                           t.price_per_session !== null
                             ? Number(t.price_per_session)
                             : null,
                         )}
                       </td>
                       <td className="px-4 py-2.5 text-right tabular-nums">
-                        {fmtTRY(
+                        {fmtMoney(
                           t.total_price !== null ? Number(t.total_price) : null,
                         )}
                       </td>
@@ -210,7 +210,7 @@ export default async function PackagesSettingsPage() {
                         </div>
                       </td>
                       <td className="px-4 py-2.5 text-right text-xs text-muted-foreground tabular-nums">
-                        {fmtTRY(
+                        {fmtMoney(
                           t.price_per_session !== null
                             ? Number(t.price_per_session)
                             : null,

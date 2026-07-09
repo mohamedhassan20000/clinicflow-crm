@@ -1,0 +1,177 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const queryLog: { table: string; method: string; args: unknown[] }[] = [];
+
+class QueryBuilder {
+  constructor(private readonly table: string) {}
+
+  select(...args: unknown[]) {
+    queryLog.push({ table: this.table, method: "select", args });
+    return this;
+  }
+
+  update(...args: unknown[]) {
+    queryLog.push({ table: this.table, method: "update", args });
+    return this;
+  }
+
+  delete(...args: unknown[]) {
+    queryLog.push({ table: this.table, method: "delete", args });
+    return this;
+  }
+
+  insert(...args: unknown[]) {
+    queryLog.push({ table: this.table, method: "insert", args });
+    return this;
+  }
+
+  upsert(...args: unknown[]) {
+    queryLog.push({ table: this.table, method: "upsert", args });
+    return this;
+  }
+
+  eq(...args: unknown[]) {
+    queryLog.push({ table: this.table, method: "eq", args });
+    return this;
+  }
+}
+
+vi.mock("server-only", () => ({}));
+vi.mock("@supabase/supabase-js", () => ({
+  createClient: vi.fn(() => ({
+    from: (table: string) => new QueryBuilder(table),
+    auth: { admin: { deleteUser: vi.fn() } },
+  })),
+}));
+
+describe("createClinicScopedAdminClient", () => {
+  beforeEach(() => {
+    queryLog.length = 0;
+  });
+
+  it("automatically adds clinic_id filters to tenant table reads and updates", async () => {
+    const { createClinicScopedAdminClient } = await import("@/lib/supabase/admin");
+    const admin = createClinicScopedAdminClient("clinic-a");
+
+    admin.from("patients").select("id").eq("is_deleted", false);
+    admin.from("appointments").update({ status: "cancelled" }).eq("id", "appt-1");
+
+    expect(queryLog).toContainEqual({
+      table: "patients",
+      method: "eq",
+      args: ["clinic_id", "clinic-a"],
+    });
+    expect(queryLog).toContainEqual({
+      table: "appointments",
+      method: "eq",
+      args: ["clinic_id", "clinic-a"],
+    });
+  });
+
+  it("injects the scoped clinic_id into tenant table inserts", async () => {
+    const { createClinicScopedAdminClient } = await import("@/lib/supabase/admin");
+    const admin = createClinicScopedAdminClient("clinic-a");
+    const looseAdmin = admin as unknown as {
+      from: (table: string) => { insert: (payload: unknown) => unknown };
+    };
+
+    looseAdmin.from("patient_documents").insert({
+      id: "doc-1",
+      patient_id: "p-1",
+      category: "other",
+      file_name: "doc.pdf",
+      mime_type: "application/pdf",
+      size_bytes: 10,
+      storage_path: "documents/clinic-a/p-1/other/doc.pdf",
+    });
+
+    expect(queryLog).toContainEqual({
+      table: "patient_documents",
+      method: "insert",
+      args: [
+        expect.objectContaining({
+          id: "doc-1",
+          clinic_id: "clinic-a",
+        }),
+      ],
+    });
+    expect(queryLog).not.toContainEqual({
+      table: "patient_documents",
+      method: "eq",
+      args: ["clinic_id", "clinic-a"],
+    });
+  });
+
+  it("rejects inserts that try to use a different clinic_id", async () => {
+    const { createClinicScopedAdminClient } = await import("@/lib/supabase/admin");
+    const admin = createClinicScopedAdminClient("clinic-a");
+    const looseAdmin = admin as unknown as {
+      from: (table: string) => { insert: (payload: unknown) => unknown };
+    };
+
+    expect(() =>
+      looseAdmin.from("patients").insert({
+        id: "patient-1",
+        clinic_id: "clinic-b",
+        created_by: "user-1",
+        date_of_birth: "1990-01-01",
+        email: null,
+        file_number: "CF-0001",
+        full_name: "Patient",
+        national_id: "N1",
+        phone: "123",
+      }),
+    ).toThrow(/different clinic_id/i);
+  });
+
+  it("rejects updates that try to move rows to a different clinic_id", async () => {
+    const { createClinicScopedAdminClient } = await import("@/lib/supabase/admin");
+    const admin = createClinicScopedAdminClient("clinic-a");
+    const looseAdmin = admin as unknown as {
+      from: (table: string) => { update: (payload: unknown) => unknown };
+    };
+
+    expect(() =>
+      looseAdmin.from("patients").update({ clinic_id: "clinic-b" }),
+    ).toThrow(/different clinic_id/i);
+  });
+
+  it("throws for unclassified tables instead of failing open", async () => {
+    const { createClinicScopedAdminClient } = await import("@/lib/supabase/admin");
+    const admin = createClinicScopedAdminClient("clinic-a");
+    const looseAdmin = admin as unknown as { from: (table: string) => unknown };
+
+    expect(() => looseAdmin.from("future_phi_table")).toThrow(
+      /unclassified table/i,
+    );
+  });
+
+  it("allows documented join-scoped tables without pretending to add clinic_id", async () => {
+    const { createClinicScopedAdminClient } = await import("@/lib/supabase/admin");
+    const admin = createClinicScopedAdminClient("clinic-a");
+
+    admin.from("feedback").delete().eq("appointment_id", "appt-1");
+
+    expect(queryLog).toContainEqual({
+      table: "feedback",
+      method: "delete",
+      args: [],
+    });
+    expect(queryLog).not.toContainEqual({
+      table: "feedback",
+      method: "eq",
+      args: ["clinic_id", "clinic-a"],
+    });
+  });
+
+  it("blocks unscoped RPC and storage access through the scoped wrapper", async () => {
+    const { createClinicScopedAdminClient } = await import("@/lib/supabase/admin");
+    const admin = createClinicScopedAdminClient("clinic-a") as unknown as {
+      rpc: unknown;
+      storage: unknown;
+    };
+
+    expect(() => admin.rpc).toThrow(/not available/i);
+    expect(() => admin.storage).toThrow(/not available/i);
+  });
+});

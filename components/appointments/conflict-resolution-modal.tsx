@@ -14,6 +14,7 @@ import { StatusBadge } from "@/components/appointments/status-badge";
 import { confirmAndDisplaceConflicts, type ConflictingAppointment } from "@/actions/appointments";
 import { toast } from "sonner";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
+import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
 
 interface ConflictResolutionModalProps {
   open: boolean;
@@ -69,7 +70,7 @@ export function ConflictResolutionModal({
             const date = new Date(c.scheduled_at).toLocaleDateString("en-GB", {
               day: "numeric",
               month: "short",
-              timeZone: "Europe/Istanbul",
+              timeZone: DEFAULT_TIME_ZONE,
             });
             const deptColor = c.departments?.color ?? "#64748b";
             return (

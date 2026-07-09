@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/rbac";
-import { CLINIC_TZ } from "@/lib/datetime";
+import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
 import { createClient } from "@/lib/supabase/server";
 import { formatDoctorName } from "@/lib/format-doctor";
 
@@ -28,9 +28,9 @@ export async function GET() {
 
   for (const a of appointments ?? []) {
     const dt = new Date(a.scheduled_at);
-    const date = dt.toLocaleDateString("en-GB", { timeZone: CLINIC_TZ });
+    const date = dt.toLocaleDateString("en-GB", { timeZone: DEFAULT_TIME_ZONE });
     const time = dt.toLocaleTimeString("en-GB", {
-      timeZone: CLINIC_TZ,
+      timeZone: DEFAULT_TIME_ZONE,
       hour: "2-digit",
       minute: "2-digit",
       hour12: false,

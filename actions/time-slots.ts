@@ -1,8 +1,9 @@
 "use server";
 
+import { fromZonedTime } from "date-fns-tz";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/rbac";
-import { CLINIC_TZ } from "@/lib/datetime";
+import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
 
 export type SlotInfo = {
   time: string;      // "HH:MM"
@@ -17,12 +18,10 @@ function timeStrToMinutes(t: string): number {
   return (h ?? 0) * 60 + (m ?? 0);
 }
 
-// Compute day-of-week (0=Sun…6=Sat) in Istanbul time for a given YYYY-MM-DD.
-// Uses noon (+03:00) as anchor to avoid any midnight DST ambiguity.
-function getIstanbulDayOfWeek(dateIso: string): number {
-  const d = new Date(`${dateIso}T12:00:00+03:00`);
+function getClinicDayOfWeek(dateIso: string, timeZone: string): number {
+  const d = fromZonedTime(`${dateIso}T12:00:00`, timeZone);
   const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: CLINIC_TZ,
+    timeZone,
     weekday: "short",
   }).formatToParts(d);
   const day = parts.find((p) => p.type === "weekday")?.value ?? "Sun";
@@ -36,7 +35,17 @@ export async function getAvailableTimeSlots(
   const user = await requireRole(["admin", "receptionist"]);
   const supabase = await createClient();
 
-  const dow = getIstanbulDayOfWeek(dateIso);
+  const { data: clinic } = await supabase
+    .from("clinics")
+    .select("timezone")
+    .eq("id", user.clinicId)
+    .maybeSingle();
+  const timeZone =
+    typeof clinic?.timezone === "string" && clinic.timezone
+      ? clinic.timezone
+      : DEFAULT_TIME_ZONE;
+
+  const dow = getClinicDayOfWeek(dateIso, timeZone);
 
   // ── Fetch doctor schedule + clinic hours in parallel ──────────────────────
   const [doctorResult, clinicResult] = await Promise.all([
@@ -92,8 +101,10 @@ export async function getAvailableTimeSlots(
   }
 
   // ── Fetch active appointments for this doctor on this date ────────────────
-  const dayStartIso = `${dateIso}T00:00:00+03:00`;
-  const dayEndIso   = `${dateIso}T23:59:59+03:00`;
+  const dayStartIso = fromZonedTime(`${dateIso}T00:00:00.000`, timeZone)
+    .toISOString();
+  const dayEndIso = fromZonedTime(`${dateIso}T23:59:59.999`, timeZone)
+    .toISOString();
 
   const { data: activeAppts } = doctorId
     ? await supabase
@@ -113,7 +124,7 @@ export async function getAvailableTimeSlots(
   const blockedRanges: BlockedRange[] = (activeAppts ?? []).map((a) => {
     const apptStart = timeStrToMinutes(
       new Date(a.scheduled_at)
-        .toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: CLINIC_TZ }),
+        .toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone }),
     );
     const apptEnd = apptStart + (a.duration_minutes ?? 30);
     return { start: apptStart - BUFFER_MIN, end: apptEnd + BUFFER_MIN };

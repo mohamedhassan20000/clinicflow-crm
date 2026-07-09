@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { CLINIC_TZ } from "@/lib/datetime";
+import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
 import { requireRole } from "@/lib/rbac";
 import type { Database } from "@/types/database";
 
@@ -53,7 +53,7 @@ export interface DoctorDashboardStats {
   followUpOutcomes: { allFine: number; hasProblem: number; total: number };
 }
 
-function buildDateRange(mode: "today" | "week" | "month", tz = CLINIC_TZ) {
+function buildDateRange(mode: "today" | "week" | "month", tz = DEFAULT_TIME_ZONE) {
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: tz }));
   const y = now.getFullYear();
   const m = now.getMonth();
@@ -75,7 +75,7 @@ function buildDateRange(mode: "today" | "week" | "month", tz = CLINIC_TZ) {
   return { start: start.toISOString(), end: end.toISOString() };
 }
 
-function buildDayRange(offsetDays: number, tz = CLINIC_TZ) {
+function buildDayRange(offsetDays: number, tz = DEFAULT_TIME_ZONE) {
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: tz }));
   const y = now.getFullYear();
   const m = now.getMonth();
@@ -306,7 +306,7 @@ export async function fetchDoctorDashboardStats(
   const endDate = new Date(end);
   while (current <= endDate) {
     const key = current.toLocaleDateString("en-US", {
-      timeZone: CLINIC_TZ,
+      timeZone: DEFAULT_TIME_ZONE,
       month: "short",
       day: "numeric",
     });
@@ -317,7 +317,7 @@ export async function fetchDoctorDashboardStats(
   for (const a of myAppts ?? []) {
     if (a.status === "cancelled") continue;
     const key = new Date(a.scheduled_at).toLocaleDateString("en-US", {
-      timeZone: CLINIC_TZ,
+      timeZone: DEFAULT_TIME_ZONE,
       month: "short",
       day: "numeric",
     });
@@ -326,7 +326,7 @@ export async function fetchDoctorDashboardStats(
   for (const a of deptAppts ?? []) {
     if (a.status === "cancelled") continue;
     const key = new Date(a.scheduled_at).toLocaleDateString("en-US", {
-      timeZone: CLINIC_TZ,
+      timeZone: DEFAULT_TIME_ZONE,
       month: "short",
       day: "numeric",
     });

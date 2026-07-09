@@ -15,19 +15,13 @@ import { KpiCard } from "@/components/dashboard/kpi-card";
 import { DoctorQueue } from "@/components/dashboard/doctor-queue";
 import { fetchDoctorDashboardStats, type DoctorDashboardStats } from "@/actions/doctor-dashboard";
 import { formatDoctorName } from "@/lib/format-doctor";
+import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
+import { useClinicSettings } from "@/contexts/clinic-settings-context";
 
 const INPUT_CLS =
   "h-8 rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground [color-scheme:light] dark:[color-scheme:dark] focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 disabled:opacity-50";
 
 type FilterMode = "today" | "week" | "month" | "custom";
-
-function fmtTRY(n: number) {
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency: "TRY",
-    maximumFractionDigits: 0,
-  }).format(Number.isFinite(n) ? n : 0);
-}
 
 function pct(num: number, den: number) {
   if (den === 0) return 0;
@@ -36,7 +30,7 @@ function pct(num: number, den: number) {
 
 function getDefaultRange(mode: FilterMode): { start: string; end: string } {
   const now = new Date();
-  const tz = "Europe/Istanbul";
+  const tz = DEFAULT_TIME_ZONE;
   const local = new Date(now.toLocaleString("en-US", { timeZone: tz }));
   const y = local.getFullYear();
   const mo = local.getMonth();
@@ -100,6 +94,9 @@ export function DoctorDashboard({
   departmentName,
   initial,
 }: DoctorDashboardProps) {
+  const { formatCurrency } = useClinicSettings();
+  const fmtMoney = (n: number) =>
+    formatCurrency(n, { maximumFractionDigits: 0 });
   const [stats, setStats] = useState<DoctorDashboardStats>(initial);
   const [filterMode, setFilterMode] = useState<FilterMode>("month");
   const [rangeFrom, setRangeFrom] = useState(() => toDateInput(getDefaultRange("month").start));
@@ -227,7 +224,7 @@ export function DoctorDashboard({
         />
         <StatCard
           label="My revenue"
-          value={fmtTRY(stats.myRevenue)}
+          value={fmtMoney(stats.myRevenue)}
           sub="from completed sessions"
           icon={Wallet}
           color="text-amber-600 dark:text-amber-400"

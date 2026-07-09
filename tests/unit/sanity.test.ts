@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { CLINIC_TZ, isoDay } from "@/lib/datetime";
+import { DEFAULT_TIME_ZONE, isoDay } from "@/lib/datetime";
 
 describe("datetime helpers", () => {
-  it("defaults to Europe/Istanbul", () => {
-    expect(CLINIC_TZ).toBe("Europe/Istanbul");
+  it("keeps the legacy deployment timezone as the code fallback", () => {
+    expect(DEFAULT_TIME_ZONE).toBe("Europe/Istanbul");
   });
 
   it("formats an ISO day in clinic timezone", () => {

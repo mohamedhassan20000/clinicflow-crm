@@ -25,6 +25,7 @@ import {
 } from "@/actions/appointments";
 import { getClinicWorkingHours } from "@/actions/settings";
 import { THIRTY_DAYS_MS } from "@/lib/constants";
+import { clinicLocaleFromRow, type ClinicLocale } from "@/lib/datetime";
 import type { Database } from "@/types/database";
 
 export const metadata: Metadata = { title: "Appointments" };
@@ -57,11 +58,14 @@ interface PageProps {
   }>;
 }
 
-function getMonday(date: Date): Date {
+function getWeekStart(
+  date: Date,
+  weekStartsOn: ClinicLocale["weekStart"],
+): Date {
   const d = new Date(date);
   const day = d.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  d.setDate(d.getDate() + diff);
+  const diff = (day - weekStartsOn + 7) % 7;
+  d.setDate(d.getDate() - diff);
   d.setHours(0, 0, 0, 0);
   return d;
 }
@@ -81,6 +85,13 @@ function parseLocalMonth(iso: string): Date {
 export default async function AppointmentsPage({ searchParams }: PageProps) {
   const user = await requireUser();
   const isDoctor = user.role === "doctor";
+  const supabase = await createClient();
+  const { data: clinic } = await supabase
+    .from("clinics")
+    .select("time_format, timezone, currency, locale, country, week_start, digits")
+    .eq("id", user.clinicId)
+    .single();
+  const clinicLocale = clinicLocaleFromRow(clinic);
 
   const {
     view: viewParam,
@@ -130,19 +141,21 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
     );
     // Include the 6-week grid so trailing/leading cells render their events too
     const firstDay = monthStart.getDay();
-    const mondayOffset = firstDay === 0 ? -6 : 1 - firstDay;
+    const weekOffset = (firstDay - clinicLocale.weekStart + 7) % 7;
     rangeStart = new Date(monthStart);
-    rangeStart.setDate(rangeStart.getDate() + mondayOffset);
+    rangeStart.setDate(rangeStart.getDate() - weekOffset);
     rangeEnd = new Date(rangeStart);
     rangeEnd.setDate(rangeEnd.getDate() + 42);
   } else {
-    weekStart = getMonday(week ? parseLocalDate(week) : new Date());
+    weekStart = getWeekStart(
+      week ? parseLocalDate(week) : new Date(),
+      clinicLocale.weekStart,
+    );
     rangeStart = weekStart;
     rangeEnd = new Date(weekStart);
     rangeEnd.setDate(rangeEnd.getDate() + 7);
   }
 
-  const supabase = await createClient();
   const canEditAppointments = !isDoctor && user.role !== "manager";
   const cutoff = new Date(new Date().getTime() - THIRTY_DAYS_MS).toISOString();
 

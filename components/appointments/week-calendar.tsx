@@ -17,6 +17,7 @@ import { isDayClosed } from "@/lib/calendar-utils";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
 import { HourAppointmentsDialog } from "@/components/appointments/hour-appointments-dialog";
 import { DeleteConfirmDialog } from "@/components/appointments/delete-confirm-dialog";
+import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
 
 type Appointment = AppointmentForDetail;
 
@@ -35,7 +36,7 @@ function apptStartMin(appt: Appointment): number {
     new Date(appt.scheduled_at).toLocaleTimeString("en-GB", {
       hour: "2-digit",
       minute: "2-digit",
-      timeZone: "Europe/Istanbul",
+      timeZone: DEFAULT_TIME_ZONE,
     }),
   );
 }
@@ -129,10 +130,9 @@ function localDateKey(date: Date) {
   return `${y}-${m}-${d}`;
 }
 
-const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-// JS getDay(): 0=Sun,1=Mon…6=Sat → convert day index (0=Mon…6=Sun) to JS dow
-function dayIndexToDow(i: number): number {
-  return i === 6 ? 0 : i + 1;
+const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+function dayIndexToDow(i: number, weekStart: number): number {
+  return (weekStart + i) % 7;
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -145,19 +145,19 @@ export function WeekCalendar({
   currentUserRole,
   clinicHours = [],
 }: WeekCalendarProps) {
+  const { formatSlotTime, weekStart: configuredWeekStart } = useClinicSettings();
   const allDays = Array.from({ length: 7 }, (_, i) => ({
     day: addDays(weekStart, i),
     originalIndex: i,
   }));
   // Hide closed days from the week view (month view is unaffected)
   const visibleDays = allDays.filter(({ originalIndex }) => {
-    const dow = dayIndexToDow(originalIndex);
+    const dow = dayIndexToDow(originalIndex, configuredWeekStart);
     return !isDayClosed(clinicHours, dow);
   });
   // Fall back to showing all 7 if no clinic hours are configured
   const displayDays = visibleDays.length > 0 ? visibleDays : allDays;
   const colCount = displayDays.length;
-  const { formatSlotTime } = useClinicSettings();
   const today = new Date();
 
   const appointmentsByDate = useMemo(() => {
@@ -255,7 +255,7 @@ export function WeekCalendar({
               const i = originalIndex;
               const isToday = isSameDay(day, today);
               const dayAppts = appointmentsByDate.get(localDateKey(day)) ?? [];
-              const dow = dayIndexToDow(i);
+              const dow = dayIndexToDow(i, configuredWeekStart);
               const breaks = getBreakBands(clinicHours, dow);
               const hourBuckets = groupByHourBucket(dayAppts);
 
@@ -267,7 +267,7 @@ export function WeekCalendar({
                       isToday ? "bg-primary text-primary-foreground" : "bg-muted/30 text-muted-foreground"
                     }`}
                   >
-                    <span>{DAY_NAMES[i]}</span>
+                    <span>{DAY_NAMES[dow]}</span>
                     <span className={isToday ? "" : "text-foreground font-semibold"}>
                       {day.getDate()}
                     </span>

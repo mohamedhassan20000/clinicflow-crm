@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createClinicScopedAdminClient } from "@/lib/supabase/admin";
 import { requireRole } from "@/lib/rbac";
 import { getPrimaryClinicAdminId, isPrimaryClinicAdmin } from "@/lib/primary-admin";
 import {
@@ -50,7 +50,7 @@ export async function ensureDefaultPagePermissions(
   role: UserRole,
   clinicId: string,
 ): Promise<PagePermissionResult> {
-  const adminClient = createAdminClient();
+  const adminClient = createClinicScopedAdminClient(clinicId);
   const rows = getRolePageSlugs(role).map((pageSlug) => ({
     user_id: userId,
     clinic_id: clinicId,
@@ -74,7 +74,7 @@ async function ensureDefaultPagePermissionsFallback(
   role: UserRole,
   clinicId: string,
 ): Promise<PagePermissionResult> {
-  const adminClient = createAdminClient();
+  const adminClient = createClinicScopedAdminClient(clinicId);
   const pages = getRolePageSlugs(role);
 
   for (const pageSlug of pages) {
@@ -113,7 +113,7 @@ export async function listStaffPagePermissions(): Promise<{
   ) {
     return { error: "Only the primary clinic admin can customize page visibility." };
   }
-  const adminClient = createAdminClient();
+  const adminClient = createClinicScopedAdminClient(user.clinicId);
   const primaryAdminId = await getPrimaryClinicAdminId(user.clinicId);
 
   const { data: staffRows, error: staffError } = await adminClient
@@ -220,7 +220,7 @@ export async function updateUserPageVisibility(
   }
   if (pageSlug === "dashboard") return { error: "Dashboard cannot be hidden." };
 
-  const adminClient = createAdminClient();
+  const adminClient = createClinicScopedAdminClient(user.clinicId);
   const { data: target, error: targetError } = await adminClient
     .from("profiles")
     .select("id, role, clinic_id")
@@ -279,7 +279,7 @@ export async function saveUserPageVisibilityChanges(
     return { error: "The primary clinic admin cannot be customized." };
   }
 
-  const adminClient = createAdminClient();
+  const adminClient = createClinicScopedAdminClient(user.clinicId);
   const { data: target, error: targetError } = await adminClient
     .from("profiles")
     .select("id, role, clinic_id")
@@ -328,7 +328,7 @@ export async function resetUserPageVisibilityToRoleDefaults(
   targetUserId: string,
 ): Promise<PagePermissionResult> {
   const user = await requireRole("admin");
-  const adminClient = createAdminClient();
+  const adminClient = createClinicScopedAdminClient(user.clinicId);
   const { data: target, error: targetError } = await adminClient
     .from("profiles")
     .select("id, role, clinic_id")
@@ -384,7 +384,7 @@ async function saveUserPageVisibilityChangesFallback(
   clinicId: string,
   changes: PendingPageVisibilityChange[],
 ): Promise<PagePermissionResult> {
-  const adminClient = createAdminClient();
+  const adminClient = createClinicScopedAdminClient(clinicId);
 
   for (const change of changes) {
     const { error: upsertError } = await adminClient

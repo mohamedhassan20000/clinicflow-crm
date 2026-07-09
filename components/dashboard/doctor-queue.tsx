@@ -24,6 +24,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
 
 const EMPTY_QUEUE: DoctorDashboardQueue = {
   inSession: [],
@@ -37,7 +38,7 @@ function formatTime(iso: string) {
   return new Intl.DateTimeFormat("en-US", {
     hour: "numeric",
     minute: "2-digit",
-    timeZone: "Europe/Istanbul",
+    timeZone: DEFAULT_TIME_ZONE,
   }).format(new Date(iso));
 }
 

@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { dismissDisplacedAppointment } from "@/actions/appointments";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
+import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
 
 export type DisplacedAppointmentItem = {
   id: string;
@@ -84,7 +85,7 @@ export function DisplacedAppointments({ items }: DisplacedAppointmentsProps) {
                 day: "numeric",
                 month: "short",
                 year: "numeric",
-                timeZone: "Europe/Istanbul",
+                timeZone: DEFAULT_TIME_ZONE,
               });
               const time = formatTime(item.scheduled_at);
 

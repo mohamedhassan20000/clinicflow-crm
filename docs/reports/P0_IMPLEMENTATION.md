@@ -233,3 +233,12 @@ No P1 or later scope was implemented during review fixes. There is still no sign
 - **Verification performed:** Targeted locale tests passed locally. `pnpm lint` passed with 4 existing warnings and 0 errors. `pnpm typecheck` passed. `pnpm test` passed: 52 files, 286 tests.
 - **Remaining known limitations:** Local Supabase/Docker integration execution remains environment-dependent; CI is expected to run the integration suite. IANA timezone validation is still deferred until a user-facing timezone write path exists.
 - **No P1+ confirmation:** No P1 or later work was implemented in this final fix.
+
+## CI Integration Env Fix
+
+- **Failure:** GitHub Actions ran `pnpm test:integration` with mismatched local Supabase JWT/API keys, producing `JWT cryptographic operation failed`.
+- **What was changed:** The CI workflow now starts local Supabase, reads `supabase status -o env`, shell-sources the generated env file so quoted values are unquoted correctly, validates `API_URL`, `ANON_KEY`, and `SERVICE_ROLE_KEY`, and exports those exact values as `LOCAL_SUPABASE_URL`, `LOCAL_SUPABASE_PUBLISHABLE_KEY`, and `LOCAL_SUPABASE_SECRET_KEY` for `pnpm test:integration`.
+- **Files modified:** `.github/workflows/ci.yml`, `docs/reports/P0_IMPLEMENTATION.md`.
+- **Tests added or updated:** None; this is CI/local integration environment wiring only.
+- **Verification performed:** `pnpm lint` passed with 4 existing warnings and 0 errors. `pnpm typecheck` passed. `pnpm test` passed: 52 files, 286 tests. Local integration execution still depends on Docker/local Supabase availability; CI now sources the keys produced by its local Supabase instance.
+- **No P1+ confirmation:** No application behavior, migrations, RLS logic, billing, onboarding, messaging, AI, WhatsApp, or entitlements work was implemented.

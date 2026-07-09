@@ -53,9 +53,19 @@ jobs:
         shell: bash
         run: |
           supabase status -o env > /tmp/supabase-env
-          echo "LOCAL_SUPABASE_URL=http://127.0.0.1:54321" >> "$GITHUB_ENV"
-          grep '^ANON_KEY=' /tmp/supabase-env | sed 's/^ANON_KEY=/LOCAL_SUPABASE_PUBLISHABLE_KEY=/' >> "$GITHUB_ENV"
-          grep '^SERVICE_ROLE_KEY=' /tmp/supabase-env | sed 's/^SERVICE_ROLE_KEY=/LOCAL_SUPABASE_SECRET_KEY=/' >> "$GITHUB_ENV"
+          set -a
+          source /tmp/supabase-env
+          set +a
+
+          : "${API_URL:?supabase status did not provide API_URL}"
+          : "${ANON_KEY:?supabase status did not provide ANON_KEY}"
+          : "${SERVICE_ROLE_KEY:?supabase status did not provide SERVICE_ROLE_KEY}"
+
+          {
+            echo "LOCAL_SUPABASE_URL=$API_URL"
+            echo "LOCAL_SUPABASE_PUBLISHABLE_KEY=$ANON_KEY"
+            echo "LOCAL_SUPABASE_SECRET_KEY=$SERVICE_ROLE_KEY"
+          } >> "$GITHUB_ENV"
 
       - name: Integration tests
         run: pnpm test:integration

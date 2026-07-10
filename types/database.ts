@@ -2027,6 +2027,10 @@ export type Database = {
       }
       is_platform_admin: { Args: never; Returns: boolean }
       record_own_last_login: { Args: never; Returns: boolean }
+      redeem_coupon: {
+        Args: { p_clinic_id: string; p_code: string; p_invitation_id?: string }
+        Returns: Json
+      }
       restore_medical_note_attachment: {
         Args: {
           p_attachment_id: string

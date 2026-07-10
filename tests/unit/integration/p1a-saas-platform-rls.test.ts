@@ -235,6 +235,13 @@ describe("P1A SaaS platform RLS", () => {
   });
 
   it("increments usage atomically with a server-resolved snapshot", async () => {
+    const aiPlan = await service.from("plans").select("id").eq("slug", "pro_ai").single();
+    if (aiPlan.error) throw aiPlan.error;
+    const upgraded = await service
+      .from("subscriptions")
+      .update({ plan_id: aiPlan.data.id })
+      .eq("clinic_id", clinicA);
+    if (upgraded.error) throw upgraded.error;
     const increments = await Promise.all(
       Array.from({ length: 20 }, () =>
         service.rpc("increment_usage", {
@@ -263,7 +270,7 @@ describe("P1A SaaS platform RLS", () => {
       p_amount: 1,
     });
 
-    expect(counter.data).toEqual({ used: 20, limit_snapshot: 0 });
+    expect(counter.data).toEqual({ used: 20, limit_snapshot: 1000 });
     expect(deniedOwn.error).not.toBeNull();
     expect(deniedCrossClinic.error).not.toBeNull();
   });

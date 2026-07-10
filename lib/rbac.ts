@@ -1,6 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import { requireActiveSubscription } from "@/lib/billing/subscriptions";
 
 export type UserRole = "admin" | "receptionist" | "manager" | "doctor";
 
@@ -60,6 +61,25 @@ export async function requireRole(
   const user = await requireUser();
   const allowed = Array.isArray(roles) ? roles : [roles];
   if (!allowed.includes(user.role)) redirect("/dashboard");
+  return user;
+}
+
+/**
+ * Billing-aware guard for every new or touched mutating Server Action. Keeping
+ * this separate from requireRole preserves read-only access needed to explain
+ * and resolve an expired subscription.
+ */
+export async function requireMutationRole(
+  roles: UserRole[] | UserRole,
+): Promise<AuthedUser> {
+  const user = await requireRole(roles);
+  await requireActiveSubscription(user.clinicId);
+  return user;
+}
+
+export async function requireMutationUser(): Promise<AuthedUser> {
+  const user = await requireUser();
+  await requireActiveSubscription(user.clinicId);
   return user;
 }
 

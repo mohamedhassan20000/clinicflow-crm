@@ -63,6 +63,7 @@ async function loadPatientDocumentActions() {
   }));
   vi.doMock("@/lib/rbac", () => ({
     requireRole: mocks.state.requireRole,
+    requireMutationRole: mocks.state.requireRole,
   }));
   vi.doMock("@/lib/supabase/server", () => ({
     createClient: vi.fn(async () => mocks.client()),

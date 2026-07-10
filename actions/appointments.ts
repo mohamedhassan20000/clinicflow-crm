@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { fromZonedTime, toZonedTime } from "date-fns-tz";
 import { createClinicScopedAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { requireRole } from "@/lib/rbac";
+import { requireMutationRole, requireRole } from "@/lib/rbac";
 import {
   appointmentSchema,
   billingSchema,
@@ -251,7 +251,7 @@ export async function createAppointment(
   _prev: ActionResult | null,
   formData: FormData,
 ): Promise<ActionResult> {
-  const user = await requireRole(["admin", "receptionist"]);
+  const user = await requireMutationRole(["admin", "receptionist"]);
 
   const durationRaw = formData.get("duration_minutes");
   const raw = {
@@ -353,7 +353,7 @@ export async function updateAppointmentStatus(
   cancellationReason?: string | null,
   noShowReason?: string | null,
 ): Promise<ActionResult> {
-  const user = await requireRole(["admin", "receptionist"]);
+  const user = await requireMutationRole(["admin", "receptionist"]);
 
   const supabase = await createClient();
 
@@ -503,7 +503,7 @@ export async function updateAppointmentStatus(
 }
 
 export async function softDeleteAppointment(id: string): Promise<ActionResult> {
-  const user = await requireRole(["admin", "receptionist"]);
+  const user = await requireMutationRole(["admin", "receptionist"]);
   const supabase = await createClient();
 
   const { data: appt, error: fetchError } = await supabase
@@ -552,7 +552,7 @@ export async function softDeleteAppointment(id: string): Promise<ActionResult> {
 }
 
 export async function restoreAppointment(id: string): Promise<ActionResult> {
-  const user = await requireRole(["admin", "receptionist"]);
+  const user = await requireMutationRole(["admin", "receptionist"]);
   const supabase = await createClient();
   const { error } = await supabase
     .from("appointments")
@@ -598,7 +598,7 @@ export async function undoAppointmentStatus(
   id: string,
   targetStatus: Extract<AppointmentStatus, "pending" | "confirmed" | "arrived" | "in_session">,
 ): Promise<ActionResult> {
-  const user = await requireRole(["admin", "receptionist", "doctor"]);
+  const user = await requireMutationRole(["admin", "receptionist", "doctor"]);
   const supabase = await createClient();
 
   const { data: appt } = await supabase
@@ -631,7 +631,7 @@ export async function undoAppointmentStatus(
 }
 
 export async function arriveAppointment(id: string): Promise<ActionResult> {
-  const user = await requireRole(["admin", "receptionist"]);
+  const user = await requireMutationRole(["admin", "receptionist"]);
   const supabase = await createClient();
 
   const { data: appt } = await supabase
@@ -666,7 +666,7 @@ export async function arriveAppointment(id: string): Promise<ActionResult> {
 export async function startAppointmentSession(
   id: string,
 ): Promise<StartAppointmentSessionResult> {
-  const user = await requireRole(["doctor"]);
+  const user = await requireMutationRole(["doctor"]);
   const supabase = await createClient();
 
   const { data: appt, error: readError } = await supabase
@@ -708,7 +708,7 @@ export async function undoInvoiceCompletion(
   id: string,
   targetStatus: InvoiceUndoStatus,
 ): Promise<ActionResult> {
-  const user = await requireRole(["admin", "receptionist"]);
+  const user = await requireMutationRole(["admin", "receptionist"]);
   const supabase = await createClient();
 
   const { data: appt } = await supabase
@@ -747,7 +747,7 @@ export async function undoInvoiceCompletion(
 }
 
 export async function permanentDeleteAppointment(id: string): Promise<ActionResult> {
-  const user = await requireRole(["admin", "receptionist"]);
+  const user = await requireMutationRole(["admin", "receptionist"]);
   const supabase = await createClient();
 
   const { data: appt, error: fetchError } = await supabase
@@ -778,7 +778,7 @@ export async function permanentDeleteAppointment(id: string): Promise<ActionResu
 }
 
 export async function emptyAppointmentsTrash(): Promise<ActionResult> {
-  const user = await requireRole(["admin", "receptionist"]);
+  const user = await requireMutationRole(["admin", "receptionist"]);
   const supabase = await createClient();
 
   const { data: trashedAppointments, error: selectError } = await supabase
@@ -1089,7 +1089,7 @@ export async function confirmAndDisplaceConflicts(
   appointmentId: string,
   conflictingIds: string[],
 ): Promise<ActionResult> {
-  const user = await requireRole(["admin", "receptionist"]);
+  const user = await requireMutationRole(["admin", "receptionist"]);
   const supabase = await createClient();
 
   // Confirm the target appointment
@@ -1134,7 +1134,7 @@ export async function confirmAndDisplaceConflicts(
  * Permanently removes a displaced appointment from the rebook queue.
  */
 export async function dismissDisplacedAppointment(id: string): Promise<ActionResult> {
-  const user = await requireRole(["admin", "receptionist"]);
+  const user = await requireMutationRole(["admin", "receptionist"]);
   const supabase = await createClient();
 
   const { error } = await supabase

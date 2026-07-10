@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClinicScopedAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { requireRole, type AuthedUser } from "@/lib/rbac";
+import { requireMutationRole, requireRole, type AuthedUser } from "@/lib/rbac";
 import { patientSchema, medicalNoteSchema } from "@/lib/validations/patient";
 import { depositSchema } from "@/lib/validations/appointment";
 
@@ -138,7 +138,7 @@ export async function createPatient(
   _prev: ActionResult | null,
   formData: FormData,
 ): Promise<ActionResult> {
-  const user = await requireRole(["admin", "receptionist"]);
+  const user = await requireMutationRole(["admin", "receptionist"]);
 
   const raw = {
     full_name: formData.get("full_name"),
@@ -223,7 +223,7 @@ export async function updatePatient(
   _prev: ActionResult | null,
   formData: FormData,
 ): Promise<ActionResult> {
-  const user = await requireRole(["admin", "receptionist"]);
+  const user = await requireMutationRole(["admin", "receptionist"]);
 
   const raw = {
     full_name: formData.get("full_name"),
@@ -266,7 +266,7 @@ export async function updatePatient(
 }
 
 export async function softDeletePatient(id: string): Promise<ActionResult> {
-  const user = await requireRole(["admin", "receptionist"]);
+  const user = await requireMutationRole(["admin", "receptionist"]);
 
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("soft_delete_patient", {
@@ -298,7 +298,7 @@ export async function softDeletePatient(id: string): Promise<ActionResult> {
 }
 
 export async function restorePatient(id: string): Promise<ActionResult> {
-  const user = await requireRole("admin");
+  const user = await requireMutationRole("admin");
 
   const adminClient = createClinicScopedAdminClient(user.clinicId);
   const { error } = await adminClient
@@ -370,7 +370,7 @@ export async function getArchivePatients(): Promise<{ data?: PatientStub[]; erro
 }
 
 export async function archivePatient(id: string): Promise<ActionResult> {
-  const user = await requireRole("admin");
+  const user = await requireMutationRole("admin");
   const adminClient = createClinicScopedAdminClient(user.clinicId);
 
   const { error } = await adminClient
@@ -389,7 +389,7 @@ export async function archivePatient(id: string): Promise<ActionResult> {
 }
 
 export async function archiveAllTrashPatients(olderThanDays?: number): Promise<ActionResult> {
-  const user = await requireRole("admin");
+  const user = await requireMutationRole("admin");
   const adminClient = createClinicScopedAdminClient(user.clinicId);
 
   let query = adminClient
@@ -420,7 +420,7 @@ export async function addMedicalNote(
   _prev: ActionResult | null,
   formData: FormData,
 ): Promise<ActionResult> {
-  const user = await requireRole(["admin", "doctor"]);
+  const user = await requireMutationRole(["admin", "doctor"]);
 
   const raw = {
     patient_id: formData.get("patient_id"),
@@ -456,7 +456,7 @@ export async function updateMedicalNote(
   noteId: string,
   note: string,
 ): Promise<ActionResult> {
-  const user = await requireRole(["admin", "doctor"]);
+  const user = await requireMutationRole(["admin", "doctor"]);
   const trimmed = note.trim();
   if (!trimmed) return { error: "Note is required." };
   if (trimmed.length > 5000) return { error: "Note is too long." };
@@ -487,7 +487,7 @@ export async function updateMedicalNote(
 }
 
 export async function deleteMedicalNote(noteId: string): Promise<ActionResult> {
-  const user = await requireRole(["admin", "doctor"]);
+  const user = await requireMutationRole(["admin", "doctor"]);
   let existing: Awaited<ReturnType<typeof getMedicalNoteForClinic>>;
   try {
     existing = await getMedicalNoteForClinic(noteId, user.clinicId);
@@ -514,7 +514,7 @@ export async function deleteMedicalNote(noteId: string): Promise<ActionResult> {
 }
 
 export async function restoreMedicalNote(noteId: string): Promise<ActionResult> {
-  const user = await requireRole(["admin", "doctor"]);
+  const user = await requireMutationRole(["admin", "doctor"]);
 
   const adminClient = createClinicScopedAdminClient(user.clinicId);
   const { data: notes, error: noteError } = await adminClient
@@ -597,7 +597,7 @@ export async function addPatientDeposit(
   _prev: ActionResult | null,
   formData: FormData,
 ): Promise<ActionResult> {
-  const user = await requireRole(["admin", "receptionist"]);
+  const user = await requireMutationRole(["admin", "receptionist"]);
 
   const raw = {
     patient_id: String(formData.get("patient_id") ?? ""),
@@ -631,7 +631,7 @@ export async function settleOutstanding(
   _prev: ActionResult | null,
   formData: FormData,
 ): Promise<ActionResult> {
-  await requireRole(["admin", "receptionist"]);
+  await requireMutationRole(["admin", "receptionist"]);
 
   const patientId = String(formData.get("patient_id") ?? "");
   const appointmentId = String(formData.get("appointment_id") ?? "") || null;

@@ -1,8 +1,10 @@
 "use server";
 
 import { cookies } from "next/headers";
+import { requireMutationUser } from "@/lib/rbac";
 
 export async function setTheme(theme: "light" | "dark") {
+  await requireMutationUser();
   const cookieStore = await cookies();
   cookieStore.set("theme", theme, {
     path: "/",

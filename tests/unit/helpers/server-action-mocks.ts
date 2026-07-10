@@ -52,6 +52,8 @@ export function createServerActionMocks() {
     revalidatePath: vi.fn(),
     redirect: vi.fn(),
     requireRole: vi.fn(),
+    requireMutationRole: vi.fn(),
+    requireMutationUser: vi.fn(),
     queryLog: [] as {
       table: string;
       operation: "select" | "insert" | "update" | "delete";
@@ -238,7 +240,11 @@ export function createServerActionMocks() {
     state.revalidatePath.mockReset();
     state.redirect.mockReset();
     state.requireRole.mockReset();
+    state.requireMutationRole.mockReset();
+    state.requireMutationUser.mockReset();
     state.requireRole.mockImplementation(() => Promise.resolve(state.authedUser));
+    state.requireMutationRole.mockImplementation(() => Promise.resolve(state.authedUser));
+    state.requireMutationUser.mockImplementation(() => Promise.resolve(state.authedUser));
     state.from.mockImplementation((table: string) => new QueryBuilder(table));
     state.rpc.mockImplementation((name: string) =>
       Promise.resolve(state.rpcResults[name] ?? { data: null, error: null }),

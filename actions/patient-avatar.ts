@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { requireRole } from "@/lib/rbac";
+import { requireMutationRole } from "@/lib/rbac";
 
 const BUCKET = "patient-assets";
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
@@ -46,7 +46,7 @@ export async function uploadPatientAvatar(
   patientId: string,
   formData: FormData,
 ): Promise<AvatarResult> {
-  const user = await requireRole(["admin", "receptionist"]);
+  const user = await requireMutationRole(["admin", "receptionist"]);
   const result = await getPatientForAvatar(patientId, user.clinicId);
   if (!result) return { error: "Patient not found." };
 
@@ -107,7 +107,7 @@ export async function uploadPatientAvatar(
 export async function removePatientAvatar(
   patientId: string,
 ): Promise<AvatarResult> {
-  const user = await requireRole(["admin", "receptionist"]);
+  const user = await requireMutationRole(["admin", "receptionist"]);
   const result = await getPatientForAvatar(patientId, user.clinicId);
   if (!result) return { error: "Patient not found." };
 

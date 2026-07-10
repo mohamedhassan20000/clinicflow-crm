@@ -29,16 +29,23 @@ export default defineConfig({
   ],
   webServer: process.env.PLAYWRIGHT_BASE_URL
     ? undefined
-    : {
+    : [{
+        command: "pnpm tsx tests/e2e/rate-limit-server.ts",
+        url: "http://127.0.0.1:3011/health",
+        reuseExistingServer: !process.env.CI,
+        timeout: 30_000,
+      }, {
         command: "pnpm build && pnpm start",
         env: {
           ...process.env,
           NEXT_PUBLIC_SUPABASE_URL: localSupabaseUrl,
           NEXT_PUBLIC_SUPABASE_ANON_KEY: requireLocalKey("LOCAL_SUPABASE_PUBLISHABLE_KEY"),
           SUPABASE_SERVICE_ROLE_KEY: requireLocalKey("LOCAL_SUPABASE_SECRET_KEY"),
+          UPSTASH_REDIS_REST_URL: "http://127.0.0.1:3011",
+          UPSTASH_REDIS_REST_TOKEN: "playwright-test-token",
         },
         url: baseURL,
         reuseExistingServer: !process.env.CI,
         timeout: 180_000,
-      },
+      }],
 });

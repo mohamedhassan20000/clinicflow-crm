@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
+import { randomUUID } from "node:crypto";
 import type { Database } from "@/types/database";
 
 const LOCAL_SUPABASE_URL =
@@ -19,16 +20,16 @@ today.setDate(today.getDate() + 1);
 const day = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 
 const ids = {
-  clinic: "90000000-0000-4000-8000-000000000001",
-  dept: "90000000-0000-4000-8000-000000000002",
+  clinic: randomUUID(),
+  dept: randomUUID(),
   doctor: "",
   receptionist: "",
   forced: "",
-  billingPatient: "90000000-0000-4000-8000-000000000003",
-  settlementPatient: "90000000-0000-4000-8000-000000000004",
-  billingAppointment: "90000000-0000-4000-8000-000000000005",
-  settlementAppointment: "90000000-0000-4000-8000-000000000006",
-  service: "90000000-0000-4000-8000-000000000007",
+  billingPatient: randomUUID(),
+  settlementPatient: randomUUID(),
+  billingAppointment: randomUUID(),
+  settlementAppointment: randomUUID(),
+  service: randomUUID(),
 };
 
 const emails = {
@@ -62,6 +63,7 @@ async function createAuthUser(email: string) {
 }
 
 async function cleanup() {
+  await service.from("subscriptions").delete().eq("clinic_id", ids.clinic);
   await service.from("appointment_services").delete().eq("clinic_id", ids.clinic);
   await service.from("outstanding_settlements").delete().eq("clinic_id", ids.clinic);
   await service.from("patient_deposits").delete().eq("clinic_id", ids.clinic);
@@ -98,6 +100,15 @@ async function seedSmokeData() {
   await must(service.from("clinics").insert({
     id: ids.clinic,
     name: `Smoke Clinic ${suffix}`,
+    onboarding_completed_at: new Date().toISOString(),
+  }));
+  const planResult = await service.from("plans").select("id").eq("slug", "basic").single();
+  if (planResult.error) throw new Error(planResult.error.message);
+  await must(service.from("subscriptions").insert({
+    clinic_id: ids.clinic,
+    plan_id: planResult.data.id,
+    status: "trialing",
+    trial_ends_at: new Date(Date.now() + 14 * 86_400_000).toISOString(),
   }));
   await must(service.from("departments").insert({
     id: ids.dept,
@@ -268,9 +279,11 @@ test("forced password users are redirected to change-password", async ({ page })
 test("appointment billing dialog submits once and shows pending feedback", async ({ page }) => {
   await login(page, emails.receptionist);
   await page.goto(`/appointments?view=day&date=${day}`);
-  await expect(page.getByText("Billing Smoke Patient")).toBeVisible();
+  const appointment = page.getByText("Billing Smoke Patient");
+  await expect(appointment).toBeVisible();
+  await appointment.click();
 
-  await page.getByRole("button", { name: /^complete$/i }).click();
+  await page.getByRole("button", { name: /^complete$/i }).first().click();
   const dialog = page.getByRole("dialog", {
     name: /invoice.*complete appointment/i,
   });
@@ -302,11 +315,17 @@ test("settlement dialog validates totals and disables while submitting", async (
   await expect(page.getByText(/combined total exceeds outstanding/i)).toHaveCount(0);
   await expect(page.getByRole("button", { name: /record payment/i })).toBeDisabled();
 
-  await page.getByLabel(/amount/i).fill("25");
+  await page.getByLabel(/amount/i).fill("75");
   const submit = page.getByRole("button", { name: /record payment/i });
   await expect(submit).toBeEnabled();
   await delayNextMutation(page);
   await submit.click();
   await expect(submit).toBeDisabled();
-  await expect(page.getByText(/outstanding balance settled/i)).toBeVisible();
+  await expect.poll(async () => {
+    const result = await service.from("outstanding_settlements")
+      .select("amount")
+      .eq("clinic_id", ids.clinic)
+      .eq("patient_id", ids.settlementPatient);
+    return result.data?.reduce((sum, row) => sum + Number(row.amount), 0) ?? 0;
+  }, { timeout: 15_000 }).toBe(75);
 });

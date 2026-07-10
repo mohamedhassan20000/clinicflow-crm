@@ -1976,6 +1976,24 @@ export type Database = {
           previous_settled_now: number
         }[]
       }
+      complete_own_onboarding: { Args: never; Returns: string }
+      create_clinic_with_owner: {
+        Args: {
+          p_clinic_name: string
+          p_country: string
+          p_invitation_token_hash?: string
+          p_locale: string
+          p_owner_email: string
+          p_owner_id: string
+          p_owner_name: string
+          p_phone: string
+        }
+        Returns: string
+      }
+      find_resumable_clinic_owner: {
+        Args: { p_email: string }
+        Returns: string
+      }
       get_cancellation_report: {
         Args: { p_end: string; p_start: string }
         Returns: Json
@@ -2002,6 +2020,14 @@ export type Database = {
         Args: { p_end: string; p_start: string }
         Returns: Json
       }
+      get_public_registration_status: {
+        Args: never
+        Returns: {
+          accepted_clinics_this_week: number
+          registration_mode: Database["public"]["Enums"]["registration_mode"]
+          weekly_invite_limit: number
+        }[]
+      }
       get_receptionist_performance_report: {
         Args: { p_end: string; p_start: string }
         Returns: Json
@@ -2026,10 +2052,20 @@ export type Database = {
         Returns: number
       }
       is_platform_admin: { Args: never; Returns: boolean }
+      platform_week_start: { Args: { p_at?: string }; Returns: string }
       record_own_last_login: { Args: never; Returns: boolean }
       redeem_coupon: {
         Args: { p_clinic_id: string; p_code: string; p_invitation_id?: string }
         Returns: Json
+      }
+      request_clinic_invitation: {
+        Args: {
+          p_clinic_name: string
+          p_email: string
+          p_owner_name: string
+          p_phone: string
+        }
+        Returns: string
       }
       restore_medical_note_attachment: {
         Args: {
@@ -2091,6 +2127,17 @@ export type Database = {
       undo_appointment_status: {
         Args: { p_appointment_id: string; p_target_status: string }
         Returns: undefined
+      }
+      validate_clinic_signup: {
+        Args: { p_token_hash?: string }
+        Returns: {
+          allowed: boolean
+          clinic_name: string
+          email: string
+          invitation_id: string
+          owner_name: string
+          reason: string
+        }[]
       }
     }
     Enums: {

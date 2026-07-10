@@ -6,6 +6,13 @@ import { headers } from "next/headers";
 import { z } from "zod";
 import { createClient as createSupabaseJs } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
+import {
+  deleteSignupAuthUser,
+  findResumableSignupUserId,
+  provisionClinicOwner,
+} from "@/lib/supabase/admin";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { hashInvitationToken, normalizeEmail, normalizePhone, requestIp } from "@/lib/signup";
 
 const signInSchema = z.object({
   email: z.string().email(),
@@ -76,6 +83,13 @@ export async function signIn(
   const parsed = signInSchema.safeParse(raw);
   if (!parsed.success) {
     return { fieldErrors: parsed.error.flatten().fieldErrors };
+  }
+
+  const loginLimit = await checkRateLimit("login", await requestIp(), {
+    limit: 10, windowSeconds: 15 * 60, failureMode: "open",
+  });
+  if (!loginLimit.allowed) {
+    return { error: "Too many sign-in attempts. Please try again later." };
   }
 
   const supabase = await createClient();
@@ -224,6 +238,11 @@ export async function requestPasswordReset(
     return { fieldErrors: parsed.error.flatten().fieldErrors };
   }
 
+  const passwordResetLimit = await checkRateLimit("password-reset", await requestIp(), {
+    limit: 5, windowSeconds: 60 * 60, failureMode: "open",
+  });
+  if (!passwordResetLimit.allowed) return { ok: true };
+
   const origin = await siteOrigin();
   const redirectTo = `${origin}/auth/confirm?next=/reset-password`;
 
@@ -250,6 +269,112 @@ export async function requestPasswordReset(
   await supabase.auth.resetPasswordForEmail(parsed.data.email, { redirectTo });
 
   return { ok: true };
+}
+
+const clinicSignupSchema = z.object({
+  token: z.string().trim().optional(),
+  clinicName: z.string().trim().min(1).max(200),
+  country: z.enum(["KW", "SA", "AE", "EG"]),
+  phone: z.string().trim().min(3).max(50),
+  ownerName: z.string().trim().min(1).max(200),
+  email: z.string().trim().email().max(320),
+  password: z.string().min(8).regex(/[A-Z]/).regex(/[0-9]/),
+  locale: z.enum(["ar", "en"]),
+});
+
+function createThrowawayAuthClient() {
+  return createSupabaseJs(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+    },
+  );
+}
+
+export async function signUpClinic(
+  _previous: AuthActionResult | null,
+  formData: FormData,
+): Promise<AuthActionResult> {
+  const parsed = clinicSignupSchema.safeParse({
+    token: formData.get("token") || undefined,
+    clinicName: formData.get("clinicName"), country: formData.get("country"),
+    phone: formData.get("phone"), ownerName: formData.get("ownerName"),
+    email: formData.get("email"), password: formData.get("password"),
+    locale: formData.get("locale"),
+  });
+  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+
+  const rateLimit = await checkRateLimit("clinic-signup", await requestIp(), {
+    limit: 5, windowSeconds: 60 * 60, failureMode: "closed",
+  });
+  if (!rateLimit.allowed) return { error: "Signup is temporarily unavailable. Please try again later." };
+
+  const email = normalizeEmail(parsed.data.email);
+  const tokenHash = parsed.data.token ? hashInvitationToken(parsed.data.token) : null;
+  const supabase = await createClient();
+  const { data: validation, error: validationError } = await supabase.rpc(
+    "validate_clinic_signup", { p_token_hash: tokenHash ?? undefined },
+  );
+  const state = validation?.[0];
+  if (validationError || !state?.allowed) return { error: "This invitation is invalid or has expired." };
+  if (state.email && normalizeEmail(state.email) !== email) return { error: "Use the email address this invitation was sent to." };
+
+  const origin = await siteOrigin();
+  const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+    email, password: parsed.data.password,
+    options: {
+      emailRedirectTo: `${origin}/auth/confirm?next=/onboarding`,
+      data: { signup_flow: "clinic_owner", invitation_id: state.invitation_id },
+    },
+  });
+
+  let owner = signUpData.user;
+  let createdNow = Boolean(owner && (owner.identities?.length ?? 0) > 0);
+  if (signUpError || !createdNow) {
+    const resumable = await findResumableSignupUserId(email);
+    if (resumable.error || !resumable.data) {
+      return { error: "An account already exists for this email. Sign in or reset its password." };
+    }
+
+    const verifier = createThrowawayAuthClient();
+    const verified = await verifier.auth.signInWithPassword({
+      email,
+      password: parsed.data.password,
+    });
+    if (verified.error || verified.data.user?.id !== resumable.data) {
+      return { error: "An account already exists for this email. Sign in or reset its password." };
+    }
+    await verifier.auth.signOut();
+    owner = verified.data.user;
+    createdNow = false;
+  }
+  if (!owner) return { error: "An account already exists for this email. Sign in or reset its password." };
+
+  const { error: provisionError } = await provisionClinicOwner({
+    ownerId: owner.id, tokenHash,
+    clinicName: parsed.data.clinicName, country: parsed.data.country,
+    phone: normalizePhone(parsed.data.phone), ownerName: parsed.data.ownerName,
+    ownerEmail: email, locale: parsed.data.locale,
+  });
+  if (provisionError) {
+    console.error("clinic_signup_provision_failed", {
+      code: provisionError.code,
+      message: provisionError.message,
+      ownerId: owner.id,
+    });
+    if (createdNow) {
+      const { error: cleanupError } = await deleteSignupAuthUser(owner.id);
+      if (cleanupError) console.error("signup_compensation_failed", { userId: owner.id });
+    }
+    return { error: "Clinic setup could not be completed. Please retry with the same details." };
+  }
+
+  redirect("/signup/complete");
 }
 
 export async function setNewPassword(

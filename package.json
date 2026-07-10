@@ -13,7 +13,7 @@
     "test:e2e": "playwright test",
     "db:types": "supabase gen types typescript --project-id tslylwruuntrqjdzreot --schema public > types/database.ts",
     "format": "prettier --write .",
-    "test:integration": "vitest run tests/unit/integration",
+    "test:integration": "vitest run tests/unit/integration --no-file-parallelism",
     "test:all": "vitest run"
   },
   "dependencies": {

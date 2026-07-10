@@ -20,6 +20,53 @@ export function createAdminClient() {
   );
 }
 
+export async function provisionClinicOwner(input: {
+  ownerId: string;
+  tokenHash: string | null;
+  clinicName: string;
+  country: string;
+  phone: string;
+  ownerName: string;
+  ownerEmail: string;
+  locale: string;
+}) {
+  const admin = createAdminClient();
+  return admin.rpc("create_clinic_with_owner", {
+    p_owner_id: input.ownerId,
+    p_invitation_token_hash: input.tokenHash ?? undefined,
+    p_clinic_name: input.clinicName,
+    p_country: input.country,
+    p_phone: input.phone,
+    p_owner_name: input.ownerName,
+    p_owner_email: input.ownerEmail,
+    p_locale: input.locale,
+  });
+}
+
+export async function deleteSignupAuthUser(userId: string) {
+  return createAdminClient().auth.admin.deleteUser(userId);
+}
+
+export async function findResumableSignupUserId(email: string) {
+  return createAdminClient().rpc("find_resumable_clinic_owner", {
+    p_email: email,
+  });
+}
+
+export async function requestClinicInvitation(input: {
+  clinicName: string;
+  ownerName: string;
+  phone: string;
+  email: string;
+}) {
+  return createAdminClient().rpc("request_clinic_invitation", {
+    p_clinic_name: input.clinicName,
+    p_owner_name: input.ownerName,
+    p_phone: input.phone,
+    p_email: input.email,
+  });
+}
+
 const CLINIC_SCOPED_TABLES = new Set([
   "appointment_services",
   "appointments",

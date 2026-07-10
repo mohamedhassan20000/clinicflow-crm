@@ -130,6 +130,39 @@ describe("auth and RBAC boundaries", () => {
     expect(mocks.state.redirect).toHaveBeenCalledWith("/login");
   });
 
+  it("requirePlatformAdmin accepts a platform admin without requiring a clinic profile", async () => {
+    const { requirePlatformAdmin, mocks } = await loadRbac();
+    mocks.state.authGetUser.mockResolvedValue({
+      data: { user: { id: "platform-user", email: "operator@example.com" } },
+      error: null,
+    });
+    mocks.state.tableResults["platform_admins.select"] = {
+      data: { user_id: "platform-user" },
+      error: null,
+    };
+
+    await expect(requirePlatformAdmin()).resolves.toEqual({
+      id: "platform-user",
+      email: "operator@example.com",
+    });
+  });
+
+  it("requirePlatformAdmin fails closed for an authenticated clinic user", async () => {
+    const { requirePlatformAdmin, mocks } = await loadRbac();
+    mocks.state.authGetUser.mockResolvedValue({
+      data: { user: { id: "clinic-user", email: "admin@example.com" } },
+      error: null,
+    });
+    mocks.state.tableResults["platform_admins.select"] = {
+      data: null,
+      error: null,
+    };
+
+    await requirePlatformAdmin();
+
+    expect(mocks.state.redirect).toHaveBeenCalledWith("/dashboard");
+  });
+
   it("uses the freshly signed-in user when choosing the login redirect", async () => {
     const { signIn, mocks } = await loadAuthActions();
     mocks.state.authSignInWithPassword.mockResolvedValue({

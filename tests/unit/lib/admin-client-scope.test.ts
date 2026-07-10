@@ -146,6 +146,56 @@ describe("createClinicScopedAdminClient", () => {
     );
   });
 
+  it("classifies every clinic-owned P1A table for fail-closed admin access", async () => {
+    const { createClinicScopedAdminClient } = await import("@/lib/supabase/admin");
+    const admin = createClinicScopedAdminClient("clinic-a") as unknown as {
+      from: (table: string) => { select: (columns: string) => unknown };
+    };
+
+    for (const table of [
+      "subscriptions",
+      "usage_counters",
+      "coupon_redemptions",
+      "clinic_feature_overrides",
+    ]) {
+      expect(() => admin.from(table).select("id")).not.toThrow();
+      expect(queryLog).toContainEqual({
+        table,
+        method: "eq",
+        args: ["clinic_id", "clinic-a"],
+      });
+    }
+  });
+
+  it("leaves global-or-assigned coupons for explicit caller scoping", async () => {
+    const { createClinicScopedAdminClient } = await import("@/lib/supabase/admin");
+    const admin = createClinicScopedAdminClient("clinic-a") as unknown as {
+      from: (table: string) => {
+        select: (columns: string) => unknown;
+        insert: (payload: unknown) => unknown;
+      };
+    };
+
+    expect(() => admin.from("coupons").select("id")).not.toThrow();
+    admin.from("coupons").insert({
+      code: "GLOBAL",
+      kind: "lifetime_free",
+      clinic_id: null,
+      invitation_id: null,
+    });
+
+    expect(queryLog).not.toContainEqual({
+      table: "coupons",
+      method: "eq",
+      args: ["clinic_id", "clinic-a"],
+    });
+    expect(queryLog).toContainEqual({
+      table: "coupons",
+      method: "insert",
+      args: [expect.objectContaining({ clinic_id: null, invitation_id: null })],
+    });
+  });
+
   it("allows documented join-scoped tables without pretending to add clinic_id", async () => {
     const { createClinicScopedAdminClient } = await import("@/lib/supabase/admin");
     const admin = createClinicScopedAdminClient("clinic-a");

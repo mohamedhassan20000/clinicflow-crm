@@ -7,11 +7,6 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.5"
-  }
   public: {
     Tables: {
       appointment_services: {
@@ -334,6 +329,103 @@ export type Database = {
           },
         ]
       }
+      clinic_feature_overrides: {
+        Row: {
+          clinic_id: string
+          created_at: string
+          enabled: boolean
+          feature_key: string
+          id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          clinic_id: string
+          created_at?: string
+          enabled: boolean
+          feature_key: string
+          id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          clinic_id?: string
+          created_at?: string
+          enabled?: boolean
+          feature_key?: string
+          id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clinic_feature_overrides_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      clinic_invitations: {
+        Row: {
+          accepted_at: string | null
+          accepted_clinic_id: string | null
+          clinic_name: string
+          created_at: string
+          email: string
+          expires_at: string | null
+          id: string
+          invited_by: string | null
+          owner_name: string
+          phone: string
+          revoked_at: string | null
+          status: Database["public"]["Enums"]["clinic_invitation_status"]
+          token_hash: string | null
+          updated_at: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          accepted_clinic_id?: string | null
+          clinic_name: string
+          created_at?: string
+          email: string
+          expires_at?: string | null
+          id?: string
+          invited_by?: string | null
+          owner_name: string
+          phone: string
+          revoked_at?: string | null
+          status?: Database["public"]["Enums"]["clinic_invitation_status"]
+          token_hash?: string | null
+          updated_at?: string
+        }
+        Update: {
+          accepted_at?: string | null
+          accepted_clinic_id?: string | null
+          clinic_name?: string
+          created_at?: string
+          email?: string
+          expires_at?: string | null
+          id?: string
+          invited_by?: string | null
+          owner_name?: string
+          phone?: string
+          revoked_at?: string | null
+          status?: Database["public"]["Enums"]["clinic_invitation_status"]
+          token_hash?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clinic_invitations_accepted_clinic_id_fkey"
+            columns: ["accepted_clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clinic_working_hours: {
         Row: {
           clinic_id: string
@@ -381,6 +473,7 @@ export type Database = {
           locale: string
           logo_url: string | null
           name: string
+          onboarding_completed_at: string | null
           phone: string | null
           reminder_lead_hours: number
           time_format: string
@@ -401,6 +494,7 @@ export type Database = {
           locale?: string
           logo_url?: string | null
           name: string
+          onboarding_completed_at?: string | null
           phone?: string | null
           reminder_lead_hours?: number
           time_format?: string
@@ -421,6 +515,7 @@ export type Database = {
           locale?: string
           logo_url?: string | null
           name?: string
+          onboarding_completed_at?: string | null
           phone?: string | null
           reminder_lead_hours?: number
           time_format?: string
@@ -431,6 +526,122 @@ export type Database = {
           working_hours_start?: string | null
         }
         Relationships: []
+      }
+      coupon_redemptions: {
+        Row: {
+          clinic_id: string
+          coupon_id: string
+          id: string
+          redeemed_at: string
+          subscription_id: string
+        }
+        Insert: {
+          clinic_id: string
+          coupon_id: string
+          id?: string
+          redeemed_at?: string
+          subscription_id: string
+        }
+        Update: {
+          clinic_id?: string
+          coupon_id?: string
+          id?: string
+          redeemed_at?: string
+          subscription_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coupon_redemptions_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coupon_redemptions_coupon_id_fkey"
+            columns: ["coupon_id"]
+            isOneToOne: false
+            referencedRelation: "coupons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coupon_redemptions_subscription_clinic_fkey"
+            columns: ["subscription_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "subscriptions"
+            referencedColumns: ["id", "clinic_id"]
+          },
+          {
+            foreignKeyName: "coupon_redemptions_subscription_id_fkey"
+            columns: ["subscription_id"]
+            isOneToOne: false
+            referencedRelation: "subscriptions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      coupons: {
+        Row: {
+          clinic_id: string | null
+          code: string
+          created_at: string
+          expires_at: string | null
+          id: string
+          invitation_id: string | null
+          is_active: boolean
+          kind: Database["public"]["Enums"]["coupon_kind"]
+          max_redemptions: number | null
+          months: number | null
+          percent: number | null
+          redemption_count: number
+          updated_at: string
+        }
+        Insert: {
+          clinic_id?: string | null
+          code: string
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          invitation_id?: string | null
+          is_active?: boolean
+          kind: Database["public"]["Enums"]["coupon_kind"]
+          max_redemptions?: number | null
+          months?: number | null
+          percent?: number | null
+          redemption_count?: number
+          updated_at?: string
+        }
+        Update: {
+          clinic_id?: string | null
+          code?: string
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          invitation_id?: string | null
+          is_active?: boolean
+          kind?: Database["public"]["Enums"]["coupon_kind"]
+          max_redemptions?: number | null
+          months?: number | null
+          percent?: number | null
+          redemption_count?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coupons_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coupons_invitation_id_fkey"
+            columns: ["invitation_id"]
+            isOneToOne: false
+            referencedRelation: "clinic_invitations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       departments: {
         Row: {
@@ -862,6 +1073,73 @@ export type Database = {
           },
         ]
       }
+      package_templates: {
+        Row: {
+          clinic_id: string
+          created_at: string
+          created_by: string | null
+          department_id: string
+          id: string
+          is_active: boolean
+          name: string
+          notes: string | null
+          price_per_session: number | null
+          total_price: number | null
+          total_sessions: number
+          updated_at: string
+        }
+        Insert: {
+          clinic_id: string
+          created_at?: string
+          created_by?: string | null
+          department_id: string
+          id?: string
+          is_active?: boolean
+          name: string
+          notes?: string | null
+          price_per_session?: number | null
+          total_price?: number | null
+          total_sessions: number
+          updated_at?: string
+        }
+        Update: {
+          clinic_id?: string
+          created_at?: string
+          created_by?: string | null
+          department_id?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          notes?: string | null
+          price_per_session?: number | null
+          total_price?: number | null
+          total_sessions?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "package_templates_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "package_templates_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "package_templates_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       patient_deposits: {
         Row: {
           amount: number
@@ -987,73 +1265,6 @@ export type Database = {
           },
         ]
       }
-      package_templates: {
-        Row: {
-          clinic_id: string
-          created_at: string
-          created_by: string | null
-          department_id: string
-          id: string
-          is_active: boolean
-          name: string
-          notes: string | null
-          price_per_session: number | null
-          total_price: number | null
-          total_sessions: number
-          updated_at: string
-        }
-        Insert: {
-          clinic_id: string
-          created_at?: string
-          created_by?: string | null
-          department_id: string
-          id?: string
-          is_active?: boolean
-          name: string
-          notes?: string | null
-          price_per_session?: number | null
-          total_price?: number | null
-          total_sessions: number
-          updated_at?: string
-        }
-        Update: {
-          clinic_id?: string
-          created_at?: string
-          created_by?: string | null
-          department_id?: string
-          id?: string
-          is_active?: boolean
-          name?: string
-          notes?: string | null
-          price_per_session?: number | null
-          total_price?: number | null
-          total_sessions?: number
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "package_templates_clinic_id_fkey"
-            columns: ["clinic_id"]
-            isOneToOne: false
-            referencedRelation: "clinics"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "package_templates_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "package_templates_department_id_fkey"
-            columns: ["department_id"]
-            isOneToOne: false
-            referencedRelation: "departments"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       patient_packages: {
         Row: {
           clinic_id: string
@@ -1143,6 +1354,7 @@ export type Database = {
       }
       patients: {
         Row: {
+          archived_at: string | null
           assigned_doctor_id: string | null
           avatar_path: string | null
           blood_type: Database["public"]["Enums"]["blood_type"] | null
@@ -1150,14 +1362,13 @@ export type Database = {
           created_at: string
           created_by: string
           date_of_birth: string
+          deleted_at: string | null
           department_id: string | null
           email: string
           file_number: string
           full_name: string
           id: string
           insurance_provider_id: string | null
-          archived_at: string | null
-          deleted_at: string | null
           is_archived: boolean
           is_deleted: boolean
           national_id: string
@@ -1255,6 +1466,90 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      plans: {
+        Row: {
+          created_at: string
+          features: Json
+          id: string
+          is_active: boolean
+          limits: Json
+          monthly_price_usd: number
+          name_ar: string
+          name_en: string
+          slug: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          features?: Json
+          id?: string
+          is_active?: boolean
+          limits?: Json
+          monthly_price_usd?: number
+          name_ar: string
+          name_en: string
+          slug: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          features?: Json
+          id?: string
+          is_active?: boolean
+          limits?: Json
+          monthly_price_usd?: number
+          name_ar?: string
+          name_en?: string
+          slug?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      platform_admins: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      platform_settings: {
+        Row: {
+          id: boolean
+          invitation_expiry_days: number
+          registration_mode: Database["public"]["Enums"]["registration_mode"]
+          updated_at: string
+          updated_by: string | null
+          weekly_invite_limit: number
+        }
+        Insert: {
+          id?: boolean
+          invitation_expiry_days?: number
+          registration_mode?: Database["public"]["Enums"]["registration_mode"]
+          updated_at?: string
+          updated_by?: string | null
+          weekly_invite_limit?: number
+        }
+        Update: {
+          id?: boolean
+          invitation_expiry_days?: number
+          registration_mode?: Database["public"]["Enums"]["registration_mode"]
+          updated_at?: string
+          updated_by?: string | null
+          weekly_invite_limit?: number
+        }
+        Relationships: []
       }
       profiles: {
         Row: {
@@ -1434,6 +1729,104 @@ export type Database = {
           },
         ]
       }
+      subscriptions: {
+        Row: {
+          clinic_id: string
+          created_at: string
+          current_period_end: string | null
+          current_period_start: string | null
+          id: string
+          plan_id: string
+          provider: string
+          provider_subscription_id: string | null
+          status: Database["public"]["Enums"]["subscription_status"]
+          trial_ends_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          clinic_id: string
+          created_at?: string
+          current_period_end?: string | null
+          current_period_start?: string | null
+          id?: string
+          plan_id: string
+          provider?: string
+          provider_subscription_id?: string | null
+          status?: Database["public"]["Enums"]["subscription_status"]
+          trial_ends_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          clinic_id?: string
+          created_at?: string
+          current_period_end?: string | null
+          current_period_start?: string | null
+          id?: string
+          plan_id?: string
+          provider?: string
+          provider_subscription_id?: string | null
+          status?: Database["public"]["Enums"]["subscription_status"]
+          trial_ends_at?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscriptions_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: true
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subscriptions_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      usage_counters: {
+        Row: {
+          clinic_id: string
+          created_at: string
+          id: string
+          limit_snapshot: number
+          metric: Database["public"]["Enums"]["usage_metric"]
+          period_start: string
+          updated_at: string
+          used: number
+        }
+        Insert: {
+          clinic_id: string
+          created_at?: string
+          id?: string
+          limit_snapshot: number
+          metric: Database["public"]["Enums"]["usage_metric"]
+          period_start: string
+          updated_at?: string
+          used?: number
+        }
+        Update: {
+          clinic_id?: string
+          created_at?: string
+          id?: string
+          limit_snapshot?: number
+          metric?: Database["public"]["Enums"]["usage_metric"]
+          period_start?: string
+          updated_at?: string
+          used?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "usage_counters_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_customizations: {
         Row: {
           access: string
@@ -1583,6 +1976,14 @@ export type Database = {
           previous_settled_now: number
         }[]
       }
+      get_cancellation_report: {
+        Args: { p_end: string; p_start: string }
+        Returns: Json
+      }
+      get_doctor_performance_report: {
+        Args: { p_end: string; p_start: string }
+        Returns: Json
+      }
       get_followups_dashboard: {
         Args: {
           p_department_id?: string
@@ -1597,32 +1998,12 @@ export type Database = {
         }
         Returns: Json
       }
-      get_cancellation_report: {
-        Args: {
-          p_end: string
-          p_start: string
-        }
-        Returns: Json
-      }
-      get_doctor_performance_report: {
-        Args: {
-          p_end: string
-          p_start: string
-        }
-        Returns: Json
-      }
       get_no_show_report: {
-        Args: {
-          p_end: string
-          p_start: string
-        }
+        Args: { p_end: string; p_start: string }
         Returns: Json
       }
       get_receptionist_performance_report: {
-        Args: {
-          p_end: string
-          p_start: string
-        }
+        Args: { p_end: string; p_start: string }
         Returns: Json
       }
       get_revenue_summary: {
@@ -1635,6 +2016,16 @@ export type Database = {
         }
         Returns: Json
       }
+      increment_usage: {
+        Args: {
+          p_amount?: number
+          p_clinic_id: string
+          p_metric: Database["public"]["Enums"]["usage_metric"]
+          p_period_start?: string
+        }
+        Returns: number
+      }
+      is_platform_admin: { Args: never; Returns: boolean }
       record_own_last_login: { Args: never; Returns: boolean }
       restore_medical_note_attachment: {
         Args: {
@@ -1708,6 +2099,8 @@ export type Database = {
         | "cancelled"
         | "no_show"
       blood_type: "A+" | "A-" | "B+" | "B-" | "AB+" | "AB-" | "O+" | "O-"
+      clinic_invitation_status: "pending" | "accepted" | "revoked" | "expired"
+      coupon_kind: "lifetime_free" | "months_free" | "percent_discount"
       follow_up_outcome: "all_fine" | "has_problem" | "no_response"
       patient_document_category: "national_id" | "insurance" | "other"
       payment_method:
@@ -1716,6 +2109,9 @@ export type Database = {
         | "paypal"
         | "bank_transfer"
         | "insurance"
+      registration_mode: "invite_only" | "open"
+      subscription_status: "trialing" | "active" | "past_due" | "cancelled"
+      usage_metric: "ai_messages" | "wa_messages" | "sms_messages" | "emails"
       user_role: "admin" | "receptionist" | "manager" | "doctor"
     }
     CompositeTypes: {
@@ -1854,6 +2250,8 @@ export const Constants = {
         "no_show",
       ],
       blood_type: ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"],
+      clinic_invitation_status: ["pending", "accepted", "revoked", "expired"],
+      coupon_kind: ["lifetime_free", "months_free", "percent_discount"],
       follow_up_outcome: ["all_fine", "has_problem", "no_response"],
       patient_document_category: ["national_id", "insurance", "other"],
       payment_method: [
@@ -1863,6 +2261,9 @@ export const Constants = {
         "bank_transfer",
         "insurance",
       ],
+      registration_mode: ["invite_only", "open"],
+      subscription_status: ["trialing", "active", "past_due", "cancelled"],
+      usage_metric: ["ai_messages", "wa_messages", "sms_messages", "emails"],
       user_role: ["admin", "receptionist", "manager", "doctor"],
     },
   },

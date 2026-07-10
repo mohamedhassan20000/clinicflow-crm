@@ -25,6 +25,8 @@ const CLINIC_SCOPED_TABLES = new Set([
   "appointments",
   "audit_logs",
   "clinic_working_hours",
+  "clinic_feature_overrides",
+  "coupon_redemptions",
   "departments",
   "doctor_schedules",
   "follow_ups",
@@ -39,6 +41,8 @@ const CLINIC_SCOPED_TABLES = new Set([
   "profiles",
   "services",
   "staff_invitations",
+  "subscriptions",
+  "usage_counters",
   "user_customizations",
   "user_page_permissions",
 ]);
@@ -48,6 +52,13 @@ const JOIN_SCOPED_TABLES = new Set([
   "medical_notes",
 ]);
 
+// These tables mix global and tenant-assigned rows. Callers must apply the
+// reviewed assignment predicate explicitly; automatic clinic_id injection
+// would make global and invitation-assigned rows unreachable.
+const EXPLICIT_SCOPE_TABLES = new Set([
+  "coupons",
+]);
+
 const INSERT_METHODS = new Set(["insert", "upsert"]);
 const SCOPED_METHODS = new Set(["select", "update", "delete"]);
 const BLOCKED_METHODS = new Set(["rpc", "schema"]);
@@ -55,12 +66,16 @@ const BLOCKED_METHODS = new Set(["rpc", "schema"]);
 type AdminClient = ReturnType<typeof createAdminClient>;
 
 function assertKnownTable(table: string) {
-  if (CLINIC_SCOPED_TABLES.has(table) || JOIN_SCOPED_TABLES.has(table)) {
+  if (
+    CLINIC_SCOPED_TABLES.has(table)
+    || JOIN_SCOPED_TABLES.has(table)
+    || EXPLICIT_SCOPE_TABLES.has(table)
+  ) {
     return;
   }
 
   throw new Error(
-    `createClinicScopedAdminClient cannot access unclassified table "${table}". Add it to the clinic-scoped or join-scoped allow-list first.`,
+    `createClinicScopedAdminClient cannot access unclassified table "${table}". Add it to a reviewed scope allow-list first.`,
   );
 }
 
@@ -114,7 +129,8 @@ function scopeQueryResult(result: unknown, table: string, clinicId: string) {
  * Auth admin APIs remain available, but table reads/writes for tenant tables are
  * automatically constrained to the provided clinic id. Tables without their own
  * clinic_id must be explicitly allow-listed as join-scoped and verified by the
- * caller before mutation. RPC, schema, and storage access are intentionally not
+ * caller before mutation. Tables with global-or-assigned rows are explicitly
+ * scoped by each caller. RPC, schema, and storage access are intentionally not
  * exposed through this wrapper.
  */
 export function createClinicScopedAdminClient(clinicId: string): AdminClient {

@@ -15,6 +15,11 @@ export type AuthedUser = {
   mustChangePassword: boolean;
 };
 
+export type PlatformAdmin = {
+  id: string;
+  email: string;
+};
+
 export async function getAuthedUser(): Promise<AuthedUser | null> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -56,4 +61,27 @@ export async function requireRole(
   const allowed = Array.isArray(roles) ? roles : [roles];
   if (!allowed.includes(user.role)) redirect("/dashboard");
   return user;
+}
+
+/**
+ * Resolves the platform role independently from clinic RBAC. A platform admin
+ * does not need a clinic profile and gains no tenant clinical-data access.
+ */
+export async function requirePlatformAdmin(): Promise<PlatformAdmin> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const { data: platformAdmin } = await supabase
+    .from("platform_admins")
+    .select("user_id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (!platformAdmin) redirect("/dashboard");
+
+  return {
+    id: user.id,
+    email: user.email ?? "",
+  };
 }

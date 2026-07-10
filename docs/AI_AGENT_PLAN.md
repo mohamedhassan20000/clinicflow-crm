@@ -12,7 +12,7 @@
 | Phase | Duration (dev-days) | Deliverable | Depends on |
 |---|---|---|---|
 | **P0 — Tenant hardening & per-clinic config** | 8–12 | ⛔ BLOCKING security fixes (clinics RLS policies, admin-client wrapper), per-clinic timezone/currency/locale columns and threading | — |
-| **P1 — SaaS foundation** | 15–20 | Self-serve clinic signup + setup wizard, Paddle + Tap billing, `plans`/`subscriptions`/`usage_counters`, entitlements/feature flags, operator panel, rate limiting, data export | P0 |
+| **P1 — SaaS foundation** | 15–20 | Invite-only early-access registration (operator-switchable to open) + setup wizard, provider-agnostic billing architecture (`plans`/`subscriptions`/`usage_counters`/trials — **no payment gateway yet**), coupons/promotions, invitation management, entitlements + per-clinic feature flags, operator Mission Control panel, rate limiting, data export | P0 |
 | **P2 — Arabic-first i18n & RTL** | 12–18 | `next-intl` (Arabic default), full RTL retrofit (87 files / 339 occurrences), Arabic typography, localized zod errors — staff UI fully Arabic | P0 (parallelizable with P1) |
 | **P3 — Messaging layer + manual WhatsApp inbox + notifications** | 15–20 | Channel-abstracted `outbound_messages` (WhatsApp via BSP, SMS, email), inbound webhook, **staff manual WhatsApp inbox**, appointment reminders, invoice follow-up sequences, in-app notification center, template management | P0, P1 (usage counters) |
 | **P4 — Doctor AI assistant (read-only)** | 10–14 | Staff chat UI, patient-summary/search tools, audit logging, AI entitlement gating | P0, P1; P2 for Arabic answers |
@@ -21,6 +21,31 @@
 | **Total** | **~82–115** (≈ 5–7 months, single developer) | | |
 
 **Recommended v1 cut line:** ship **P0–P4 including the manual WhatsApp inbox**. P5 (patient AI booking) may slip without blocking launch — clinics get real patient messaging on day one via the staff inbox, and the AI layer plugs into the same infrastructure later.
+
+### Execution sub-phase plan (branch/PR boundaries)
+
+Phases P1–P6 are too large for one branch/PR each. They are split below into **18 execution sub-phases**, each sized for one focused implementation session, one rigorous review, one branch, and one PR. Product scope, phase numbering, and dependencies are unchanged — this is an execution-planning split only (full per-sub-phase detail lives in each phase's *Execution split* block in §8). P0 is complete and is not part of this table.
+
+| Parent | Sub-phase | Deliverable | Depends on | Est. days | Recommended PR boundary (branch) |
+|---|---|---|---|---|---|
+| P1 | **P1A** | SaaS platform schema + RLS + platform-admin guard (all P1 tables, no UI) | P0 | 4–5 | `feat/p1a-saas-platform-schema` |
+| P1 | **P1B** | Billing domain + entitlements engine (`lib/billing/`, `lib/entitlements.ts`, trial gate, coupons logic) | P1A | 4–5 | `feat/p1b-billing-entitlements` |
+| P1 | **P1C** | Early-access request + invitations + invited signup + onboarding wizard + rate limiting | P1A (∥ P1B) | 4–6 | `feat/p1c-early-access-signup` |
+| P1 | **P1D** | Operator Mission Control panel + data export | P1A–P1C | 3–4 | `feat/p1d-operator-panel` |
+| P2 | **P2A** | i18n infrastructure (next-intl, locale resolution, zod message keys, typography) | P0 (∥ P1) | 4–5 | `feat/p2a-i18n-infrastructure` |
+| P2 | **P2B** | RTL retrofit (shadcn regeneration, logical-properties codemod, icon mirroring, CI grep-gate) | P2A | 4–6 | `feat/p2b-rtl-retrofit` |
+| P2 | **P2C** | String extraction + Arabic translation + digits/date/currency polish + full RTL QA | P2A, P2B | 4–7 | `feat/p2c-arabic-strings-qa` |
+| P3 | **P3A** | Messaging schema + channel abstraction + email/SMS adapters + credential encryption | P1B (usage/entitlements) | 4–5 | `feat/p3a-messaging-core` |
+| P3 | **P3B** | WhatsApp (360dialog) integration: connect flow, webhooks, signature verification, template sync | P3A | 3–4 | `feat/p3b-whatsapp-integration` |
+| P3 | **P3C** | Manual inbox UI (threading, realtime, 24h window, template picker, triage) | P3A (∥ P3D; P3B for live traffic) | 5–7 | `feat/p3c-manual-inbox` |
+| P3 | **P3D** | Cron + reminders + invoice follow-ups + template management + notification center | P3A (∥ P3C) | 3–4 | `feat/p3d-reminders-notifications` |
+| P4 | **P4A** | AI foundation + doctor tools + per-tool authorization + audit (no UI) | P1B, P1A; P2A for ar prompts | 6–8 | `feat/p4a-ai-doctor-tools` |
+| P4 | **P4B** | Staff assistant chat UI (streaming route, assistant page, patient-profile launcher) | P4A | 4–6 | `feat/p4b-assistant-ui` |
+| P5 | **P5A** | Booking-core hardening (pending caps/TTL) + patient tools + identity gating (no channel wiring) | P4A, P3A | 6–8 | `feat/p5a-patient-tools-booking` |
+| P5 | **P5B** | Inbox AI integration: suggest/auto modes, escalation, confirmation flows, FAQ content UI | P5A, P3B, P3C | 6–8 | `feat/p5b-inbox-ai-booking` |
+| P6 | **P6A** | Prompt-injection suite + evaluation set (ar/en) in CI | P4B, P5B | 4–5 | `feat/p6a-adversarial-eval` |
+| P6 | **P6B** | Load tests + cost dashboards + delivery/cost alerting | P3, P1D | 3–4 | `feat/p6b-ops-load-cost` |
+| P6 | **P6C** | Meta Tech Provider / Embedded Signup migration + per-clinic runbook | P3B; Meta verification (external) | 3–6 | `feat/p6c-tech-provider-migration` |
 
 ---
 
@@ -125,7 +150,7 @@ Harmless in a single-clinic deployment; disqualifying in a SaaS. Fixed first thi
 |---|---|---|
 | Fix 2 cross-tenant `clinics` policies; admin-client guardrails | Any external customer | **P0 (blocking)** |
 | Per-clinic timezone/currency/locale/country | Kuwait launch (`Asia/Kuwait`, KWD, ar) | P0 |
-| Clinic signup + setup wizard | Selling at all | P1 |
+| Invite-gated clinic signup (early access) + setup wizard | Selling at all | P1 |
 | Subscriptions/plans/entitlements/usage counters | Selling at all; AI as add-on tier | P1 |
 | Rate limiting; operator panel; per-clinic data export | SaaS operations | P1 |
 | Arabic/RTL + i18n | Target market | P2 |
@@ -145,51 +170,76 @@ Harmless in a single-clinic deployment; disqualifying in a SaaS. Fixed first thi
 3. **Lint rule:** ESLint `no-restricted-imports`/`no-restricted-syntax` entry in [eslint.config.mjs](../eslint.config.mjs) banning direct `createAdminClient()` outside `lib/supabase/admin.ts` and an explicit allow-list file — CI ([.github/workflows/ci.yml](../.github/workflows/ci.yml)) already runs `pnpm lint`, so violations fail the pipeline.
 4. **Acceptance criterion / test:** extend [tests/unit/integration/rls-security.test.ts](../tests/unit/integration/rls-security.test.ts) with a **two-clinic fixture**: create clinic A and clinic B with an admin each; assert admin-A cannot select clinic B's row, cannot insert a clinics row, and cannot read B's patients/appointments/notes/storage paths. This two-clinic denial suite becomes a permanent CI fixture reused by every later phase.
 
-### 3.2 Self-serve clinic onboarding
+### 3.2 Clinic onboarding — invite-only early access (default), operator-switchable
 
-Today: manual DB inserts (§2.3). Plan:
+Today: manual DB inserts (§2.3). **Approved product decision (post-P0): registration defaults to Invite Only.** Public visitors request an invitation; they do not create a clinic directly. Plan:
 
-- **New route group** `app/(public)/signup/` (parallel to `app/(auth)/`): clinic registration form (clinic name, country, phone, owner name/email/password, locale).
-- **New RPC `create_clinic_with_owner(...)` (SECURITY DEFINER, single transaction):** insert `clinics` row (with new per-clinic config columns, §3.5), create the owner `profiles` row bound to the new Supabase Auth user, seed default `user_page_permissions`. Called from a new `signUpClinic` action in [actions/auth.ts](../actions/auth.ts). Email verification via Supabase Auth (already configured for password flows).
+- **Registration Mode — a global platform setting, not code.** New `platform_settings` table (single-row or key/value; operator-writable only via `platform_admins` RLS) holding at minimum `registration_mode` (`'invite_only'` **default** | `'open'`) and `weekly_invite_limit` (default **20**, configurable — never hardcoded). The public registration surface reads the setting at request time, so the operator flipping the toggle in the Operator Panel (§3.6) changes behavior **immediately, with no deploy or code change**.
+- **Early Access flow (replaces the public signup experience)** at `app/(public)/early-access/` (parallel to `app/(auth)/`):
+  - **Request Invitation form** — fields: **Clinic Name, Owner Name, Phone, Email** → stored as an invitation request for operator review.
+  - Displays: *"We currently accept only 20 clinics per week to ensure the highest quality onboarding."* (copy sourced from the configurable `weekly_invite_limit`, i18n-ready for P2).
+  - **Dynamic progress indicator** showing accepted clinics for the current week vs. the configured weekly limit (e.g., "14 of 20 spots taken this week"), computed from accepted invitations — never a hardcoded number.
+- **Invitation system (operator-managed; expands the concept behind the existing staff `staff_invitations` pattern to the platform level).** New `clinic_invitations` table: recipient details (from the request or operator-entered), single-use token, `expires_at` (**tokens expire**; default 7 days, configurable), status `pending | accepted | revoked | expired`, optional coupon assignment (§3.3). The operator can **create, resend (fresh token/expiry), revoke, and monitor pending and accepted invitations** from the Operator Panel.
+- **Invited signup** `app/(public)/signup/[token]`: validates a live, unexpired token, then runs the clinic registration form (clinic name, country, phone, owner name/email/password, locale). In `registration_mode = 'open'`, the same signup form is reachable without a token — the flow is identical from this point on.
+- **New RPC `create_clinic_with_owner(...)` (SECURITY DEFINER, single transaction):** insert `clinics` row (with new per-clinic config columns, §3.5), create the owner `profiles` row bound to the new Supabase Auth user, seed default `user_page_permissions`, and (invite-only mode) atomically consume the invitation token. Called from a new `signUpClinic` action in [actions/auth.ts](../actions/auth.ts). Email verification via Supabase Auth (already configured for password flows).
 - **Setup wizard** `app/(protected)/onboarding/` shown until complete: steps reuse existing actions verbatim — working hours (`upsertClinicWorkingHours`), departments/services/insurance (CRUD in [actions/settings.ts](../actions/settings.ts)), doctors & staff invites (`createStaff`, `staff_invitations` table), doctor schedules (`upsertDoctorSchedule`). New columns `clinics.onboarding_completed_at`; middleware gate in [lib/supabase/middleware.ts](../lib/supabase/middleware.ts) (same pattern as the existing `must_change_password` gate).
 
-### 3.3 Subscription billing (Paddle primary + Tap Payments fallback)
+### 3.3 Billing architecture — provider-agnostic (no payment gateway in P1)
 
-**Provider comparison (Arab-market lens):**
+**Approved product decision (post-P0): P1 builds the complete billing architecture only — subscriptions, plans, entitlements, trials, usage tracking, coupons, and the billing domain model. No payment gateway is integrated in P1.** The final provider will be chosen later; the architecture must support any future provider through a provider abstraction.
+
+- **Provider abstraction:** new `lib/billing/provider.ts` interface (`createCheckout`, `syncSubscriptionFromProvider`, `cancelSubscription`, `parseWebhook`/`verifySignature`) mirroring the `lib/messaging/` adapter pattern (§5.2). **P1 ships exactly one implementation: `manual`** — the operator grants, extends, comps, or cancels subscriptions from the Operator Panel (§3.6). No checkout UI, no PSP webhooks, no provider SDK in P1.
+- **Non-binding future provider candidates:** Paddle, Stripe, Lemon Squeezy, Polar, Tap. Nothing in the P1 schema or code may assume any one of them; `subscriptions.provider` is free-form text (`'manual'` in P1). Adding the chosen provider later means one new adapter + one webhook route — no domain-model changes.
+
+**Provider comparison (Arab-market lens — retained as non-binding input for the future provider decision, not a P1 dependency):**
 
 | Provider | Coverage for our sellers/buyers | Model | Notes |
 |---|---|---|---|
 | **Stripe** | Not generally available for merchants in Kuwait/Saudi/Egypt (UAE supported) — *verify current country list at execution* | PSP | Fine only if founder incorporates in a Stripe-supported country |
-| **Paddle** ✅ primary | Merchant of record — sells globally regardless of founder's incorporation country; handles VAT (KSA 15%, Egypt 14%) and invoicing | MoR, ~5% + fees (approx., as of 2026-07-09 — verify at https://www.paddle.com/pricing) | Best fit: founder doesn't need a local payment license; subscription tooling built in |
-| **Tap Payments** ✅ fallback/local | GCC-native (Kuwait HQ) — KNET (Kuwait), mada (Saudi), local cards | PSP, per-txn ~2.x% (approx., as of 2026-07-09 — verify at https://www.tap.company) | Needed because many Kuwaiti/Saudi clinics pay by KNET/mada, which MoRs handle poorly |
+| **Paddle** | Merchant of record — sells globally regardless of founder's incorporation country; handles VAT (KSA 15%, Egypt 14%) and invoicing | MoR, ~5% + fees (approx., as of 2026-07-09 — verify at https://www.paddle.com/pricing) | Best fit: founder doesn't need a local payment license; subscription tooling built in |
+| **Tap Payments** | GCC-native (Kuwait HQ) — KNET (Kuwait), mada (Saudi), local cards | PSP, per-txn ~2.x% (approx., as of 2026-07-09 — verify at https://www.tap.company) | Needed because many Kuwaiti/Saudi clinics pay by KNET/mada, which MoRs handle poorly |
 | Paymob | Egypt/KSA strong | PSP | Candidate when Egypt becomes a focus market |
 | Moyasar | Saudi-only | PSP | Too narrow as primary |
-
-**Recommendation:** Paddle as the default checkout (webhooks → `subscriptions` table), Tap as an alternative checkout for GCC clinics wanting KNET/mada, both normalized into the same subscription model. Start Paddle-only in P1; add Tap when the first customer asks for KNET (realistically within the first Kuwaiti sales conversations).
 
 **New tables (migration `saas_billing`):**
 
 ```sql
-plans            (id, slug 'basic'|'pro'|'pro_ai', name_ar, name_en, monthly_price_usd,
-                  features jsonb, limits jsonb, is_active)
-subscriptions    (id, clinic_id FK unique, plan_id FK, provider 'paddle'|'tap'|'manual',
-                  provider_subscription_id, status 'trialing'|'active'|'past_due'|'cancelled',
-                  trial_ends_at, current_period_start/end, created_at, updated_at)
-usage_counters   (id, clinic_id FK, period_start date, metric
-                  'ai_messages'|'wa_messages'|'sms_messages'|'emails',
-                  used int, limit_snapshot int, unique(clinic_id, period_start, metric))
+plans               (id, slug 'basic'|'pro'|'pro_ai', name_ar, name_en, monthly_price_usd,
+                     features jsonb, limits jsonb, is_active)
+subscriptions       (id, clinic_id FK unique, plan_id FK, provider text /* 'manual' in P1 */,
+                     provider_subscription_id nullable,
+                     status 'trialing'|'active'|'past_due'|'cancelled',
+                     trial_ends_at, current_period_start/end, created_at, updated_at)
+usage_counters      (id, clinic_id FK, period_start date, metric
+                     'ai_messages'|'wa_messages'|'sms_messages'|'emails',
+                     used int, limit_snapshot int, unique(clinic_id, period_start, metric))
+coupons             (id, code unique, kind 'lifetime_free'|'months_free'|'percent_discount',
+                     months int nullable /* months_free: X months; 12 = one year */,
+                     percent int nullable /* percent_discount */,
+                     expires_at nullable, max_redemptions int nullable, redemption_count int,
+                     clinic_id FK nullable    /* clinic-specific assignment */,
+                     invitation_id FK nullable /* invitation-specific assignment (§3.2) */,
+                     is_active, created_at)
+coupon_redemptions  (id, coupon_id FK, clinic_id FK, subscription_id FK, redeemed_at,
+                     unique(coupon_id, clinic_id))
 ```
 
-All three RLS'd: clinics read their own `subscriptions`/`usage_counters`; writes only via SECURITY DEFINER RPCs (`increment_usage(clinic_id, metric, amount)` with atomic `insert ... on conflict do update`) and webhook handlers using the scoped admin wrapper. **14-day trial** default (`status = 'trialing'`, `trial_ends_at`), enforced in middleware alongside the auth gates.
+All RLS'd: clinics read their own `subscriptions`/`usage_counters` (and any coupon applied to them); writes only via SECURITY DEFINER RPCs (`increment_usage(clinic_id, metric, amount)` with atomic `insert ... on conflict do update`) and operator/billing paths using the scoped admin wrapper. **14-day trial** default (`status = 'trialing'`, `trial_ends_at`), enforced in middleware alongside the auth gates.
 
-Webhook route: `app/api/webhooks/paddle/route.ts` (signature-verified), the second-ever route handler pattern after `appointments/export`.
+**Coupons / promotions (P1, operator-managed from §3.6):** supported kinds — **lifetime free**, **one year free** (`months_free` with `months = 12`), **X months free**, and **percentage discounts**. Every coupon supports **expiration** (`expires_at`), **usage limits** (`max_redemptions`), **clinic-specific assignment**, and **invitation-specific assignment** (attached to a `clinic_invitations` row so the discount applies automatically on accepted signup). Redemption effects live in the domain model (extended trial/comped period on `subscriptions`, discount recorded for the future provider), so they survive whichever gateway is chosen later.
 
-### 3.4 Entitlements = feature flags (approved mechanism for selling AI as an add-on)
+**Plans philosophy (approved):** the **Basic plan must remain genuinely useful** — full core clinic management (patients, appointments, billing, reports) works well on Basic. Plans differentiate mainly by **limits, automation, AI, messaging, and advanced capabilities** — never by intentionally crippling Basic's core workflows.
 
-No third-party flag service. `plans.features jsonb` (e.g. `{"ai_assistant": true, "whatsapp": true, "sms": false}`) + `plans.limits jsonb` (e.g. `{"ai_messages_month": 1000, "staff_seats": 10}`).
+Webhook routes for the eventual provider are explicitly **out of P1**; when the provider is chosen, its adapter adds `app/api/webhooks/<provider>/route.ts` (signature-verified), following the route-handler precedent of `appointments/export`.
 
-- **New module `lib/entitlements.ts`:** `getEntitlements(clinicId)` (cached with `unstable_cache` + tag, same pattern as [lib/cache/reference-data.ts](../lib/cache/reference-data.ts)), `hasFeature(ents, "ai_assistant")`, `checkUsageLimit(clinicId, "ai_messages")`.
+### 3.4 Entitlements & per-clinic feature flags (P1 — approved mechanism for selling AI as an add-on)
+
+No third-party flag service. **Feature flags are a P1 deliverable: per-clinic flags exist from the SaaS foundation onward**, so every later phase (AI, WhatsApp, SMS, beta features, future modules) gates on infrastructure that already exists rather than retrofitting it.
+
+- **Two layers, one resolution:** `plans.features jsonb` (e.g. `{"ai_assistant": true, "whatsapp": true, "sms": false}`) + `plans.limits jsonb` (e.g. `{"ai_messages_month": 1000, "staff_seats": 10}`), overlaid by **per-clinic overrides** (new relational clinic_feature_overrides table; feature overrides must not be stored as JSONB on clinics, operator-writable from §3.6) — effective entitlements = plan defaults ⊕ clinic overrides. Example flags: `ai_assistant`, `whatsapp`, `sms`, `beta_features`, plus namespaced keys for future modules.
+- **New module `lib/entitlements.ts`:** `getEntitlements(clinicId)` (cached with `unstable_cache` + tag, same pattern as [lib/cache/reference-data.ts](../lib/cache/reference-data.ts)), `hasFeature(ents, "ai_assistant")`, `checkUsageLimit(clinicId, "ai_messages")` — the resolution of plan + override happens here, callers never read the raw jsonb.
 - Enforced in three places, mirroring existing RBAC layering: middleware (hide gated pages — extends the existing page-visibility mechanism in [lib/page-permissions.ts](../lib/page-permissions.ts) by adding entitlement-conditional slugs), server actions (guard at top, next to `requireRole`), and the agent/messaging send paths (hard usage caps, §6.7/§11).
+- **Plan-differentiation guardrail (approved):** flags and limits are how Pro/Pro+AI add value on top of a **genuinely useful Basic** (§3.3) — differentiation by limits/automation/AI/messaging/advanced capabilities, not by switching off core clinic management.
 
 ### 3.5 Per-clinic configuration (fixes the TZ inconsistency properly)
 
@@ -204,9 +254,9 @@ No third-party flag service. `plans.features jsonb` (e.g. `{"ai_assistant": true
 
 ### 3.6 Operational must-haves
 
-- **Rate limiting (previously missing entirely):** Upstash Redis (Vercel Marketplace) sliding-window limiter in a new `lib/rate-limit.ts`; applied to auth actions in [actions/auth.ts](../actions/auth.ts) (login, password reset), the signup route, all webhook routes, and (later) agent/messaging endpoints. Per-IP for public routes, per-clinic for authenticated.
+- **Rate limiting (previously missing entirely):** Upstash Redis (Vercel Marketplace) sliding-window limiter in a new `lib/rate-limit.ts`; applied to auth actions in [actions/auth.ts](../actions/auth.ts) (login, password reset), the early-access request form and signup routes, all webhook routes, and (later) agent/messaging endpoints. Per-IP for public routes, per-clinic for authenticated.
 - **Per-clinic data export ("can I get my data out?"):** extend the existing export pattern ([app/(protected)/appointments/export/route.ts](../app/(protected)/appointments/export/route.ts)) into `app/(protected)/settings/export/route.ts` — admin-only ZIP of CSVs (patients, appointments, notes metadata, invoices) + signed URLs for documents. Sales objection-killer and practical PDPL data-portability answer.
-- **Operator (super-admin) panel:** a **new `platform_admins` table** (`user_id` FK) — deliberately *not* a new value in the clinic `user_role` enum, keeping tenant RBAC untouched. New route group `app/(operator)/` with its own guard (`requirePlatformAdmin()` added to [lib/rbac.ts](../lib/rbac.ts)) and layout, listing tenants, subscription status, usage counters, and message-delivery health. RLS: `platform_admins`-only policies on the SaaS tables; tenant PHI stays invisible to the operator except aggregate counts.
+- **Operator (super-admin) panel — a Mission Control dashboard.** Its purpose is to **detect platform issues before customers discover them**, not merely to list tenants. A **new `platform_admins` table** (`user_id` FK) — deliberately *not* a new value in the clinic `user_role` enum, keeping tenant RBAC untouched. New route group `app/(operator)/` with its own guard (`requirePlatformAdmin()` added to [lib/rbac.ts](../lib/rbac.ts)) and layout. It **monitors**: clinics, trials (starting/expiring), subscriptions, usage vs. limits, invitations (pending/accepted, weekly early-access progress), coupons and redemptions, feature flags in effect, health indicators (delivery rates, job failures, webhook errors once P3 lands), error summaries (Sentry-fed), and recent platform activity. It **manages**: the global Registration Mode setting and `weekly_invite_limit` (§3.2 — effective immediately, no deploy), invitation create/resend/revoke, coupon CRUD and assignment (§3.3), per-clinic feature-flag overrides (§3.4), and manual subscription grants/extensions (the P1 `manual` billing provider, §3.3). RLS: `platform_admins`-only policies on the SaaS tables; **the operator panel must never expose patient PHI** — tenant clinical data stays invisible except aggregate counts.
 - **Backups/monitoring posture:** Supabase PITR add-on (paid tier) before first paying customer; Sentry env separation (staging/prod DSNs); uptime check on `/api/health` (new trivial route); weekly `pg_dump` to founder-controlled storage as belt-and-braces. Documented as an ops runbook item, not code.
 
 ---
@@ -218,7 +268,7 @@ No third-party flag service. `plans.features jsonb` (e.g. `{"ai_assistant": true
 ### 4.1 i18n architecture
 
 - **Library: `next-intl`** — the de-facto App Router standard; first-class Server Component and server-action support; message catalogs `messages/ar.json` (default) + `messages/en.json`.
-- **Routing strategy: no URL locale prefix.** The app is authenticated-only (public surface = login + signup); locale is per-clinic (`clinics.locale`, §3.5) with per-user override (new `profiles.locale` nullable column). `next-intl`'s cookie/request-config mode: a `getRequestConfig` in `i18n/request.ts` resolves user → clinic → `ar` default. Root layout ([app/layout.tsx](../app/layout.tsx)) sets `<html lang={locale} dir={locale === 'ar' ? 'rtl' : 'ltr'}>`.
+- **Routing strategy: no URL locale prefix.** The app is authenticated-only (public surface = login + early-access request + invited signup); locale is per-clinic (`clinics.locale`, §3.5) with per-user override (new `profiles.locale` nullable column). `next-intl`'s cookie/request-config mode: a `getRequestConfig` in `i18n/request.ts` resolves user → clinic → `ar` default. Root layout ([app/layout.tsx](../app/layout.tsx)) sets `<html lang={locale} dir={locale === 'ar' ? 'rtl' : 'ltr'}>`.
 - **Server actions & zod:** validation messages in [lib/validations/](../lib/validations/) are currently hardcoded English strings. Plan: replace literal messages with **message keys** (`"validation.appointment.pastTime"`), and translate at the edge — a small `translateFieldErrors(fieldErrors, t)` helper applied where actions' `{ error, fieldErrors }` results are rendered (forms use react-hook-form; the resolver path stays untouched). This avoids threading `t()` into every schema and keeps schemas serializable. One shared zod error map for generic messages (`required`, `too_long`), registered in a `lib/validations/error-map.ts`.
 
 ### 4.2 RTL as default direction
@@ -414,11 +464,49 @@ Summary table at the top of this document. Common to every phase: unit tests fol
 
 ### P1 — SaaS foundation (15–20 days)
 
-- **Goal:** a clinic can sign up, trial, subscribe, and be operated.
-- **In scope:** signup route group + `create_clinic_with_owner` RPC + wizard (§3.2); `saas_billing` migration + Paddle checkout/webhooks (§3.3); `lib/entitlements.ts` + gating hooks (§3.4); rate limiting (`lib/rate-limit.ts`, Upstash); operator panel `app/(operator)/` + `platform_admins`; data-export route (§3.6). **Out:** Tap Payments (added on first KNET request), dunning emails (P3 delivers channels).
-- **Migrations:** `saas_billing`, `platform_admins`, `onboarding_completed_at`.
-- **Tests:** signup-RPC unit tests (rollback on partial failure); webhook signature + idempotency tests with fixture payloads; entitlement gate tests (Basic clinic denied `ai_assistant`); Playwright: signup → wizard → dashboard happy path (add to `tests/e2e/`).
-- **Acceptance:** a stranger can self-serve from signup to a working, isolated clinic in <10 minutes; trial expiry locks mutating actions; operator panel lists tenants/usage without exposing PHI.
+- **Goal:** an invited clinic can register, trial, and be operated; the complete billing architecture exists without any payment gateway; the operator runs the platform from Mission Control.
+- **In scope:** early-access request flow + registration-mode setting (`platform_settings`) + `clinic_invitations` (create/resend/revoke/monitor, expiring tokens) + invited signup + `create_clinic_with_owner` RPC + wizard (§3.2); `saas_billing` migration — plans/subscriptions/trials/usage counters/coupons + `lib/billing/provider.ts` abstraction with the **`manual` provider only** (§3.3); `lib/entitlements.ts` + per-clinic feature-flag overrides + gating hooks (§3.4); rate limiting (`lib/rate-limit.ts`, Upstash) incl. the public early-access form; operator Mission Control panel `app/(operator)/` + `platform_admins` (§3.6); data-export route (§3.6). **Out:** any payment gateway/checkout/PSP webhook (provider chosen later — Paddle/Stripe/Lemon Squeezy/Polar/Tap are non-binding candidates), dunning emails (P3 delivers channels).
+- **Migrations:** `saas_billing` (incl. `coupons`/`coupon_redemptions`), `platform_admins`, `platform_settings`, `clinic_invitations`, `onboarding_completed_at`, feature-override storage (§3.4).
+- **Tests:** signup-RPC unit tests (rollback on partial failure, atomic invitation-token consumption, expired/revoked token rejection); registration-mode tests (invite-only blocks tokenless signup; flipping to open admits it without redeploy); weekly-limit tests (progress indicator reflects accepted count; limit read from settings, not constants); coupon tests (each kind's effect on the subscription, expiration, `max_redemptions`, clinic-/invitation-specific assignment); entitlement gate tests (Basic clinic denied `ai_assistant`; per-clinic override flips it); two-clinic denial tests for every new table (P0 fixture); Playwright: request invitation → operator invites → signup → wizard → dashboard happy path (add to `tests/e2e/`).
+- **Acceptance:** in invite-only mode a stranger can only *request* access, and an invited owner gets from token to a working, isolated clinic in <10 minutes; the operator flips Registration Mode and the public flow changes immediately with no code change; the early-access page shows the live accepted-this-week count against the configurable limit; trial expiry locks mutating actions; a coupon of each kind applies its effect; operator Mission Control shows clinics/trials/subscriptions/usage/invitations/coupons/flags/health/errors/activity without exposing PHI; no payment-provider code or dependency exists anywhere in the repo.
+
+#### P1 execution split (4 sub-phases; merge order P1A → P1B/P1C → P1D)
+
+**P1A — SaaS platform schema & RLS foundation** — branch `feat/p1a-saas-platform-schema`, est. **4–5 days**, merge **1st**.
+- *Goal:* every P1 table exists with airtight RLS and the platform-admin trust boundary, before any feature code touches them. Security-sensitive work isolated here by design.
+- *In scope:* migrations `platform_admins`, `platform_settings` (registration mode + weekly limit defaults), `saas_billing` (`plans`, `subscriptions`, `usage_counters`, `coupons`, `coupon_redemptions`), `clinic_invitations`, feature-override storage (§3.4), `onboarding_completed_at`; RLS policies for all (clinic-read-own, platform-admin-write); `requirePlatformAdmin()` in [lib/rbac.ts](../lib/rbac.ts); `increment_usage` RPC; seed rows for the three plans; scoped-admin-wrapper allow-list updates (P0 fail-closed rule).
+- *Out of scope:* all UI, all business logic (billing math, token flows), the operator panel.
+- *Dependencies:* P0 only.
+- *Migrations:* all P1 migrations land here — later P1 sub-phases add **no** schema.
+- *Tests/acceptance:* two-clinic denial tests for every new table (P0 fixture); non-platform-admin denied on `platform_settings`/`clinic_invitations`/`coupons`; `increment_usage` atomicity test; `pnpm test:integration` green in CI.
+- *Parallel:* nothing before it; P1B and P1C both branch from it.
+
+**P1B — Billing domain & entitlements engine** — branch `feat/p1b-billing-entitlements`, est. **4–5 days**, merge **2nd (or 3rd, interchangeable with P1C)**.
+- *Goal:* the provider-agnostic billing brain: subscriptions, trials, coupons, usage, and entitlement resolution — still no UI.
+- *In scope:* `lib/billing/provider.ts` interface + the **`manual` provider** (§3.3); trial lifecycle (`trialing` → expiry lock in middleware); coupon redemption logic for all four kinds incl. expiration/usage-limit/assignment rules; `lib/entitlements.ts` (plan features ⊕ per-clinic overrides, cached) + `hasFeature`/`checkUsageLimit`; gating hooks in middleware and server-action guard position (§3.4).
+- *Out of scope:* any payment gateway/PSP code (out of P1 entirely); operator UI for granting subscriptions (P1D); signup flows (P1C).
+- *Dependencies:* P1A.
+- *Migrations:* none (P1A owns schema).
+- *Tests/acceptance:* trial-expiry locks mutating actions; each coupon kind applies its documented effect; entitlement gate denies Basic `ai_assistant` and a per-clinic override flips it; usage-cap check degrades correctly at the limit.
+- *Parallel:* **yes — with P1C** (disjoint files: `lib/billing/`+`lib/entitlements.ts` vs. public routes/RPC).
+
+**P1C — Early access, invitations & invited signup** — branch `feat/p1c-early-access-signup`, est. **4–6 days**, merge **2nd or 3rd (interchangeable with P1B)**.
+- *Goal:* the complete public path: request → invitation → token signup → onboarding wizard, honoring Registration Mode.
+- *In scope:* `app/(public)/early-access/` request form (clinic name, owner name, phone, email) + weekly-limit copy + dynamic accepted-this-week indicator (§3.2); registration-mode read at request time; invitation token lifecycle (create/resend/revoke server actions — UI in P1D; expiry); `create_clinic_with_owner` RPC with atomic token consumption; `app/(public)/signup/[token]` + open-mode tokenless variant; onboarding wizard `app/(protected)/onboarding/` + middleware gate; `lib/rate-limit.ts` (Upstash) on the public form, signup, and auth actions.
+- *Out of scope:* operator-facing invitation/coupon management UI (P1D); billing logic (P1B).
+- *Dependencies:* P1A (tables); does **not** require P1B (a new clinic starts `trialing` via RPC default).
+- *Migrations:* none.
+- *Tests/acceptance:* signup-RPC rollback on partial failure; expired/revoked token rejected; invite-only blocks tokenless signup and flipping the mode admits it without redeploy; weekly indicator reflects accepted count from settings, not constants; rate limiter blocks a flooding IP; Playwright: request → (seeded invite) → signup → wizard → dashboard.
+- *Parallel:* **yes — with P1B**.
+
+**P1D — Operator Mission Control & data export** — branch `feat/p1d-operator-panel`, est. **3–4 days**, merge **4th (last in P1)**.
+- *Goal:* the operator can run the platform: monitor everything, manage invitations/coupons/flags/subscriptions, flip Registration Mode.
+- *In scope:* `app/(operator)/` route group + layout behind `requirePlatformAdmin()`; monitoring views (clinics, trials, subscriptions, usage, invitations + weekly progress, coupons, flags, health/error summaries, recent activity — §3.6); management UI wired to P1B/P1C actions (invitation create/resend/revoke, coupon CRUD/assignment, per-clinic flag overrides, manual subscription grants, registration-mode + weekly-limit settings); per-clinic data-export route (§3.6).
+- *Out of scope:* message-delivery health widgets (data arrives in P3 — leave placeholders).
+- *Dependencies:* P1A, P1B, P1C (it manages objects those create).
+- *Migrations:* none.
+- *Tests/acceptance:* non-platform-admin gets 404/redirect on every operator route; no PHI reachable from any operator view (explicit test: operator client cannot select patients/notes); export produces a complete clinic ZIP; settings changes take effect on the public flow without redeploy.
+- *Parallel:* no — integrates the other three.
 
 ### P2 — Arabic-first i18n & RTL (12–18 days; parallelizable with P1 after P0)
 
@@ -427,6 +515,35 @@ Summary table at the top of this document. Common to every phase: unit tests fol
 - **Migrations:** `profiles.locale` (nullable).
 - **Tests:** i18n snapshot tests for representative pages in `ar`+`en` (extend `tests/unit/pages/`); CI grep-gate failing on new physical-direction classes; Playwright smoke in Arabic locale; visual QA checklist of all 36 pages in RTL.
 - **Acceptance:** default new clinic experience is fully Arabic RTL with zero mirrored-layout defects on the 36 pages; language toggle flips instantly; no hardcoded English strings in components (lint/extraction check).
+
+#### P2 execution split (3 sub-phases; merge order P2A → P2B → P2C)
+
+**P2A — i18n infrastructure** — branch `feat/p2a-i18n-infrastructure`, est. **4–5 days**, merge **1st**.
+- *Goal:* the machinery exists and the app still renders identically in English — a low-risk, reviewable foundation.
+- *In scope:* `next-intl` setup + `getRequestConfig` (user → clinic → `ar` resolution, §4.1); root layout `lang`/`dir` wiring; `profiles.locale` column; zod message-key refactor + shared error map (`lib/validations/error-map.ts`) + `translateFieldErrors` helper; typography stack via `next/font/local` (IBM Plex Sans Arabic, §4.3); `messages/en.json`/`messages/ar.json` skeletons.
+- *Out of scope:* converting any physical-direction CSS (P2B); extracting existing UI strings (P2C).
+- *Dependencies:* P0. Runs **in parallel with P1** (per roadmap).
+- *Migrations:* `profiles.locale` (nullable) — the only P2 migration.
+- *Tests/acceptance:* locale resolution unit tests (user override beats clinic beats default); zod messages resolve through keys in both locales; app renders byte-identical in `en` (snapshot regression) — proof of zero behavior change.
+- *Parallel:* with P1B–P1D freely (disjoint surface).
+
+**P2B — RTL retrofit** — branch `feat/p2b-rtl-retrofit`, est. **4–6 days**, merge **2nd**.
+- *Goal:* every layout is direction-safe; still no translated copy.
+- *In scope:* `components.json` `"rtl": true` + shadcn primitive regeneration with diff review (§4.2 step 1); logical-properties codemod of the 87 app-owned files + manual pass on intentional physical cases (charts, print layouts); directional icon mirroring (`rtl:rotate-180`); CI grep-gate failing on new physical-direction classes.
+- *Out of scope:* string extraction/translation (P2C); Recharts internals (stay LTR by design).
+- *Dependencies:* P2A (needs `dir="rtl"` rendering context to verify against).
+- *Migrations:* none.
+- *Tests/acceptance:* CI grep-gate green (zero physical-direction classes outside the documented exception list); English UI unchanged in LTR (snapshots); spot-check RTL rendering on the 5 highest-traffic pages.
+- *Parallel:* not with P2C (P2C QAs on top of it); fine alongside P1D/P3A.
+
+**P2C — Arabic strings, localization polish & full QA** — branch `feat/p2c-arabic-strings-qa`, est. **4–7 days**, merge **3rd (last in P2)**.
+- *Goal:* the staff UI actually ships Arabic-first.
+- *In scope:* string extraction from the 36 routes + 126 components into `messages/en.json`; professional Arabic translation integration (~1,000–1,500 strings); digits/date/currency polish through the P0 `ClinicLocale` formatters (§4.4, minus Hijri); language toggle; full RTL/LTR visual QA pass across all 36 pages.
+- *Out of scope:* Hijri calendar (Saudi milestone); marketing site.
+- *Dependencies:* P2A + P2B.
+- *Migrations:* none.
+- *Tests/acceptance:* the P2 phase acceptance above (this sub-phase closes the phase); i18n snapshot tests `ar`+`en` for representative pages; Playwright Arabic-locale smoke; extraction lint proves no hardcoded English strings remain in components.
+- *Parallel:* translation *procurement* can start during P2B (send extracted strings early); the merge itself is serial.
 
 ### P3 — Messaging layer, manual WhatsApp inbox & notifications (15–20 days)
 
@@ -437,6 +554,44 @@ Summary table at the top of this document. Common to every phase: unit tests fol
 - **Acceptance (manual inbox):** a patient WhatsApp message to a connected clinic number appears in that clinic's inbox in <5s with correct patient linking; staff reply is delivered and its status reaches `delivered` in `outbound_messages`; a clinic with no WhatsApp still sends reminders via SMS/email; every send has an `outbound_messages` row with cost attribution.
 - **Acceptance (notifications):** confirmed appointment triggers reminders at configured offsets in the clinic's language/timezone; unpaid invoice sequence sends D0/D+3/D+7 and stops on settlement.
 
+#### P3 execution split (4 sub-phases; merge order P3A → P3B → {P3C ∥ P3D})
+
+**P3A — Messaging schema, channel abstraction & email/SMS adapters** — branch `feat/p3a-messaging-core`, est. **4–5 days**, merge **1st**.
+- *Goal:* the internal abstraction and its two simplest adapters — a clinic can send email/SMS before any WhatsApp exists (§5.1 Model C day-one requirement). Internal abstraction deliberately separated from the external WhatsApp integration.
+- *In scope:* `messaging_layer` migration (all §5.2 tables: `clinic_channels`, `outbound_messages`, `inbound_messages`, `conversations`, `message_templates`) with RLS + two-clinic denial tests; `lib/messaging/provider.ts` interface + `send.ts` single entry point (channel preference, entitlement + usage-counter checks, `outbound_messages` recording); `email-resend.ts` (finally wiring [lib/email/resend.ts](../lib/email/resend.ts)) and `sms-unifonic.ts` adapters; `clinic_channels` credential encryption (Vault/pgsodium, §9.2) + Sentry scrubbing — the security-sensitive core of P3, isolated here.
+- *Out of scope:* WhatsApp/360dialog anything (P3B); all UI (P3C/P3D); cron jobs (P3D).
+- *Dependencies:* P1B (entitlements/usage counters). Parallel with P2B/P2C.
+- *Migrations:* `messaging_layer` — P3B–P3D add only their own listed columns/tables.
+- *Tests/acceptance:* adapter unit tests on recorded fixtures (send, status callback, signature failure); every send produces an `outbound_messages` row with cost attribution; credentials never appear in logs/Sentry events (explicit test); cross-tenant denial on all five tables.
+- *Parallel:* first in P3; nothing else in P3 starts before it merges.
+
+**P3B — WhatsApp (360dialog) integration** — branch `feat/p3b-whatsapp-integration`, est. **3–4 days**, merge **2nd**.
+- *Goal:* the external integration in isolation: a clinic connects its own number and traffic flows both ways.
+- *In scope:* `whatsapp-dialog360.ts` adapter; WhatsApp connect flow in settings (BSP-hosted signup, §5.1 Model B) with token storage via P3A encryption; `app/api/webhooks/whatsapp/route.ts` (+ `unifonic`/`resend` webhook routes) with signature verification + rate limiting; `phone_number_id → clinic_id` routing; template submission + `approval_status` webhook sync (§7.4 backend).
+- *Out of scope:* inbox UI (P3C); template management UI (P3D); Tech Provider migration (P6C).
+- *Dependencies:* P3A.
+- *Migrations:* none beyond `messaging_layer`.
+- *Tests/acceptance:* webhook fixtures incl. signature-failure and replay (same `provider_message_id` twice → one row); unsigned webhook → 401; inbound message lands in the correct clinic's `inbound_messages`/`conversations` in a two-clinic fixture.
+- *Parallel:* no (P3C/P3D wait for it to branch cleanly, though P3C can develop against P3A mocks).
+
+**P3C — Manual WhatsApp inbox** — branch `feat/p3c-manual-inbox`, est. **5–7 days** (the §5.3 sub-estimate), merge **3rd or 4th (interchangeable with P3D)**.
+- *Goal:* staff answer patients from the dashboard — the first-class P3 deliverable.
+- *In scope:* conversation threading per patient (§5.4 identity + unlinked-sender triage); inbox UI at `app/(protected)/inbox/` (new `PageSlug`, conversation list + unread badges + thread view + reply box); Supabase Realtime updates; 24-hour-window enforcement **in `lib/messaging/send.ts`** with template-picker outside the window; verified badge (`identity_verified_at` display).
+- *Out of scope:* any AI (P5); reminders/notifications (P3D); template CRUD UI (P3D).
+- *Dependencies:* P3A (works fully against mocked inbound); P3B for live end-to-end.
+- *Migrations:* none.
+- *Tests/acceptance:* the P3 manual-inbox acceptance block above (message appears <5s, correct linking, reply delivered with status lifecycle); window-enforcement test (freeform blocked at 24h+1min); Playwright staff-reply flow with mocked webhook.
+- *Parallel:* **yes — with P3D** (inbox UI vs. cron/notification surfaces are disjoint).
+
+**P3D — Reminders, follow-ups, templates & notification center** — branch `feat/p3d-reminders-notifications`, est. **3–4 days**, merge **3rd or 4th (interchangeable with P3C)**.
+- *Goal:* the automated sends and staff awareness layer.
+- *In scope:* Vercel Cron routes (`reminders`, `invoice-followups`, `CRON_SECRET`-guarded, §7.1); confirmed-appointment reminders on `idx_appointments_reminder` + per-offset markers (§7.2); `followup_sequences` state machine with stop conditions (§7.3); template management UI (§7.4, submitting via the P3B sync); `notifications` table + bell/dropdown in the protected layout header (§7.5).
+- *Out of scope:* inbox (P3C); AI escalation notifications (emitters added in P5B).
+- *Dependencies:* P3A (sends via `send.ts`); P3B only for WhatsApp-channel reminders (email/SMS reminders work without it).
+- *Migrations:* `followup_sequences`, `notifications`, `clinics.reminder_offsets`.
+- *Tests/acceptance:* reminder idempotency (run twice → one send); sequence stop-condition tests (settled/cancelled/opt-out/max-3); the P3 notifications acceptance block above; notification RLS per recipient/clinic.
+- *Parallel:* **yes — with P3C**.
+
 ### P4 — Doctor AI assistant, read-only (10–14 days)
 
 - **Goal:** doctors/staff query patient history in natural language (Arabic/English).
@@ -444,6 +599,26 @@ Summary table at the top of this document. Common to every phase: unit tests fol
 - **Migrations:** `agent_conversations_messages`, `clinic_faq` (schema only, content UI in P5).
 - **Tests:** LLM fully mocked (deterministic tool-call fixtures); per-tool authorization tests — doctor A cannot summarize doctor B's-department patient (asserting the `20260505220000` RLS scoping through the tool); redaction unit tests; Playwright: staff chat happy path with mocked model.
 - **Acceptance:** doctor asks in Arabic "لخص لي تاريخ المريض فلان" and receives a summary citing real notes/dates; every tool call appears in `audit_logs`; Basic-plan clinics see the upgrade gate; usage cap degrades gracefully.
+
+#### P4 execution split (2 sub-phases; merge order P4A → P4B)
+
+**P4A — AI foundation, doctor tools & authorization** — branch `feat/p4a-ai-doctor-tools`, est. **6–8 days**, merge **1st**.
+- *Goal:* everything security-critical about the doctor assistant, with zero UI — tool authorization gets its own undiluted review (design principle: AI tool authorization isolated from surface work).
+- *In scope:* `lib/ai/` foundation (client/model tiers, doctor prompts ar/en, `redact.ts`, `guardrails.ts`); `agent_conversations`/`agent_messages` + `clinic_faq` (schema-only) migrations with RLS; extraction of callable cores into `lib/booking/` + patient-summary helpers (shared with actions — one booking implementation, §6.3); the four doctor tools (§6.3 rows 1–4) with per-tool `requireRole` + RLS-client-only data access (§9.1); `log_agent_tool_call` audit RPC (§6.6); entitlement (`ai_assistant`) + usage-cap wiring (§6.7).
+- *Out of scope:* any UI or streaming route (P4B); patient tools and write tools of any kind (P5A).
+- *Dependencies:* P1A/P1B (entitlements, usage); P2A for Arabic prompt plumbing (not blocking — prompts are data).
+- *Migrations:* `agent_conversations_messages`, `clinic_faq` (schema only) — all P4 schema lands here.
+- *Tests/acceptance:* **the tool-authorization suite (§10's most important suite):** doctor A cannot summarize doctor B's-department patient (asserting `20260505220000` scoping through the tool); every tool × persona × cross-boundary attempt; redaction unit tests; every tool call writes `audit_logs`; deterministic mocked-LLM fixtures only.
+- *Parallel:* with P3C/P3D tail ends (disjoint files); P4B waits for it.
+
+**P4B — Staff assistant UI** — branch `feat/p4b-assistant-ui`, est. **4–6 days**, merge **2nd**.
+- *Goal:* doctors/staff actually use the assistant.
+- *In scope:* streaming route handler `app/api/agent/chat/route.ts`; `useChat` UI at `app/(protected)/assistant/` (new gated `PageSlug`); patient-profile Sheet launcher on [app/(protected)/patients/[id]/page.tsx](<../app/(protected)/patients/[id]/page.tsx>); graceful model/tool-error fallback + Sentry capture; upgrade-gate and cap-degradation UX.
+- *Out of scope:* new tools or authorization changes (any tool change goes back through a P4A-style review).
+- *Dependencies:* P4A.
+- *Migrations:* none.
+- *Tests/acceptance:* the P4 phase acceptance above (closes the phase); Playwright staff-chat happy path with mocked model; streaming route rejects non-entitled/role-blocked users.
+- *Parallel:* with P5A (P5A is tools/domain; P4B is UI — disjoint ownership).
 
 ### P5 — Patient WhatsApp AI + preliminary booking (12–16 days)
 
@@ -453,11 +628,60 @@ Summary table at the top of this document. Common to every phase: unit tests fol
 - **Tests:** booking-tool concurrency test (two simultaneous bookings, same slot → both pending, staff confirm one, second is displaced via the existing `getConflictingPendingAppointments` flow in [actions/appointments.ts](../actions/appointments.ts)); cap tests; identity-gating tests (unverified sender gets no appointment details); Arabic-dialect fixture conversations; end-to-end with mocked provider + mocked LLM.
 - **Acceptance:** a verified patient books a real free slot via WhatsApp in Arabic; the slot appears as `pending` for staff exactly like a receptionist-created one; caps prevent >N pendings per slot and >1 active AI pending per patient; agent never reveals data of another patient in adversarial tests.
 
+#### P5 execution split (2 sub-phases; merge order P5A → P5B)
+
+**P5A — Booking-core hardening, patient tools & identity gating** — branch `feat/p5a-patient-tools-booking`, est. **6–8 days**, merge **1st**.
+- *Goal:* everything that could book wrongly or leak across patients, reviewed on its own — patient-facing *automation* (P5B) deliberately not bundled with tool *authorization* (here).
+- *In scope:* pending pile-up controls in `lib/booking/` (§12-HP1: per-slot cap default 2, one active AI pending per patient, TTL auto-expiry via the P3D cron); the patient tools (§6.3 rows 5–8: `check_availability` widening, `create_preliminary_booking`, `list_my_appointments`/`cancel_my_appointment`, `answer_clinic_faq`) with conversation-bound identity — `patient_id` never model-visible; DOB verification step + `identity_verified_at` (§5.4); patient persona prompts + allow-listed tool mounting (§9.4).
+- *Out of scope:* wiring into the live inbox/webhook (P5B); FAQ content management UI (P5B); rescheduling negotiation (post-v1).
+- *Dependencies:* P4A (tool/audit/guardrail foundation, `lib/booking/`); P3A (conversations tables). Parallel with P4B.
+- *Migrations:* `conversations.identity_verified_at`, `appointments.expires_at` (or `pending_booking_holds` — decide here), FAQ content columns.
+- *Tests/acceptance:* booking-tool concurrency test (two simultaneous same-slot bookings → both pending → staff confirm one → displacement flow); cap + TTL-expiry tests; identity-gating tests (unverified sender gets logistics only, never appointment details); cross-patient denial through every patient tool.
+- *Parallel:* **yes — with P4B**.
+
+**P5B — Inbox AI integration & booking flows** — branch `feat/p5b-inbox-ai-booking`, est. **6–8 days**, merge **2nd**.
+- *Goal:* the agent answers real patients in the P3 inbox and the full booking conversation works end-to-end.
+- *In scope:* webhook → `lib/ai/agent-loop.ts` with per-clinic `suggest`/`auto` modes (§6.2); escalation to human (low confidence, explicit request, emergency keywords → canned response with clinic phone + local emergency number); confirmation/cancellation message flows hooked into `updateAppointmentStatus`; FAQ content UI in settings; inbox notification emitters for AI escalations; Arabic-dialect fixture conversations.
+- *Out of scope:* payments over WhatsApp; changes to tool authorization (P5A owns it).
+- *Dependencies:* P5A + P3B + P3C.
+- *Migrations:* none.
+- *Tests/acceptance:* the P5 phase acceptance above (closes the phase); suggest-mode reply requires staff approval, auto-mode logs + escapes correctly; end-to-end with mocked provider + mocked LLM; adversarial no-other-patient-data fixtures.
+- *Parallel:* no — final integration of P3+P4+P5A.
+
 ### P6 — Hardening, evaluation & Tech Provider migration (10–15 days)
 
 - **Goal:** production confidence and margin recovery.
 - **In scope:** prompt-injection test suite (adversarial ar/en corpora run in CI against mocked-tool agent asserting no unauthorized tool calls); evaluation set (~50 doctor + ~50 patient realistic queries, graded rubric, run per prompt/model change); load tests on webhook + agent routes; cost dashboards in the operator panel (per-clinic LLM/WA/SMS from `usage_counters` + `outbound_messages.cost_micro`); Meta Business verification → Tech Provider + Embedded Signup ([§5.1 Model A] — start the verification paperwork *at P3 time*, execute the technical migration here); per-clinic migration runbook off 360dialog.
 - **Tests/acceptance:** injection suite green in CI; eval score threshold documented and met; a pilot clinic migrated to Embedded Signup with zero message loss; alerting fires on delivery-failure spikes.
+
+#### P6 execution split (3 sub-phases; merge order P6A/P6B (either) → P6C)
+
+**P6A — Prompt-injection & evaluation suites** — branch `feat/p6a-adversarial-eval`, est. **4–5 days**, merge **1st or 2nd (interchangeable with P6B)**.
+- *Goal:* adversarial confidence in both agent personas before scale.
+- *In scope:* prompt-injection test suite (adversarial ar/en corpora incl. dialect variants, run in CI against the mocked-tool agent, asserting no unauthorized tool calls); evaluation set (~50 doctor + ~50 patient realistic queries, graded rubric, documented threshold, re-run per prompt/model change).
+- *Out of scope:* fixing any issues found beyond prompt/guardrail tuning (tool-authorization changes route back through P4A/P5A-style review).
+- *Dependencies:* P4B + P5B (both personas live).
+- *Migrations:* none.
+- *Tests/acceptance:* injection suite green in CI as a required job; eval threshold documented and met; both suites runnable locally with one command.
+- *Parallel:* **yes — with P6B** (test corpora vs. ops dashboards, disjoint).
+
+**P6B — Load, cost dashboards & alerting** — branch `feat/p6b-ops-load-cost`, est. **3–4 days**, merge **1st or 2nd (interchangeable with P6A)**.
+- *Goal:* the operator sees problems before customers do, at production load.
+- *In scope:* load tests on webhook + agent routes; cost dashboards in the operator panel (per-clinic LLM/WA/SMS from `usage_counters` + `outbound_messages.cost_micro` — fills the P1D placeholders); alert thresholds on delivery-failure rate and per-clinic cost anomalies.
+- *Out of scope:* new billing/usage mechanics (P1 owns the model).
+- *Dependencies:* P3 (delivery data), P1D (panel), P4/P5 for realistic agent-route load profiles.
+- *Migrations:* none.
+- *Tests/acceptance:* load-test results documented against targets; alerting fires on a simulated delivery-failure spike; dashboards reconcile with raw `usage_counters`.
+- *Parallel:* **yes — with P6A**.
+
+**P6C — Meta Tech Provider / Embedded Signup migration** — branch `feat/p6c-tech-provider-migration`, est. **3–6 days engineering** (calendar time dominated by Meta approval — paperwork starts at P3 time per §5.1/§12-HP2), merge **last**.
+- *Goal:* margin recovery — reclaim the €49/number/month by moving off the BSP.
+- *In scope:* `whatsapp-meta.ts` adapter (§5.2); Embedded Signup connect flow; per-clinic migration runbook off 360dialog (number/WABA porting); webhook routing updates for Meta-direct traffic.
+- *Out of scope:* changes to the channel abstraction's interface (it was designed for this — adapter-only change).
+- *Dependencies:* P3B (the abstraction + existing connect flow); **external:** Meta business verification + Tech Provider approval complete.
+- *Migrations:* none expected (`clinic_channels.provider` already distinguishes `dialog360`/`meta`).
+- *Tests/acceptance:* pilot clinic migrated with zero message loss; both providers coexist during the transition (per-clinic provider switch); Meta webhook signature verification fixtures.
+- *Parallel:* engineering can start once Meta approval lands, regardless of P6A/P6B state.
 
 ---
 
@@ -504,7 +728,7 @@ Agent bookings are always `pending` until staff confirm through existing flows; 
 - **Multi-tenant fixtures:** the P0 two-clinic fixture becomes a shared helper (`tests/unit/helpers/two-clinic-fixture.ts`) reused by messaging, billing, and agent suites — every new table ships with a cross-tenant denial test.
 - **i18n:** snapshot tests in `ar` + `en` for representative pages (extend `tests/unit/pages/`); CI grep-gate against physical-direction class regressions.
 - **Webhooks:** recorded fixture payloads per provider incl. signature-failure and replay cases; idempotency asserted (same `provider_message_id` twice → one row).
-- **E2E (Playwright, `tests/e2e/`):** signup→wizard (P1), Arabic-locale smoke (P2), inbox reply (P3), staff chat (P4), WhatsApp booking with mocked provider+model (P5). Recommend adding a nightly E2E job to CI (currently E2E is never run in CI).
+- **E2E (Playwright, `tests/e2e/`):** invitation request→operator invite→signup→wizard (P1), Arabic-locale smoke (P2), inbox reply (P3), staff chat (P4), WhatsApp booking with mocked provider+model (P5). Recommend adding a nightly E2E job to CI (currently E2E is never run in CI).
 - **Evaluation set (P6):** ~100 realistic doctor/patient queries (both languages, incl. dialects), rubric-graded; run on every prompt or model-tier change; injection corpus run in CI.
 
 ---
@@ -551,8 +775,8 @@ Meta requires business verification and a clean number; small Kuwaiti clinics ha
 
 **HP4 — Payment provider coverage gaps across Arab countries.**
 Stripe is unavailable to merchants in most target countries; local PSPs (Tap/Paymob/Moyasar) don't do merchant-of-record, leaving VAT/invoicing on the founder.
-*Candidates:* (a) Paddle MoR only — global reach, but weak local rails (KNET/mada); (b) local PSP only — coverage gaps + tax burden; (c) Paddle primary + Tap fallback for GCC local rails.
-**Recommendation (approved): (c)**, normalized into one `subscriptions` model (§3.3). **Cost:** ~3 days extra in/after P1 for the second provider; Paddle's ~5% MoR fee is the price of not needing local entities.
+*Candidates:* (a) Paddle MoR only — global reach, but weak local rails (KNET/mada); (b) local PSP only — coverage gaps + tax burden; (c) Paddle primary + Tap fallback for GCC local rails; (d) defer the provider decision entirely — ship a provider-agnostic billing architecture with a `manual` provider first.
+**Decision (updated post-P0): (d)** — P1 builds the full billing domain model behind `lib/billing/provider.ts` with no gateway integrated (§3.3); the final provider (Paddle/Stripe/Lemon Squeezy/Polar/Tap — non-binding) is chosen later with real customer data on payment-rail demand. The (a)/(c) analysis above remains the input to that future decision. **Cost:** provider abstraction is included in P1; the chosen adapter later costs ~3 days.
 
 **HP5 — PHI + LLM provider data agreements.**
 Clinic health data flowing to a US LLM provider is the #1 diligence question from any serious clinic, and PDPL-sensitive.
@@ -588,7 +812,8 @@ Still open:
 4. **Trial policy:** 14-day free trial (planned default) vs. demo-clinic sandbox vs. founder-led onboarding only for the first ~10 customers.
 5. **Font licensing budget:** ship free IBM Plex Sans Arabic v1, or purchase 29LT Zarid Sans (~$300–1,500) for brand distinction at launch?
 6. **Hijri calendar priority:** confirmed as Saudi-milestone (not v1) — acceptable?
-7. **Legal:** which entity/ jurisdiction will contract with clinics (affects Paddle onboarding, DPAs, and the Meta Business verification in P6 — the verification should start as early as P3).
+7. **Legal:** which entity/ jurisdiction will contract with clinics (affects the future payment-provider onboarding, DPAs, and the Meta Business verification in P6 — the verification should start as early as P3).
+8. **Final payment provider** (post-P1 decision by design, §3.3/HP4): Paddle, Stripe, Lemon Squeezy, Polar, Tap, or another — choose once real prospects reveal payment-rail demand (KNET/mada vs. cards) and the contracting entity (question 7) is settled.
 
 ---
 

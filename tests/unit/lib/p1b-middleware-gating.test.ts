@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
+  queriedTables: [] as string[],
   profile: {
     data: {
       role: "admin",
@@ -17,6 +18,10 @@ const state = vi.hoisted(() => ({
       trial_ends_at: "2020-01-01T00:00:00.000Z",
       current_period_end: null,
     } as Record<string, unknown> | null,
+    error: null as { message: string } | null,
+  },
+  clinic: {
+    data: { onboarding_completed_at: "2026-01-01T00:00:00.000Z" } as Record<string, unknown> | null,
     error: null as { message: string } | null,
   },
 }));
@@ -38,8 +43,10 @@ vi.mock("@supabase/ssr", () => ({
       signOut: vi.fn(async () => undefined),
     },
     from: vi.fn((table: string) => {
+      state.queriedTables.push(table);
       if (table === "profiles") return resultBuilder(state.profile);
       if (table === "subscriptions") return resultBuilder(state.subscription);
+      if (table === "clinics") return resultBuilder(state.clinic);
       return resultBuilder({ data: [], error: null });
     }),
   })),
@@ -57,6 +64,7 @@ function redirectPath(response: Response) {
 }
 
 beforeEach(() => {
+  state.queriedTables = [];
   state.profile.data = {
     role: "admin",
     clinic_id: "clinic-1",
@@ -70,6 +78,8 @@ beforeEach(() => {
     current_period_end: null,
   };
   state.subscription.error = null;
+  state.clinic.data = { onboarding_completed_at: "2026-01-01T00:00:00.000Z" };
+  state.clinic.error = null;
 });
 
 describe("P1B middleware billing behavior", () => {
@@ -90,6 +100,8 @@ describe("P1B middleware billing behavior", () => {
     await expect(updateSession(request("/reset-password", "POST"))).resolves.toMatchObject({
       status: 200,
     });
+    expect(state.queriedTables).not.toContain("subscriptions");
+    expect(state.queriedTables).not.toContain("clinics");
   });
 
   it("fails closed when the profile is missing or errors", async () => {
@@ -116,5 +128,56 @@ describe("P1B middleware billing behavior", () => {
     };
     await expect(updateSession(request("/patients"))).resolves.toMatchObject({ status: 200 });
     await expect(updateSession(request("/patients", "POST"))).resolves.toMatchObject({ status: 200 });
+  });
+
+  it("gates an active clinic on onboarding without looping an expired clinic", async () => {
+    state.subscription.data = {
+      status: "active",
+      trial_ends_at: null,
+      current_period_end: null,
+    };
+    state.clinic.data = { onboarding_completed_at: null };
+    expect(redirectPath(await updateSession(request("/patients")))).toBe("/onboarding");
+    await expect(updateSession(request("/onboarding"))).resolves.toMatchObject({ status: 200 });
+
+    state.subscription.data = {
+      status: "trialing",
+      trial_ends_at: "2020-01-01T00:00:00.000Z",
+      current_period_end: null,
+    };
+    await expect(updateSession(request("/dashboard"))).resolves.toMatchObject({ status: 200 });
+  });
+
+  it.each(["receptionist", "doctor"])(
+    "does not redirect an incomplete %s clinic member into the admin wizard",
+    async (role) => {
+      state.profile.data = {
+        role,
+        clinic_id: "clinic-1",
+        must_change_password: false,
+        is_active: true,
+      };
+      state.subscription.data = {
+        status: "active",
+        trial_ends_at: null,
+        current_period_end: null,
+      };
+      state.clinic.data = { onboarding_completed_at: null };
+
+      await expect(updateSession(request("/patients"))).resolves.toMatchObject({ status: 200 });
+      expect(state.queriedTables).not.toContain("clinics");
+    },
+  );
+
+  it("does not turn a transient clinic lookup error into an onboarding redirect", async () => {
+    state.subscription.data = {
+      status: "active",
+      trial_ends_at: null,
+      current_period_end: null,
+    };
+    state.clinic.data = null;
+    state.clinic.error = { message: "temporary clinic lookup failure" };
+
+    await expect(updateSession(request("/dashboard"))).resolves.toMatchObject({ status: 200 });
   });
 });

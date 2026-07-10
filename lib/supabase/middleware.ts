@@ -17,6 +17,7 @@ const PROTECTED_PREFIXES = [
   "/reports",
   "/settings",
   "/profile",
+  "/onboarding",
 ];
 
 const AUTH_PAGES = ["/login", "/change-password"];
@@ -124,25 +125,6 @@ export async function updateSession(request: NextRequest) {
       return NextResponse.redirect(url);
     }
 
-    // Authenticated user on login page → /dashboard
-    if (isAuthPage && !profile?.must_change_password) {
-      const url = request.nextUrl.clone();
-      url.pathname = "/dashboard";
-      return NextResponse.redirect(url);
-    }
-
-    // Role-based route guard: admin/manager settings routes
-    if (
-      profile &&
-      profile.role !== "admin" &&
-      profile.role !== "manager" &&
-      ADMIN_MANAGER_PREFIXES.some((p) => pathname.startsWith(p))
-    ) {
-      const url = request.nextUrl.clone();
-      url.pathname = "/dashboard";
-      return NextResponse.redirect(url);
-    }
-
     // Billing gate is fail-closed. Dashboard GET remains readable so an expired
     // clinic has a safe landing surface. Auth recovery paths are explicit
     // middleware exemptions; every business mutation is guarded again inside
@@ -159,7 +141,11 @@ export async function updateSession(request: NextRequest) {
       return NextResponse.redirect(url);
     }
 
-    if (requiresBillingGate && profile) {
+    const needsOnboardingCheck =
+      Boolean(profile && profile.role === "admin" && isProtected);
+    const needsSubscriptionLookup = requiresBillingGate || needsOnboardingCheck;
+    let subscriptionAllowsAccess: boolean | null = null;
+    if (profile && needsSubscriptionLookup) {
       const { data: subscription, error: subscriptionError } = await supabase
         .from("subscriptions")
         .select("status, trial_ends_at, current_period_end")
@@ -168,13 +154,59 @@ export async function updateSession(request: NextRequest) {
       const access = subscriptionError
         ? { allowed: false as const, reason: "lookup_failed" as const }
         : resolveSubscriptionAccess(subscription);
+      subscriptionAllowsAccess = access.allowed;
 
-      if (!access.allowed) {
+      if (requiresBillingGate && !access.allowed) {
         const url = request.nextUrl.clone();
         url.pathname = "/dashboard";
         url.searchParams.set("billing", "subscription_required");
         return NextResponse.redirect(url);
       }
+    }
+
+    // Onboarding follows subscription access and precedes role/page visibility.
+    // The onboarding route itself (including its Server Action POSTs) remains
+    // reachable and is protected by the active trial created during signup.
+    if (profile && needsOnboardingCheck && subscriptionAllowsAccess === true) {
+      const { data: clinic, error: clinicError } = await supabase
+        .from("clinics")
+        .select("onboarding_completed_at")
+        .eq("id", profile.clinic_id)
+        .maybeSingle();
+      // A transient lookup failure is not evidence that onboarding is
+      // incomplete. Let the protected RSC handle its own data error.
+      const onboardingComplete = clinic
+        ? Boolean(clinic.onboarding_completed_at)
+        : null;
+      if (!clinicError && onboardingComplete === false && pathname !== "/onboarding") {
+        const url = request.nextUrl.clone();
+        url.pathname = "/onboarding";
+        return NextResponse.redirect(url);
+      }
+      if (!clinicError && onboardingComplete === true && pathname === "/onboarding") {
+        const url = request.nextUrl.clone();
+        url.pathname = "/dashboard";
+        return NextResponse.redirect(url);
+      }
+    }
+
+    // Authenticated user on login page enters onboarding until explicitly complete.
+    if (isAuthPage && !profile?.must_change_password) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/dashboard";
+      return NextResponse.redirect(url);
+    }
+
+    // Role-based route guard: admin/manager settings routes
+    if (
+      profile &&
+      profile.role !== "admin" &&
+      profile.role !== "manager" &&
+      ADMIN_MANAGER_PREFIXES.some((p) => pathname.startsWith(p))
+    ) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/dashboard";
+      return NextResponse.redirect(url);
     }
 
     const pageSlug = getPageSlugFromPath(pathname);

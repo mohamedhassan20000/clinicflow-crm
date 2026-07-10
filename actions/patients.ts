@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createClinicScopedAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole, type AuthedUser } from "@/lib/rbac";
 import { patientSchema, medicalNoteSchema } from "@/lib/validations/patient";
@@ -40,7 +40,7 @@ function logSupabaseError(
 async function getMedicalNoteForClinic(noteId: string, clinicId: string) {
   if (!noteId) return null;
 
-  const adminClient = createAdminClient();
+  const adminClient = createClinicScopedAdminClient(clinicId);
   const { data: notes, error: noteError } = await adminClient
     .from("medical_notes")
     .select("id, patient_id, doctor_id, created_by, created_at, note, deleted_at")
@@ -70,7 +70,7 @@ async function canAccessPatientForMedicalNotes(
   patientId: string,
   user: AuthedUser,
 ): Promise<boolean> {
-  const adminClient = createAdminClient();
+  const adminClient = createClinicScopedAdminClient(user.clinicId);
   const { data: patient, error } = await adminClient
     .from("patients")
     .select("id, department_id, assigned_doctor_id")
@@ -286,7 +286,7 @@ export async function softDeletePatient(id: string): Promise<ActionResult> {
   }
 
   // Stamp deleted_at so trash page can show age and enforce 30-day rule.
-  const adminClient = createAdminClient();
+  const adminClient = createClinicScopedAdminClient(user.clinicId);
   await adminClient
     .from("patients")
     .update({ deleted_at: new Date().toISOString() })
@@ -300,7 +300,7 @@ export async function softDeletePatient(id: string): Promise<ActionResult> {
 export async function restorePatient(id: string): Promise<ActionResult> {
   const user = await requireRole("admin");
 
-  const adminClient = createAdminClient();
+  const adminClient = createClinicScopedAdminClient(user.clinicId);
   const { error } = await adminClient
     .from("patients")
     .update({
@@ -340,7 +340,7 @@ export type PatientStub = {
 
 export async function getTrashPatients(): Promise<{ data?: PatientStub[]; error?: string }> {
   const user = await requireRole(["admin", "receptionist"]);
-  const adminClient = createAdminClient();
+  const adminClient = createClinicScopedAdminClient(user.clinicId);
 
   const { data, error } = await adminClient
     .from("patients")
@@ -356,7 +356,7 @@ export async function getTrashPatients(): Promise<{ data?: PatientStub[]; error?
 
 export async function getArchivePatients(): Promise<{ data?: PatientStub[]; error?: string }> {
   const user = await requireRole(["admin", "receptionist"]);
-  const adminClient = createAdminClient();
+  const adminClient = createClinicScopedAdminClient(user.clinicId);
 
   const { data, error } = await adminClient
     .from("patients")
@@ -371,7 +371,7 @@ export async function getArchivePatients(): Promise<{ data?: PatientStub[]; erro
 
 export async function archivePatient(id: string): Promise<ActionResult> {
   const user = await requireRole("admin");
-  const adminClient = createAdminClient();
+  const adminClient = createClinicScopedAdminClient(user.clinicId);
 
   const { error } = await adminClient
     .from("patients")
@@ -390,7 +390,7 @@ export async function archivePatient(id: string): Promise<ActionResult> {
 
 export async function archiveAllTrashPatients(olderThanDays?: number): Promise<ActionResult> {
   const user = await requireRole("admin");
-  const adminClient = createAdminClient();
+  const adminClient = createClinicScopedAdminClient(user.clinicId);
 
   let query = adminClient
     .from("patients")
@@ -474,7 +474,7 @@ export async function updateMedicalNote(
     return { error: "You can only edit your own medical notes." };
   }
 
-  const adminClient = createAdminClient();
+  const adminClient = createClinicScopedAdminClient(user.clinicId);
   const { error } = await adminClient
     .from("medical_notes")
     .update({ note: trimmed })
@@ -501,7 +501,7 @@ export async function deleteMedicalNote(noteId: string): Promise<ActionResult> {
     return { error: "You can only delete your own medical notes." };
   }
 
-  const adminClient = createAdminClient();
+  const adminClient = createClinicScopedAdminClient(user.clinicId);
   const { error } = await adminClient
     .from("medical_notes")
     .update({ deleted_at: new Date().toISOString() })
@@ -516,7 +516,7 @@ export async function deleteMedicalNote(noteId: string): Promise<ActionResult> {
 export async function restoreMedicalNote(noteId: string): Promise<ActionResult> {
   const user = await requireRole(["admin", "doctor"]);
 
-  const adminClient = createAdminClient();
+  const adminClient = createClinicScopedAdminClient(user.clinicId);
   const { data: notes, error: noteError } = await adminClient
     .from("medical_notes")
     .select("id, patient_id, doctor_id, created_by, deleted_at")

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { CLINIC_TZ } from "@/lib/datetime";
+import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
 import { requireUser } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedDepartments, getCachedStaff } from "@/lib/cache/reference-data";
@@ -12,12 +12,12 @@ import { fetchReceptionInSessionBoard } from "@/actions/receptionist-dashboard";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
-// ── Date helpers (Europe/Istanbul) ──────────────────────────────────────────
+// ── Date helpers (default clinic timezone) ──────────────────────────────────────────
 
 function toIstanbul(date: Date): Date {
   // Shift to Istanbul time so midnight comparisons are correct
   return new Date(
-    date.toLocaleString("en-US", { timeZone: CLINIC_TZ }),
+    date.toLocaleString("en-US", { timeZone: DEFAULT_TIME_ZONE }),
   );
 }
 
@@ -76,7 +76,7 @@ function buildSeriesForRange(
   const end = new Date(endISO);
   while (current <= end) {
     const key = current.toLocaleDateString("en-US", {
-      timeZone: CLINIC_TZ,
+      timeZone: DEFAULT_TIME_ZONE,
       month: "short",
       day: "numeric",
     });
@@ -85,7 +85,7 @@ function buildSeriesForRange(
   }
   for (const a of appointments) {
     const key = new Date(a.scheduled_at).toLocaleDateString("en-US", {
-      timeZone: CLINIC_TZ,
+      timeZone: DEFAULT_TIME_ZONE,
       month: "short",
       day: "numeric",
     });
@@ -385,7 +385,7 @@ export default async function DashboardPage() {
 
     const priorMonths = priorMonthRanges.map(({ start, end }) => ({
       label: new Date(start).toLocaleDateString("en-US", {
-        timeZone: CLINIC_TZ,
+        timeZone: DEFAULT_TIME_ZONE,
         month: "short",
       }),
       amount: sumInRange(start, end),

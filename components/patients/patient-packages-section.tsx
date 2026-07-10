@@ -21,6 +21,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useClinicSettings } from "@/contexts/clinic-settings-context";
 
 export type PatientPackageDepartment = {
   id: string;
@@ -68,15 +69,6 @@ interface PatientPackagesSectionProps {
   packageTemplates: PatientPackageTemplate[];
   patientDepartmentId: string | null;
   canManage: boolean;
-}
-
-function fmtTRY(value: number | null) {
-  if (value == null) return "Not set";
-  return new Intl.NumberFormat("en-GB", {
-    style: "currency",
-    currency: "TRY",
-    maximumFractionDigits: 2,
-  }).format(Number.isFinite(value) ? value : 0);
 }
 
 export function PatientPackagesSection({
@@ -154,6 +146,9 @@ function PackageRow({
   services: PatientPackageService[];
   canManage: boolean;
 }) {
+  const { formatCurrency } = useClinicSettings();
+  const fmtMoney = (value: number | null) =>
+    value == null ? "Not set" : formatCurrency(value);
   const remaining = Math.max(
     0,
     packageItem.total_sessions - packageItem.used_sessions,
@@ -206,7 +201,7 @@ function PackageRow({
           <Metric label="Remaining" value={remaining} />
           <Metric
             label="Price/session"
-            value={fmtTRY(packageItem.price_per_session)}
+            value={fmtMoney(packageItem.price_per_session)}
           />
         </div>
 

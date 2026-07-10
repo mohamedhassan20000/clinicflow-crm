@@ -8,8 +8,9 @@ import {
   type AppointmentPaymentRowData,
   type SettlementEntry,
 } from "@/components/patients/appointment-payment-row";
-import { CLINIC_TZ } from "@/lib/datetime";
+import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
 import { formatDoctorName } from "@/lib/format-doctor";
+import { useClinicSettings } from "@/contexts/clinic-settings-context";
 
 interface Props {
   appointments: AppointmentPaymentRowData[];
@@ -17,6 +18,8 @@ interface Props {
 }
 
 export function AppointmentsReportList({ appointments, settlementsByAppt }: Props) {
+  const { formatCurrency } = useClinicSettings();
+  const fmtMoney = (n: number) => formatCurrency(n);
   const [openIds, setOpenIds] = useState<Set<string>>(new Set());
 
   const completedIds = appointments
@@ -121,7 +124,7 @@ export function AppointmentsReportList({ appointments, settlementsByAppt }: Prop
                 <tr key={a.id}>
                   <td style={{ whiteSpace: "nowrap" }}>
                     {new Date(a.scheduled_at).toLocaleString("en-GB", {
-                      timeZone: CLINIC_TZ,
+                      timeZone: DEFAULT_TIME_ZONE,
                       dateStyle: "medium",
                       timeStyle: "short",
                     })}
@@ -145,10 +148,10 @@ export function AppointmentsReportList({ appointments, settlementsByAppt }: Prop
                   <td style={{ textTransform: "capitalize" }}>
                     {a.status.replace("_", " ")}
                   </td>
-                  <td style={moneyCellStyle}>{fmtTRY(a.total_amount ?? 0)}</td>
-                  <td style={moneyCellStyle}>{fmtTRY(paid)}</td>
+                  <td style={moneyCellStyle}>{fmtMoney(a.total_amount ?? 0)}</td>
+                  <td style={moneyCellStyle}>{fmtMoney(paid)}</td>
                   <td style={moneyCellStyle}>
-                    {fmtTRY(a.outstanding_amount ?? 0)}
+                    {fmtMoney(a.outstanding_amount ?? 0)}
                   </td>
                 </tr>
               );
@@ -164,14 +167,6 @@ const moneyCellStyle = {
   textAlign: "right",
   fontVariantNumeric: "tabular-nums",
 } as const;
-
-function fmtTRY(n: number) {
-  return new Intl.NumberFormat("en-GB", {
-    style: "currency",
-    currency: "TRY",
-    maximumFractionDigits: 2,
-  }).format(Number.isFinite(n) ? n : 0);
-}
 
 function formatPackagePrintLine(a: AppointmentPaymentRowData) {
   const pkg = a.patient_packages;

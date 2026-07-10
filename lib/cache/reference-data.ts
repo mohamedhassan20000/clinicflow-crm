@@ -1,6 +1,6 @@
 import "server-only";
 import { unstable_cache } from "next/cache";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createClinicScopedAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/types/database";
 
 type DepartmentRow = Database["public"]["Tables"]["departments"]["Row"];
@@ -18,7 +18,7 @@ type ProfileRow = Database["public"]["Tables"]["profiles"]["Row"] & {
 export function getCachedDepartments(clinicId: string): Promise<DepartmentRow[]> {
   return unstable_cache(
     async () => {
-      const supabase = createAdminClient();
+      const supabase = createClinicScopedAdminClient(clinicId);
       const { data } = await supabase
         .from("departments")
         .select("*")
@@ -34,7 +34,7 @@ export function getCachedDepartments(clinicId: string): Promise<DepartmentRow[]>
 export function getCachedInsuranceProviders(clinicId: string): Promise<InsuranceRow[]> {
   return unstable_cache(
     async () => {
-      const supabase = createAdminClient();
+      const supabase = createClinicScopedAdminClient(clinicId);
       const { data } = await supabase
         .from("insurance_providers")
         .select("*")
@@ -50,7 +50,7 @@ export function getCachedInsuranceProviders(clinicId: string): Promise<Insurance
 export function getCachedServices(clinicId: string): Promise<ServiceRow[]> {
   return unstable_cache(
     async () => {
-      const supabase = createAdminClient();
+      const supabase = createClinicScopedAdminClient(clinicId);
       const { data } = await supabase
         .from("services")
         .select("id, name, price, department_id, is_active, deleted_at, departments(id, name, color)")
@@ -66,7 +66,7 @@ export function getCachedServices(clinicId: string): Promise<ServiceRow[]> {
 export function getCachedStaff(clinicId: string): Promise<ProfileRow[]> {
   return unstable_cache(
     async () => {
-      const supabase = createAdminClient();
+      const supabase = createClinicScopedAdminClient(clinicId);
       const { data } = await supabase
         .from("profiles")
         .select("*, departments(name, color)")

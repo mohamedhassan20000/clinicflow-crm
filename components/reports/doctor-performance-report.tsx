@@ -8,6 +8,7 @@ import {
   formatNumber,
   formatPercent,
 } from "@/components/reports/report-formatters";
+import { useClinicSettings } from "@/contexts/clinic-settings-context";
 
 export function DoctorPerformanceReport({
   data,
@@ -18,6 +19,7 @@ export function DoctorPerformanceReport({
   range: ReportDateRange;
   clinic: ClinicPrintMeta;
 }) {
+  const { locale } = useClinicSettings();
   const totals = data.doctors.reduce(
     (acc, row) => ({
       sessions: acc.sessions + row.sessions,
@@ -33,15 +35,15 @@ export function DoctorPerformanceReport({
       section="doctor-performance"
       title="Doctor Performance"
       description="Doctor sessions, outcomes, revenue, and clinic share."
-      rangeLabel={formatDateRangeLabel(range.from, range.to)}
+      rangeLabel={formatDateRangeLabel(range.from, range.to, locale)}
       clinic={clinic}
     >
       <MetricGrid
         items={[
-          { label: "Doctors", value: formatNumber(data.doctors.length) },
-          { label: "Sessions", value: formatNumber(totals.sessions) },
-          { label: "Completed", value: formatNumber(totals.completed) },
-          { label: "Revenue", value: formatCurrency(totals.revenue) },
+          { label: "Doctors", value: formatNumber(data.doctors.length, locale) },
+          { label: "Sessions", value: formatNumber(totals.sessions, locale) },
+          { label: "Completed", value: formatNumber(totals.completed, locale) },
+          { label: "Revenue", value: formatCurrency(totals.revenue, locale) },
         ]}
       />
 
@@ -72,19 +74,19 @@ export function DoctorPerformanceReport({
               {data.doctors.map((row) => (
                 <tr key={row.doctorId} className="border-t border-border/50">
                   <td className="px-3 py-2 font-medium">{row.doctorName || "Unknown doctor"}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatNumber(row.sessions)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatNumber(row.completed)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatNumber(row.cancelled)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatNumber(row.noShow)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatNumber(row.uniquePatients)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(row.revenue)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatPercent(row.completionRate)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatPercent(row.cancellationRate)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatPercent(row.noShowRate)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatPercent(row.deptPatientShare)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatPercent(row.clinicPatientShare)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatPercent(row.deptRevenueShare)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatPercent(row.clinicRevenueShare)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{formatNumber(row.sessions, locale)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{formatNumber(row.completed, locale)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{formatNumber(row.cancelled, locale)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{formatNumber(row.noShow, locale)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{formatNumber(row.uniquePatients, locale)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(row.revenue, locale)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{formatPercent(row.completionRate, locale)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{formatPercent(row.cancellationRate, locale)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{formatPercent(row.noShowRate, locale)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{formatPercent(row.deptPatientShare, locale)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{formatPercent(row.clinicPatientShare, locale)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{formatPercent(row.deptRevenueShare, locale)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{formatPercent(row.clinicRevenueShare, locale)}</td>
                 </tr>
               ))}
             </tbody>

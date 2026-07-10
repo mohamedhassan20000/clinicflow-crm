@@ -130,7 +130,7 @@ export function PackageTemplateForm({
 
         <div className="space-y-1.5">
           <Label htmlFor="pkg-tpl-price-each" className="text-xs">
-            Price / session (₺)
+            Price / session
           </Label>
           <Input
             id="pkg-tpl-price-each"
@@ -146,7 +146,7 @@ export function PackageTemplateForm({
 
         <div className="space-y-1.5">
           <Label htmlFor="pkg-tpl-price-total" className="text-xs">
-            Total price (₺)
+            Total price
           </Label>
           <Input
             id="pkg-tpl-price-total"

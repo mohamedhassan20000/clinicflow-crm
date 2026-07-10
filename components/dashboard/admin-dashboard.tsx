@@ -16,6 +16,7 @@ import { AnalyticsSection, type AnalyticsSectionProps } from "@/components/dashb
 import type { Tables } from "@/types/database";
 import { formatDoctorName } from "@/lib/format-doctor";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
+import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
 
 type Appointment = Tables<"appointments"> & {
   patients: { full_name: string } | null;
@@ -33,7 +34,7 @@ interface AdminDashboardProps {
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-GB", {
-    timeZone: "Europe/Istanbul",
+    timeZone: DEFAULT_TIME_ZONE,
     month: "short",
     day: "numeric",
   });

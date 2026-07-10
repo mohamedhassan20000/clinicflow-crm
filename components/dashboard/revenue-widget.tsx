@@ -1,5 +1,8 @@
+"use client";
+
 import { Wallet, TrendingUp, CalendarDays, Clock, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useClinicSettings } from "@/contexts/clinic-settings-context";
 
 interface RevenueBucket {
   label: string;
@@ -21,14 +24,6 @@ export interface RevenueWidgetProps {
   outstanding: number;
 }
 
-function fmtTRY(n: number) {
-  return new Intl.NumberFormat("en-GB", {
-    style: "currency",
-    currency: "TRY",
-    maximumFractionDigits: 0,
-  }).format(n);
-}
-
 export function RevenueWidget({
   today,
   week,
@@ -37,6 +32,9 @@ export function RevenueWidget({
   priorMonths,
   outstanding,
 }: RevenueWidgetProps) {
+  const { formatCurrency } = useClinicSettings();
+  const fmtMoney = (n: number) =>
+    formatCurrency(n, { maximumFractionDigits: 0 });
   const monthTrend =
     lastMonth === 0 ? 0 : Math.round(((month - lastMonth) / lastMonth) * 100);
 
@@ -63,7 +61,7 @@ export function RevenueWidget({
         </div>
         {outstanding > 0 && (
           <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-400">
-            {fmtTRY(outstanding)} outstanding
+            {fmtMoney(outstanding)} outstanding
           </span>
         )}
       </div>
@@ -79,7 +77,7 @@ export function RevenueWidget({
               </p>
             </div>
             <p className="mt-1 text-lg font-semibold tabular-nums">
-              {fmtTRY(amount)}
+              {fmtMoney(amount)}
             </p>
             {sub && (
               <p
@@ -127,7 +125,7 @@ export function RevenueWidget({
                     />
                   </div>
                   <span className="w-20 shrink-0 text-right text-xs font-semibold tabular-nums">
-                    {fmtTRY(m.amount)}
+                    {fmtMoney(m.amount)}
                   </span>
                 </div>
               );

@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { fromZonedTime, toZonedTime } from "date-fns-tz";
+import { createClinicScopedAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/rbac";
 import {
@@ -16,6 +17,7 @@ import {
 import type { Database, TablesUpdate } from "@/types/database";
 import { getPatientAccountBalance } from "@/actions/patients";
 import { getClinicWorkingHours } from "@/actions/settings";
+import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
 
 export type ActionResult = {
   error?: string;
@@ -108,6 +110,19 @@ async function validateAppointmentReferences(
   return {};
 }
 
+async function getClinicTimeZone(clinicId: string): Promise<string> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("clinics")
+    .select("timezone")
+    .eq("id", clinicId)
+    .maybeSingle();
+
+  return typeof data?.timezone === "string" && data.timezone
+    ? data.timezone
+    : DEFAULT_TIME_ZONE;
+}
+
 async function validateAppointmentPackage(
   values: AppointmentValues,
   clinicId: string,
@@ -159,14 +174,36 @@ async function validateAppointmentPackage(
 async function validateAppointmentSlot(
   values: AppointmentValues,
   clinicId: string,
+  timeZone: string,
 ): Promise<ActionResult> {
   const supabase = await createClient();
   const startTime = new Date(values.scheduled_at);
   const endTime = new Date(startTime.getTime() + values.duration_minutes * 60_000);
-  const dayStart = new Date(startTime);
-  dayStart.setHours(0, 0, 0, 0);
-  const dayEnd = new Date(startTime);
-  dayEnd.setHours(23, 59, 59, 999);
+  const zonedStart = toZonedTime(startTime, timeZone);
+  const dayStart = fromZonedTime(
+    new Date(
+      zonedStart.getFullYear(),
+      zonedStart.getMonth(),
+      zonedStart.getDate(),
+      0,
+      0,
+      0,
+      0,
+    ),
+    timeZone,
+  );
+  const dayEnd = fromZonedTime(
+    new Date(
+      zonedStart.getFullYear(),
+      zonedStart.getMonth(),
+      zonedStart.getDate(),
+      23,
+      59,
+      59,
+      999,
+    ),
+    timeZone,
+  );
 
   const { data: sameDay, error } = await supabase
     .from("appointments")
@@ -239,10 +276,12 @@ export async function createAppointment(
     return { error: "Choose a future date and time for the appointment." };
   }
 
+  const clinicTimeZone = await getClinicTimeZone(user.clinicId);
+
   // Validate appointment is not on a clinic-closed day
   const clinicHours = await getClinicWorkingHours();
   if (clinicHours.some((d) => d.open)) {
-    const apptDate = new Date(parsed.data.scheduled_at);
+    const apptDate = toZonedTime(parsed.data.scheduled_at, clinicTimeZone);
     const dow = apptDate.getDay();
     const clinicDay = clinicHours.find((d) => d.day_of_week === dow);
     if (!clinicDay?.open) {
@@ -260,7 +299,11 @@ export async function createAppointment(
   const selectedPackage = await validateAppointmentPackage(parsed.data, user.clinicId);
   if (selectedPackage.error) return selectedPackage;
 
-  const slot = await validateAppointmentSlot(parsed.data, user.clinicId);
+  const slot = await validateAppointmentSlot(
+    parsed.data,
+    user.clinicId,
+    clinicTimeZone,
+  );
   if (slot.error) return slot;
 
   const supabase = await createClient();
@@ -525,7 +568,7 @@ async function deleteAppointmentDependents(
   appointmentId: string,
   clinicId: string,
 ): Promise<ActionResult> {
-  const adminClient = createAdminClient();
+  const adminClient = createClinicScopedAdminClient(clinicId);
   const operations = [
     adminClient
       .from("appointment_services")
@@ -707,6 +750,17 @@ export async function permanentDeleteAppointment(id: string): Promise<ActionResu
   const user = await requireRole(["admin", "receptionist"]);
   const supabase = await createClient();
 
+  const { data: appt, error: fetchError } = await supabase
+    .from("appointments")
+    .select("id")
+    .eq("id", id)
+    .eq("clinic_id", user.clinicId)
+    .not("deleted_at", "is", null)
+    .maybeSingle();
+
+  if (fetchError) return { error: fetchError.message };
+  if (!appt) return { error: "Appointment not found." };
+
   const cascaded = await deleteAppointmentDependents(id, user.clinicId);
   if (cascaded.error) return cascaded;
 
@@ -738,7 +792,7 @@ export async function emptyAppointmentsTrash(): Promise<ActionResult> {
   const ids = (trashedAppointments ?? []).map((appointment) => appointment.id);
   if (ids.length === 0) return { success: true };
 
-  const adminClient = createAdminClient();
+  const adminClient = createClinicScopedAdminClient(user.clinicId);
 
   const { error: servicesError } = await adminClient
     .from("appointment_services")

@@ -51,6 +51,7 @@ async function loadActions() {
   }));
   vi.doMock("@/lib/supabase/admin", () => ({
     createAdminClient: vi.fn(() => mocks.client()),
+    createClinicScopedAdminClient: vi.fn(() => mocks.client()),
   }));
 
   const appointments = await import("@/actions/appointments");

@@ -16,6 +16,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
 
 export interface AppointmentTrashItem {
   id: string;
@@ -40,7 +41,7 @@ function daysLeft(deletedAt: string): number {
 
 function fmtDate(value: string) {
   return new Date(value).toLocaleString("en-GB", {
-    timeZone: "Europe/Istanbul",
+    timeZone: DEFAULT_TIME_ZONE,
     day: "2-digit",
     month: "short",
     year: "numeric",

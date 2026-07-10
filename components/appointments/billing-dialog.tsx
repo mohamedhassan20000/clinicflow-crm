@@ -36,6 +36,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { useClinicSettings } from "@/contexts/clinic-settings-context";
 
 export type PaymentMethod =
   | "cash"
@@ -117,14 +118,6 @@ interface BillingDialogProps {
   draftKey?: number;
 }
 
-function fmtTRY(n: number) {
-  return new Intl.NumberFormat("en-GB", {
-    style: "currency",
-    currency: "TRY",
-    maximumFractionDigits: 2,
-  }).format(Number.isFinite(n) ? n : 0);
-}
-
 function uid() {
   return Math.random().toString(36).slice(2, 10);
 }
@@ -152,6 +145,8 @@ export function BillingDialog({
   initialPayload,
   draftKey = 0,
 }: BillingDialogProps) {
+  const { formatCurrency } = useClinicSettings();
+  const fmtMoney = (n: number) => formatCurrency(n);
   const [lines, setLines] = useState<DraftLine[]>([]);
   const [pickerValue, setPickerValue] = useState<string>("");
   const [paid, setPaid] = useState<string>("");
@@ -448,7 +443,7 @@ export function BillingDialog({
               </span>
               <span>{packageInfo.remainingSessions} remaining</span>
               {packageInfo.pricePerSession != null && (
-                <span>{fmtTRY(packageInfo.pricePerSession)} / session</span>
+                <span>{fmtMoney(packageInfo.pricePerSession)} / session</span>
               )}
             </div>
           )}
@@ -460,7 +455,7 @@ export function BillingDialog({
                 Invoice total
               </p>
               <p className="text-sm font-semibold tabular-nums">
-                {fmtTRY(totalN)}
+                {fmtMoney(totalN)}
               </p>
             </div>
             <div>
@@ -468,7 +463,7 @@ export function BillingDialog({
                 Collected
               </p>
               <p className="text-sm font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
-                {fmtTRY(collected)}
+                {fmtMoney(collected)}
               </p>
             </div>
             <div>
@@ -483,7 +478,7 @@ export function BillingDialog({
                     : "text-muted-foreground",
                 )}
               >
-                {fmtTRY(remaining)}
+                {fmtMoney(remaining)}
               </p>
             </div>
           </div>
@@ -567,7 +562,7 @@ export function BillingDialog({
                           />
                         </div>
                         <div className="col-span-1 text-right text-xs font-semibold tabular-nums">
-                          {fmtTRY(lineTotal)}
+                          {fmtMoney(lineTotal)}
                         </div>
                         <div className="col-span-1 flex justify-end">
                           <Button
@@ -611,7 +606,7 @@ export function BillingDialog({
                         <span className="flex justify-between gap-4 w-full">
                           <span className="truncate">{s.name}</span>
                           <span className="text-muted-foreground tabular-nums">
-                            {fmtTRY(s.price)}
+                            {fmtMoney(s.price)}
                           </span>
                         </span>
                       </SelectItem>
@@ -686,7 +681,7 @@ export function BillingDialog({
                 <span className="text-[11px] text-muted-foreground">
                   Available{" "}
                   <span className="font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
-                    {fmtTRY(accountBalance)}
+                    {fmtMoney(accountBalance)}
                   </span>
                 </span>
               </div>
@@ -721,7 +716,7 @@ export function BillingDialog({
                 <p className="text-[11px] text-muted-foreground">
                   Remaining account balance after this invoice:{" "}
                   <span className="font-semibold tabular-nums">
-                    {fmtTRY(remainingBalanceAfter)}
+                    {fmtMoney(remainingBalanceAfter)}
                   </span>
                 </p>
               )}
@@ -731,7 +726,7 @@ export function BillingDialog({
           {/* Patient paid now */}
           <div className={cn("space-y-1.5")}>
             <Label htmlFor="bill-paid" className="text-xs">
-              Patient paid now (₺)
+              Patient paid now
             </Label>
             <Input
               id="bill-paid"
@@ -778,8 +773,8 @@ export function BillingDialog({
             <div className="space-y-1.5 rounded-lg border border-sky-500/30 bg-sky-500/5 p-3">
               <Label htmlFor="bill-insurance" className="text-xs">
                 {insuranceProviderName
-                  ? `Covered by ${insuranceProviderName} (₺)`
-                  : "Covered by insurance (₺)"}
+                  ? `Covered by ${insuranceProviderName}`
+                  : "Covered by insurance"}
               </Label>
               <Input
                 id="bill-insurance"
@@ -830,7 +825,7 @@ export function BillingDialog({
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="bill-secondary" className="text-xs">
-                    Paid via another method (₺)
+                    Paid via another method
                   </Label>
                   <Input
                     id="bill-secondary"
@@ -855,7 +850,7 @@ export function BillingDialog({
                           : "text-emerald-600 dark:text-emerald-400",
                       )}
                     >
-                      {fmtTRY(remaining)}
+                      {fmtMoney(remaining)}
                     </span>
                   </p>
                 </div>
@@ -895,7 +890,7 @@ export function BillingDialog({
 
           {remaining > 0 && totalN > 0 && (
             <p className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-400">
-              {fmtTRY(remaining)} will be saved as outstanding on the
+              {fmtMoney(remaining)} will be saved as outstanding on the
               patient&apos;s file (settle later).
             </p>
           )}
@@ -919,7 +914,7 @@ export function BillingDialog({
                 <span className="text-[11px] text-muted-foreground">
                   Previous balance:{" "}
                   <span className="font-semibold tabular-nums text-amber-700 dark:text-amber-400">
-                    {fmtTRY(previousBalanceN)}
+                    {fmtMoney(previousBalanceN)}
                   </span>
                 </span>
               </div>
@@ -936,7 +931,7 @@ export function BillingDialog({
               <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
                 <div className="space-y-1.5">
                   <Label htmlFor="previous-settlement" className="text-xs">
-                    Settle now (₺)
+                    Settle now
                   </Label>
                   <Input
                     id="previous-settlement"
@@ -1024,10 +1019,15 @@ export function BillingDialog({
               </div>
 
               <div className="grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-border/50 bg-border/40">
-                <SummaryCell label="Previous balance" amount={previousBalanceN} />
+                <SummaryCell
+                  label="Previous balance"
+                  amount={previousBalanceN}
+                  formatAmount={fmtMoney}
+                />
                 <SummaryCell
                   label="Settled now"
                   amount={previousAboveBalance ? 0 : previousSettlementN}
+                  formatAmount={fmtMoney}
                   accent={
                     previousSettlementN > 0 && !previousAboveBalance
                       ? "text-emerald-600 dark:text-emerald-400"
@@ -1037,6 +1037,7 @@ export function BillingDialog({
                 <SummaryCell
                   label="Remaining previous balance"
                   amount={previousRemaining}
+                  formatAmount={fmtMoney}
                   accent={
                     previousRemaining > 0
                       ? "text-amber-600 dark:text-amber-400"
@@ -1050,7 +1051,7 @@ export function BillingDialog({
                   Total collected today
                 </span>
                 <span className="font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
-                  {fmtTRY(totalCollectedToday)}
+                  {fmtMoney(totalCollectedToday)}
                 </span>
               </div>
             </section>
@@ -1101,10 +1102,12 @@ export function BillingDialog({
 function SummaryCell({
   label,
   amount,
+  formatAmount,
   accent,
 }: {
   label: string;
   amount: number;
+  formatAmount: (amount: number) => string;
   accent?: string;
 }) {
   return (
@@ -1118,7 +1121,7 @@ function SummaryCell({
           accent,
         )}
       >
-        {fmtTRY(amount)}
+        {formatAmount(amount)}
       </p>
     </div>
   );

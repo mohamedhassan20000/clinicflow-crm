@@ -8,6 +8,7 @@ import { MobileNav } from "@/components/layout/mobile-nav";
 import { getVisiblePageSlugs } from "@/lib/server-page-permissions";
 import { ClinicSettingsProvider } from "@/contexts/clinic-settings-context";
 import type { TimeFormat } from "@/lib/format-time";
+import { clinicLocaleFromRow } from "@/lib/datetime";
 
 export default async function ProtectedLayout({
   children,
@@ -27,15 +28,16 @@ export default async function ProtectedLayout({
   const supabase = await createClient();
   const { data: clinic } = await supabase
     .from("clinics")
-    .select("time_format")
+    .select("time_format, timezone, currency, locale, country, week_start, digits")
     .eq("id", user.clinicId)
     .single();
 
   const timeFormat: TimeFormat =
     clinic?.time_format === "12h" ? "12h" : "24h";
+  const clinicLocale = clinicLocaleFromRow(clinic);
 
   return (
-    <ClinicSettingsProvider timeFormat={timeFormat}>
+    <ClinicSettingsProvider timeFormat={timeFormat} locale={clinicLocale}>
       <div className="flex min-h-dvh bg-background">
         {/* Desktop sidebar — manages its own <aside> + collapse state */}
         <Sidebar

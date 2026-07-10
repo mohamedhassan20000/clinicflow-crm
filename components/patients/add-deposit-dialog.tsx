@@ -116,7 +116,7 @@ export function AddDepositDialog({ patientId, patientName }: Props) {
 
             <div className="space-y-1.5">
               <Label htmlFor="deposit-amount" className="text-xs">
-                Amount (₺)
+                Amount
               </Label>
               <Input
                 id="deposit-amount"

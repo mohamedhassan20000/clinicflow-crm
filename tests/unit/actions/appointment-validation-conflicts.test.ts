@@ -87,6 +87,7 @@ async function loadAppointmentsActions() {
   }));
   vi.doMock("@/lib/supabase/admin", () => ({
     createAdminClient: vi.fn(() => mocks.client()),
+    createClinicScopedAdminClient: vi.fn(() => mocks.client()),
   }));
   vi.doMock("@/actions/patients", () => ({
     getPatientAccountBalance: vi.fn(async () => 0),

@@ -3,6 +3,7 @@
 import type { ClinicPrintMeta, ReceptionistPerformanceReportResponse, ReportDateRange } from "@/types/reports";
 import { EmptyReportState, MetricGrid, ReportSectionShell } from "@/components/reports/report-section-shell";
 import { formatDateRangeLabel, formatNumber, formatPercent } from "@/components/reports/report-formatters";
+import { useClinicSettings } from "@/contexts/clinic-settings-context";
 
 export function ReceptionistPerformanceReport({
   data,
@@ -13,6 +14,7 @@ export function ReceptionistPerformanceReport({
   range: ReportDateRange;
   clinic: ClinicPrintMeta;
 }) {
+  const { locale } = useClinicSettings();
   const totals = data.receptionists.reduce(
     (acc, row) => ({
       appointments: acc.appointments + row.appointmentsBooked,
@@ -26,14 +28,14 @@ export function ReceptionistPerformanceReport({
       section="receptionist-performance"
       title="Receptionist Performance"
       description="Bookings and follow-ups handled by receptionist."
-      rangeLabel={formatDateRangeLabel(range.from, range.to)}
+      rangeLabel={formatDateRangeLabel(range.from, range.to, locale)}
       clinic={clinic}
     >
       <MetricGrid
         items={[
-          { label: "Receptionists", value: formatNumber(data.receptionists.length) },
-          { label: "Appointments booked", value: formatNumber(totals.appointments) },
-          { label: "Follow-ups handled", value: formatNumber(totals.followups) },
+          { label: "Receptionists", value: formatNumber(data.receptionists.length, locale) },
+          { label: "Appointments booked", value: formatNumber(totals.appointments, locale) },
+          { label: "Follow-ups handled", value: formatNumber(totals.followups, locale) },
         ]}
       />
 
@@ -56,16 +58,16 @@ export function ReceptionistPerformanceReport({
                 <tr key={row.id} className="border-t border-border/50">
                   <td className="px-3 py-2 font-medium">{row.name || "Unknown receptionist"}</td>
                   <td className="px-3 py-2 text-right tabular-nums">
-                    {formatNumber(row.appointmentsBooked)}
+                    {formatNumber(row.appointmentsBooked, locale)}
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">
-                    {formatPercent(row.appointmentShare)}
+                    {formatPercent(row.appointmentShare, locale)}
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">
-                    {formatNumber(row.followupsHandled)}
+                    {formatNumber(row.followupsHandled, locale)}
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">
-                    {formatPercent(row.followupShare)}
+                    {formatPercent(row.followupShare, locale)}
                   </td>
                 </tr>
               ))}

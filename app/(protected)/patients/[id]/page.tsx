@@ -1,12 +1,16 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CLINIC_TZ } from "@/lib/datetime";
+import {
+  DEFAULT_TIME_ZONE,
+  clinicLocaleFromRow,
+  formatClinicCurrency,
+} from "@/lib/datetime";
 import { AlertCircle, Archive, CalendarPlus, ChevronLeft, FileText, Pencil, Receipt, Trash2 } from "lucide-react";
 import { StatusBadge } from "@/components/appointments/status-badge";
 import { requireUser } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createClinicScopedAdminClient } from "@/lib/supabase/admin";
 import {
   MedicalNotesList,
   type MedicalNoteWithAttachments,
@@ -43,6 +47,13 @@ export default async function PatientDetailPage({ params }: PageProps) {
   const { id } = await params;
   const user = await requireUser();
   const supabase = await createClient();
+  const { data: clinic } = await supabase
+    .from("clinics")
+    .select("time_format, timezone, currency, locale, country, week_start, digits")
+    .eq("id", user.clinicId)
+    .single();
+  const clinicLocale = clinicLocaleFromRow(clinic);
+  const fmtMoney = (n: number) => formatClinicCurrency(n, clinicLocale);
 
   // Base columns: always available, no migration dependency.
   const PATIENT_SELECT_BASE =
@@ -98,7 +109,7 @@ export default async function PatientDetailPage({ params }: PageProps) {
     patientError?.code === "PGRST116" &&
     (user.role === "admin" || user.role === "receptionist")
   ) {
-    const adminClient = createAdminClient();
+    const adminClient = createClinicScopedAdminClient(user.clinicId);
     const { data: adminPatient } = await adminClient
       .from("patients")
       .select(PATIENT_SELECT_FULL)
@@ -581,15 +592,21 @@ export default async function PatientDetailPage({ params }: PageProps) {
               )}
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-px rounded-xl border border-border/50 bg-border/40 overflow-hidden">
-              <BillingCell label="Billed" amount={billingTotals.billed} />
+              <BillingCell
+                label="Billed"
+                amount={billingTotals.billed}
+                formatAmount={fmtMoney}
+              />
               <BillingCell
                 label="Collected"
                 amount={billingTotals.collected}
+                formatAmount={fmtMoney}
                 accent="text-emerald-600 dark:text-emerald-400"
               />
               <BillingCell
                 label="Outstanding"
                 amount={billingTotals.outstanding}
+                formatAmount={fmtMoney}
                 accent={
                   billingTotals.outstanding > 0
                     ? "text-amber-600 dark:text-amber-400"
@@ -599,6 +616,7 @@ export default async function PatientDetailPage({ params }: PageProps) {
               <BillingCell
                 label="Account balance"
                 amount={accountBalance}
+                formatAmount={fmtMoney}
                 accent={
                   accountBalance > 0
                     ? "text-emerald-600 dark:text-emerald-400"
@@ -611,7 +629,7 @@ export default async function PatientDetailPage({ params }: PageProps) {
                 <AlertCircle className="h-3.5 w-3.5 shrink-0" />
                 This patient has an outstanding balance of{" "}
                 <span className="font-semibold tabular-nums">
-                  {fmtTRY(billingTotals.outstanding)}
+                  {fmtMoney(billingTotals.outstanding)}
                 </span>
                 .
               </div>
@@ -755,14 +773,6 @@ export default async function PatientDetailPage({ params }: PageProps) {
   );
 }
 
-function fmtTRY(n: number) {
-  return new Intl.NumberFormat("en-GB", {
-    style: "currency",
-    currency: "TRY",
-    maximumFractionDigits: 2,
-  }).format(Number.isFinite(n) ? n : 0);
-}
-
 function SimpleApptRow({
   a,
 }: {
@@ -783,7 +793,7 @@ function SimpleApptRow({
       <div className="min-w-0 flex-1 space-y-0.5">
         <p className="font-medium tabular-nums text-xs">
           {new Date(a.scheduled_at).toLocaleString("en-GB", {
-            timeZone: CLINIC_TZ,
+            timeZone: DEFAULT_TIME_ZONE,
             dateStyle: "medium",
             timeStyle: "short",
           })}
@@ -811,10 +821,12 @@ function SimpleApptRow({
 function BillingCell({
   label,
   amount,
+  formatAmount,
   accent,
 }: {
   label: string;
   amount: number;
+  formatAmount: (amount: number) => string;
   accent?: string;
 }) {
   return (
@@ -823,7 +835,7 @@ function BillingCell({
         {label}
       </p>
       <p className={`mt-1 text-base font-semibold tabular-nums ${accent ?? ""}`}>
-        {fmtTRY(amount)}
+        {formatAmount(amount)}
       </p>
     </div>
   );

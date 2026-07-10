@@ -108,8 +108,8 @@ describe("BillingDialog previous outstanding balance", () => {
     await waitForInvoicePayload();
 
     const section = previousSection();
-    await user.clear(section.getByLabelText("Settle now (₺)"));
-    await user.type(section.getByLabelText("Settle now (₺)"), "25");
+    await user.clear(section.getByLabelText("Settle now"));
+    await user.type(section.getByLabelText("Settle now"), "25");
     await user.click(section.getByRole("button", { name: "Cash" }));
     await user.type(
       section.getByLabelText("Previous balance note (optional)"),
@@ -141,7 +141,7 @@ describe("BillingDialog previous outstanding balance", () => {
     await waitForInvoicePayload();
 
     const section = previousSection();
-    await user.type(section.getByLabelText("Settle now (₺)"), "30");
+    await user.type(section.getByLabelText("Settle now"), "30");
     await user.click(section.getByRole("button", { name: "Cash" }));
 
     expect(
@@ -158,7 +158,7 @@ describe("BillingDialog previous outstanding balance", () => {
     await waitForInvoicePayload();
 
     const section = previousSection();
-    await user.type(section.getByLabelText("Settle now (₺)"), "-1");
+    await user.type(section.getByLabelText("Settle now"), "-1");
 
     expect(
       section.getByText("Enter a positive amount or leave this blank."),
@@ -182,7 +182,7 @@ describe("BillingDialog previous outstanding balance", () => {
     );
 
     onConfirm.mockClear();
-    await user.type(section.getByLabelText("Settle now (₺)"), "10");
+    await user.type(section.getByLabelText("Settle now"), "10");
 
     expect(
       section.getByText("Select a payment method for previous balance."),
@@ -204,7 +204,7 @@ describe("BillingDialog previous outstanding balance", () => {
     await waitForInvoicePayload();
 
     const section = previousSection();
-    await user.type(section.getByLabelText("Settle now (₺)"), "25");
+    await user.type(section.getByLabelText("Settle now"), "25");
 
     await waitFor(() => {
       expect(section.getByText("Total collected today")).toBeInTheDocument();

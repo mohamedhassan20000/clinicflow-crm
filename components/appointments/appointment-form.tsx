@@ -40,6 +40,7 @@ import {
   appointmentSchema,
   type AppointmentFormValues,
 } from "@/lib/validations/appointment";
+import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
 import type { ClinicWorkingHoursValues } from "@/lib/validations/settings";
 import {
   AlertDialog,
@@ -95,18 +96,18 @@ interface AppointmentFormProps {
 }
 
 
-// All clinic times are authored in Europe/Istanbul (UTC+3, no DST).
+// All clinic times default to default clinic timezone (UTC+3).
 // Tag the local date/time with the +03:00 offset so Postgres timestamptz
 // stores the exact wall-clock moment the receptionist picked, regardless
 // of server or browser timezone.
-const CLINIC_TZ_OFFSET = "+03:00";
+const DEFAULT_TIME_ZONE_OFFSET = "+03:00";
 function buildClinicIso(date: string, time: string): string {
-  return `${date}T${time}:00${CLINIC_TZ_OFFSET}`;
+  return `${date}T${time}:00${DEFAULT_TIME_ZONE_OFFSET}`;
 }
 
 function clinicNowParts() {
   const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Europe/Istanbul",
+    timeZone: DEFAULT_TIME_ZONE,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -126,14 +127,6 @@ function clinicNowParts() {
 function timeToMinutes(time: string): number {
   const [h, m] = time.split(":").map(Number);
   return h * 60 + m;
-}
-
-function fmtTRY(value: number) {
-  return new Intl.NumberFormat("en-GB", {
-    style: "currency",
-    currency: "TRY",
-    maximumFractionDigits: 2,
-  }).format(Number.isFinite(value) ? value : 0);
 }
 
 function isPastClinicSlot(value: string): boolean {
@@ -174,7 +167,7 @@ export function AppointmentForm({
   onPatientChange,
 }: AppointmentFormProps) {
   const closedDays = clinicWorkingHours ? getClosedDaysOfWeek(clinicWorkingHours) : new Set<number>();
-  const { formatSlotTime } = useClinicSettings();
+  const { formatCurrency, formatSlotTime } = useClinicSettings();
   const [state, formAction, isPending] = useActionState(action, null);
   const [patientOpen, setPatientOpen] = useState(false);
   const [sameDayWarning, setSameDayWarning] = useState(false);
@@ -521,7 +514,7 @@ export function AppointmentForm({
                             <span className="text-xs text-muted-foreground">
                               {remaining}/{pkg.total_sessions} remaining · session {nextSession}
                               {pkg.price_per_session != null
-                                ? ` · ${fmtTRY(Number(pkg.price_per_session))}`
+                                ? ` · ${formatCurrency(Number(pkg.price_per_session))}`
                                 : ""}
                             </span>
                           </span>
@@ -548,7 +541,7 @@ export function AppointmentForm({
                       remaining
                     </span>
                     {selectedPackage.price_per_session != null && (
-                      <span>{fmtTRY(Number(selectedPackage.price_per_session))}</span>
+                      <span>{formatCurrency(Number(selectedPackage.price_per_session))}</span>
                     )}
                   </div>
                 ) : null}

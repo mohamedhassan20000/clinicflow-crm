@@ -23,6 +23,7 @@ import { RecordFollowupDialog } from "@/components/followups/record-dialog";
 import { PatientScopeFilterBar } from "@/components/shared/patient-scope-filter-bar";
 import { PrintHeader } from "@/components/shared/print-header";
 import { formatDoctorName } from "@/lib/format-doctor";
+import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
 
 type Scope = "day" | "yesterday" | "week" | "month";
 
@@ -140,7 +141,7 @@ const OUTCOME_META = {
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-GB", {
-    timeZone: "Europe/Istanbul",
+    timeZone: DEFAULT_TIME_ZONE,
     day: "2-digit",
     month: "short",
     year: "numeric",
@@ -148,7 +149,7 @@ function fmtDate(iso: string) {
 }
 function fmtDateTime(iso: string) {
   return new Date(iso).toLocaleString("en-GB", {
-    timeZone: "Europe/Istanbul",
+    timeZone: DEFAULT_TIME_ZONE,
     day: "2-digit",
     month: "short",
     hour: "2-digit",

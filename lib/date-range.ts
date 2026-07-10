@@ -1,5 +1,5 @@
 import { formatInTimeZone, fromZonedTime, toZonedTime } from "date-fns-tz";
-import { CLINIC_TZ } from "@/lib/datetime";
+import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
 
 export type DateRangePreset = "today" | "this_week" | "this_month" | "custom";
 
@@ -19,28 +19,28 @@ export type ResolvedDateRange = {
 };
 
 function startOfClinicDay(date: Date): Date {
-  const zoned = toZonedTime(date, CLINIC_TZ);
+  const zoned = toZonedTime(date, DEFAULT_TIME_ZONE);
   return fromZonedTime(
     new Date(zoned.getFullYear(), zoned.getMonth(), zoned.getDate(), 0, 0, 0, 0),
-    CLINIC_TZ,
+    DEFAULT_TIME_ZONE,
   );
 }
 
 function endOfClinicDay(date: Date): Date {
-  const zoned = toZonedTime(date, CLINIC_TZ);
+  const zoned = toZonedTime(date, DEFAULT_TIME_ZONE);
   return fromZonedTime(
     new Date(zoned.getFullYear(), zoned.getMonth(), zoned.getDate(), 23, 59, 59, 999),
-    CLINIC_TZ,
+    DEFAULT_TIME_ZONE,
   );
 }
 
 function clinicDateInputToDate(value: string, endOfDay = false): Date {
   const time = endOfDay ? "T23:59:59.999" : "T00:00:00.000";
-  return fromZonedTime(`${value}${time}`, CLINIC_TZ);
+  return fromZonedTime(`${value}${time}`, DEFAULT_TIME_ZONE);
 }
 
 function fmtInput(date: Date): string {
-  return formatInTimeZone(date, CLINIC_TZ, "yyyy-MM-dd");
+  return formatInTimeZone(date, DEFAULT_TIME_ZONE, "yyyy-MM-dd");
 }
 
 export function resolveDateRange(input: DateRangeInput = {}): ResolvedDateRange {
@@ -53,7 +53,7 @@ export function resolveDateRange(input: DateRangeInput = {}): ResolvedDateRange 
     return { preset, start, end, from: input.from, to: input.to };
   }
 
-  const zonedNow = toZonedTime(now, CLINIC_TZ);
+  const zonedNow = toZonedTime(now, DEFAULT_TIME_ZONE);
 
   if (preset === "today") {
     const start = startOfClinicDay(now);
@@ -84,8 +84,8 @@ export function resolveDateRange(input: DateRangeInput = {}): ResolvedDateRange 
       999,
     );
 
-    const start = fromZonedTime(monday, CLINIC_TZ);
-    const end = fromZonedTime(sunday, CLINIC_TZ);
+    const start = fromZonedTime(monday, DEFAULT_TIME_ZONE);
+    const end = fromZonedTime(sunday, DEFAULT_TIME_ZONE);
     return { preset, start, end, from: fmtInput(start), to: fmtInput(end) };
   }
 

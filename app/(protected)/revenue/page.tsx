@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CLINIC_TZ } from "@/lib/datetime";
+import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
 import { redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { requireUser } from "@/lib/rbac";
@@ -18,9 +18,9 @@ type PresetKey = "today" | "week" | "this_month" | "last_month" | "last_year" | 
 const REVENUE_PAGE_SIZE = 50;
 const SETTLEMENT_DETAIL_LIMIT = 50;
 
-// ─── date helpers (Europe/Istanbul) ─────────────────────────────────────────
+// ─── date helpers (default clinic timezone) ─────────────────────────────────────────
 function toIstanbul(date: Date): Date {
-  return new Date(date.toLocaleString("en-US", { timeZone: CLINIC_TZ }));
+  return new Date(date.toLocaleString("en-US", { timeZone: DEFAULT_TIME_ZONE }));
 }
 
 function startOfDay(d: Date): Date {

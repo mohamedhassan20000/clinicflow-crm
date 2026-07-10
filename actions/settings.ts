@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath, revalidateTag } from "next/cache";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createClinicScopedAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/rbac";
 import { ensureDefaultPagePermissions } from "@/actions/page-permissions";
@@ -74,7 +74,7 @@ export async function createStaff(
     return { error: "Only admins can create admin users." };
   }
 
-  const adminClient = createAdminClient();
+  const adminClient = createClinicScopedAdminClient(user.clinicId);
 
   // Create auth user via Admin API (auto-confirmed, no email verify)
   const { data: authData, error: authError } =
@@ -283,7 +283,7 @@ export async function deleteStaff(staffId: string): Promise<ActionResult> {
   }
 
   // Delete auth user → cascades to profile via FK on auth.users
-  const adminClient = createAdminClient();
+  const adminClient = createClinicScopedAdminClient(user.clinicId);
   const { error } = await adminClient.auth.admin.deleteUser(staffId);
   if (error) return { error: error.message };
 
@@ -318,7 +318,7 @@ export async function resetStaffPassword(
     return { error: "Only admins can manage admin users." };
   }
 
-  const adminClient = createAdminClient();
+  const adminClient = createClinicScopedAdminClient(user.clinicId);
 
   const { error } = await adminClient.auth.admin.updateUserById(staffId, {
     password: parsed.data.temporary_password,
@@ -363,7 +363,7 @@ export async function emptyStaffTrash(): Promise<ActionResult> {
   }
   if (staff.length === 0) return { success: true };
 
-  const adminClient = createAdminClient();
+  const adminClient = createClinicScopedAdminClient(user.clinicId);
   for (const target of staff) {
     const { error } = await adminClient.auth.admin.deleteUser(target.id);
     if (error) return { error: error.message };

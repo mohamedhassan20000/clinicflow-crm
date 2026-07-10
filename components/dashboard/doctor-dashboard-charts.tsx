@@ -14,18 +14,11 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import type { DoctorDashboardStats } from "@/actions/doctor-dashboard";
+import { useClinicSettings } from "@/contexts/clinic-settings-context";
 
 export interface DoctorDashboardChartsProps {
   stats: DoctorDashboardStats;
   departmentName: string;
-}
-
-function fmtTRY(n: number) {
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency: "TRY",
-    maximumFractionDigits: 0,
-  }).format(Number.isFinite(n) ? n : 0);
 }
 
 function pct(num: number, den: number) {
@@ -88,6 +81,9 @@ function ShareRow({
 }
 
 export default function DoctorDashboardCharts({ stats, departmentName }: DoctorDashboardChartsProps) {
+  const { formatCurrency } = useClinicSettings();
+  const fmtMoney = (n: number) =>
+    formatCurrency(n, { maximumFractionDigits: 0 });
   const deptNoShowRate = pct(stats.deptNoShow, stats.deptTotal);
   const deptCancelRate = pct(stats.deptCancelled, stats.deptTotal);
   const myPatientShareOfDept = pct(stats.myPatients, stats.deptPatients || 1);
@@ -116,7 +112,7 @@ export default function DoctorDashboardCharts({ stats, departmentName }: DoctorD
           <div className="grid grid-cols-2 gap-3 pt-2 border-t border-border/30">
             <MiniStat label="Dept total appts" value={stats.deptTotal} />
             <MiniStat label="Dept patients" value={stats.deptPatients} />
-            <MiniStat label="Dept revenue" value={fmtTRY(stats.deptRevenue)} />
+            <MiniStat label="Dept revenue" value={fmtMoney(stats.deptRevenue)} />
             <MiniStat label="No-shows" value={stats.deptNoShow} />
           </div>
         </div>

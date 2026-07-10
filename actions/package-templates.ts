@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/rbac";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createClinicScopedAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import {
   createPackageTemplateSchema,
@@ -97,7 +97,7 @@ export async function createPackageTemplate(
     );
     if (deptError) return deptError;
 
-    const supabase = createAdminClient();
+    const supabase = createClinicScopedAdminClient(user.clinicId);
     const { error } = await supabase.from("package_templates").insert({
       clinic_id: user.clinicId,
       department_id: parsed.data.department_id,

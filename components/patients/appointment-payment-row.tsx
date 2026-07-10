@@ -71,14 +71,6 @@ export interface AppointmentPaymentRowData {
   }[] | null;
 }
 
-function fmtTRY(n: number) {
-  return new Intl.NumberFormat("en-GB", {
-    style: "currency",
-    currency: "TRY",
-    maximumFractionDigits: 2,
-  }).format(Number.isFinite(n) ? n : 0);
-}
-
 export interface SettlementEntry {
   id: string;
   settled_at: string;
@@ -98,7 +90,8 @@ export function AppointmentPaymentRow({
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 }) {
-  const { formatTime } = useClinicSettings();
+  const { formatCurrency, formatTime } = useClinicSettings();
+  const fmtMoney = (n: number) => formatCurrency(n);
   const [internalOpen, setInternalOpen] = useState(false);
   const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
 
@@ -181,13 +174,13 @@ export function AppointmentPaymentRow({
         <div className="flex items-center gap-2 shrink-0">
           {isCompleted && (a.total_amount ?? 0) > 0 && (
             <span className="text-sm font-semibold tabular-nums">
-              {fmtTRY(a.total_amount ?? 0)}
+              {fmtMoney(a.total_amount ?? 0)}
             </span>
           )}
           {outstanding > 0 && (
             <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400">
               <AlertCircle className="h-3 w-3" />
-              {fmtTRY(outstanding)}
+              {fmtMoney(outstanding)}
             </span>
           )}
           <span
@@ -253,7 +246,7 @@ export function AppointmentPaymentRow({
                       )}
                     </span>
                     <span className="tabular-nums text-xs font-medium">
-                      {fmtTRY(Number(li.price) * Number(li.quantity))}
+                      {fmtMoney(Number(li.price) * Number(li.quantity))}
                     </span>
                   </li>
                 ))}
@@ -263,15 +256,21 @@ export function AppointmentPaymentRow({
 
           {/* Summary strip */}
           <div className="grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-border/50 bg-border/40">
-            <SummaryCell label="Total" amount={a.total_amount ?? 0} />
+            <SummaryCell
+              label="Total"
+              amount={a.total_amount ?? 0}
+              formatAmount={fmtMoney}
+            />
             <SummaryCell
               label="Collected"
               amount={collected}
+              formatAmount={fmtMoney}
               accent="text-emerald-600 dark:text-emerald-400"
             />
             <SummaryCell
               label="Outstanding"
               amount={outstanding}
+              formatAmount={fmtMoney}
               accent={
                 outstanding > 0
                   ? "text-amber-600 dark:text-amber-400"
@@ -287,7 +286,7 @@ export function AppointmentPaymentRow({
                 <Wallet className="h-3 w-3" />
                 Deposit
                 <span className="tabular-nums font-medium">
-                  {fmtTRY(deposit)}
+                  {fmtMoney(deposit)}
                 </span>
               </Pill>
             )}
@@ -295,7 +294,7 @@ export function AppointmentPaymentRow({
               <Pill>
                 <PrimaryIcon className="h-3 w-3" />
                 {primary.label}
-                <span className="tabular-nums font-medium">{fmtTRY(paid)}</span>
+                <span className="tabular-nums font-medium">{fmtMoney(paid)}</span>
               </Pill>
             )}
             {secondary && SecondaryIcon && secondaryAmt > 0 && (
@@ -303,7 +302,7 @@ export function AppointmentPaymentRow({
                 <SecondaryIcon className="h-3 w-3" />
                 {secondary.label}
                 <span className="tabular-nums font-medium">
-                  {fmtTRY(secondaryAmt)}
+                  {fmtMoney(secondaryAmt)}
                 </span>
               </Pill>
             )}
@@ -312,7 +311,7 @@ export function AppointmentPaymentRow({
                 <ShieldCheck className="h-3 w-3" />
                 {a.insurance_providers?.name ?? "Insurance"}
                 <span className="tabular-nums font-medium">
-                  {fmtTRY(insurance)}
+                  {fmtMoney(insurance)}
                 </span>
               </Pill>
             )}
@@ -321,7 +320,7 @@ export function AppointmentPaymentRow({
                 <AlertCircle className="h-3 w-3" />
                 Outstanding
                 <span className="tabular-nums font-semibold">
-                  {fmtTRY(outstanding)}
+                  {fmtMoney(outstanding)}
                 </span>
               </Pill>
             )}
@@ -356,7 +355,7 @@ export function AppointmentPaymentRow({
                         </span>
                       </div>
                       <span className="tabular-nums font-semibold text-emerald-700 dark:text-emerald-400">
-                        {fmtTRY(s.amount)}
+                        {fmtMoney(s.amount)}
                       </span>
                     </li>
                   );
@@ -388,10 +387,12 @@ export function AppointmentPaymentRow({
 function SummaryCell({
   label,
   amount,
+  formatAmount,
   accent,
 }: {
   label: string;
   amount: number;
+  formatAmount: (amount: number) => string;
   accent?: string;
 }) {
   return (
@@ -405,7 +406,7 @@ function SummaryCell({
           accent,
         )}
       >
-        {fmtTRY(amount)}
+        {formatAmount(amount)}
       </p>
     </div>
   );

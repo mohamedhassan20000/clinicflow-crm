@@ -372,43 +372,61 @@ export type Database = {
       clinics: {
         Row: {
           address: string | null
+          country: string
           created_at: string
+          currency: string
+          digits: string
           id: string
           is_active: boolean
+          locale: string
           logo_url: string | null
           name: string
           phone: string | null
           reminder_lead_hours: number
           time_format: string
+          timezone: string
           updated_at: string
+          week_start: number
           working_hours_end: string | null
           working_hours_start: string | null
         }
         Insert: {
           address?: string | null
+          country?: string
           created_at?: string
+          currency?: string
+          digits?: string
           id?: string
           is_active?: boolean
+          locale?: string
           logo_url?: string | null
           name: string
           phone?: string | null
           reminder_lead_hours?: number
           time_format?: string
+          timezone?: string
           updated_at?: string
+          week_start?: number
           working_hours_end?: string | null
           working_hours_start?: string | null
         }
         Update: {
           address?: string | null
+          country?: string
           created_at?: string
+          currency?: string
+          digits?: string
           id?: string
           is_active?: boolean
+          locale?: string
           logo_url?: string | null
           name?: string
           phone?: string | null
           reminder_lead_hours?: number
           time_format?: string
+          timezone?: string
           updated_at?: string
+          week_start?: number
           working_hours_end?: string | null
           working_hours_start?: string | null
         }

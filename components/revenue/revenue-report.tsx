@@ -23,6 +23,8 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { formatDoctorName } from "@/lib/format-doctor";
+import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
+import { useClinicSettings } from "@/contexts/clinic-settings-context";
 
 type PaymentMethod =
   | "cash"
@@ -101,17 +103,14 @@ const PRESETS: { value: string; label: string }[] = [
   { value: "custom", label: "Custom range" },
 ];
 
-function fmtTRY(n: number) {
-  return new Intl.NumberFormat("en-GB", {
-    style: "currency",
-    currency: "TRY",
-    maximumFractionDigits: 2,
-  }).format(Number.isFinite(n) ? n : 0);
+function useMoneyFormatter() {
+  const { formatCurrency } = useClinicSettings();
+  return (n: number) => formatCurrency(n);
 }
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-GB", {
-    timeZone: "Europe/Istanbul",
+    timeZone: DEFAULT_TIME_ZONE,
     day: "2-digit",
     month: "short",
     year: "numeric",
@@ -120,7 +119,7 @@ function fmtDate(iso: string) {
 
 function fmtDateTime(iso: string) {
   return new Date(iso).toLocaleString("en-GB", {
-    timeZone: "Europe/Istanbul",
+    timeZone: DEFAULT_TIME_ZONE,
     day: "2-digit",
     month: "short",
     year: "numeric",
@@ -167,6 +166,7 @@ export function RevenueReport({
   clinicPhone,
   clinicLogoUrl,
 }: Props) {
+  const fmtMoney = useMoneyFormatter();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [, startTransition] = useTransition();
@@ -424,7 +424,7 @@ export function RevenueReport({
                   >
                     <Icon className="h-3 w-3" />
                     <span className="font-medium">{meta.label}</span>
-                    <span className="tabular-nums">{fmtTRY(amount)}</span>
+                    <span className="tabular-nums">{fmtMoney(amount)}</span>
                   </span>
                 );
               })}
@@ -432,13 +432,13 @@ export function RevenueReport({
                 <span className="inline-flex items-center gap-1.5 rounded-md border border-violet-500/40 bg-violet-500/10 px-2.5 py-1 text-xs text-violet-700 dark:text-violet-400">
                   <Wallet2 className="h-3 w-3" />
                   From deposit{" "}
-                  <span className="tabular-nums">{fmtTRY(depositTotal)}</span>
+                  <span className="tabular-nums">{fmtMoney(depositTotal)}</span>
                 </span>
               )}
               {outstandingTotal > 0 && (
                 <span className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-xs text-amber-700 dark:text-amber-400">
                   <Building2 className="h-3 w-3" />
-                  Outstanding <span className="tabular-nums">{fmtTRY(outstandingTotal)}</span>
+                  Outstanding <span className="tabular-nums">{fmtMoney(outstandingTotal)}</span>
                 </span>
               )}
             </div>
@@ -479,22 +479,22 @@ export function RevenueReport({
                     Totals
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums">
-                    {fmtTRY(summary.totalAmount)}
+                    {fmtMoney(summary.totalAmount)}
                   </td>
                   <td className="px-4 py-3 text-left tabular-nums">
-                    {fmtTRY(primaryTotal)}
+                    {fmtMoney(primaryTotal)}
                   </td>
                   <td className="px-4 py-3 text-left tabular-nums">
-                    {fmtTRY(secondaryTotal)}
+                    {fmtMoney(secondaryTotal)}
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums">
-                    {fmtTRY(insuranceTotal)}
+                    {fmtMoney(insuranceTotal)}
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums text-violet-600 dark:text-violet-400">
-                    {fmtTRY(depositTotal)}
+                    {fmtMoney(depositTotal)}
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums text-amber-600 dark:text-amber-400">
-                    {fmtTRY(outstandingTotal)}
+                    {fmtMoney(outstandingTotal)}
                   </td>
                 </tr>
               </tbody>
@@ -618,7 +618,7 @@ export function RevenueReport({
               <span>
                 <span className="text-muted-foreground">Total settled: </span>
                 <span className="font-semibold tabular-nums text-amber-700 dark:text-amber-400">
-                  {fmtTRY(settlementsTotal)}
+                  {fmtMoney(settlementsTotal)}
                 </span>
               </span>
             </div>
@@ -658,7 +658,7 @@ export function RevenueReport({
                     Total settled
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums text-emerald-600 dark:text-emerald-400">
-                    {fmtTRY(settlementsTotal)}
+                    {fmtMoney(settlementsTotal)}
                   </td>
                   <td className="px-4 py-3" />
                 </tr>
@@ -696,6 +696,7 @@ function SummaryCell({
   amount: number;
   accent: string;
 }) {
+  const fmtMoney = useMoneyFormatter();
   return (
     <div className="bg-card px-4 py-4">
       <div className="flex items-center gap-1.5">
@@ -704,7 +705,7 @@ function SummaryCell({
           {label}
         </p>
       </div>
-      <p className="mt-1 text-lg font-semibold tabular-nums">{fmtTRY(amount)}</p>
+      <p className="mt-1 text-lg font-semibold tabular-nums">{fmtMoney(amount)}</p>
       {sublabel && (
         <p className="text-[10px] text-muted-foreground/80">{sublabel}</p>
       )}
@@ -713,6 +714,7 @@ function SummaryCell({
 }
 
 function SettlementTxnRow({ row }: { row: SettlementRow }) {
+  const fmtMoney = useMoneyFormatter();
   const meta = METHOD_META[row.payment_method];
   const MethodIcon = meta?.icon;
   const appt = row.appointment;
@@ -758,7 +760,7 @@ function SettlementTxnRow({ row }: { row: SettlementRow }) {
                 <span className="ml-2">
                   · total{" "}
                   <span className="tabular-nums font-medium text-foreground">
-                    {fmtTRY(appt.total_amount)}
+                    {fmtMoney(appt.total_amount)}
                   </span>
                 </span>
               )}
@@ -782,12 +784,12 @@ function SettlementTxnRow({ row }: { row: SettlementRow }) {
         </span>
       </td>
       <td className="px-4 py-2.5 text-right tabular-nums font-semibold text-emerald-600 dark:text-emerald-400">
-        {fmtTRY(row.amount)}
+        {fmtMoney(row.amount)}
       </td>
       <td className="px-4 py-2.5 text-right tabular-nums">
         {remaining > 0 ? (
           <span className="text-amber-600 dark:text-amber-400 font-medium">
-            {fmtTRY(remaining)}
+            {fmtMoney(remaining)}
           </span>
         ) : (
           <span className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
@@ -800,6 +802,7 @@ function SettlementTxnRow({ row }: { row: SettlementRow }) {
 }
 
 function TxnRow({ row, hidden }: { row: RevenueRow; hidden?: boolean }) {
+  const fmtMoney = useMoneyFormatter();
   const primary = row.payment_method ? METHOD_META[row.payment_method] : null;
   const secondary = row.secondary_payment_method
     ? METHOD_META[row.secondary_payment_method]
@@ -834,7 +837,7 @@ function TxnRow({ row, hidden }: { row: RevenueRow; hidden?: boolean }) {
         )}
       </td>
       <td className="px-4 py-2.5 text-right tabular-nums font-medium">
-        {fmtTRY(row.total_amount ?? 0)}
+        {fmtMoney(row.total_amount ?? 0)}
       </td>
       <td className="px-4 py-2.5">
         {primary ? (
@@ -842,7 +845,7 @@ function TxnRow({ row, hidden }: { row: RevenueRow; hidden?: boolean }) {
             <primary.icon className="h-3 w-3 text-muted-foreground" />
             {primary.label}
             <span className="ml-1 tabular-nums font-medium">
-              {fmtTRY(row.paid_amount ?? 0)}
+              {fmtMoney(row.paid_amount ?? 0)}
             </span>
           </span>
         ) : (
@@ -855,7 +858,7 @@ function TxnRow({ row, hidden }: { row: RevenueRow; hidden?: boolean }) {
             <secondary.icon className="h-3 w-3 text-muted-foreground" />
             {secondary.label}
             <span className="ml-1 tabular-nums font-medium">
-              {fmtTRY(row.secondary_amount ?? 0)}
+              {fmtMoney(row.secondary_amount ?? 0)}
             </span>
           </span>
         ) : (
@@ -864,18 +867,18 @@ function TxnRow({ row, hidden }: { row: RevenueRow; hidden?: boolean }) {
       </td>
       <td className="px-4 py-2.5 text-right tabular-nums text-sky-600 dark:text-sky-400">
         {(row.insurance_amount ?? 0) > 0
-          ? fmtTRY(row.insurance_amount ?? 0)
+          ? fmtMoney(row.insurance_amount ?? 0)
           : "—"}
       </td>
       <td className="px-4 py-2.5 text-right tabular-nums text-violet-600 dark:text-violet-400">
         {(row.deposit_amount ?? 0) > 0
-          ? fmtTRY(row.deposit_amount ?? 0)
+          ? fmtMoney(row.deposit_amount ?? 0)
           : "—"}
       </td>
       <td className="px-4 py-2.5 text-right tabular-nums">
         {(row.outstanding_amount ?? 0) > 0 ? (
           <span className="text-amber-600 dark:text-amber-400 font-medium">
-            {fmtTRY(row.outstanding_amount ?? 0)}
+            {fmtMoney(row.outstanding_amount ?? 0)}
           </span>
         ) : (
           <span className="text-xs text-muted-foreground">—</span>

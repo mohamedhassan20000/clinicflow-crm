@@ -103,7 +103,7 @@ export function ServiceForm({
 
       <div className="space-y-1.5">
         <Label htmlFor="svc-price" className="text-xs">
-          Price (₺)
+          Price
         </Label>
         <Input
           id="svc-price"

@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireRole } from "@/lib/rbac";
+import { requireMutationRole } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
 import {
   createPatientPackageSchema,
@@ -114,7 +114,7 @@ export async function createPatientPackage(
   _prev: PatientPackageActionResult | null,
   formData: FormData,
 ): Promise<PatientPackageActionResult> {
-  const user = await requireRole(["admin", "receptionist"]);
+  const user = await requireMutationRole(["admin", "receptionist"]);
 
   const parsed = createPatientPackageSchema.safeParse({
     patient_id: formData.get("patient_id"),
@@ -170,7 +170,7 @@ export async function updatePatientPackage(
   _prev: PatientPackageActionResult | null,
   formData: FormData,
 ): Promise<PatientPackageActionResult> {
-  const user = await requireRole(["admin", "receptionist"]);
+  const user = await requireMutationRole(["admin", "receptionist"]);
 
   const parsed = updatePatientPackageSchema.safeParse({
     package_id: formData.get("package_id"),
@@ -238,7 +238,7 @@ export async function deactivatePatientPackage(
   _prev: PatientPackageActionResult | null,
   formData: FormData,
 ): Promise<PatientPackageActionResult> {
-  const user = await requireRole(["admin", "receptionist"]);
+  const user = await requireMutationRole(["admin", "receptionist"]);
 
   const parsed = deactivatePatientPackageSchema.safeParse({
     package_id: formData.get("package_id"),

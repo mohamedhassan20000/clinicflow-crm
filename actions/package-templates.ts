@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireRole } from "@/lib/rbac";
+import { requireMutationRole } from "@/lib/rbac";
 import { createClinicScopedAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -75,7 +75,7 @@ export async function createPackageTemplate(
   _prev: PackageTemplateActionResult | null,
   formData: FormData,
 ): Promise<PackageTemplateActionResult> {
-  const user = await requireRole(["admin"]);
+  const user = await requireMutationRole(["admin"]);
 
   const parsed = createPackageTemplateSchema.safeParse({
     name: formData.get("name"),
@@ -123,7 +123,7 @@ export async function updatePackageTemplate(
   _prev: PackageTemplateActionResult | null,
   formData: FormData,
 ): Promise<PackageTemplateActionResult> {
-  const user = await requireRole(["admin"]);
+  const user = await requireMutationRole(["admin"]);
 
   const parsed = updatePackageTemplateSchema.safeParse({
     template_id: formData.get("template_id"),
@@ -179,7 +179,7 @@ async function setTemplateActive(
   templateId: string,
   isActive: boolean,
 ): Promise<PackageTemplateActionResult> {
-  const user = await requireRole(["admin"]);
+  const user = await requireMutationRole(["admin"]);
 
   const parsed = templateIdSchema.safeParse({ template_id: templateId });
   if (!parsed.success) {
@@ -230,7 +230,7 @@ export async function restorePackageTemplate(
 export async function deletePackageTemplate(
   templateId: string,
 ): Promise<PackageTemplateActionResult> {
-  const user = await requireRole(["admin"]);
+  const user = await requireMutationRole(["admin"]);
 
   const parsed = templateIdSchema.safeParse({ template_id: templateId });
   if (!parsed.success) {

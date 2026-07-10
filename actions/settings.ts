@@ -3,7 +3,10 @@
 import { revalidatePath, revalidateTag } from "next/cache";
 import { createClinicScopedAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { requireRole } from "@/lib/rbac";
+import {
+  requireMutationRole as requireRole,
+  requireRole as requireReadRole,
+} from "@/lib/rbac";
 import { ensureDefaultPagePermissions } from "@/actions/page-permissions";
 import {
   createStaffSchema,
@@ -893,7 +896,7 @@ export async function toggleServiceActive(
 const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6] as const;
 
 export async function getClinicWorkingHours(): Promise<ClinicWorkingHoursValues> {
-  const user = await requireRole(["admin", "manager", "receptionist", "doctor"]);
+  const user = await requireReadRole(["admin", "manager", "receptionist", "doctor"]);
   const supabase = await createClient();
 
   const { data } = await supabase
@@ -974,7 +977,7 @@ export async function upsertClinicWorkingHours(
 export async function getDoctorSchedule(
   doctorId: string,
 ): Promise<DoctorScheduleValues> {
-  const user = await requireRole(["admin", "manager", "receptionist", "doctor"]);
+  const user = await requireReadRole(["admin", "manager", "receptionist", "doctor"]);
   const supabase = await createClient();
 
   const { data } = await supabase

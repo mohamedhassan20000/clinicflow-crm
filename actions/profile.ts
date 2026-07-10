@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { requireUser } from "@/lib/rbac";
+import { requireMutationUser, requireUser } from "@/lib/rbac";
 
 export type ActionResult = {
   ok?: boolean;
@@ -67,7 +67,7 @@ export async function updateProfile(
   _prev: ActionResult | null,
   formData: FormData,
 ): Promise<ActionResult> {
-  const user = await requireUser();
+  const user = await requireMutationUser();
 
   const raw = {
     full_name: formData.get("full_name"),
@@ -98,7 +98,7 @@ export async function uploadAvatar(
   _prev: ActionResult | null,
   formData: FormData,
 ): Promise<ActionResult> {
-  const user = await requireUser();
+  const user = await requireMutationUser();
 
   const file = formData.get("avatar");
   if (!(file instanceof File) || file.size === 0) {
@@ -169,7 +169,7 @@ export async function removeAvatar(
   _prev?: ActionResult | null,
 ): Promise<ActionResult> {
   void _prev;
-  const user = await requireUser();
+  const user = await requireMutationUser();
   const supabase = await createClient();
 
   const { data: prev } = await supabase

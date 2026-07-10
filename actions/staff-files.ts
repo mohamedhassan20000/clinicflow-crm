@@ -1,7 +1,10 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { requireRole } from "@/lib/rbac";
+import {
+  requireMutationRole as requireRole,
+  requireRole as requireReadRole,
+} from "@/lib/rbac";
 
 const BUCKET = "clinic-assets";
 const MAX_PHOTO_BYTES = 2 * 1024 * 1024; // 2 MB
@@ -42,7 +45,7 @@ function staffPath(clinicId: string, staffId: string, segment: string) {
 export async function listStaffFiles(
   staffId: string,
 ): Promise<{ data?: StaffFiles; error?: string }> {
-  const user = await requireRole(["admin", "manager"]);
+  const user = await requireReadRole(["admin", "manager"]);
   const supabase = await createClient();
 
   const { data: profile } = await supabase

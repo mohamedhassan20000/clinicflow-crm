@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClinicScopedAdminClient } from "@/lib/supabase/admin";
-import { requireRole } from "@/lib/rbac";
+import { requireMutationRole, requireRole } from "@/lib/rbac";
 import { getPrimaryClinicAdminId, isPrimaryClinicAdmin } from "@/lib/primary-admin";
 import {
   getRolePageSlugs,
@@ -50,6 +50,8 @@ export async function ensureDefaultPagePermissions(
   role: UserRole,
   clinicId: string,
 ): Promise<PagePermissionResult> {
+  const actor = await requireMutationRole(["admin", "manager"]);
+  if (actor.clinicId !== clinicId) return { error: "Clinic scope mismatch." };
   const adminClient = createClinicScopedAdminClient(clinicId);
   const rows = getRolePageSlugs(role).map((pageSlug) => ({
     user_id: userId,
@@ -211,7 +213,7 @@ export async function updateUserPageVisibility(
   pageSlug: PageSlug,
   isVisible: boolean,
 ): Promise<PagePermissionResult> {
-  const user = await requireRole("admin");
+  const user = await requireMutationRole("admin");
   if (
     user.role === "admin" &&
     !(await isPrimaryClinicAdmin(user.id, user.clinicId))
@@ -267,7 +269,7 @@ export async function saveUserPageVisibilityChanges(
   targetUserId: string,
   changes: PendingPageVisibilityChange[],
 ): Promise<PagePermissionResult> {
-  const user = await requireRole("admin");
+  const user = await requireMutationRole("admin");
   if (
     user.role === "admin" &&
     !(await isPrimaryClinicAdmin(user.id, user.clinicId))
@@ -327,7 +329,7 @@ export async function saveUserPageVisibilityChanges(
 export async function resetUserPageVisibilityToRoleDefaults(
   targetUserId: string,
 ): Promise<PagePermissionResult> {
-  const user = await requireRole("admin");
+  const user = await requireMutationRole("admin");
   const adminClient = createClinicScopedAdminClient(user.clinicId);
   const { data: target, error: targetError } = await adminClient
     .from("profiles")

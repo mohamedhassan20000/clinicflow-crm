@@ -6,6 +6,7 @@ import {
   getRolePageSlugs,
   type PageSlug,
 } from "@/lib/page-permissions";
+import { resolveSubscriptionAccess } from "@/lib/billing/access";
 
 const PROTECTED_PREFIXES = [
   "/dashboard",
@@ -19,6 +20,13 @@ const PROTECTED_PREFIXES = [
 ];
 
 const AUTH_PAGES = ["/login", "/change-password"];
+const AUTH_MUTATION_EXEMPT_PATHS = new Set([
+  "/login",
+  "/change-password",
+  "/forgot-password",
+  "/reset-password",
+  "/auth/confirm",
+]);
 
 // Routes only admins and managers may access.
 const ADMIN_MANAGER_PREFIXES = ["/settings"];
@@ -89,11 +97,17 @@ export async function updateSession(request: NextRequest) {
 
   if (user) {
     // Fetch profile for role + must_change_password (cached by browser/Supabase)
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("role, clinic_id, must_change_password, is_active")
       .eq("id", user.id)
       .single();
+
+    if (isProtected && (profileError || !profile)) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/login";
+      return NextResponse.redirect(url);
+    }
 
     // Deactivated account → sign out and redirect
     if (profile && !profile.is_active) {
@@ -127,6 +141,40 @@ export async function updateSession(request: NextRequest) {
       const url = request.nextUrl.clone();
       url.pathname = "/dashboard";
       return NextResponse.redirect(url);
+    }
+
+    // Billing gate is fail-closed. Dashboard GET remains readable so an expired
+    // clinic has a safe landing surface. Auth recovery paths are explicit
+    // middleware exemptions; every business mutation is guarded again inside
+    // its Server Action, so replaying one against an exempt URL still fails.
+    const isReadOnlyDashboard = pathname === "/dashboard" && request.method === "GET";
+    const isAuthenticatedMutation =
+      request.method !== "GET" && !AUTH_MUTATION_EXEMPT_PATHS.has(pathname);
+    const requiresBillingGate =
+      (isProtected && !isReadOnlyDashboard) || isAuthenticatedMutation;
+
+    if (requiresBillingGate && (profileError || !profile)) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/login";
+      return NextResponse.redirect(url);
+    }
+
+    if (requiresBillingGate && profile) {
+      const { data: subscription, error: subscriptionError } = await supabase
+        .from("subscriptions")
+        .select("status, trial_ends_at, current_period_end")
+        .eq("clinic_id", profile.clinic_id)
+        .maybeSingle();
+      const access = subscriptionError
+        ? { allowed: false as const, reason: "lookup_failed" as const }
+        : resolveSubscriptionAccess(subscription);
+
+      if (!access.allowed) {
+        const url = request.nextUrl.clone();
+        url.pathname = "/dashboard";
+        url.searchParams.set("billing", "subscription_required");
+        return NextResponse.redirect(url);
+      }
     }
 
     const pageSlug = getPageSlugFromPath(pathname);

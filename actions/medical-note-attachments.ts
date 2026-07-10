@@ -3,7 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { requireRole } from "@/lib/rbac";
+import { requireMutationRole, requireRole } from "@/lib/rbac";
 
 const BUCKET = "patient-assets";
 const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
@@ -231,7 +231,7 @@ export async function uploadMedicalNoteAttachment(
   noteId: string,
   formData: FormData,
 ): Promise<MedicalNoteAttachmentResult<MedicalNoteAttachmentItem[]>> {
-  const user = await requireRole(["admin", "doctor"]);
+  const user = await requireMutationRole(["admin", "doctor"]);
   const supabase = await createClient();
 
   const note = await getAccessibleNote(supabase, noteId, patientId);
@@ -348,7 +348,7 @@ export async function deleteMedicalNoteAttachment(
   noteId: string,
   attachmentId: string,
 ): Promise<MedicalNoteAttachmentResult<MedicalNoteAttachmentItem[]>> {
-  const user = await requireRole(["admin", "doctor"]);
+  const user = await requireMutationRole(["admin", "doctor"]);
   const supabase = await createClient();
 
   const note = await getAccessibleNote(supabase, noteId, patientId);
@@ -403,7 +403,7 @@ export async function restoreMedicalNoteAttachment(
   noteId: string,
   attachmentId: string,
 ): Promise<MedicalNoteAttachmentResult<MedicalNoteAttachmentItem[]>> {
-  const user = await requireRole(["admin", "doctor"]);
+  const user = await requireMutationRole(["admin", "doctor"]);
   const supabase = await createClient();
 
   const note = await getAccessibleNote(supabase, noteId, patientId);

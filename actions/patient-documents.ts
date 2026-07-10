@@ -3,7 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { requireRole } from "@/lib/rbac";
+import { requireMutationRole, requireRole } from "@/lib/rbac";
 import type { Database } from "@/types/database";
 
 const BUCKET = "patient-assets";
@@ -273,7 +273,7 @@ export async function uploadPatientDocument(
   category: PatientDocumentCategory,
   formData: FormData,
 ): Promise<PatientDocumentResult<PatientDocumentsData>> {
-  const user = await requireRole(["admin", "receptionist"]);
+  const user = await requireMutationRole(["admin", "receptionist"]);
   if (!isPatientDocumentCategory(category)) {
     return { error: "Select a valid document category." };
   }
@@ -355,7 +355,7 @@ export async function deletePatientDocument(
   patientId: string,
   documentId: string,
 ): Promise<PatientDocumentResult<PatientDocumentsData>> {
-  const user = await requireRole(["admin", "receptionist"]);
+  const user = await requireMutationRole(["admin", "receptionist"]);
   const supabase = await createClient();
 
   const patient = await getPatientForDocuments(supabase, patientId, user.clinicId);
@@ -414,7 +414,7 @@ export async function restorePatientDocument(
   patientId: string,
   documentId: string,
 ): Promise<PatientDocumentResult<PatientDocumentsData>> {
-  const user = await requireRole(["admin", "receptionist"]);
+  const user = await requireMutationRole(["admin", "receptionist"]);
   const supabase = await createClient();
 
   const patient = await getPatientForDocuments(supabase, patientId, user.clinicId);

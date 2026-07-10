@@ -13,6 +13,7 @@ async function loadProfileActions() {
   }));
   vi.doMock("@/lib/rbac", () => ({
     requireUser: vi.fn(async () => mocks.state.authedUser),
+    requireMutationUser: vi.fn(async () => mocks.state.authedUser),
   }));
   vi.doMock("@/lib/supabase/server", () => ({
     createClient: vi.fn(async () => mocks.client()),

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { requireRole } from "@/lib/rbac";
+import { requireMutationRole } from "@/lib/rbac";
 import type { Database } from "@/types/database";
 
 export type ActionResult = {
@@ -29,7 +29,7 @@ export async function recordFollowup(
   _prev: ActionResult | null,
   formData: FormData,
 ): Promise<ActionResult> {
-  const user = await requireRole(["admin", "receptionist"]);
+  const user = await requireMutationRole(["admin", "receptionist"]);
 
   const appointmentId = String(formData.get("appointment_id") ?? "");
   const patientId = String(formData.get("patient_id") ?? "");
@@ -102,7 +102,7 @@ export async function updateFollowup(
   _prev: ActionResult | null,
   formData: FormData,
 ): Promise<ActionResult> {
-  const user = await requireRole(["admin", "receptionist"]);
+  const user = await requireMutationRole(["admin", "receptionist"]);
 
   const followupId = String(formData.get("followup_id") ?? "");
   const patientId = String(formData.get("patient_id") ?? "");
@@ -141,7 +141,7 @@ export async function updateFollowup(
 }
 
 export async function deleteFollowup(followupId: string): Promise<ActionResult> {
-  const user = await requireRole(["admin", "receptionist"]);
+  const user = await requireMutationRole(["admin", "receptionist"]);
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("follow_ups")
@@ -161,7 +161,7 @@ export async function deleteFollowup(followupId: string): Promise<ActionResult> 
 export async function restoreFollowup(
   data: NonNullable<ActionResult["followup"]>,
 ): Promise<ActionResult> {
-  const user = await requireRole(["admin", "receptionist"]);
+  const user = await requireMutationRole(["admin", "receptionist"]);
   const supabase = await createClient();
   const { data: inserted, error } = await supabase
     .from("follow_ups")

@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { randomUUID } from "node:crypto";
+import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "@/types/database";
 
 const LOCAL_SUPABASE_URL =
@@ -15,14 +16,35 @@ const LOCAL_SUPABASE_SECRET_KEY = requireTestEnv("LOCAL_SUPABASE_SECRET_KEY");
 
 type DbClient = SupabaseClient<Database>;
 
-const ids = {
-  clinic: "91000000-0000-4000-8000-000000000001",
-  dept: "91000000-0000-4000-8000-000000000002",
-  patient: "91000000-0000-4000-8000-000000000003",
-  oldAppointment1: "91000000-0000-4000-8000-000000000004",
-  oldAppointment2: "91000000-0000-4000-8000-000000000005",
-  currentAppointment: "91000000-0000-4000-8000-000000000006",
+const suiteIds = {
+  clinic: randomUUID(),
+  dept: randomUUID(),
 } as const;
+const suiteMinuteOffset = Math.floor(Math.random() * 500_000);
+let fixtureCounter = 0;
+
+function futureSlot(minutesFromSuiteStart: number) {
+  return new Date(
+    Date.UTC(2099, 0, 1, 9, suiteMinuteOffset + minutesFromSuiteStart),
+  ).toISOString();
+}
+
+function createFixtureIds() {
+  const slotOffset = ++fixtureCounter * 10;
+  return {
+    clinic: suiteIds.clinic,
+    dept: suiteIds.dept,
+    patient: randomUUID(),
+    oldAppointment1: randomUUID(),
+    oldAppointment2: randomUUID(),
+    currentAppointment: randomUUID(),
+    oldAppointment1At: futureSlot(slotOffset),
+    oldAppointment2At: futureSlot(slotOffset + 1),
+    currentAppointmentAt: futureSlot(slotOffset + 2),
+  } as const;
+}
+
+let ids = createFixtureIds();
 
 const suffix = `phase11-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 const password = "Phase11Test12345";
@@ -95,44 +117,39 @@ async function signInAdmin() {
   if (error) throw new Error(error.message);
 }
 
-async function cleanupData() {
+async function seedSuiteData() {
   assertNoError(
-    await service.from("outstanding_settlements").delete().eq("clinic_id", ids.clinic),
-    "cleanup outstanding settlements",
+    await service.from("clinics").insert({
+      id: suiteIds.clinic,
+      name: `Phase 11 Clinic ${suffix}`,
+    }),
+    "seed suite clinic",
   );
   assertNoError(
-    await service.from("appointment_services").delete().eq("clinic_id", ids.clinic),
-    "cleanup appointment services",
+    await service.from("departments").insert({
+      id: suiteIds.dept,
+      clinic_id: suiteIds.clinic,
+      name: `Phase 11 Dept ${suffix}`,
+    }),
+    "seed suite department",
   );
   assertNoError(
-    await service
-      .from("appointments")
-      .delete()
-      .in("id", [
-        ids.oldAppointment1,
-        ids.oldAppointment2,
-        ids.currentAppointment,
-      ]),
-    "cleanup appointments",
-  );
-  assertNoError(
-    await service.from("patients").delete().eq("id", ids.patient),
-    "cleanup patient",
-  );
-  assertNoError(
-    await service.from("profiles").delete().in("id", [
-      userIds.admin,
-      userIds.doctor,
+    await service.from("profiles").insert([
+      {
+        id: userIds.admin,
+        clinic_id: suiteIds.clinic,
+        full_name: "Phase 11 Admin",
+        role: "admin",
+      },
+      {
+        id: userIds.doctor,
+        clinic_id: suiteIds.clinic,
+        department_id: suiteIds.dept,
+        full_name: "Phase 11 Doctor",
+        role: "doctor",
+      },
     ]),
-    "cleanup profiles",
-  );
-  assertNoError(
-    await service.from("departments").delete().eq("id", ids.dept),
-    "cleanup department",
-  );
-  assertNoError(
-    await service.from("clinics").delete().eq("id", ids.clinic),
-    "cleanup clinic",
+    "seed suite profiles",
   );
 }
 
@@ -145,49 +162,17 @@ async function seedBaseData({
   secondOutstanding?: number;
   currentOutstanding?: number | null;
 } = {}) {
+  const fixtureSuffix = ids.patient.slice(0, 8);
   assertNoError(
-    await service.from("clinics").upsert({
-      id: ids.clinic,
-      name: `Phase 11 Clinic ${suffix}`,
-    }),
-    "seed clinic",
-  );
-  assertNoError(
-    await service.from("departments").upsert({
-      id: ids.dept,
-      clinic_id: ids.clinic,
-      name: `Phase 11 Dept ${suffix}`,
-    }),
-    "seed department",
-  );
-  assertNoError(
-    await service.from("profiles").upsert([
-      {
-        id: userIds.admin,
-        clinic_id: ids.clinic,
-        full_name: "Phase 11 Admin",
-        role: "admin",
-      },
-      {
-        id: userIds.doctor,
-        clinic_id: ids.clinic,
-        department_id: ids.dept,
-        full_name: "Phase 11 Doctor",
-        role: "doctor",
-      },
-    ]),
-    "seed profiles",
-  );
-  assertNoError(
-    await service.from("patients").upsert({
+    await service.from("patients").insert({
       id: ids.patient,
       clinic_id: ids.clinic,
       full_name: "Phase 11 Patient",
       date_of_birth: "1990-01-01",
       phone: "05551231234",
-      email: `${suffix}-patient@example.com`,
-      national_id: `${suffix}P`,
-      file_number: `${suffix}-P`,
+      email: `${suffix}-${fixtureSuffix}-patient@example.com`,
+      national_id: `${suffix}-${fixtureSuffix}P`,
+      file_number: `${suffix}-${fixtureSuffix}-P`,
       department_id: ids.dept,
       assigned_doctor_id: userIds.doctor,
       created_by: userIds.admin,
@@ -195,14 +180,14 @@ async function seedBaseData({
     "seed patient",
   );
   assertNoError(
-    await service.from("appointments").upsert([
+    await service.from("appointments").insert([
       {
         id: ids.oldAppointment1,
         clinic_id: ids.clinic,
         patient_id: ids.patient,
         doctor_id: userIds.doctor,
         department_id: ids.dept,
-        scheduled_at: "2099-01-01T09:00:00.000Z",
+        scheduled_at: ids.oldAppointment1At,
         duration_minutes: 30,
         status: "completed",
         total_amount: 100,
@@ -218,7 +203,7 @@ async function seedBaseData({
         patient_id: ids.patient,
         doctor_id: userIds.doctor,
         department_id: ids.dept,
-        scheduled_at: "2099-01-02T09:00:00.000Z",
+        scheduled_at: ids.oldAppointment2At,
         duration_minutes: 30,
         status: "completed",
         total_amount: 100,
@@ -234,7 +219,7 @@ async function seedBaseData({
         patient_id: ids.patient,
         doctor_id: userIds.doctor,
         department_id: ids.dept,
-        scheduled_at: "2099-01-03T09:00:00.000Z",
+        scheduled_at: ids.currentAppointmentAt,
         duration_minutes: 30,
         status: "confirmed",
         outstanding_amount: currentOutstanding,
@@ -272,21 +257,13 @@ beforeAll(async () => {
     );
   }
   await createAuthUsers();
+  await seedSuiteData();
   await signInAdmin();
 }, 30_000);
 
 beforeEach(async () => {
-  await cleanupData();
+  ids = createFixtureIds();
   await seedBaseData();
-});
-
-afterAll(async () => {
-  await cleanupData();
-  await Promise.all(
-    Object.values(userIds)
-      .filter(Boolean)
-      .map((id) => service.auth.admin.deleteUser(id)),
-  );
 });
 
 describe("complete_appointment_billing_with_previous_settlement", () => {
@@ -348,7 +325,7 @@ describe("complete_appointment_billing_with_previous_settlement", () => {
   });
 
   it("rejects settlement above prior outstanding and excludes current appointment debt", async () => {
-    await cleanupData();
+    ids = createFixtureIds();
     await seedBaseData({
       firstOutstanding: 30,
       secondOutstanding: 20,

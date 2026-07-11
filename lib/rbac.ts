@@ -100,6 +100,17 @@ export async function requirePlatformAdmin(): Promise<PlatformAdmin> {
 
   if (!platformAdmin) redirect("/dashboard");
 
+  // Dual-role hardening (mirrors the middleware operator branch): a platform
+  // admin who also holds a clinic profile must be active and not pending a
+  // forced password change. Platform admins with no profile pass untouched.
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("must_change_password, is_active")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (profile && !profile.is_active) redirect("/login");
+  if (profile?.must_change_password) redirect("/change-password");
+
   return {
     id: user.id,
     email: user.email ?? "",

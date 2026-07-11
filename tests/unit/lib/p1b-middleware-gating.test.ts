@@ -24,6 +24,10 @@ const state = vi.hoisted(() => ({
     data: { onboarding_completed_at: "2026-01-01T00:00:00.000Z" } as Record<string, unknown> | null,
     error: null as { message: string } | null,
   },
+  platformAdmin: {
+    data: null as Record<string, unknown> | null,
+    error: null as { message: string } | null,
+  },
 }));
 
 function resultBuilder(result: { data: unknown; error: { message: string } | null }) {
@@ -47,6 +51,7 @@ vi.mock("@supabase/ssr", () => ({
       if (table === "profiles") return resultBuilder(state.profile);
       if (table === "subscriptions") return resultBuilder(state.subscription);
       if (table === "clinics") return resultBuilder(state.clinic);
+      if (table === "platform_admins") return resultBuilder(state.platformAdmin);
       return resultBuilder({ data: [], error: null });
     }),
   })),
@@ -80,6 +85,8 @@ beforeEach(() => {
   state.subscription.error = null;
   state.clinic.data = { onboarding_completed_at: "2026-01-01T00:00:00.000Z" };
   state.clinic.error = null;
+  state.platformAdmin.data = null;
+  state.platformAdmin.error = null;
 });
 
 describe("P1B middleware billing behavior", () => {
@@ -168,6 +175,63 @@ describe("P1B middleware billing behavior", () => {
       expect(state.queriedTables).not.toContain("clinics");
     },
   );
+
+  it("admits platform admins to operator routes without any clinic billing gate", async () => {
+    state.platformAdmin.data = { user_id: "user-1" };
+    state.profile.data = null; // platform admins hold no clinic profile
+
+    await expect(updateSession(request("/operator"))).resolves.toMatchObject({ status: 200 });
+    await expect(updateSession(request("/operator/settings", "POST"))).resolves.toMatchObject({
+      status: 200,
+    });
+    expect(state.queriedTables).not.toContain("subscriptions");
+    expect(state.queriedTables).not.toContain("clinics");
+  });
+
+  it("admits a dual-role platform admin whose clinic profile is active and settled", async () => {
+    state.platformAdmin.data = { user_id: "user-1" };
+    state.profile.data = {
+      role: "admin",
+      clinic_id: "clinic-1",
+      must_change_password: false,
+      is_active: true,
+    };
+
+    await expect(updateSession(request("/operator"))).resolves.toMatchObject({ status: 200 });
+    expect(state.queriedTables).not.toContain("subscriptions");
+  });
+
+  it("denies a dual-role platform admin whose clinic profile is deactivated", async () => {
+    state.platformAdmin.data = { user_id: "user-1" };
+    state.profile.data = {
+      role: "admin",
+      clinic_id: "clinic-1",
+      must_change_password: false,
+      is_active: false,
+    };
+
+    expect(redirectPath(await updateSession(request("/operator")))).toBe("/login");
+    expect(redirectPath(await updateSession(request("/operator/settings", "POST")))).toBe("/login");
+  });
+
+  it("forces a dual-role platform admin through a pending password change first", async () => {
+    state.platformAdmin.data = { user_id: "user-1" };
+    state.profile.data = {
+      role: "admin",
+      clinic_id: "clinic-1",
+      must_change_password: true,
+      is_active: true,
+    };
+
+    expect(redirectPath(await updateSession(request("/operator")))).toBe("/change-password");
+  });
+
+  it("redirects non-platform-admins away from every operator route", async () => {
+    expect(redirectPath(await updateSession(request("/operator")))).toBe("/dashboard");
+    expect(redirectPath(await updateSession(request("/operator/coupons", "POST")))).toBe(
+      "/dashboard",
+    );
+  });
 
   it("does not turn a transient clinic lookup error into an onboarding redirect", async () => {
     state.subscription.data = {

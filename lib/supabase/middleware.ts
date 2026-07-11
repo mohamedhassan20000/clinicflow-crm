@@ -21,13 +21,34 @@ const PROTECTED_PREFIXES = [
 ];
 
 const AUTH_PAGES = ["/login", "/change-password"];
+// Session-bound auth recovery pages that must stay reachable for POST but
+// still receive the auth-page gates above (redirect-when-settled, forced
+// password change). Fully public flows are exempted earlier via
+// PUBLIC_FLOW_PREFIXES instead.
 const AUTH_MUTATION_EXEMPT_PATHS = new Set([
   "/login",
   "/change-password",
+]);
+
+// Public, pre-authentication flows: signup, early access, email confirmation,
+// and password recovery. GET and Server Action POST requests must reach these
+// routes untouched for anonymous AND authenticated visitors alike — a stale or
+// half-provisioned session on a signup POST must never be bounced to /login
+// mid-action. Every action hosted on these routes performs its own
+// validation and rate limiting.
+const PUBLIC_FLOW_PREFIXES = [
+  "/signup",
+  "/early-access",
+  "/auth/confirm",
   "/forgot-password",
   "/reset-password",
-  "/auth/confirm",
-]);
+];
+
+function isPublicFlowPath(pathname: string) {
+  return PUBLIC_FLOW_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+}
 
 // Routes only admins and managers may access.
 const ADMIN_MANAGER_PREFIXES = ["/settings"];
@@ -85,6 +106,13 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
+
+  // getUser() already ran above, so session cookies stay refreshed; beyond
+  // that, public flows bypass every session-derived gate. Protected and
+  // operator prefixes never overlap these paths.
+  if (isPublicFlowPath(pathname)) {
+    return supabaseResponse;
+  }
 
   const isAuthPage = AUTH_PAGES.some((p) => pathname.startsWith(p));
   const isProtected = PROTECTED_PREFIXES.some((p) => pathname.startsWith(p));

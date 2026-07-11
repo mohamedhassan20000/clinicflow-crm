@@ -699,6 +699,7 @@ Open [http://localhost:3000](http://localhost:3000) — the root redirects to `/
 | `NEXT_PUBLIC_SUPABASE_URL`      |    ✓     | Supabase project URL                                    |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` |    ✓     | Supabase public anon key                                |
 | `SUPABASE_SERVICE_ROLE_KEY`     |    ✓     | Service role key — server-only, never expose to browser |
+| `NEXT_PUBLIC_SITE_URL`          |    —     | Canonical origin for auth email links. Set in Vercel **Production**; leave unset on previews/local so the request host is used |
 | `NEXT_PUBLIC_SENTRY_DSN`        |    —     | Sentry DSN; Sentry is a no-op if omitted                |
 | `SENTRY_AUTH_TOKEN`             |    —     | Source map upload during build (optional)               |
 | `RESEND_API_KEY`                |    —     | Transactional email                                     |
@@ -715,11 +716,22 @@ The project deploys to **Vercel** as a Next.js App Router application. Vercel au
 
 **Supabase setup checklist:**
 
-- [ ] All 50 migrations applied (`supabase db push`)
+- [ ] All migrations applied (`supabase db push`)
 - [ ] Email auth enabled in Authentication → Providers
 - [ ] Storage bucket `clinic-files` created with RLS policies
 - [ ] Admin account seeded
 - [ ] `SUPABASE_SERVICE_ROLE_KEY` not committed to git
+- [ ] Supabase Auth email + URL configuration completed (below)
+
+**Supabase Auth email & URL configuration (required for clinic-owner signup):**
+
+Signup sends a confirmation email through **Supabase Auth's** mailer, not through the app's Resend key. Without custom SMTP, Supabase's built-in mail service allows only a handful of emails per hour project-wide — signup then fails with `over_email_send_rate_limit` / "Error sending confirmation email".
+
+- [ ] **Custom SMTP** configured in Authentication → Emails → SMTP Settings (Resend SMTP works: host `smtp.resend.com`, username `resend`, password = API key) with a verified sender domain
+- [ ] **Site URL** (Authentication → URL Configuration) set to the production origin, e.g. `https://app.example.com`
+- [ ] **Redirect URLs** allowlist includes `https://app.example.com/**` and the Vercel preview pattern `https://*-<team>.vercel.app/**` — otherwise confirmation links from preview deployments silently fall back to the Site URL
+- [ ] Auth **rate limits** (Authentication → Rate Limits) reviewed for expected signup volume
+- [ ] `NEXT_PUBLIC_SITE_URL` set in Vercel Production (previews intentionally omit it and use the request host)
 
 ---
 

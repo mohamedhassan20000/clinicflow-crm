@@ -2025,7 +2025,10 @@ export type Database = {
       }
       find_resumable_clinic_owner: {
         Args: { p_email: string }
-        Returns: string
+        Returns: {
+          user_id: string
+          email_confirmed: boolean
+        }[]
       }
       get_cancellation_report: {
         Args: { p_end: string; p_start: string }

@@ -9,6 +9,7 @@ function required(name: string) {
   return value;
 }
 const secretKey = required("LOCAL_SUPABASE_SECRET_KEY");
+const publishableKey = required("LOCAL_SUPABASE_PUBLISHABLE_KEY");
 process.env.NEXT_PUBLIC_SUPABASE_URL = url;
 process.env.SUPABASE_SERVICE_ROLE_KEY = secretKey;
 
@@ -27,6 +28,7 @@ let aiPlanId: string;
 const subscriptionIds: string[] = [];
 
 async function cleanup() {
+  await service.from("platform_audit_logs").delete().in("clinic_id", clinicIds);
   await service.from("coupon_redemptions").delete().in("clinic_id", clinicIds);
   await service.from("coupons").delete().like("code", `P1B${suffix}%`);
   await service.from("usage_counters").delete().in("clinic_id", clinicIds);
@@ -69,6 +71,37 @@ beforeAll(async () => {
 afterAll(cleanup);
 
 describe("P1B atomic coupon redemption", () => {
+  it("does not expose coupon redemption to authenticated clinic callers", async () => {
+    const email = `p1b-auth-${suffix}@example.com`;
+    const password = "Password123!";
+    const created = await service.auth.admin.createUser({ email, password, email_confirm: true });
+    if (created.error || !created.data.user) throw created.error;
+    const caller = createClient<Database>(url, publishableKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+    await service.from("profiles").insert({
+      id: created.data.user.id, clinic_id: clinicIds[0], full_name: "Coupon Caller", role: "admin",
+    });
+    await caller.auth.signInWithPassword({ email, password });
+    const result = await caller.rpc("redeem_coupon", {
+      p_clinic_id: clinicIds[0], p_code: `P1B${suffix}NOPE`,
+    });
+    expect(result.error).not.toBeNull();
+    await service.from("profiles").delete().eq("id", created.data.user.id);
+    await service.auth.admin.deleteUser(created.data.user.id);
+  });
+
+  it("does not resurrect a cancelled subscription", async () => {
+    const code = `P1B${suffix}CANCELLED`;
+    await service.from("subscriptions").update({ status: "cancelled" }).eq("clinic_id", clinicIds[0]);
+    await service.from("coupons").insert({ code, kind: "lifetime_free" });
+    const result = await redeem(clinicIds[0], code);
+    expect(result.error?.message).toContain("CANCELLED_SUBSCRIPTION");
+    const subscription = await service.from("subscriptions").select("status").eq("clinic_id", clinicIds[0]).single();
+    expect(subscription.data?.status).toBe("cancelled");
+    await service.from("subscriptions").update({ status: "trialing" }).eq("clinic_id", clinicIds[0]);
+  });
+
   it("applies lifetime, finite months, and percentage effects", async () => {
     const lifetimeCode = `P1B${suffix}LIFE`;
     const monthsCode = `P1B${suffix}MONTHS`;
@@ -104,6 +137,9 @@ describe("P1B atomic coupon redemption", () => {
     expect(monthsSubscription?.status).toBe("active");
     expect(monthsSubscription?.current_period_end).not.toBeNull();
     expect(percentSubscription?.status).toBe("trialing");
+    const audit = await service.from("platform_audit_logs").select("action, clinic_id")
+      .eq("action", "coupon.redeemed").eq("clinic_id", clinicIds[0]);
+    expect(audit.data).toHaveLength(1);
   });
 
   it("preserves an unbounded active grant when months_free is redeemed", async () => {
@@ -283,4 +319,3 @@ describe("P1B usage limit resolution and atomic reservation", () => {
     expect(persisted.data).toEqual({ used: 1000, limit_snapshot: 1000 });
   });
 });
-

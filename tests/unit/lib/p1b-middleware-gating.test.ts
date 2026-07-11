@@ -119,6 +119,20 @@ describe("P1B middleware billing behavior", () => {
     expect(redirectPath(await updateSession(request("/patients")))).toBe("/login");
   });
 
+  it("routes a profileless platform admin to operator from login and clinic paths", async () => {
+    state.profile.data = null;
+    state.platformAdmin.data = { user_id: "user-1" };
+    expect(redirectPath(await updateSession(request("/login")))).toBe("/operator");
+    expect(redirectPath(await updateSession(request("/dashboard")))).toBe("/operator");
+  });
+
+  it("signs a true profileless orphan out instead of creating a redirect loop", async () => {
+    state.profile.data = null;
+    state.platformAdmin.data = null;
+    expect(redirectPath(await updateSession(request("/login")))).toBe("/login");
+    expect(redirectPath(await updateSession(request("/dashboard")))).toBe("/login");
+  });
+
   it("fails closed when subscription lookup errors", async () => {
     state.subscription.data = null;
     state.subscription.error = { message: "subscription lookup failed" };

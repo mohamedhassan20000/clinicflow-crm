@@ -209,6 +209,14 @@ describe("P1A SaaS platform RLS", () => {
     expect(persisted.data).toEqual([]);
   });
 
+  it("prevents platform admins from provisioning additional platform admins", async () => {
+    const { data: authData } = await adminA.auth.getUser();
+    const attemptedGrant = await operator.from("platform_admins").insert({
+      user_id: authData.user!.id,
+    });
+    expect(attemptedGrant.error).not.toBeNull();
+  });
+
   it("allows platform admins to manage SaaS tables without exposing clinical rows", async () => {
     const settings = await operator.from("platform_settings").select("registration_mode").single();
     const invitations = await operator.from("clinic_invitations").select("id").eq("id", invitation);

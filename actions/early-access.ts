@@ -10,6 +10,7 @@ import { checkRateLimit } from "@/lib/rate-limit";
 import { createClient } from "@/lib/supabase/server";
 import { requestClinicInvitation } from "@/lib/supabase/admin";
 import { hashInvitationToken, normalizeEmail, normalizePhone, requestIp } from "@/lib/signup";
+import { logOperatorAction } from "@/lib/platform-audit";
 
 export type PublicActionResult = {
   ok?: boolean;
@@ -113,6 +114,7 @@ export async function issueClinicInvitation(
   if (!updated || updated.length === 0) {
     return { error: "Invitation is no longer pending — it was accepted or revoked. Refresh the list." };
   }
+  await logOperatorAction({ action: "invitation.issued", targetType: "clinic_invitation", targetId: invitationId, payload: { force: options?.force === true, expiresAt } });
   revalidatePath("/operator/invitations");
   return { ok: true, rawToken };
 }
@@ -156,6 +158,7 @@ export async function revokeClinicInvitation(invitationId: string): Promise<Publ
   if (!updated || updated.length === 0) {
     return { error: "Invitation is no longer pending — nothing was revoked. Refresh the list." };
   }
+  await logOperatorAction({ action: "invitation.revoked", targetType: "clinic_invitation", targetId: invitationId });
   revalidatePath("/operator/invitations");
   return { ok: true };
 }

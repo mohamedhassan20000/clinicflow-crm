@@ -105,7 +105,16 @@ export async function signIn(
     .eq("id", data.user.id)
     .single();
 
-  if (!profile) return { error: "Profile not found. Contact your administrator." };
+  if (!profile) {
+    const { data: platformAdmin } = await supabase
+      .from("platform_admins")
+      .select("user_id")
+      .eq("user_id", data.user.id)
+      .maybeSingle();
+    if (platformAdmin) return { ok: true, redirectTo: "/operator" };
+    await supabase.auth.signOut();
+    return { error: "Profile not found. Contact your administrator." };
+  }
   if (!profile.is_active || profile.is_deleted || profile.deleted_at) {
     return { error: "Your account is inactive. Contact your administrator." };
   }

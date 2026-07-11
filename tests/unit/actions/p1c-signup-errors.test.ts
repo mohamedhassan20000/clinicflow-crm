@@ -6,6 +6,7 @@ const state = vi.hoisted(() => ({
   findOrphan: vi.fn(),
   setPassword: vi.fn(),
   signUp: vi.fn(),
+  serverSignOut: vi.fn(),
   rpc: vi.fn(),
   signInWithPassword: vi.fn(),
   signOut: vi.fn(),
@@ -47,7 +48,7 @@ async function loadAction() {
   }));
   vi.doMock("@/lib/supabase/server", () => ({
     createClient: vi.fn(async () => ({
-      auth: { signUp: state.signUp },
+      auth: { signUp: state.signUp, signOut: state.serverSignOut },
       rpc: state.rpc,
     })),
   }));
@@ -91,6 +92,7 @@ describe("P1C signup error and resume branch matrix", () => {
       error: { code: "invalid_credentials", message: "Invalid login credentials" },
     });
     state.signOut.mockResolvedValue({ error: null });
+    state.serverSignOut.mockResolvedValue({ error: null });
     state.resend.mockResolvedValue({ data: {}, error: null });
   });
 
@@ -301,5 +303,28 @@ describe("P1C signup error and resume branch matrix", () => {
     );
     expect(state.findOrphan).not.toHaveBeenCalled();
     expect(state.redirect).toHaveBeenCalledWith("/signup/complete");
+  });
+
+  it("clears the browser session after successful provisioning, before the completion redirect", async () => {
+    // Regression: a stale operator/tenant session left in the cookies made
+    // /signup/complete's "Go to sign in" link bounce to /operator.
+    const { signUpClinic } = await loadAction();
+
+    await signUpClinic(null, form());
+
+    expect(state.serverSignOut).toHaveBeenCalledWith({ scope: "local" });
+    expect(state.serverSignOut.mock.invocationCallOrder[0]).toBeLessThan(
+      state.redirect.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("does not clear the session when provisioning fails and the form must be retried", async () => {
+    state.provision.mockResolvedValue({ data: null, error: { message: "boom" } });
+    const { signUpClinic } = await loadAction();
+
+    const result = await signUpClinic(null, form());
+
+    expect(result.error).toBe("Clinic setup could not be completed. Please retry with the same details.");
+    expect(state.serverSignOut).not.toHaveBeenCalled();
   });
 });

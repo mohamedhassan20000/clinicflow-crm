@@ -145,8 +145,18 @@ export async function updateSession(request: NextRequest) {
       .eq("id", user.id)
       .single();
 
-    if (isProtected && (profileError || !profile)) {
+    if ((isProtected || isAuthPage) && (profileError || !profile)) {
+      const { data: platformAdmin } = await supabase
+        .from("platform_admins")
+        .select("user_id")
+        .eq("user_id", user.id)
+        .maybeSingle();
       const url = request.nextUrl.clone();
+      if (platformAdmin) {
+        url.pathname = "/operator";
+        return NextResponse.redirect(url);
+      }
+      await supabase.auth.signOut();
       url.pathname = "/login";
       return NextResponse.redirect(url);
     }

@@ -47,10 +47,36 @@ export async function deleteSignupAuthUser(userId: string) {
   return createAdminClient().auth.admin.deleteUser(userId);
 }
 
-export async function findResumableSignupUserId(email: string) {
-  return createAdminClient().rpc("find_resumable_clinic_owner", {
+export type ResumableSignupUser = {
+  userId: string;
+  emailConfirmed: boolean;
+};
+
+export async function findResumableSignupUser(email: string): Promise<
+  | { data: ResumableSignupUser | null; error: null }
+  | { data: null; error: { message: string; code?: string } }
+> {
+  const result = await createAdminClient().rpc("find_resumable_clinic_owner", {
     p_email: email,
   });
+  if (result.error) return { data: null, error: result.error };
+  const row = result.data?.[0];
+  return {
+    data: row
+      ? { userId: row.user_id, emailConfirmed: row.email_confirmed }
+      : null,
+    error: null,
+  };
+}
+
+/**
+ * Resets the password of an orphaned, unconfirmed clinic-owner signup user.
+ * Callers must have verified the orphan via findResumableSignupUser AND hold
+ * an invitation token bound to the orphan's email — never call this for a
+ * confirmed account.
+ */
+export async function setSignupUserPassword(userId: string, password: string) {
+  return createAdminClient().auth.admin.updateUserById(userId, { password });
 }
 
 export async function requestClinicInvitation(input: {

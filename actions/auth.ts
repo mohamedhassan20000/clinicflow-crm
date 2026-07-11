@@ -8,8 +8,9 @@ import { createClient as createSupabaseJs } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import {
   deleteSignupAuthUser,
-  findResumableSignupUserId,
+  findResumableSignupUser,
   provisionClinicOwner,
+  setSignupUserPassword,
 } from "@/lib/supabase/admin";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { hashInvitationToken, normalizeEmail, normalizePhone, requestIp } from "@/lib/signup";
@@ -105,7 +106,16 @@ export async function signIn(
     .eq("id", data.user.id)
     .single();
 
-  if (!profile) return { error: "Profile not found. Contact your administrator." };
+  if (!profile) {
+    const { data: platformAdmin } = await supabase
+      .from("platform_admins")
+      .select("user_id")
+      .eq("user_id", data.user.id)
+      .maybeSingle();
+    if (platformAdmin) return { ok: true, redirectTo: "/operator" };
+    await supabase.auth.signOut();
+    return { error: "Profile not found. Contact your administrator." };
+  }
   if (!profile.is_active || profile.is_deleted || profile.deleted_at) {
     return { error: "Your account is inactive. Contact your administrator." };
   }
@@ -282,6 +292,48 @@ const clinicSignupSchema = z.object({
   locale: z.enum(["ar", "en"]),
 });
 
+const SIGNUP_EXISTS_MESSAGE =
+  "An account already exists for this email. Sign in or reset its password.";
+const SIGNUP_RETRY_MESSAGE = "Signup failed. Please try again.";
+
+// Supabase Auth error codes that mean "this email is already registered".
+// They only occur when email-enumeration protection is disabled; with it
+// enabled, Supabase instead returns an obfuscated user with no identities.
+const SIGNUP_DUPLICATE_CODES = new Set(["user_already_exists", "email_exists"]);
+const SIGNUP_RATE_LIMIT_CODES = new Set([
+  "over_email_send_rate_limit",
+  "over_request_rate_limit",
+]);
+const SIGNUP_DISABLED_CODES = new Set([
+  "signup_disabled",
+  "email_provider_disabled",
+]);
+
+type SignUpAuthError = {
+  code?: string;
+  message?: string;
+  status?: number;
+};
+
+// Real Auth failures must never masquerade as "account already exists" —
+// none of these codes are evidence about the email, so the messages stay
+// enumeration-neutral.
+function mapSignUpFailure(error: SignUpAuthError): string {
+  if (SIGNUP_RATE_LIMIT_CODES.has(error.code ?? "")) {
+    return "Too many signup attempts right now. Please try again in a little while.";
+  }
+  if (SIGNUP_DISABLED_CODES.has(error.code ?? "")) {
+    return "Signup is temporarily unavailable. Please try again later.";
+  }
+  if (error.code === "weak_password") {
+    return "This password was rejected. Choose a stronger password.";
+  }
+  if (error.code === "unexpected_failure" || (error.status ?? 0) >= 500) {
+    return "We couldn't send your confirmation email. Please try again shortly.";
+  }
+  return SIGNUP_RETRY_MESSAGE;
+}
+
 function createThrowawayAuthClient() {
   return createSupabaseJs(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -294,6 +346,23 @@ function createThrowawayAuthClient() {
       },
     },
   );
+}
+
+// Best-effort: a resend failure must not abort a resumed signup — the orphan's
+// original confirmation email may still be valid, and /login surfaces the
+// unconfirmed state on the next attempt.
+async function resendSignupConfirmation(email: string, emailRedirectTo: string) {
+  const client = createThrowawayAuthClient();
+  const { error } = await client.auth.resend({
+    type: "signup",
+    email,
+    options: { emailRedirectTo },
+  });
+  if (error) {
+    logSupabaseError("clinic_signup_confirmation_resend_failed", error, {
+      status: error.status != null ? String(error.status) : null,
+    });
+  }
 }
 
 export async function signUpClinic(
@@ -325,38 +394,95 @@ export async function signUpClinic(
   if (state.email && normalizeEmail(state.email) !== email) return { error: "Use the email address this invitation was sent to." };
 
   const origin = await siteOrigin();
+  const confirmRedirectTo = `${origin}/auth/confirm?next=/onboarding`;
   const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
     email, password: parsed.data.password,
     options: {
-      emailRedirectTo: `${origin}/auth/confirm?next=/onboarding`,
+      emailRedirectTo: confirmRedirectTo,
       data: { signup_flow: "clinic_owner", invitation_id: state.invitation_id },
     },
   });
 
-  let owner = signUpData.user;
-  let createdNow = Boolean(owner && (owner.identities?.length ?? 0) > 0);
-  if (signUpError || !createdNow) {
-    const resumable = await findResumableSignupUserId(email);
-    if (resumable.error || !resumable.data) {
-      return { error: "An account already exists for this email. Sign in or reset its password." };
+  const duplicateSignal =
+    signUpError == null || SIGNUP_DUPLICATE_CODES.has(signUpError.code ?? "");
+  if (signUpError && !duplicateSignal) {
+    // Infrastructure/Auth failure (rate limit, SMTP outage, …) — no user was
+    // created and this says nothing about whether the email is registered.
+    logSupabaseError("clinic_signup_auth_failed", signUpError, {
+      status: signUpError.status != null ? String(signUpError.status) : null,
+      invitationId: state.invitation_id,
+    });
+    return { error: mapSignUpFailure(signUpError) };
+  }
+
+  let ownerId = signUpData.user?.id ?? null;
+  // With email-enumeration protection on, a duplicate signup returns an
+  // obfuscated user whose identities array is empty — only a genuinely new
+  // user carries an identity.
+  let createdNow = Boolean(
+    !signUpError && ownerId && (signUpData.user?.identities?.length ?? 0) > 0,
+  );
+
+  if (!createdNow) {
+    // Supabase signaled a duplicate. Either it's an orphan from an
+    // interrupted clinic-owner signup (resume it) or a real account (stop).
+    const resumable = await findResumableSignupUser(email);
+    if (resumable.error) {
+      logSupabaseError("clinic_signup_resume_lookup_failed", resumable.error, {
+        invitationId: state.invitation_id,
+      });
+      return { error: SIGNUP_RETRY_MESSAGE };
     }
+    if (!resumable.data) return { error: SIGNUP_EXISTS_MESSAGE };
 
     const verifier = createThrowawayAuthClient();
     const verified = await verifier.auth.signInWithPassword({
       email,
       password: parsed.data.password,
     });
-    if (verified.error || verified.data.user?.id !== resumable.data) {
-      return { error: "An account already exists for this email. Sign in or reset its password." };
+    if (!verified.error && verified.data.user?.id === resumable.data.userId) {
+      // Confirmed orphan and the caller proved control of its password.
+      await verifier.auth.signOut();
+      ownerId = resumable.data.userId;
+    } else if (
+      verified.error?.code === "email_not_confirmed" &&
+      !resumable.data.emailConfirmed
+    ) {
+      // GoTrue checks the password before the confirmation gate, so this
+      // error code still proves the caller controls the orphan's password.
+      ownerId = resumable.data.userId;
+      await resendSignupConfirmation(email, confirmRedirectTo);
+    } else if (
+      !resumable.data.emailConfirmed &&
+      tokenHash &&
+      state.email &&
+      normalizeEmail(state.email) === email
+    ) {
+      // Unconfirmed orphan, wrong/forgotten password, but the caller holds a
+      // valid invitation token bound to this exact email — that token is the
+      // authorization to reclaim the unusable orphan with a fresh password.
+      // Confirmed accounts are never reclaimable this way.
+      const reset = await setSignupUserPassword(
+        resumable.data.userId,
+        parsed.data.password,
+      );
+      if (reset.error) {
+        logSupabaseError("clinic_signup_orphan_reset_failed", reset.error, {
+          userId: resumable.data.userId,
+        });
+        return { error: SIGNUP_RETRY_MESSAGE };
+      }
+      ownerId = resumable.data.userId;
+      await resendSignupConfirmation(email, confirmRedirectTo);
+    } else {
+      return { error: SIGNUP_EXISTS_MESSAGE };
     }
-    await verifier.auth.signOut();
-    owner = verified.data.user;
     createdNow = false;
   }
-  if (!owner) return { error: "An account already exists for this email. Sign in or reset its password." };
+  if (!ownerId) return { error: SIGNUP_RETRY_MESSAGE };
 
   const { error: provisionError } = await provisionClinicOwner({
-    ownerId: owner.id, tokenHash,
+    ownerId, tokenHash,
     clinicName: parsed.data.clinicName, country: parsed.data.country,
     phone: normalizePhone(parsed.data.phone), ownerName: parsed.data.ownerName,
     ownerEmail: email, locale: parsed.data.locale,
@@ -365,11 +491,11 @@ export async function signUpClinic(
     console.error("clinic_signup_provision_failed", {
       code: provisionError.code,
       message: provisionError.message,
-      ownerId: owner.id,
+      ownerId,
     });
     if (createdNow) {
-      const { error: cleanupError } = await deleteSignupAuthUser(owner.id);
-      if (cleanupError) console.error("signup_compensation_failed", { userId: owner.id });
+      const { error: cleanupError } = await deleteSignupAuthUser(ownerId);
+      if (cleanupError) console.error("signup_compensation_failed", { userId: ownerId });
     }
     return { error: "Clinic setup could not be completed. Please retry with the same details." };
   }

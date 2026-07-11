@@ -1524,6 +1524,39 @@ export type Database = {
         }
         Relationships: []
       }
+      platform_audit_logs: {
+        Row: {
+          action: string
+          actor_user_id: string | null
+          clinic_id: string | null
+          created_at: string
+          id: string
+          payload: Json
+          target_id: string | null
+          target_type: string
+        }
+        Insert: {
+          action: string
+          actor_user_id?: string | null
+          clinic_id?: string | null
+          created_at?: string
+          id?: string
+          payload?: Json
+          target_id?: string | null
+          target_type: string
+        }
+        Update: {
+          action?: string
+          actor_user_id?: string | null
+          clinic_id?: string | null
+          created_at?: string
+          id?: string
+          payload?: Json
+          target_id?: string | null
+          target_type?: string
+        }
+        Relationships: []
+      }
       platform_settings: {
         Row: {
           id: boolean
@@ -1992,7 +2025,10 @@ export type Database = {
       }
       find_resumable_clinic_owner: {
         Args: { p_email: string }
-        Returns: string
+        Returns: {
+          user_id: string
+          email_confirmed: boolean
+        }[]
       }
       get_cancellation_report: {
         Args: { p_end: string; p_start: string }
@@ -2052,6 +2088,16 @@ export type Database = {
         Returns: number
       }
       is_platform_admin: { Args: never; Returns: boolean }
+      log_platform_audit_event: {
+        Args: {
+          p_action: string
+          p_clinic_id?: string
+          p_payload?: Json
+          p_target_id?: string
+          p_target_type: string
+        }
+        Returns: string
+      }
       platform_week_start: { Args: { p_at?: string }; Returns: string }
       record_own_last_login: { Args: never; Returns: boolean }
       redeem_coupon: {

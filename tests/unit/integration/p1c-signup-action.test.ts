@@ -51,12 +51,12 @@ function signupForm(email: string, submittedPassword = password, token?: string)
   return form;
 }
 
-async function seedOrphan(label: string) {
+async function seedOrphan(label: string, emailConfirmed = true) {
   const email = `p1c-action-${suffix}-${label}@example.com`;
   const result = await service.auth.admin.createUser({
     email,
     password,
-    email_confirm: true,
+    email_confirm: emailConfirmed,
     user_metadata: { signup_flow: "clinic_owner" },
   });
   if (result.error || !result.data.user) throw result.error;
@@ -125,7 +125,7 @@ describe("P1C signup action secure resume", () => {
     clinicIds.push(profile.data!.clinic_id);
   });
 
-  it("does not resume or provision an orphan when the password is wrong", async () => {
+  it("does not resume or provision a confirmed orphan when the password is wrong", async () => {
     const orphan = await seedOrphan("resume-wrong");
 
     const result = await signUpClinic(null, signupForm(orphan.user.email!, "WrongPass123", orphan.rawToken));
@@ -133,5 +133,54 @@ describe("P1C signup action secure resume", () => {
     expect(result.error).toBe("An account already exists for this email. Sign in or reset its password.");
     const profile = await service.from("profiles").select("id").eq("id", orphan.user.id);
     expect(profile.data).toHaveLength(0);
+  });
+
+  // NOTE: the local stack runs with mailer autoconfirm (enable_confirmations =
+  // false) and without email-enumeration protection, so signUp returns an
+  // existing unconfirmed orphan directly instead of the production duplicate
+  // signal. These tests therefore assert environment-independent outcomes
+  // (resume without a duplicate clinic, no account takeover); the
+  // production-only resume branches (email_not_confirmed proof, token-bound
+  // password reclaim) are covered by tests/unit/actions/p1c-signup-errors.test.ts.
+  it("resumes an unconfirmed orphan without creating a duplicate clinic", async () => {
+    const orphan = await seedOrphan("resume-unconfirmed", false);
+
+    await expect(
+      signUpClinic(null, signupForm(orphan.user.email!, password, orphan.rawToken)),
+    ).rejects.toThrow("REDIRECT:/signup/complete");
+
+    const profile = await service.from("profiles").select("clinic_id, role").eq("id", orphan.user.id).single();
+    expect(profile.error).toBeNull();
+    expect(profile.data?.role).toBe("admin");
+    clinicIds.push(profile.data!.clinic_id);
+    const clinics = await service.from("clinics").select("id").eq("id", profile.data!.clinic_id);
+    expect(clinics.data).toHaveLength(1);
+  });
+
+  it("never lets a signup retry with a different password take over an unconfirmed orphan's login", async () => {
+    const orphan = await seedOrphan("resume-retry-password", false);
+
+    const result = await signUpClinic(
+      null,
+      signupForm(orphan.user.email!, "DifferentPass123", orphan.rawToken),
+    ).catch((error: Error) => error);
+
+    // Whichever path the environment takes (direct resume locally, token
+    // reclaim in production), the retry must never leave the orphan
+    // sign-in-able with a password its owner did not just submit: exactly one
+    // of the two candidate passwords may work.
+    await service.auth.admin.updateUserById(orphan.user.id, { email_confirm: true });
+    const relog = publicClient();
+    const oldAttempt = await relog.auth.signInWithPassword({ email: orphan.user.email!, password });
+    const newAttempt = await relog.auth.signInWithPassword({ email: orphan.user.email!, password: "DifferentPass123" });
+    expect([oldAttempt.error, newAttempt.error].filter(Boolean)).toHaveLength(1);
+    await relog.auth.signOut();
+
+    if (result instanceof Error) {
+      expect(result.message).toBe("REDIRECT:/signup/complete");
+      const profile = await service.from("profiles").select("clinic_id").eq("id", orphan.user.id).single();
+      expect(profile.error).toBeNull();
+      clinicIds.push(profile.data!.clinic_id);
+    }
   });
 });

@@ -33,7 +33,8 @@ async function loadAction() {
   vi.doMock("@/lib/supabase/admin", () => ({
     provisionClinicOwner: state.provision,
     deleteSignupAuthUser: state.deleteUser,
-    findResumableSignupUserId: state.findOrphan,
+    findResumableSignupUser: state.findOrphan,
+    setSignupUserPassword: vi.fn(),
   }));
   vi.doMock("@/lib/supabase/server", () => ({
     createClient: vi.fn(async () => ({

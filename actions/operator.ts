@@ -11,6 +11,7 @@ import { manualBillingProvider } from "@/lib/billing/manual";
 import { couponExpiryFromInput, manualGrantPeriod } from "@/lib/operator";
 import { requirePlatformAdmin } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
+import { logOperatorAction } from "@/lib/platform-audit";
 
 export type OperatorActionResult = {
   ok?: boolean;
@@ -54,6 +55,7 @@ export async function updatePlatformSettings(
     })
     .eq("id", true);
   if (error) return { error: "Settings could not be saved." };
+  await logOperatorAction({ action: "platform_settings.updated", targetType: "platform_settings", targetId: "global", payload: parsed.data });
   revalidatePath("/operator", "layout");
   return { ok: true };
 }
@@ -107,6 +109,7 @@ export async function grantManualSubscription(
     })
     .eq("id", subscription.data.id);
   if (error) return { error: "Subscription grant failed." };
+  await logOperatorAction({ action: "subscription.granted", targetType: "subscription", targetId: subscription.data.id, clinicId: parsed.data.clinicId, payload: { planSlug: parsed.data.planSlug, months: parsed.data.months } });
 
   invalidateEntitlements(parsed.data.clinicId);
   revalidatePath("/operator", "layout");
@@ -135,6 +138,7 @@ export async function cancelManualSubscription(
     .update({ ...patch, updated_at: new Date().toISOString() })
     .eq("id", subscription.id);
   if (error) return { error: "Cancellation failed." };
+  await logOperatorAction({ action: "subscription.cancelled", targetType: "subscription", targetId: subscription.id, clinicId: clinicId.data });
 
   invalidateEntitlements(clinicId.data);
   revalidatePath("/operator", "layout");
@@ -176,6 +180,7 @@ export async function upsertFeatureOverride(
     { onConflict: "clinic_id,feature_key" },
   );
   if (error) return { error: "Override could not be saved." };
+  await logOperatorAction({ action: "feature_override.upserted", targetType: "clinic_feature_override", targetId: parsed.data.featureKey, clinicId: parsed.data.clinicId, payload: { enabled: parsed.data.enabled } });
 
   invalidateEntitlements(parsed.data.clinicId);
   revalidatePath("/operator", "layout");
@@ -199,6 +204,7 @@ export async function removeFeatureOverride(
     .eq("clinic_id", parsed.data.clinicId)
     .eq("feature_key", parsed.data.featureKey);
   if (error) return { error: "Override could not be removed." };
+  await logOperatorAction({ action: "feature_override.removed", targetType: "clinic_feature_override", targetId: parsed.data.featureKey, clinicId: parsed.data.clinicId });
 
   invalidateEntitlements(parsed.data.clinicId);
   revalidatePath("/operator", "layout");
@@ -278,7 +284,7 @@ export async function createCoupon(
   if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
 
   const supabase = await createClient();
-  const { error } = await supabase.from("coupons").insert({
+  const { data: coupon, error } = await supabase.from("coupons").insert({
     code: parsed.data.code,
     kind: parsed.data.kind,
     months: parsed.data.kind === "months_free" ? Number(parsed.data.months) : null,
@@ -287,12 +293,13 @@ export async function createCoupon(
     max_redemptions: parsed.data.maxRedemptions ? Number(parsed.data.maxRedemptions) : null,
     clinic_id: parsed.data.clinicId || null,
     invitation_id: parsed.data.invitationId || null,
-  });
+  }).select("id").single();
   if (error) {
     return {
       error: error.code === "23505" ? "A coupon with this code already exists." : "Coupon could not be created.",
     };
   }
+  await logOperatorAction({ action: "coupon.created", targetType: "coupon", targetId: coupon.id, clinicId: parsed.data.clinicId || null, payload: { code: parsed.data.code, kind: parsed.data.kind, invitationId: parsed.data.invitationId || null } });
   revalidatePath("/operator/coupons");
   return { ok: true };
 }
@@ -313,6 +320,7 @@ export async function setCouponActive(
     .update({ is_active: parsed.data.isActive === "true", updated_at: new Date().toISOString() })
     .eq("id", parsed.data.couponId);
   if (error) return { error: "Coupon could not be updated." };
+  await logOperatorAction({ action: "coupon.active_changed", targetType: "coupon", targetId: parsed.data.couponId, payload: { isActive: parsed.data.isActive === "true" } });
   revalidatePath("/operator/coupons");
   return { ok: true };
 }

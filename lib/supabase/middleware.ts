@@ -88,15 +88,56 @@ export async function updateSession(request: NextRequest) {
 
   const isAuthPage = AUTH_PAGES.some((p) => pathname.startsWith(p));
   const isProtected = PROTECTED_PREFIXES.some((p) => pathname.startsWith(p));
+  const isOperatorPath = pathname === "/operator" || pathname.startsWith("/operator/");
 
   // ── Unauthenticated → /login ─────────────────────────────────────────────
-  if (!user && isProtected) {
+  if (!user && (isProtected || isOperatorPath)) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
   }
 
   if (user) {
+    // ── Operator trust boundary. Platform admins deliberately hold no clinic
+    // profile, so the clinic billing/onboarding gates below cannot apply to
+    // them. Access requires platform_admins membership (self-read RLS policy)
+    // plus, for dual-role accounts, an active profile with no forced password
+    // change. The (operator) layout re-checks with requirePlatformAdmin() as
+    // defense in depth. Non-members never reach an operator surface.
+    if (isOperatorPath) {
+      const { data: platformAdmin } = await supabase
+        .from("platform_admins")
+        .select("user_id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (!platformAdmin) {
+        const url = request.nextUrl.clone();
+        url.pathname = "/dashboard";
+        return NextResponse.redirect(url);
+      }
+      // Dual-role hardening: platform admins normally hold no clinic profile,
+      // but nothing prevents granting platform_admins to a clinic user. If a
+      // profile exists it must be active and not pending a forced password
+      // change before any operator surface is reachable.
+      const { data: operatorProfile } = await supabase
+        .from("profiles")
+        .select("must_change_password, is_active")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (operatorProfile && !operatorProfile.is_active) {
+        await supabase.auth.signOut();
+        const url = request.nextUrl.clone();
+        url.pathname = "/login";
+        return NextResponse.redirect(url);
+      }
+      if (operatorProfile?.must_change_password) {
+        const url = request.nextUrl.clone();
+        url.pathname = "/change-password";
+        return NextResponse.redirect(url);
+      }
+      return supabaseResponse;
+    }
+
     // Fetch profile for role + must_change_password (cached by browser/Supabase)
     const { data: profile, error: profileError } = await supabase
       .from("profiles")

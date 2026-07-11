@@ -67,6 +67,89 @@ export async function requestClinicInvitation(input: {
   });
 }
 
+/**
+ * Detail lists in the operator panel are explicitly bounded; headline totals
+ * use the exact count returned alongside so they never depend on row-array
+ * length (PostgREST caps each response at max_rows).
+ */
+export const OPERATOR_CLINIC_LIST_LIMIT = 500;
+
+/**
+ * Operator-panel clinic directory. `clinics` RLS is intentionally
+ * clinic-members-only, so the platform-admin panel reads tenant *metadata*
+ * (never clinical tables) through this reviewed helper. Callers must have
+ * passed requirePlatformAdmin() first. Returns an exact total count plus the
+ * newest OPERATOR_CLINIC_LIST_LIMIT rows.
+ */
+export async function listOperatorClinics() {
+  return createAdminClient()
+    .from("clinics")
+    .select("id, name, phone, country, locale, timezone, onboarding_completed_at, created_at", {
+      count: "exact",
+    })
+    .order("created_at", { ascending: false })
+    .limit(OPERATOR_CLINIC_LIST_LIMIT);
+}
+
+/**
+ * Single-clinic variant of listOperatorClinics for the operator detail page —
+ * same reviewed metadata column list, never clinical tables. Callers must have
+ * passed requirePlatformAdmin() first.
+ */
+export async function getOperatorClinic(clinicId: string) {
+  return createAdminClient()
+    .from("clinics")
+    .select("id, name, phone, country, locale, timezone, onboarding_completed_at, created_at")
+    .eq("id", clinicId)
+    .maybeSingle();
+}
+
+// Safety bound for the Auth-user scan below: 500 pages × 100 users. The scan
+// walks every page until the API reports a short (final) page; the bound only
+// exists to keep a pathological directory from hanging the panel, and hitting
+// it is surfaced as `truncated: true`, which Mission Control renders as an
+// explicit warning instead of silently narrowing the orphan list.
+const ORPHAN_SCAN_PER_PAGE = 100;
+const ORPHAN_SCAN_MAX_PAGES = 500;
+
+/**
+ * Operational backstop for the P1C signup compensation path: Auth users that
+ * carry the clinic-owner signup marker but never received a profile.
+ */
+export async function listOrphanedSignupUsers(): Promise<
+  | { data: { orphans: Array<{ id: string; email: string | null; created_at: string }>; truncated: boolean }; error: null }
+  | { data: null; error: { message: string } }
+> {
+  const admin = createAdminClient();
+  const orphans: Array<{ id: string; email: string | null; created_at: string }> = [];
+  let truncated = true;
+  for (let page = 1; page <= ORPHAN_SCAN_MAX_PAGES; page += 1) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: ORPHAN_SCAN_PER_PAGE });
+    if (error) return { data: null, error };
+    const marked = data.users.filter(
+      (user) => user.user_metadata?.signup_flow === "clinic_owner",
+    );
+    if (marked.length > 0) {
+      const profiles = await admin
+        .from("profiles")
+        .select("id")
+        .in("id", marked.map((user) => user.id));
+      if (profiles.error) return { data: null, error: profiles.error };
+      const withProfile = new Set((profiles.data ?? []).map((row) => row.id));
+      for (const user of marked) {
+        if (!withProfile.has(user.id)) {
+          orphans.push({ id: user.id, email: user.email ?? null, created_at: user.created_at });
+        }
+      }
+    }
+    if (data.users.length < ORPHAN_SCAN_PER_PAGE) {
+      truncated = false;
+      break;
+    }
+  }
+  return { data: { orphans, truncated }, error: null };
+}
+
 const CLINIC_SCOPED_TABLES = new Set([
   "appointment_services",
   "appointments",

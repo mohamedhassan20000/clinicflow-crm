@@ -1,10 +1,12 @@
 "use server";
 
 import { cookies } from "next/headers";
-import { requireMutationUser } from "@/lib/rbac";
+import { createClient } from "@/lib/supabase/server";
 
 export async function setTheme(theme: "light" | "dark") {
-  await requireMutationUser();
+  const supabase = await createClient();
+  const { data: { user }, error } = await supabase.auth.getUser();
+  if (error || !user) throw new Error("Authentication required.");
   const cookieStore = await cookies();
   cookieStore.set("theme", theme, {
     path: "/",

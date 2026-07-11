@@ -1,6 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { setTheme } from "@/actions/theme";
@@ -11,6 +12,7 @@ interface ThemeToggleProps {
 
 export function ThemeToggle({ currentTheme }: ThemeToggleProps) {
   const [, startTransition] = useTransition();
+  const router = useRouter();
   const isDark = currentTheme === "dark";
 
   function toggle() {
@@ -24,7 +26,10 @@ export function ThemeToggle({ currentTheme }: ThemeToggleProps) {
     }
 
     // Persist via server action (cookie)
-    startTransition(() => setTheme(next));
+    startTransition(async () => {
+      await setTheme(next);
+      router.refresh();
+    });
   }
 
   return (

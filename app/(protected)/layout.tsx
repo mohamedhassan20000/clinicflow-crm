@@ -1,11 +1,10 @@
-import Image from "next/image";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { requireUser } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
-import { Sidebar } from "@/components/layout/sidebar";
-import { MobileNav } from "@/components/layout/mobile-nav";
+import { DashboardShell } from "@/components/layout/dashboard-shell";
 import { getVisiblePageSlugs } from "@/lib/server-page-permissions";
+import { getTenantShellNavigation } from "@/lib/dashboard-navigation";
 import { ClinicSettingsProvider } from "@/contexts/clinic-settings-context";
 import type { TimeFormat } from "@/lib/format-time";
 import { clinicLocaleFromRow } from "@/lib/datetime";
@@ -35,57 +34,13 @@ export default async function ProtectedLayout({
   const timeFormat: TimeFormat =
     clinic?.time_format === "12h" ? "12h" : "24h";
   const clinicLocale = clinicLocaleFromRow(clinic);
+  const navItems = getTenantShellNavigation(visiblePages);
 
   return (
     <ClinicSettingsProvider timeFormat={timeFormat} locale={clinicLocale}>
-      <div className="flex min-h-dvh bg-background">
-        {/* Desktop sidebar — manages its own <aside> + collapse state */}
-        <Sidebar
-          role={user.role}
-          fullName={user.fullName}
-          avatarUrl={user.avatarUrl}
-          theme={theme}
-          visiblePages={visiblePages}
-          mode="sidebar"
-        />
-
-        {/* Main column */}
-        <div className="flex flex-1 flex-col min-w-0">
-          {/* Top header */}
-          <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border/50 bg-card px-4 lg:px-6">
-            <MobileNav
-              role={user.role}
-              fullName={user.fullName}
-              avatarUrl={user.avatarUrl}
-              theme={theme}
-              visiblePages={visiblePages}
-            />
-            {/* ClinicFlow brand for mobile */}
-            <span className="flex items-center gap-2 lg:hidden">
-              <Image
-                src="/brand/clinicflow-mark.png"
-                alt="ClinicFlow"
-                width={28}
-                height={24}
-                className="h-6 w-auto object-contain"
-              />
-              <span className="text-sm font-semibold">ClinicFlow</span>
-            </span>
-            <div className="flex-1" />
-            {/* Desktop: user chip */}
-            <div className="hidden lg:flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">{user.fullName}</span>
-              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium capitalize text-primary">
-                {user.role}
-              </span>
-            </div>
-          </header>
-
-          <main className="flex-1 overflow-auto px-6 py-4 lg:px-10 lg:py-6">
-            {children}
-          </main>
-        </div>
-      </div>
+      <DashboardShell navItems={navItems} user={{ fullName: user.fullName, email: user.email, roleLabel: user.role, avatarUrl: user.avatarUrl, profileHref: "/profile" }} theme={theme}>
+        {children}
+      </DashboardShell>
     </ClinicSettingsProvider>
   );
 }

@@ -25,6 +25,7 @@ const ids = {
   doctor: "",
   receptionist: "",
   forced: "",
+  operator: "",
   billingPatient: randomUUID(),
   settlementPatient: randomUUID(),
   billingAppointment: randomUUID(),
@@ -36,6 +37,7 @@ const emails = {
   receptionist: `${suffix}-receptionist@example.com`,
   forced: `${suffix}-forced@example.com`,
   doctor: `${suffix}-doctor@example.com`,
+  operator: `${suffix}-operator@example.com`,
 };
 
 const service = createClient<Database>(
@@ -63,6 +65,7 @@ async function createAuthUser(email: string) {
 }
 
 async function cleanup() {
+  if (ids.operator) await service.from("platform_admins").delete().eq("user_id", ids.operator);
   await service.from("subscriptions").delete().eq("clinic_id", ids.clinic);
   await service.from("appointment_services").delete().eq("clinic_id", ids.clinic);
   await service.from("outstanding_settlements").delete().eq("clinic_id", ids.clinic);
@@ -94,8 +97,11 @@ async function seedSmokeData() {
   ids.receptionist = await createAuthUser(emails.receptionist);
   ids.forced = await createAuthUser(emails.forced);
   ids.doctor = await createAuthUser(emails.doctor);
+  ids.operator = await createAuthUser(emails.operator);
 
   await cleanup();
+
+  await must(service.from("platform_admins").insert({ user_id: ids.operator }));
 
   await must(service.from("clinics").insert({
     id: ids.clinic,
@@ -215,7 +221,7 @@ async function seedSmokeData() {
 }
 
 async function deleteAuthUsers() {
-  for (const id of [ids.receptionist, ids.forced, ids.doctor].filter(Boolean)) {
+  for (const id of [ids.receptionist, ids.forced, ids.doctor, ids.operator].filter(Boolean)) {
     await service.auth.admin.deleteUser(id);
   }
 }
@@ -226,6 +232,14 @@ async function login(page: Page, email: string) {
   await page.locator('input[type="password"]').fill(password);
   await page.getByRole("button", { name: /sign in/i }).click();
   await expect(page).toHaveURL(/\/(dashboard|change-password)/);
+}
+
+async function loginOperator(page: Page) {
+  await page.goto("/login");
+  await page.getByLabel(/email/i).fill(emails.operator);
+  await page.locator('input[type="password"]').fill(password);
+  await page.getByRole("button", { name: /sign in/i }).click();
+  await expect(page).toHaveURL(/\/operator/);
 }
 
 async function delayNextMutation(page: Page) {
@@ -266,6 +280,31 @@ test("login page accepts input and protects app routes", async ({ page }) => {
 
   await page.goto("/appointments");
   await expect(page).toHaveURL(/\/login/);
+});
+
+test("dashboard shell renders on a deep protected page and signs out", async ({ page }) => {
+  await login(page, emails.receptionist);
+  await page.goto(`/patients/${ids.settlementPatient}`);
+  await expect(page.getByTestId("dashboard-header")).toBeVisible();
+  await expect(page.getByRole("navigation", { name: /clinicflow navigation/i })).toBeVisible();
+  await expect(page.getByRole("link", { name: /patients/i })).toBeVisible();
+  await page.getByRole("button", { name: /open user menu/i }).click();
+  await page.getByRole("menuitem", { name: /sign out/i }).click();
+  await expect(page).toHaveURL(/\/login/);
+});
+
+test("operator shell renders and persists theme without a clinic profile", async ({ page }) => {
+  await loginOperator(page);
+  await expect(page.getByRole("navigation", { name: /clinicflow operator navigation/i })).toBeVisible();
+  await expect(page.getByRole("link", { name: /clinics/i })).toBeVisible();
+  await page.getByRole("button", { name: /switch to dark mode/i }).click();
+  await expect(page.locator("html")).toHaveClass(/dark/);
+  await expect.poll(async () => (await page.context().cookies()).find((cookie) => cookie.name === "theme")?.value).toBe("dark");
+  await page.goto("/operator/clinics");
+  await expect(page).toHaveURL(/\/operator\/clinics/);
+  await expect(page.locator("html")).toHaveClass(/dark/);
+  await page.reload();
+  await expect(page.locator("html")).toHaveClass(/dark/);
 });
 
 test("forced password users are redirected to change-password", async ({ page }) => {

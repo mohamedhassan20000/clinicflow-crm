@@ -26,6 +26,9 @@ const authUserIds: string[] = [];
 const clinicIds: string[] = [];
 const invitationIds: string[] = [];
 let signUpClinic: typeof import("@/actions/auth")["signUpClinic"];
+// When set, the action's server client is this session-holding client instead
+// of a fresh anonymous one — models a browser with existing auth cookies.
+let actionClient: ReturnType<typeof publicClient> | null = null;
 
 function publicClient() {
   return createClient<Database>(url, publishableKey, {
@@ -93,7 +96,7 @@ beforeAll(async () => {
     })),
   }));
   vi.doMock("@/lib/supabase/server", () => ({
-    createClient: vi.fn(async () => publicClient()),
+    createClient: vi.fn(async () => actionClient ?? publicClient()),
   }));
   ({ signUpClinic } = await import("@/actions/auth"));
 });
@@ -182,5 +185,60 @@ describe("P1C signup action secure resume", () => {
       expect(profile.error).toBeNull();
       clinicIds.push(profile.data!.clinic_id);
     }
+  });
+
+  it("clears an existing platform-operator session when completing a public clinic signup", async () => {
+    // Regression: the operator issued an invite, then opened the signup link
+    // in the same browser. Their session cookies survived provisioning, so
+    // /signup/complete's "Go to sign in" bounced to /operator.
+    const operatorEmail = `p1c-action-${suffix}-operator@example.com`;
+    const operator = await service.auth.admin.createUser({
+      email: operatorEmail,
+      password,
+      email_confirm: true,
+    });
+    if (operator.error || !operator.data.user) throw operator.error;
+    authUserIds.push(operator.data.user.id);
+    const granted = await service.from("platform_admins").insert({ user_id: operator.data.user.id });
+    if (granted.error) throw granted.error;
+
+    const sessionClient = publicClient();
+    const signedIn = await sessionClient.auth.signInWithPassword({ email: operatorEmail, password });
+    if (signedIn.error) throw signedIn.error;
+    expect((await sessionClient.auth.getSession()).data.session).not.toBeNull();
+
+    const ownerEmail = `p1c-action-${suffix}-session-clear@example.com`;
+    const rawToken = `p1c-action-token-${suffix}-session-clear`;
+    const invitation = await service.from("clinic_invitations").insert({
+      clinic_name: `Action Clinic ${suffix}`,
+      owner_name: "Action Owner",
+      phone: "50001000",
+      email: ownerEmail,
+      token_hash: createHash("sha256").update(rawToken).digest("hex"),
+      expires_at: new Date(Date.now() + 86_400_000).toISOString(),
+    }).select("id").single();
+    if (invitation.error) throw invitation.error;
+    invitationIds.push(invitation.data.id);
+
+    actionClient = sessionClient;
+    try {
+      await expect(
+        signUpClinic(null, signupForm(ownerEmail, password, rawToken)),
+      ).rejects.toThrow("REDIRECT:/signup/complete");
+    } finally {
+      actionClient = null;
+    }
+
+    // The browser-facing session is gone: /login renders instead of the
+    // middleware's authenticated redirect to /operator.
+    expect((await sessionClient.auth.getSession()).data.session).toBeNull();
+
+    const users = await service.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    const owner = users.data.users.find((user) => user.email === ownerEmail);
+    expect(owner).toBeTruthy();
+    authUserIds.push(owner!.id);
+    const profile = await service.from("profiles").select("clinic_id").eq("id", owner!.id).single();
+    expect(profile.error).toBeNull();
+    clinicIds.push(profile.data!.clinic_id);
   });
 });

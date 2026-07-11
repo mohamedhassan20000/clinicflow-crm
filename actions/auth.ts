@@ -102,7 +102,7 @@ export async function signIn(
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("must_change_password, is_active, is_deleted, deleted_at")
+    .select("role, clinic_id, must_change_password, is_active, is_deleted, deleted_at")
     .eq("id", data.user.id)
     .single();
 
@@ -131,10 +131,33 @@ export async function signIn(
 
   // Client will navigate after awaiting — ensures fresh session cookies
   // are fully committed before middleware runs on the next request.
-  return {
-    ok: true,
-    redirectTo: profile.must_change_password ? "/change-password" : "/dashboard",
-  };
+  if (profile.must_change_password) {
+    return { ok: true, redirectTo: "/change-password" };
+  }
+
+  // The post-login destination is decided here, deterministically: an admin
+  // whose clinic never completed the onboarding wizard goes straight to it.
+  // The middleware onboarding gate only fires after a successful
+  // subscription-allowed lookup, so it cannot be the sole guard. Middleware
+  // still re-checks with billing precedence — a lapsed clinic is bounced from
+  // /onboarding to the dashboard landing page as before.
+  if (profile.role === "admin") {
+    const { data: clinic, error: clinicError } = await supabase
+      .from("clinics")
+      .select("onboarding_completed_at")
+      .eq("id", profile.clinic_id)
+      .maybeSingle();
+    if (clinicError) {
+      logSupabaseError("login_onboarding_lookup_failed", clinicError, {
+        userId: data.user.id,
+      });
+    }
+    if (clinic && !clinic.onboarding_completed_at) {
+      return { ok: true, redirectTo: "/onboarding" };
+    }
+  }
+
+  return { ok: true, redirectTo: "/dashboard" };
 }
 
 export async function signOut(): Promise<void> {
@@ -499,6 +522,16 @@ export async function signUpClinic(
     }
     return { error: "Clinic setup could not be completed. Please retry with the same details." };
   }
+
+  // The public signup flow must never hand its session state to the next
+  // page. Whatever the browser held — a platform-operator or tenant session
+  // from earlier, or a session minted by signUp in autoconfirm environments —
+  // is cleared from this browser so /signup/complete and its "Go to sign in"
+  // link land on /login instead of being captured by the stale session's
+  // middleware redirects. scope: "local" leaves the account's other devices
+  // signed in, and the new owner still has to confirm their email and sign
+  // in with their own credentials.
+  await supabase.auth.signOut({ scope: "local" });
 
   redirect("/signup/complete");
 }

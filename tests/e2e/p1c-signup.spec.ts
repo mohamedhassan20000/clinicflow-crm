@@ -17,6 +17,7 @@ const email = `p1c-e2e-${suffix}@example.com`;
 const password = "P1cE2eTest123";
 const rawToken = `p1c-e2e-token-${suffix}`;
 let invitationId: string | null = null;
+let expiredSessionRequestId: string | null = null;
 let userId: string | null = null;
 let clinicId: string | null = null;
 
@@ -29,6 +30,7 @@ test.afterAll(async () => {
   }
   if (clinicId) await service.from("clinics").delete().eq("id", clinicId);
   if (invitationId) await service.from("clinic_invitations").delete().eq("id", invitationId);
+  if (expiredSessionRequestId) await service.from("clinic_invitations").delete().eq("id", expiredSessionRequestId);
   if (userId) await service.auth.admin.deleteUser(userId);
 });
 
@@ -36,6 +38,8 @@ test("request → issued invite → verified signup → onboarding → dashboard
   await service.from("platform_settings").update({ registration_mode: "invite_only" }).eq("id", true);
 
   await page.goto("/early-access");
+  await expect(page).toHaveURL(/\/#early-access$/);
+  await page.getByRole("button", { name: "Request an invitation" }).click();
   await page.getByLabel("Clinic name").fill(`P1C E2E Clinic ${suffix}`);
   await page.getByLabel("Owner name").fill("P1C E2E Owner");
   await page.getByLabel("Phone").fill("50003000");
@@ -92,4 +96,32 @@ test("request → issued invite → verified signup → onboarding → dashboard
   clinicId = profile.data.clinic_id;
   const clinic = await service.from("clinics").select("onboarding_completed_at").eq("id", clinicId).single();
   expect(clinic.data?.onboarding_completed_at).not.toBeNull();
+});
+
+test("expired-subscription user can submit the public root dialog", async ({ page }) => {
+  expect(clinicId).toBeTruthy();
+  const expiredEmail = `p15c-expired-${suffix}@example.com`;
+  const expired = await service
+    .from("subscriptions")
+    .update({ status: "cancelled", trial_ends_at: new Date(0).toISOString() })
+    .eq("clinic_id", clinicId!);
+  if (expired.error) throw expired.error;
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "Request an invitation" }).click();
+  await page.getByLabel("Clinic name").fill(`Expired Session Clinic ${suffix}`);
+  await page.getByLabel("Owner name").fill("Expired Session Owner");
+  await page.getByLabel("Phone").fill("50004000");
+  await page.getByLabel("Email").fill(expiredEmail);
+  await page.getByRole("button", { name: "Request invitation" }).click();
+  await expect(page.getByRole("heading", { name: "Request received" })).toBeVisible();
+
+  const request = await service
+    .from("clinic_invitations")
+    .select("id")
+    .eq("email", expiredEmail)
+    .eq("status", "pending")
+    .single();
+  if (request.error) throw request.error;
+  expiredSessionRequestId = request.data.id;
 });

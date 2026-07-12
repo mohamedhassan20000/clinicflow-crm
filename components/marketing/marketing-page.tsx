@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { ArrowRight, CalendarCheck, Check, FileHeart, LineChart, LockKeyhole, Menu, Sparkles, Users } from "lucide-react";
-import { EarlyAccessForm } from "@/components/auth/early-access-form";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -12,6 +12,10 @@ type Props = { registrationMode: string; weeklyLimit: number; acceptedThisWeek: 
 
 const featureIcons = [CalendarCheck, FileHeart, LineChart] as const;
 const navigation = [["#product", copy.nav.product], ["#features", copy.nav.features], ["#pricing", copy.nav.pricing], ["#faq", copy.nav.faq], ["#contact", copy.nav.contact]] as const;
+const EarlyAccessForm = dynamic(
+  () => import("@/components/auth/early-access-form").then((module) => module.EarlyAccessForm),
+  { ssr: false },
+);
 
 export function MarketingPage({ registrationMode, weeklyLimit, acceptedThisWeek }: Props) {
   const percentage = Math.min(100, Math.round((acceptedThisWeek / Math.max(weeklyLimit, 1)) * 100));

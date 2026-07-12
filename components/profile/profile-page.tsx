@@ -17,6 +17,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { InternationalPhoneInput } from "@/components/shared/international-phone-input";
 import { cn } from "@/lib/utils";
 import {
   changeMyPassword,
@@ -294,15 +295,7 @@ function DetailsForm({ profile }: { profile: ProfileData }) {
           <Label htmlFor="profile-phone" className="text-xs">
             Phone
           </Label>
-          <Input
-            id="profile-phone"
-            name="phone"
-            value={phone}
-            disabled={isPending}
-            onChange={(e) => setPhone(e.target.value)}
-            placeholder="+90 555 000 0000"
-            maxLength={40}
-          />
+          <InternationalPhoneInput id="profile-phone" name="phone" value={phone} disabled={isPending} onChange={setPhone} />
           {state?.fieldErrors?.phone && (
             <p className="text-xs text-destructive">
               {state.fieldErrors.phone[0]}

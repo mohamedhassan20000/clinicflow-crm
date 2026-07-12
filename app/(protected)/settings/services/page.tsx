@@ -7,7 +7,8 @@ import { ServiceRowActions } from "@/components/settings/service-row-actions";
 import { SettingsTrashSection, type TrashItem } from "@/components/settings/settings-trash-section";
 import { restoreService, deleteService, emptyServicesTrash } from "@/actions/settings";
 import { THIRTY_DAYS_MS } from "@/lib/constants";
-import { clinicLocaleFromRow, formatClinicCurrency } from "@/lib/datetime";
+import { clinicLocaleFromRow } from "@/lib/datetime";
+import { getServerMoneyFormatter } from "@/lib/currency/server";
 
 export const metadata: Metadata = { title: "Services" };
 
@@ -25,7 +26,7 @@ export default async function ServicesSettingsPage() {
       .single(),
   ]);
   const clinicLocale = clinicLocaleFromRow(clinic);
-  const fmtMoney = (n: number) => formatClinicCurrency(n, clinicLocale);
+  const fmtMoney = await getServerMoneyFormatter(user.id, clinicLocale);
 
   const deptList = allDepartments.filter((d) => !d.deleted_at && d.is_active);
   const cutoff = new Date(new Date().getTime() - THIRTY_DAYS_MS).toISOString();

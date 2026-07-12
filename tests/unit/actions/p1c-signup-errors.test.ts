@@ -96,6 +96,19 @@ describe("P1C signup error and resume branch matrix", () => {
     state.resend.mockResolvedValue({ data: {}, error: null });
   });
 
+  it("returns a field error instead of throwing for an unparseable phone", async () => {
+    const { signUpClinic } = await loadAction();
+    const result = await signUpClinic(null, form({ phone: "abc", phoneCountry: "KW" }));
+    expect(result).toEqual({ fieldErrors: { phone: ["Enter a valid international phone number"] } });
+    expect(state.signUp).not.toHaveBeenCalled();
+  });
+
+  it("preserves a submitted non-Kuwaiti phone country through provisioning", async () => {
+    const { signUpClinic } = await loadAction();
+    await signUpClinic(null, form({ country: "SA", phoneCountry: "SA", phone: "0501234567" }));
+    expect(state.provision).toHaveBeenCalledWith(expect.objectContaining({ country: "SA", phone: "+966501234567" }));
+  });
+
   it("maps an email-send rate limit to a retry message without claiming the account exists", async () => {
     state.signUp.mockResolvedValue({
       data: { user: null },

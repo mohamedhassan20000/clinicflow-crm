@@ -380,6 +380,7 @@ export type Database = {
           invited_by: string | null
           owner_name: string
           phone: string
+          phone_e164_valid: boolean
           revoked_at: string | null
           status: Database["public"]["Enums"]["clinic_invitation_status"]
           token_hash: string | null
@@ -397,6 +398,7 @@ export type Database = {
           invited_by?: string | null
           owner_name: string
           phone: string
+          phone_e164_valid?: boolean
           revoked_at?: string | null
           status?: Database["public"]["Enums"]["clinic_invitation_status"]
           token_hash?: string | null
@@ -414,6 +416,7 @@ export type Database = {
           invited_by?: string | null
           owner_name?: string
           phone?: string
+          phone_e164_valid?: boolean
           revoked_at?: string | null
           status?: Database["public"]["Enums"]["clinic_invitation_status"]
           token_hash?: string | null
@@ -478,6 +481,7 @@ export type Database = {
           name: string
           onboarding_completed_at: string | null
           phone: string | null
+          phone_e164_valid: boolean
           reminder_lead_hours: number
           time_format: string
           timezone: string
@@ -499,6 +503,7 @@ export type Database = {
           name: string
           onboarding_completed_at?: string | null
           phone?: string | null
+          phone_e164_valid?: boolean
           reminder_lead_hours?: number
           time_format?: string
           timezone?: string
@@ -520,6 +525,7 @@ export type Database = {
           name?: string
           onboarding_completed_at?: string | null
           phone?: string | null
+          phone_e164_valid?: boolean
           reminder_lead_hours?: number
           time_format?: string
           timezone?: string
@@ -527,6 +533,36 @@ export type Database = {
           week_start?: number
           working_hours_end?: string | null
           working_hours_start?: string | null
+        }
+        Relationships: []
+      }
+      fx_rates: {
+        Row: {
+          base_currency: string
+          currency_code: string
+          fetched_at: string
+          provider: string
+          provider_timestamp: string
+          rate: number
+          updated_at: string
+        }
+        Insert: {
+          base_currency?: string
+          currency_code: string
+          fetched_at?: string
+          provider: string
+          provider_timestamp: string
+          rate: number
+          updated_at?: string
+        }
+        Update: {
+          base_currency?: string
+          currency_code?: string
+          fetched_at?: string
+          provider?: string
+          provider_timestamp?: string
+          rate?: number
+          updated_at?: string
         }
         Relationships: []
       }
@@ -1376,6 +1412,7 @@ export type Database = {
           is_deleted: boolean
           national_id: string
           phone: string
+          phone_e164_valid: boolean
           updated_at: string
           updated_by: string | null
         }
@@ -1399,6 +1436,7 @@ export type Database = {
           is_deleted?: boolean
           national_id: string
           phone: string
+          phone_e164_valid?: boolean
           updated_at?: string
           updated_by?: string | null
         }
@@ -1422,6 +1460,7 @@ export type Database = {
           is_deleted?: boolean
           national_id?: string
           phone?: string
+          phone_e164_valid?: boolean
           updated_at?: string
           updated_by?: string | null
         }
@@ -1594,6 +1633,7 @@ export type Database = {
           created_at: string
           deleted_at: string | null
           department_id: string | null
+          display_currency: string | null
           full_name: string
           id: string
           is_active: boolean
@@ -1601,6 +1641,7 @@ export type Database = {
           last_login_at: string | null
           must_change_password: boolean
           phone: string | null
+          phone_e164_valid: boolean
           role: Database["public"]["Enums"]["user_role"]
           updated_at: string
         }
@@ -1610,6 +1651,7 @@ export type Database = {
           created_at?: string
           deleted_at?: string | null
           department_id?: string | null
+          display_currency?: string | null
           full_name: string
           id: string
           is_active?: boolean
@@ -1617,6 +1659,7 @@ export type Database = {
           last_login_at?: string | null
           must_change_password?: boolean
           phone?: string | null
+          phone_e164_valid?: boolean
           role: Database["public"]["Enums"]["user_role"]
           updated_at?: string
         }
@@ -1626,6 +1669,7 @@ export type Database = {
           created_at?: string
           deleted_at?: string | null
           department_id?: string | null
+          display_currency?: string | null
           full_name?: string
           id?: string
           is_active?: boolean
@@ -1633,6 +1677,7 @@ export type Database = {
           last_login_at?: string | null
           must_change_password?: boolean
           phone?: string | null
+          phone_e164_valid?: boolean
           role?: Database["public"]["Enums"]["user_role"]
           updated_at?: string
         }
@@ -1714,6 +1759,8 @@ export type Database = {
           expires_at: string
           id: string
           invited_by: string
+          phone: string | null
+          phone_e164_valid: boolean
           role: Database["public"]["Enums"]["user_role"]
           token: string
         }
@@ -1726,6 +1773,8 @@ export type Database = {
           expires_at?: string
           id?: string
           invited_by: string
+          phone?: string | null
+          phone_e164_valid?: boolean
           role: Database["public"]["Enums"]["user_role"]
           token?: string
         }
@@ -1738,6 +1787,8 @@ export type Database = {
           expires_at?: string
           id?: string
           invited_by?: string
+          phone?: string | null
+          phone_e164_valid?: boolean
           role?: Database["public"]["Enums"]["user_role"]
           token?: string
         }
@@ -1958,6 +2009,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      normalize_legacy_phone_e164: {
+        Args: { value: string; default_country: string }
+        Returns: string
+      }
       auth_clinic_id: { Args: never; Returns: string }
       auth_department_id: { Args: never; Returns: string }
       auth_profile: {

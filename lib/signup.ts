@@ -1,6 +1,7 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import { headers } from "next/headers";
+import { normalizePhone as normalizeInternationalPhone } from "@/lib/phone/registry";
 
 export function hashInvitationToken(token: string): string {
   return createHash("sha256").update(token, "utf8").digest("hex");
@@ -10,8 +11,8 @@ export function normalizeEmail(value: string): string {
   return value.trim().toLowerCase();
 }
 
-export function normalizePhone(value: string): string {
-  return value.trim();
+export function normalizePhone(value: string, country = "KW"): string {
+  return normalizeInternationalPhone(value, country) ?? "";
 }
 
 export async function requestIp(): Promise<string> {

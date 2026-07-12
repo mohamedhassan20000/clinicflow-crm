@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { MarketingPage } from "@/components/marketing/marketing-page";
 
@@ -19,5 +20,17 @@ describe("P1.5C marketing page", () => {
   it("renders an accessible mobile navigation trigger", () => {
     render(<MarketingPage registrationMode="invite_only" weeklyLimit={20} acceptedThisWeek={0} />);
     expect(screen.getByRole("button", { name: "Open navigation menu" })).toBeInTheDocument();
+  });
+
+  it("loads the early-access form when the dialog opens", async () => {
+    const user = userEvent.setup();
+    render(<MarketingPage registrationMode="invite_only" weeklyLimit={20} acceptedThisWeek={0} />);
+
+    expect(screen.queryByLabelText("Clinic name")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Request an invitation" }));
+
+    expect(await screen.findByLabelText("Clinic name", {}, { timeout: 10_000 })).toBeEnabled();
+    expect(screen.getByLabelText("Phone")).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Request invitation" })).toBeEnabled();
   });
 });

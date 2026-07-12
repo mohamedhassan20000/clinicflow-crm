@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { normalizePhone } from "@/lib/phone/registry";
+
+const optionalPhone = z.string().optional().nullable().refine((value) => !value || normalizePhone(value), "Enter a valid phone number");
 
 // ── Staff ────────────────────────────────────────────────────────────────────
 
@@ -14,7 +17,7 @@ export const createStaffSchema = z.object({
     error: "Select a role",
   }),
   department_id: z.string().uuid().optional().nullable(),
-  phone: z.string().optional().nullable(),
+  phone: optionalPhone,
 });
 
 export type CreateStaffValues = z.infer<typeof createStaffSchema>;
@@ -23,7 +26,7 @@ export const updateStaffSchema = z.object({
   full_name: z.string().min(2).max(100),
   role: z.enum(["admin", "doctor", "receptionist", "manager"]),
   department_id: z.string().uuid().optional().nullable(),
-  phone: z.string().optional().nullable(),
+  phone: optionalPhone,
   is_active: z.boolean(),
 });
 
@@ -54,12 +57,7 @@ export type InsuranceValues = z.infer<typeof insuranceSchema>;
 
 export const clinicSchema = z.object({
   name: z.string().min(2, "Clinic name must be at least 2 characters").max(100),
-  phone: z
-    .string()
-    .regex(/^(\+90|0)?\s?(\(?\d{3}\)?)\s?\d{3}\s?\d{2}\s?\d{2}$/, "Invalid Turkish phone number")
-    .optional()
-    .nullable()
-    .or(z.literal("")),
+  phone: optionalPhone,
   address: z.string().max(500).optional().nullable(),
   time_format: z.enum(["12h", "24h"]).default("24h"),
 });

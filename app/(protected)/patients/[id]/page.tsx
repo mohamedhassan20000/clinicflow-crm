@@ -4,8 +4,8 @@ import { notFound } from "next/navigation";
 import {
   DEFAULT_TIME_ZONE,
   clinicLocaleFromRow,
-  formatClinicCurrency,
 } from "@/lib/datetime";
+import { getServerMoneyFormatter } from "@/lib/currency/server";
 import { AlertCircle, Archive, CalendarPlus, ChevronLeft, FileText, Pencil, Receipt, Trash2 } from "lucide-react";
 import { StatusBadge } from "@/components/appointments/status-badge";
 import { requireUser } from "@/lib/rbac";
@@ -53,7 +53,7 @@ export default async function PatientDetailPage({ params }: PageProps) {
     .eq("id", user.clinicId)
     .single();
   const clinicLocale = clinicLocaleFromRow(clinic);
-  const fmtMoney = (n: number) => formatClinicCurrency(n, clinicLocale);
+  const fmtMoney = await getServerMoneyFormatter(user.id, clinicLocale);
 
   // Base columns: always available, no migration dependency.
   const PATIENT_SELECT_BASE =

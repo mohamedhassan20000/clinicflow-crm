@@ -1,6 +1,7 @@
 import "server-only";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
+import type { FxSnapshot } from "@/lib/currency/provider";
 
 /**
  * Service-role Supabase client. Server-only.
@@ -17,6 +18,22 @@ export function createAdminClient() {
         persistSession: false,
       },
     },
+  );
+}
+
+/** Platform-managed FX write boundary. Never accepts tenant financial data. */
+export async function storeFxSnapshot(snapshot: FxSnapshot) {
+  return createAdminClient().from("fx_rates").upsert(
+    Object.entries(snapshot.rates).map(([currency_code, rate]) => ({
+      currency_code,
+      base_currency: snapshot.baseCurrency,
+      rate,
+      provider: snapshot.provider,
+      provider_timestamp: snapshot.providerTimestamp,
+      fetched_at: snapshot.fetchedAt,
+      updated_at: snapshot.fetchedAt,
+    })),
+    { onConflict: "currency_code" },
   );
 }
 

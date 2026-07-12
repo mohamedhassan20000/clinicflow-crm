@@ -7,7 +7,8 @@ import {
   PackageTemplateRowActions,
   type PackageTemplateRowData,
 } from "@/components/settings/packages/package-template-row-actions";
-import { clinicLocaleFromRow, formatClinicCurrency } from "@/lib/datetime";
+import { clinicLocaleFromRow } from "@/lib/datetime";
+import { getServerMoneyFormatter } from "@/lib/currency/server";
 
 export const metadata: Metadata = { title: "Package templates" };
 
@@ -32,8 +33,9 @@ export default async function PackagesSettingsPage() {
       .single(),
   ]);
   const clinicLocale = clinicLocaleFromRow(clinic);
+  const formatMoney = await getServerMoneyFormatter(user.id, clinicLocale);
   const fmtMoney = (n: number | null | undefined) =>
-    n === null || n === undefined ? "—" : formatClinicCurrency(n, clinicLocale);
+    n === null || n === undefined ? "—" : formatMoney(n);
 
   const deptList = allDepartments.filter((d) => !d.deleted_at && d.is_active);
   const rows = (templates ?? []) as PackageTemplateRowData[];

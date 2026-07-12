@@ -309,6 +309,7 @@ const clinicSignupSchema = z.object({
   clinicName: z.string().trim().min(1).max(200),
   country: z.enum(["KW", "SA", "AE", "EG"]),
   phone: z.string().trim().min(3).max(50),
+  phoneCountry: z.string().trim().length(2),
   ownerName: z.string().trim().min(1).max(200),
   email: z.string().trim().email().max(320),
   password: z.string().min(8).regex(/[A-Z]/).regex(/[0-9]/),
@@ -395,11 +396,13 @@ export async function signUpClinic(
   const parsed = clinicSignupSchema.safeParse({
     token: formData.get("token") || undefined,
     clinicName: formData.get("clinicName"), country: formData.get("country"),
-    phone: formData.get("phone"), ownerName: formData.get("ownerName"),
+    phone: formData.get("phone"), phoneCountry: formData.get("phoneCountry") || formData.get("country"), ownerName: formData.get("ownerName"),
     email: formData.get("email"), password: formData.get("password"),
     locale: formData.get("locale"),
   });
   if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  const normalizedPhone = normalizePhone(parsed.data.phone, parsed.data.phoneCountry);
+  if (!normalizedPhone) return { fieldErrors: { phone: ["Enter a valid international phone number"] } };
 
   const rateLimit = await checkRateLimit("clinic-signup", await requestIp(), {
     limit: 5, windowSeconds: 60 * 60, failureMode: "closed",
@@ -507,7 +510,7 @@ export async function signUpClinic(
   const { error: provisionError } = await provisionClinicOwner({
     ownerId, tokenHash,
     clinicName: parsed.data.clinicName, country: parsed.data.country,
-    phone: normalizePhone(parsed.data.phone), ownerName: parsed.data.ownerName,
+    phone: normalizedPhone, ownerName: parsed.data.ownerName,
     ownerEmail: email, locale: parsed.data.locale,
   });
   if (provisionError) {

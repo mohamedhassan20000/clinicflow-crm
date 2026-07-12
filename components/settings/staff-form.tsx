@@ -8,6 +8,7 @@ import { Loader2, UserPlus, Save } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { InternationalPhoneInput } from "@/components/shared/international-phone-input";
 import {
   Form,
   FormControl,
@@ -251,12 +252,7 @@ export function CreateStaffForm({
               <FormItem className="sm:col-span-2">
                 <FormLabel>Phone (optional)</FormLabel>
                 <FormControl>
-                  <Input
-                    {...field}
-                    value={field.value ?? ""}
-                    disabled={isPending}
-                    placeholder="0532 000 00 00"
-                  />
+                  <InternationalPhoneInput {...field} value={field.value ?? ""} disabled={isPending} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -423,11 +419,7 @@ export function EditStaffForm({
               <FormItem>
                 <FormLabel>Phone</FormLabel>
                 <FormControl>
-                  <Input
-                    {...field}
-                    value={field.value ?? ""}
-                    disabled={isPending}
-                  />
+                  <InternationalPhoneInput {...field} value={field.value ?? ""} disabled={isPending} />
                 </FormControl>
                 <FormMessage />
               </FormItem>

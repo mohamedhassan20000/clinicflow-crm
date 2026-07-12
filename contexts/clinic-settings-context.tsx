@@ -8,8 +8,10 @@ import {
   formatClinicCurrency,
   formatClinicNumber,
   formatClinicPercent,
+  toNumberingLocale,
   type ClinicLocale,
 } from "@/lib/datetime";
+import { convertForDisplay, formatMoney, type FxRate } from "@/lib/currency/conversion";
 
 interface ClinicSettingsContextValue {
   timeFormat: TimeFormat;
@@ -42,14 +44,19 @@ const ClinicSettingsContext = createContext<ClinicSettingsContextValue>({
 export function ClinicSettingsProvider({
   timeFormat: initialFormat,
   locale = DEFAULT_CLINIC_LOCALE,
+  displayCurrency,
+  fxRates = [],
   children,
 }: {
   timeFormat: TimeFormat;
   locale?: ClinicLocale;
+  displayCurrency?: string;
+  fxRates?: readonly FxRate[];
   children: React.ReactNode;
 }) {
   const [timeFormat, setTimeFormat] = useState<TimeFormat>(initialFormat);
   const resolvedLocale = { ...DEFAULT_CLINIC_LOCALE, ...locale, timeFormat };
+  const preferredCurrency = displayCurrency ?? resolvedLocale.currency;
 
   return (
     <ClinicSettingsContext.Provider
@@ -62,8 +69,12 @@ export function ClinicSettingsProvider({
         formatSlotTime: (s) => formatSlotTime(s, timeFormat, resolvedLocale),
         formatNumber: (n) => formatClinicNumber(n, resolvedLocale),
         formatPercent: (n) => formatClinicPercent(n, resolvedLocale),
-        formatCurrency: (n, options) =>
-          formatClinicCurrency(n, resolvedLocale, options),
+        formatCurrency: (n, options) => {
+          const canonical = Number(n ?? 0);
+          const money = convertForDisplay(canonical, resolvedLocale.currency, preferredCurrency, fxRates);
+          const display = formatMoney(money, toNumberingLocale(resolvedLocale), options);
+          return money.approximate ? `${display} (${formatClinicCurrency(canonical, resolvedLocale, options)})` : display;
+        },
       }}
     >
       {children}

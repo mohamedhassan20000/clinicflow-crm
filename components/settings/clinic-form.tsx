@@ -9,6 +9,7 @@ import { useClinicSettings } from "@/contexts/clinic-settings-context";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { InternationalPhoneInput } from "@/components/shared/international-phone-input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
@@ -211,12 +212,7 @@ export function ClinicForm({ defaultValues, logoUrl: initialLogoUrl, readOnly = 
                 <FormItem>
                   <FormLabel>Phone</FormLabel>
                   <FormControl>
-                    <Input
-                      {...field}
-                      value={field.value ?? ""}
-                      disabled={isPending || readOnly}
-                      placeholder="0212 000 00 00"
-                    />
+                    <InternationalPhoneInput {...field} value={field.value ?? ""} disabled={isPending || readOnly} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

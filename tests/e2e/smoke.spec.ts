@@ -153,6 +153,11 @@ async function seedSmokeData() {
     name: "Smoke Consultation",
     price: 50,
   }));
+  const fxTime = new Date().toISOString();
+  await must(service.from("fx_rates").upsert([
+    { currency_code: "USD", rate: 1, provider: "e2e", provider_timestamp: fxTime, fetched_at: fxTime },
+    { currency_code: "KWD", rate: 0.307, provider: "e2e", provider_timestamp: fxTime, fetched_at: fxTime },
+  ]));
   await must(service.from("patients").insert([
     {
       id: ids.billingPatient,
@@ -286,11 +291,37 @@ test("dashboard shell renders on a deep protected page and signs out", async ({ 
   await login(page, emails.receptionist);
   await page.goto(`/patients/${ids.settlementPatient}`);
   await expect(page.getByTestId("dashboard-header")).toBeVisible();
-  await expect(page.getByRole("navigation", { name: /clinicflow navigation/i })).toBeVisible();
-  await expect(page.getByRole("link", { name: /patients/i })).toBeVisible();
+  const navigation = page.getByRole("navigation", { name: /clinicflow navigation/i });
+  await expect(navigation).toBeVisible();
+  await expect(navigation.getByRole("link", { name: "Patients", exact: true })).toBeVisible();
   await page.getByRole("button", { name: /open user menu/i }).click();
   await page.getByRole("menuitem", { name: /sign out/i }).click();
   await expect(page).toHaveURL(/\/login/);
+});
+
+test("display currency applies on the server-rendered patient money surface", async ({ page }) => {
+  await login(page, emails.receptionist);
+  await page.getByLabel("Display currency").click();
+  const [currencyUpdate] = await Promise.all([
+    page.waitForResponse(
+      (response) => response.request().method() === "POST" && response.ok(),
+    ),
+    page.getByRole("option", { name: /United States — USD/ }).click(),
+  ]);
+  expect(currencyUpdate.ok()).toBe(true);
+  await expect
+    .poll(async () => {
+      const profile = await service
+        .from("profiles")
+        .select("display_currency")
+        .eq("id", ids.receptionist)
+        .single();
+      return profile.data?.display_currency;
+    })
+    .toBe("USD");
+  await page.goto(`/patients/${ids.settlementPatient}`);
+  await expect(page.getByText(/≈.*US\$/).first()).toBeVisible();
+  await expect(page.getByText(/KWD|د\.ك/).first()).toBeVisible();
 });
 
 test("operator shell renders and persists theme without a clinic profile", async ({ page }) => {
@@ -328,6 +359,21 @@ test("operator shell renders and persists theme without a clinic profile", async
 
   await page.reload();
   await expect(page.locator("html")).toHaveClass(/dark/);
+
+  const invitationEmail = `${suffix}-sa-invite@example.com`;
+  await page.goto("/operator/invitations");
+  await page.getByPlaceholder("Clinic name").fill("Saudi E2E Clinic");
+  await page.getByPlaceholder("Owner name").fill("Saudi Owner");
+  await page.getByLabel("Country calling code").click();
+  await page.getByRole("option", { name: /Saudi Arabia \+966/ }).click();
+  await page.getByPlaceholder("Local number").fill("0501234567");
+  await page.getByPlaceholder("owner@example.com").fill(invitationEmail);
+  await page.getByRole("checkbox", { name: /override/i }).check();
+  await page.getByRole("button", { name: "Create & issue" }).click();
+  await expect(page.getByText(invitationEmail)).toBeVisible();
+  const invitation = await service.from("clinic_invitations").select("phone").eq("email", invitationEmail).single();
+  expect(invitation.data?.phone).toBe("+966501234567");
+  await service.from("clinic_invitations").delete().eq("email", invitationEmail);
 });
 
 test("forced password users are redirected to change-password", async ({ page }) => {

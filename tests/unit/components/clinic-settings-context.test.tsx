@@ -53,4 +53,16 @@ describe("ClinicSettingsProvider locale config", () => {
     expect(screen.getByTestId("week-start").textContent).toBe("6");
     expect(screen.getByTestId("locale-currency").textContent).toBe("KWD");
   });
+
+  it("shows an approximate preferred value beside the untouched canonical value", () => {
+    const fetchedAt = new Date().toISOString();
+    render(<ClinicSettingsProvider timeFormat="24h" locale={gulfArabicLocale} displayCurrency="USD" fxRates={[
+      { currencyCode: "USD", rate: 1, providerTimestamp: fetchedAt, fetchedAt },
+      { currencyCode: "KWD", rate: 0.307, providerTimestamp: fetchedAt, fetchedAt },
+    ]}><Probe /></ClinicSettingsProvider>);
+    const text = screen.getByTestId("currency").textContent ?? "";
+    expect(text).toContain("≈");
+    expect(text).toContain("US$");
+    expect(text).toContain("د.ك");
+  });
 });

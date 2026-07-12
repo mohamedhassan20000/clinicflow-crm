@@ -260,6 +260,19 @@
   animation: auth-feature-in 460ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+@keyframes marketing-reveal { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes marketing-float { 0%, 100% { transform: translateY(0) rotate(-0.4deg); } 50% { transform: translateY(-10px) rotate(0.4deg); } }
+.marketing-reveal { animation: marketing-reveal 700ms cubic-bezier(.22,1,.36,1) both; }
+.marketing-float { animation: marketing-float 7s ease-in-out infinite; }
+.marketing-card { transition: transform 240ms ease, box-shadow 240ms ease, border-color 240ms ease; }
+.marketing-card:hover { transform: translateY(-5px); border-color: color-mix(in oklab, var(--primary) 25%, transparent); box-shadow: 0 24px 50px -32px rgba(15, 118, 110, .45); }
+@media (prefers-reduced-motion: reduce) {
+  .marketing-page { scroll-behavior: auto; }
+  .marketing-reveal, .marketing-float { animation: none; }
+  .marketing-card { transition: none; }
+  .marketing-card:hover { transform: none; }
+}
+
 .auth-right-panel {
   background:
     radial-gradient(ellipse 90% 60% at top, oklch(0.96 0.03 208) 0%, var(--background) 60%);

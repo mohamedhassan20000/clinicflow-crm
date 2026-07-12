@@ -3,13 +3,14 @@
 import { useActionState } from "react";
 import { requestEarlyAccess, type PublicActionResult } from "@/actions/early-access";
 import { Button } from "@/components/ui/button";
+import { DialogClose } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-export function EarlyAccessForm() {
+export function EarlyAccessForm({ mode = "standalone" }: { mode?: "standalone" | "dialog" }) {
   const [state, action, pending] = useActionState<PublicActionResult | null, FormData>(requestEarlyAccess, null);
   if (state?.ok) {
-    return <div className="rounded-xl border border-primary/30 bg-primary/5 p-6 text-center"><h2 className="text-lg font-semibold">Request received</h2><p className="mt-2 text-sm text-muted-foreground">We’ll contact you at the email address provided after reviewing your clinic.</p></div>;
+    return <div className="rounded-xl border border-primary/30 bg-primary/5 p-6 text-center"><h2 className="text-lg font-semibold">Request received</h2><p className="mt-2 text-sm text-muted-foreground">We’ll contact you at the email address provided after reviewing your clinic.</p>{mode === "dialog" ? <DialogClose asChild><Button className="mt-5" variant="outline">Back to ClinicFlow</Button></DialogClose> : null}</div>;
   }
   return (
     <form action={action} className="space-y-4">
@@ -25,4 +26,3 @@ export function EarlyAccessForm() {
     </form>
   );
 }
-

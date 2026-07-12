@@ -1,65 +1,52 @@
-import { redirect } from "next/navigation";
+import type { Metadata } from "next";
+import { MarketingPage } from "@/components/marketing/marketing-page";
+import { createClient } from "@/lib/supabase/server";
+
+export const metadata: Metadata = {
+  title: "ClinicFlow — Your clinic, in one calm workspace",
+  description:
+    "Run appointments, patients, billing, and clinic operations from one secure workspace built for modern private clinics.",
+  robots: { index: true, follow: true },
+};
 
 interface PageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
-// Supabase password-reset / magic-link emails sometimes deliver users to the
-// site root with auth params attached (e.g. `?code=…`, `?token_hash=…&type=…`,
-// or `?error=…`). In that case we must NOT swallow the params by redirecting
-// to /login — we forward to /auth/confirm so the proper handler can run.
-// Additionally, an `#access_token=…` hash fragment can never be seen on the
-// server, so we hand off to a tiny client shim that re-runs detection.
 export default async function Home({ searchParams }: PageProps) {
-  const sp = await searchParams;
-  const passthroughKeys = [
-    "code",
-    "token_hash",
-    "type",
-    "next",
-    "error",
-    "error_description",
-  ];
-  const params = new URLSearchParams();
-  for (const key of passthroughKeys) {
-    const v = sp[key];
-    if (typeof v === "string" && v.length > 0) params.set(key, v);
+  const params = await searchParams;
+
+  // Preserve the existing password-reset and magic-link handoff. Hash-based
+  // implicit-flow tokens are handled by /auth/confirm links generated today.
+  const authKeys = ["code", "token_hash", "type", "error", "error_description"];
+  if (authKeys.some((key) => typeof params[key] === "string")) {
+    const query = new URLSearchParams();
+    for (const key of [...authKeys, "next"]) {
+      const value = params[key];
+      if (typeof value === "string" && value) query.set(key, value);
+    }
+    if (!query.has("next")) query.set("next", "/reset-password");
+    const { redirect } = await import("next/navigation");
+    redirect(`/auth/confirm?${query.toString()}`);
   }
 
-  if (params.size > 0) {
-    if (!params.has("next")) params.set("next", "/reset-password");
-    redirect(`/auth/confirm?${params.toString()}`);
-  }
+  const supabase = await createClient();
+  const { data } = await supabase.rpc("get_public_registration_status");
+  const status = data?.[0];
 
-  // No auth params on the URL — render a tiny client-side hop that checks for
-  // implicit-flow tokens in the URL fragment before falling through to /login.
-  return <RootRedirect />;
-}
-
-// Inline client component — checks for `#access_token=…` (implicit flow) and
-// hands off to /auth/confirm; otherwise redirects to /login.
-function RootRedirect() {
   return (
     <>
-      <noscript>
-        <meta httpEquiv="refresh" content="0;url=/login" />
-      </noscript>
       <script
-        // The script is static and not injected via user data — safe.
+        // Supabase implicit-flow fragments are invisible to the server. Keep
+        // the old recovery handoff without redirecting ordinary visitors.
         dangerouslySetInnerHTML={{
-          __html: `
-            (function () {
-              try {
-                var hash = window.location.hash || "";
-                if (hash.indexOf("access_token=") !== -1 || hash.indexOf("token_hash=") !== -1) {
-                  window.location.replace("/auth/confirm" + hash);
-                  return;
-                }
-              } catch (e) {}
-              window.location.replace("/login");
-            })();
-          `,
+          __html: `(function(){try{var h=window.location.hash||"";if(h.indexOf("access_token=")!==-1||h.indexOf("token_hash=")!==-1){window.location.replace("/auth/confirm"+h)}}catch(e){}})();`,
         }}
+      />
+      <MarketingPage
+        registrationMode={status?.registration_mode ?? "invite_only"}
+        weeklyLimit={status?.weekly_invite_limit ?? 20}
+        acceptedThisWeek={Number(status?.accepted_clinics_this_week ?? 0)}
       />
     </>
   );

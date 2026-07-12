@@ -110,7 +110,9 @@ export async function updateSession(request: NextRequest) {
   // getUser() already ran above, so session cookies stay refreshed; beyond
   // that, public flows bypass every session-derived gate. Protected and
   // operator prefixes never overlap these paths.
-  if (isPublicFlowPath(pathname)) {
+  // `/` hosts the P1.5C public early-access Server Action. This must be an
+  // exact match: treating `/` as a prefix would exempt every protected route.
+  if (pathname === "/" || isPublicFlowPath(pathname)) {
     return supabaseResponse;
   }
 

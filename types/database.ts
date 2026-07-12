@@ -374,6 +374,7 @@ export type Database = {
           clinic_name: string
           created_at: string
           email: string
+          email_sent_at: string | null
           expires_at: string | null
           id: string
           invited_by: string | null
@@ -390,6 +391,7 @@ export type Database = {
           clinic_name: string
           created_at?: string
           email: string
+          email_sent_at?: string | null
           expires_at?: string | null
           id?: string
           invited_by?: string | null
@@ -406,6 +408,7 @@ export type Database = {
           clinic_name?: string
           created_at?: string
           email?: string
+          email_sent_at?: string | null
           expires_at?: string | null
           id?: string
           invited_by?: string | null

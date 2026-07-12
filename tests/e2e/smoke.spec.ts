@@ -296,7 +296,9 @@ test("dashboard shell renders on a deep protected page and signs out", async ({ 
 test("operator shell renders and persists theme without a clinic profile", async ({ page }) => {
   await loginOperator(page);
   await expect(page.getByRole("navigation", { name: /clinicflow operator navigation/i })).toBeVisible();
-  await expect(page.getByRole("link", { name: /clinics/i })).toBeVisible();
+  await expect(page.getByText(/registration mode:/i)).toBeVisible();
+  await expect(page.getByText(/active clinics/i)).toBeVisible();
+  await expect(page.getByTestId("dashboard-sidebar").getByRole("link", { name: /clinics/i })).toBeVisible();
   await page.getByRole("button", { name: /switch to dark mode/i }).click();
   await expect(page.locator("html")).toHaveClass(/dark/);
   await expect.poll(async () => (await page.context().cookies()).find((cookie) => cookie.name === "theme")?.value).toBe("dark");

@@ -17,6 +17,8 @@ export type PublicActionResult = {
   error?: string;
   fieldErrors?: Record<string, string[]>;
   rawToken?: string;
+  invitationId?: string;
+  invitationEmail?: string;
 };
 
 const requestSchema = z.object({
@@ -109,14 +111,14 @@ export async function issueClinicInvitation(
   const { data: updated, error } = await supabase.from("clinic_invitations").update({
     token_hash: hashInvitationToken(rawToken), expires_at: expiresAt,
     invited_by: admin.id, revoked_at: null, updated_at: new Date().toISOString(),
-  }).eq("id", invitationId).eq("status", "pending").select("id");
+  }).eq("id", invitationId).eq("status", "pending").select("id, email");
   if (error) return { error: "Invitation could not be issued." };
   if (!updated || updated.length === 0) {
     return { error: "Invitation is no longer pending — it was accepted or revoked. Refresh the list." };
   }
   await logOperatorAction({ action: "invitation.issued", targetType: "clinic_invitation", targetId: invitationId, payload: { force: options?.force === true, expiresAt } });
   revalidatePath("/operator/invitations");
-  return { ok: true, rawToken };
+  return { ok: true, rawToken, invitationId, invitationEmail: updated[0].email };
 }
 
 export async function createClinicInvitation(

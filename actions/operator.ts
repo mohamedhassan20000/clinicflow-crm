@@ -12,6 +12,7 @@ import { couponExpiryFromInput, manualGrantPeriod } from "@/lib/operator";
 import { requirePlatformAdmin } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
 import { logOperatorAction } from "@/lib/platform-audit";
+import { DEFAULT_FROM, getResend } from "@/lib/email/resend";
 
 export type OperatorActionResult = {
   ok?: boolean;
@@ -229,6 +230,26 @@ export async function revokeInvitationForm(
   const parsed = z.string().uuid().safeParse(formData.get("invitationId"));
   if (!parsed.success) return { error: "Invalid invitation." };
   return revokeClinicInvitation(parsed.data);
+}
+
+export async function sendInvitationEmail(_previous: OperatorActionResult | null, formData: FormData): Promise<OperatorActionResult> {
+  await requirePlatformAdmin();
+  const expectedOrigin = process.env.NEXT_PUBLIC_SITE_URL ? new URL(process.env.NEXT_PUBLIC_SITE_URL).origin : null;
+  const parsed = z.object({ invitationId: z.string().uuid(), invitationEmail: z.string().email(), invitationLink: z.string().url().refine((value) => { const url = new URL(value); return url.pathname.startsWith("/signup/") && (!expectedOrigin || url.origin === expectedOrigin); }) }).safeParse({ invitationId: formData.get("invitationId"), invitationEmail: formData.get("invitationEmail"), invitationLink: formData.get("invitationLink") });
+  if (!parsed.success) return { error: "The invitation email request is invalid." };
+  const db = await createClient();
+  const invitation = await db.from("clinic_invitations").select("id, clinic_name, owner_name, email, status, expires_at").eq("id", parsed.data.invitationId).eq("email", parsed.data.invitationEmail).maybeSingle();
+  if (invitation.error || !invitation.data || invitation.data.status !== "pending") return { error: "This invitation is no longer available." };
+  try {
+    const result = await getResend().emails.send({ from: DEFAULT_FROM, to: invitation.data.email, subject: `You're invited to ClinicFlow — ${invitation.data.clinic_name}`, html: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto"><h1 style="color:#0f766e">Welcome to ClinicFlow</h1><p>Hello ${invitation.data.owner_name},</p><p>Your clinic has been invited to join ClinicFlow.</p><p><a href="${parsed.data.invitationLink}" style="display:inline-block;padding:12px 18px;background:#0f766e;color:white;text-decoration:none;border-radius:8px">Accept invitation</a></p><p>This single-use link expires ${invitation.data.expires_at ? new Date(invitation.data.expires_at).toUTCString() : "soon"}.</p></div>` });
+    if (result.error) { console.error("Invitation email send failed", { invitationId: invitation.data.id, category: "provider_error" }); return { error: "Invitation email could not be sent. The invitation link remains valid." }; }
+  } catch { console.error("Invitation email transport failed", { invitationId: invitation.data.id, category: "transport_error" }); return { error: "Invitation email could not be sent. The invitation link remains valid." }; }
+  const sentAt = new Date().toISOString();
+  const updated = await db.from("clinic_invitations").update({ email_sent_at: sentAt, updated_at: sentAt }).eq("id", invitation.data.id).eq("status", "pending");
+  await logOperatorAction({ action: "invitation.email_sent", targetType: "clinic_invitation", targetId: invitation.data.id });
+  if (updated.error) { console.error("Invitation email timestamp failed", { invitationId: invitation.data.id, message: updated.error.message }); return { error: "Email was sent and audited, but its delivery timestamp could not be recorded." }; }
+  revalidatePath("/operator/invitations");
+  return { ok: true };
 }
 
 // ── Coupon CRUD & assignment (§3.3) ─────────────────────────────────────────

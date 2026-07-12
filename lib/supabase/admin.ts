@@ -117,6 +117,42 @@ export async function listOperatorClinics() {
     .limit(OPERATOR_CLINIC_LIST_LIMIT);
 }
 
+/** Reviewed metadata-only read for executive growth and registry reports. */
+export async function listOperatorClinicMetadata() {
+  return createAdminClient().from("clinics").select("id, name, country, created_at").order("created_at", { ascending: false }).limit(1000);
+}
+
+export async function getOperatorAggregateInputs() {
+  const db=createAdminClient(), now=new Date(), nowIso=now.toISOString();
+  const monthStart=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),1)).toISOString(), previousStart=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth()-1,1)).toISOString(), sixMonthsStart=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth()-5,1)).toISOString();
+  return Promise.all([
+    db.from("subscriptions").select("clinic_id",{count:"exact",head:true}).eq("status","active").or(`current_period_end.is.null,current_period_end.gt.${nowIso}`),
+    db.from("subscriptions").select("clinic_id",{count:"exact",head:true}).eq("status","trialing").gt("trial_ends_at",nowIso),
+    db.from("clinics").select("id",{count:"exact",head:true}).gte("created_at",monthStart),
+    db.from("clinics").select("id",{count:"exact",head:true}).gte("created_at",previousStart).lt("created_at",monthStart),
+    db.from("profiles").select("id",{count:"exact",head:true}).gte("created_at",monthStart),
+    db.from("profiles").select("id",{count:"exact",head:true}).gte("created_at",previousStart).lt("created_at",monthStart),
+    db.from("clinics").select("id, created_at").gte("created_at",sixMonthsStart).order("created_at"),
+  ]);
+}
+
+export async function listOperatorUserCounts() {
+  const db=createAdminClient(); const [clinics,profiles]=await Promise.all([db.from("clinics").select("id, name"),db.from("profiles").select("clinic_id, created_at")]);
+  if(clinics.error||profiles.error)return{data:null,error:clinics.error??profiles.error};
+  const grouped=new Map<string,{count:number;latest:string|null}>();
+  for(const row of profiles.data??[]){const item=grouped.get(row.clinic_id)??{count:0,latest:null};item.count++;if(!item.latest||row.created_at>item.latest)item.latest=row.created_at;grouped.set(row.clinic_id,item)}
+  return{data:(clinics.data??[]).map(c=>({clinic_name:c.name,user_count:grouped.get(c.id)?.count??0,latest_signup:grouped.get(c.id)?.latest??null})),error:null};
+}
+
+export async function getExactActiveRevenueUsd() {
+  const db=createAdminClient(),nowIso=new Date().toISOString();
+  const plans=await db.from("plans").select("id, monthly_price_usd");
+  if(plans.error)return{data:null,error:plans.error};
+  let revenue=0;
+  for(const plan of plans.data??[]){const count=await db.from("subscriptions").select("id",{count:"exact",head:true}).eq("plan_id",plan.id).eq("status","active").or(`current_period_end.is.null,current_period_end.gt.${nowIso}`);if(count.error)return{data:null,error:count.error};revenue+=(count.count??0)*Number(plan.monthly_price_usd)}
+  return{data:revenue,error:null};
+}
+
 /**
  * Single-clinic variant of listOperatorClinics for the operator detail page —
  * same reviewed metadata column list, never clinical tables. Callers must have

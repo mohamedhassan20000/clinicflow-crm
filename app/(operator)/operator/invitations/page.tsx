@@ -11,7 +11,7 @@ export default async function OperatorInvitationsPage() {
     supabase.rpc("get_public_registration_status"),
     supabase
       .from("clinic_invitations")
-      .select("id, clinic_name, owner_name, email, phone, status, token_hash, expires_at, created_at, accepted_at")
+      .select("id, clinic_name, owner_name, email, phone, status, token_hash, expires_at, created_at, accepted_at, email_sent_at")
       .order("created_at", { ascending: false })
       .limit(200),
     supabase
@@ -77,7 +77,7 @@ export default async function OperatorInvitationsPage() {
                   {row.status === "pending" && !row.token_hash ? "requested" : row.status}
                   {row.accepted_at ? ` (${row.accepted_at.slice(0, 10)})` : ""}
                 </td>
-                <td className="px-4 py-3 text-muted-foreground">{row.expires_at ? row.expires_at.slice(0, 10) : "—"}</td>
+                <td className="px-4 py-3 text-muted-foreground">{row.expires_at ? row.expires_at.slice(0, 10) : "—"}{row.email_sent_at ? <span className="mt-1 block text-xs text-emerald-700">Email sent {row.email_sent_at.slice(0, 10)}</span> : null}</td>
                 <td className="px-4 py-3">
                   {row.status === "pending" ? (
                     <div className="flex flex-wrap items-start gap-3">

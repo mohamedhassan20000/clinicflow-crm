@@ -3,7 +3,6 @@
 import type { ClinicPrintMeta, ReportDateRange, RevenueSummaryReportResponse } from "@/types/reports";
 import { EmptyReportState, MetricGrid, ReportSectionShell } from "@/components/reports/report-section-shell";
 import {
-  formatCurrency,
   formatDateRangeLabel,
   formatNumber,
   humanizeKey,
@@ -19,7 +18,7 @@ export function RevenueSummaryReport({
   range: ReportDateRange;
   clinic: ClinicPrintMeta;
 }) {
-  const { locale } = useClinicSettings();
+  const { locale, formatCurrency } = useClinicSettings();
   const hasData =
     data.transactionCount > 0 ||
     data.settlementCount > 0 ||
@@ -36,14 +35,14 @@ export function RevenueSummaryReport({
     >
       <MetricGrid
         items={[
-          { label: "Gross total", value: formatCurrency(data.grossTotal, locale) },
-          { label: "Service total", value: formatCurrency(data.totalAmount, locale) },
-          { label: "Primary payments", value: formatCurrency(data.primaryTotal, locale) },
-          { label: "Secondary payments", value: formatCurrency(data.secondaryTotal, locale) },
-          { label: "Insurance", value: formatCurrency(data.insuranceTotal, locale) },
-          { label: "Deposits", value: formatCurrency(data.depositTotal, locale) },
-          { label: "Settlements", value: formatCurrency(data.settlementsTotal, locale) },
-          { label: "Outstanding", value: formatCurrency(data.outstandingTotal, locale) },
+          { label: "Gross total", value: formatCurrency(data.grossTotal) },
+          { label: "Service total", value: formatCurrency(data.totalAmount) },
+          { label: "Primary payments", value: formatCurrency(data.primaryTotal) },
+          { label: "Secondary payments", value: formatCurrency(data.secondaryTotal) },
+          { label: "Insurance", value: formatCurrency(data.insuranceTotal) },
+          { label: "Deposits", value: formatCurrency(data.depositTotal) },
+          { label: "Settlements", value: formatCurrency(data.settlementsTotal) },
+          { label: "Outstanding", value: formatCurrency(data.outstandingTotal) },
         ]}
       />
 
@@ -62,8 +61,8 @@ export function RevenueSummaryReport({
               <tbody>
                 <RevenueRow label="Transactions" value={formatNumber(data.transactionCount, locale)} />
                 <RevenueRow label="Settlement payments" value={formatNumber(data.settlementCount, locale)} />
-                <RevenueRow label="Collected revenue" value={formatCurrency(data.grossTotal, locale)} />
-                <RevenueRow label="Outstanding balance" value={formatCurrency(data.outstandingTotal, locale)} />
+                <RevenueRow label="Collected revenue" value={formatCurrency(data.grossTotal)} />
+                <RevenueRow label="Outstanding balance" value={formatCurrency(data.outstandingTotal)} />
               </tbody>
             </table>
           </div>
@@ -88,7 +87,7 @@ export function RevenueSummaryReport({
                     <tr key={row.method} className="border-t border-border/50">
                       <td className="px-3 py-2 font-medium">{humanizeKey(row.method)}</td>
                       <td className="px-3 py-2 text-right tabular-nums">
-                        {formatCurrency(row.amount, locale)}
+                        {formatCurrency(row.amount)}
                       </td>
                     </tr>
                   ))

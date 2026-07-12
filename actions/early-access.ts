@@ -25,6 +25,7 @@ const requestSchema = z.object({
   clinicName: z.string().trim().min(1).max(200),
   ownerName: z.string().trim().min(1).max(200),
   phone: z.string().trim().min(3).max(50),
+  phoneCountry: z.string().trim().length(2),
   email: z.string().trim().email().max(320),
 });
 
@@ -35,10 +36,12 @@ export async function requestEarlyAccess(
   const parsed = requestSchema.safeParse({
     clinicName: formData.get("clinicName"),
     ownerName: formData.get("ownerName"),
-    phone: formData.get("phone"),
+    phone: formData.get("phone"), phoneCountry: formData.get("phoneCountry"),
     email: formData.get("email"),
   });
   if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  const normalizedPhone = normalizePhone(parsed.data.phone, parsed.data.phoneCountry);
+  if (!normalizedPhone) return { fieldErrors: { phone: ["Enter a valid international phone number"] } };
 
   const limit = await checkRateLimit("early-access", await requestIp(), {
     limit: 5,
@@ -50,7 +53,7 @@ export async function requestEarlyAccess(
   const { error } = await requestClinicInvitation({
     clinicName: parsed.data.clinicName,
     ownerName: parsed.data.ownerName,
-    phone: normalizePhone(parsed.data.phone),
+    phone: normalizedPhone,
     email: normalizeEmail(parsed.data.email),
   });
   if (error) return { error: "We could not save your request. Please try again." };
@@ -128,14 +131,16 @@ export async function createClinicInvitation(
   await requirePlatformAdmin();
   const parsed = requestSchema.safeParse({
     clinicName: formData.get("clinicName"), ownerName: formData.get("ownerName"),
-    phone: formData.get("phone"), email: formData.get("email"),
+    phone: formData.get("phone"), phoneCountry: formData.get("phoneCountry"), email: formData.get("email"),
   });
   if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  const normalizedPhone = normalizePhone(parsed.data.phone, parsed.data.phoneCountry);
+  if (!normalizedPhone) return { fieldErrors: { phone: ["Enter a valid international phone number"] } };
   const supabase = await createClient();
   const { data, error } = await supabase.from("clinic_invitations").insert({
     clinic_name: parsed.data.clinicName,
     owner_name: parsed.data.ownerName,
-    phone: normalizePhone(parsed.data.phone),
+    phone: normalizedPhone,
     email: normalizeEmail(parsed.data.email),
   }).select("id").single();
   if (error || !data) return { error: "Invitation could not be created." };

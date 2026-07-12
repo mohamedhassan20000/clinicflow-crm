@@ -1,6 +1,7 @@
 import { createClinicInvitation } from "@/actions/early-access";
 import { issueInvitationForm, revokeInvitationForm } from "@/actions/operator";
 import { OperatorActionForm } from "@/components/operator/operator-action-form";
+import { InternationalPhoneField } from "@/components/shared/international-phone-input";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function OperatorInvitationsPage() {
@@ -49,7 +50,7 @@ export default async function OperatorInvitationsPage() {
           <div className="grid gap-3 sm:grid-cols-2">
             <input name="clinicName" placeholder="Clinic name" required className="rounded-md border bg-background px-2 py-1 text-sm" />
             <input name="ownerName" placeholder="Owner name" required className="rounded-md border bg-background px-2 py-1 text-sm" />
-            <input name="phone" placeholder="Phone" required className="rounded-md border bg-background px-2 py-1 text-sm" />
+            <InternationalPhoneField name="phone" required />
             <input name="email" type="email" placeholder="owner@example.com" required className="rounded-md border bg-background px-2 py-1 text-sm" />
           </div>
           <label className="flex items-center gap-2 text-sm text-muted-foreground">

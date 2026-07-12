@@ -20,6 +20,7 @@ import {
   type ClinicWorkingHoursValues,
   type DoctorScheduleValues,
 } from "@/lib/validations/settings";
+import { normalizePhone } from "@/lib/phone/registry";
 
 export interface ActionResult {
   error?: string;
@@ -104,7 +105,7 @@ export async function createStaff(
     full_name,
     role,
     department_id: department_id ?? null,
-    phone: phone ?? null,
+    phone: phone ? normalizePhone(phone) : null,
     must_change_password: true,
     is_active: true,
   });
@@ -164,7 +165,7 @@ export async function updateStaff(
       full_name: parsed.data.full_name,
       role: parsed.data.role,
       department_id: parsed.data.department_id ?? null,
-      phone: parsed.data.phone ?? null,
+      phone: parsed.data.phone ? normalizePhone(parsed.data.phone) : null,
       is_active: parsed.data.is_active,
     }, { count: "exact" })
     .eq("id", staffId)
@@ -695,7 +696,7 @@ export async function updateClinic(
     .from("clinics")
     .update({
       name: parsed.data.name,
-      phone: parsed.data.phone ?? null,
+      phone: parsed.data.phone ? normalizePhone(parsed.data.phone) : null,
       address: parsed.data.address ?? null,
       time_format: parsed.data.time_format,
     })

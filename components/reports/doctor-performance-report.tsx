@@ -3,7 +3,6 @@
 import type { ClinicPrintMeta, DoctorPerformanceReportResponse, ReportDateRange } from "@/types/reports";
 import { EmptyReportState, MetricGrid, ReportSectionShell } from "@/components/reports/report-section-shell";
 import {
-  formatCurrency,
   formatDateRangeLabel,
   formatNumber,
   formatPercent,
@@ -19,7 +18,7 @@ export function DoctorPerformanceReport({
   range: ReportDateRange;
   clinic: ClinicPrintMeta;
 }) {
-  const { locale } = useClinicSettings();
+  const { locale, formatCurrency } = useClinicSettings();
   const totals = data.doctors.reduce(
     (acc, row) => ({
       sessions: acc.sessions + row.sessions,
@@ -43,7 +42,7 @@ export function DoctorPerformanceReport({
           { label: "Doctors", value: formatNumber(data.doctors.length, locale) },
           { label: "Sessions", value: formatNumber(totals.sessions, locale) },
           { label: "Completed", value: formatNumber(totals.completed, locale) },
-          { label: "Revenue", value: formatCurrency(totals.revenue, locale) },
+          { label: "Revenue", value: formatCurrency(totals.revenue) },
         ]}
       />
 
@@ -79,7 +78,7 @@ export function DoctorPerformanceReport({
                   <td className="px-3 py-2 text-right tabular-nums">{formatNumber(row.cancelled, locale)}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{formatNumber(row.noShow, locale)}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{formatNumber(row.uniquePatients, locale)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(row.revenue, locale)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(row.revenue)}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{formatPercent(row.completionRate, locale)}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{formatPercent(row.cancellationRate, locale)}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{formatPercent(row.noShowRate, locale)}</td>

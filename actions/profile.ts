@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { requireMutationUser, requireUser } from "@/lib/rbac";
+import { isSupportedCurrency } from "@/lib/currency/registry";
+import { normalizePhone } from "@/lib/phone/registry";
 
 export type ActionResult = {
   ok?: boolean;
@@ -22,7 +24,9 @@ const profileSchema = z.object({
     .trim()
     .max(40, "Phone must be 40 characters or less")
     .nullable()
-    .optional(),
+    .optional()
+    .refine((value) => !value || normalizePhone(value), "Enter a valid phone number")
+    .transform((value) => value ? normalizePhone(value) : null),
 });
 
 const passwordSchema = z
@@ -83,7 +87,7 @@ export async function updateProfile(
     .from("profiles")
     .update({
       full_name: parsed.data.full_name,
-      phone: parsed.data.phone ?? null,
+      phone: parsed.data.phone,
     })
     .eq("id", user.id);
 
@@ -91,6 +95,16 @@ export async function updateProfile(
 
   revalidatePath("/profile");
   revalidatePath("/dashboard");
+  return { ok: true };
+}
+
+export async function updateDisplayCurrency(currency: string): Promise<ActionResult> {
+  const user = await requireMutationUser();
+  if (!isSupportedCurrency(currency)) return { error: "Unsupported display currency." };
+  const supabase = await createClient();
+  const { error } = await supabase.from("profiles").update({ display_currency: currency }).eq("id", user.id);
+  if (error) return { error: "Unable to save display currency." };
+  revalidatePath("/", "layout");
   return { ok: true };
 }
 

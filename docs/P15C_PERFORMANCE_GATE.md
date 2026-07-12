@@ -22,3 +22,20 @@ The production marketing page at `/` must score at least **90 Performance** and 
 Command used:
 
 `pnpm dlx lighthouse http://127.0.0.1:3100/ --only-categories=performance,accessibility --form-factor=mobile --output=json --output-path=/tmp/p15c-lighthouse.json --chrome-flags='--headless --no-sandbox --disable-gpu' --quiet`
+
+## P15-R1 verification — 2026-07-13
+
+The early-access form is now loaded dynamically when its dialog opens, keeping
+the international phone-input dependency out of the marketing page's initial
+JavaScript path. Three consecutive Lighthouse 13.4.0 mobile runs against the
+local production build at `http://127.0.0.1:3100/` produced:
+
+| Run | Performance | Accessibility | Result |
+|---|---:|---:|---|
+| 1 | **96** | **100** | PASS |
+| 2 | **90** | **100** | PASS |
+| 3 | **92** | **100** | PASS |
+
+Command used for each run (with the output path numbered 1–3):
+
+`pnpm dlx lighthouse http://127.0.0.1:3100/ --only-categories=performance,accessibility --form-factor=mobile --output=json --output-path=/tmp/p15-r1-lighthouse-1.json --chrome-flags='--headless --no-sandbox --disable-gpu' --quiet`

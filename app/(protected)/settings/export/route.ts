@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
 import { buildZip, csvRow, type ZipEntry } from "@/lib/zip";
+import { convertForDisplay } from "@/lib/currency/conversion";
 
 const SIGNED_URL_TTL_SECONDS = 24 * 60 * 60;
 
@@ -55,6 +56,15 @@ export async function GET() {
   const supabase = await createClient();
 
   try {
+    const [{ data: clinic }, { data: profile }, { data: fxRows }] = await Promise.all([
+      supabase.from("clinics").select("currency").eq("id", user.clinicId).single(),
+      supabase.from("profiles").select("display_currency").eq("id", user.id).single(),
+      supabase.from("fx_rates").select("currency_code, rate, provider_timestamp, fetched_at"),
+    ]);
+    const canonicalCurrency = clinic?.currency ?? "KWD";
+    const preferredCurrency = profile?.display_currency ?? canonicalCurrency;
+    const rates = (fxRows ?? []).map((row) => ({ currencyCode: row.currency_code, rate: Number(row.rate), providerTimestamp: row.provider_timestamp, fetchedAt: row.fetched_at }));
+    const exportMoney = (amount: number) => convertForDisplay(Number(amount), canonicalCurrency, preferredCurrency, rates);
     const [patients, appointments, notes, services, deposits, settlements, documents] =
       await Promise.all([
         fetchAll("patients", (from, to) =>
@@ -165,15 +175,15 @@ export async function GET() {
       ...notes.map((row) => csvRow([row.id, row.patient_id, row.doctor_id, row.created_at, row.created_by])),
     ]);
     addEntry("invoices.csv", [
-      csvRow(["type", "id", "patient_id", "appointment_id", "name", "amount", "quantity", "payment_method", "settled_at", "note", "created_at"]),
+      csvRow(["type", "id", "patient_id", "appointment_id", "name", "canonical_amount", "canonical_currency", "approximate_display_amount", "display_currency", "fx_rate_timestamp", "quantity", "payment_method", "settled_at", "note", "created_at"]),
       ...services.map((row) =>
-        csvRow(["service", row.id, "", row.appointment_id, row.name, row.price, row.quantity, "", "", "", row.created_at]),
+        (() => { const money = exportMoney(row.price); return csvRow(["service", row.id, "", row.appointment_id, row.name, row.price, canonicalCurrency, money.approximate ? money.display : "", money.approximate ? money.displayCurrency : "", money.rateTimestamp ?? "", row.quantity, "", "", "", row.created_at]); })(),
       ),
       ...deposits.map((row) =>
-        csvRow(["deposit", row.id, row.patient_id, "", "", row.amount, "", row.payment_method, "", row.note, row.created_at]),
+        (() => { const money = exportMoney(row.amount); return csvRow(["deposit", row.id, row.patient_id, "", "", row.amount, canonicalCurrency, money.approximate ? money.display : "", money.approximate ? money.displayCurrency : "", money.rateTimestamp ?? "", "", row.payment_method, "", row.note, row.created_at]); })(),
       ),
       ...settlements.map((row) =>
-        csvRow(["settlement", row.id, row.patient_id, row.appointment_id, "", row.amount, "", row.payment_method, row.settled_at, row.note, row.created_at]),
+        (() => { const money = exportMoney(row.amount); return csvRow(["settlement", row.id, row.patient_id, row.appointment_id, "", row.amount, canonicalCurrency, money.approximate ? money.display : "", money.approximate ? money.displayCurrency : "", money.rateTimestamp ?? "", "", row.payment_method, row.settled_at, row.note, row.created_at]); })(),
       ),
     ]);
     addEntry("documents.csv", [

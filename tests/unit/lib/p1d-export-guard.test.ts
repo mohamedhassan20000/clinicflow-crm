@@ -31,6 +31,7 @@ function makeBuilder() {
   for (const method of ["select", "eq", "is", "order", "range"]) {
     builder[method] = vi.fn(() => builder);
   }
+  builder.single = vi.fn(async () => ({ data: {}, error: null }));
   // Short (empty) page terminates the export's pagination loop immediately.
   builder.then = (resolve: (value: unknown) => void) => resolve({ data: [], error: null });
   return builder as never;

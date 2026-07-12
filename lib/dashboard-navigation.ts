@@ -31,6 +31,7 @@ export function getTenantShellNavigation(
   visiblePages: readonly PageSlug[],
 ): TenantShellNavItem[] {
   const visible = new Set(visiblePages);
+
   return PAGE_DEFINITIONS
     .filter((page) => page.alwaysVisible || visible.has(page.slug))
     .map((page) => ({

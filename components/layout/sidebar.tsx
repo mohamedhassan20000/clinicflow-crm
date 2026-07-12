@@ -28,7 +28,11 @@ const OPERATOR_ICONS: Record<OperatorIconKey, LucideIcon> = {
 };
 
 function resolveIcon(item: ShellNavItem): LucideIcon {
-  return "mission-control" === item.icon || "clinics" === item.icon || "invitations" === item.icon || "coupons" === item.icon || "reports" === item.icon
+  return "mission-control" === item.icon ||
+    "clinics" === item.icon ||
+    "invitations" === item.icon ||
+    "coupons" === item.icon ||
+    "reports" === item.icon
     ? OPERATOR_ICONS[item.icon]
     : TENANT_ICONS[item.icon];
 }

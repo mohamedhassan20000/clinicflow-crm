@@ -61,7 +61,10 @@ export function Sidebar({
       data-collapsed={isCollapsed}
       className={cn(
         "flex h-full shrink-0 flex-col border-e border-sidebar-border bg-sidebar text-sidebar-foreground",
-        mode === "sidebar" && "sticky top-0 hidden h-dvh self-start md:flex transition-[width] duration-200 ease-out",
+        // z-40: sticky positioning creates a stacking context, so the collapse
+        // toggle's overhang would otherwise be painted over by the content
+        // column's sticky header (z-30).
+        mode === "sidebar" && "sticky top-0 z-40 hidden h-dvh self-start md:flex transition-[width] duration-200 ease-out",
         mode === "sidebar" && (isCollapsed ? "w-20" : "w-72"),
       )}
     >
@@ -74,7 +77,7 @@ export function Sidebar({
             onClick={() => onCollapsedChange?.(!collapsed)}
             aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             aria-expanded={!isCollapsed}
-            className="absolute inset-e-0 top-1/2 flex size-7 translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-sidebar-border bg-sidebar text-sidebar-foreground shadow-sm transition-colors hover:bg-sidebar-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sidebar-ring rtl:-translate-x-1/2"
+            className="absolute inset-e-0 top-1/2 z-40 flex size-7 translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-sidebar-border bg-sidebar text-sidebar-foreground shadow-sm transition-colors before:absolute before:-inset-2.5 before:content-[''] hover:bg-sidebar-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sidebar-ring rtl:-translate-x-1/2"
           >
             {isCollapsed ? <ChevronRight className="size-4 rtl:rotate-180" /> : <ChevronLeft className="size-4 rtl:rotate-180" />}
           </button>

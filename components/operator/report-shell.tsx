@@ -1,14 +1,255 @@
-import type { OperatorReportDefinition, ReportRow } from "@/lib/operator-reports/types";
+import Link from "next/link";
+import { ArrowDown, ArrowUp, Download, FileBarChart, FilterX } from "lucide-react";
+import { ReportFilterCombobox } from "@/components/operator/report-filter-combobox";
+import { DataTable } from "@/components/shared/data-table";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { pathWithSearch } from "@/lib/navigation/return-url";
+import {
+  REPORT_EXPORT_LIMIT,
+  REPORT_AGGREGATE_SOURCE_LIMIT,
+  REPORT_PAGE_SIZES,
+  clearedReportSearchParams,
+  reportParamsToSearchParams,
+  type OperatorReportDefinition,
+  type ParsedReportParams,
+  type ReportFilterOption,
+  type ReportQueryResult,
+  type ReportRow,
+} from "@/lib/operator-reports/types";
 
-export function ReportShell({ definition, rows }: { definition: OperatorReportDefinition; rows: ReportRow[] }) {
+function hiddenState(
+  definition: OperatorReportDefinition,
+  params: ParsedReportParams,
+  omitted: ReadonlySet<string>,
+) {
+  const values = reportParamsToSearchParams(definition, params);
+  return [...values.entries()]
+    .filter(([key]) => !omitted.has(key))
+    .map(([key, value]) => <input key={key} type="hidden" name={key} value={value} />);
+}
+
+function reportHref(
+  definition: OperatorReportDefinition,
+  params: ParsedReportParams,
+  changes: Partial<Pick<ParsedReportParams, "sort" | "direction" | "page" | "pageSize">>,
+) {
+  const next = { ...params, ...changes };
+  return pathWithSearch(
+    `/operator/reports/${definition.id}`,
+    reportParamsToSearchParams(definition, next),
+  );
+}
+
+export function ReportShell({
+  definition,
+  result,
+  params,
+  filterOptions,
+}: {
+  definition: OperatorReportDefinition;
+  result: ReportQueryResult;
+  params: ParsedReportParams;
+  filterOptions: Record<string, readonly ReportFilterOption[]>;
+}) {
+  const basePath = `/operator/reports/${definition.id}`;
+  const clearHref = pathWithSearch(basePath, clearedReportSearchParams(definition));
+  const exportParams = reportParamsToSearchParams(definition, params, {
+    includePage: false,
+    includePageSize: false,
+  });
+  const exportHref = pathWithSearch(`${basePath}/export`, exportParams);
+  const firstVisible = result.total === 0 ? 0 : (result.page - 1) * result.pageSize + 1;
+  const lastVisible = Math.min(result.total, result.page * result.pageSize);
+
+  const columns = definition.columns.map((column) => {
+    const sortDefinition = definition.sorts.find((sort) => sort.key === column.key);
+    const active = params.sort === column.key;
+    const nextDirection = active
+      ? params.direction === "asc"
+        ? "desc"
+        : "asc"
+      : sortDefinition?.defaultDirection ?? "asc";
+    return {
+      key: column.key,
+      numeric: column.numeric,
+      ariaSort: column.sortable
+        ? active
+          ? params.direction === "asc"
+            ? ("ascending" as const)
+            : ("descending" as const)
+          : ("none" as const)
+        : undefined,
+      label: column.sortable ? (
+        <Link
+          href={reportHref(definition, params, {
+            sort: column.key,
+            direction: nextDirection,
+            page: 1,
+          })}
+          className="inline-flex min-h-11 items-center gap-1.5 rounded-sm underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          aria-label={`Sort by ${column.label} ${nextDirection === "asc" ? "ascending" : "descending"}`}
+        >
+          {column.label}
+          {active ? (
+            params.direction === "asc" ? (
+              <ArrowUp className="size-3.5" aria-hidden="true" />
+            ) : (
+              <ArrowDown className="size-3.5" aria-hidden="true" />
+            )
+          ) : null}
+        </Link>
+      ) : (
+        column.label
+      ),
+    };
+  });
+
   return (
-    <section className="overflow-hidden rounded-2xl border bg-card shadow-sm">
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b p-5">
-        <div><h2 className="text-lg font-semibold">{definition.title}</h2><p className="text-sm text-muted-foreground">{definition.description}</p></div>
-        <a href={`/operator/reports/${definition.id}/export`} className="rounded-lg border px-3 py-2 text-sm font-medium hover:bg-muted">Export CSV</a>
-      </div>
-      <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-muted/50"><tr>{definition.columns.map((column) => <th key={column.key} className="px-5 py-3 text-start font-medium text-muted-foreground">{column.label}</th>)}</tr></thead><tbody>{rows.map((row, index) => <tr key={index} className="border-t">{definition.columns.map((column) => <td key={column.key} className="px-5 py-3">{String(row[column.key] ?? "—")}</td>)}</tr>)}</tbody></table></div>
-      {rows.length === 0 ? <p className="p-8 text-center text-sm text-muted-foreground">No records.</p> : null}
-    </section>
+    <div className="space-y-4">
+      <form method="get" className="rounded-2xl border bg-card p-4 shadow-sm">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {definition.filters.map((filter) => {
+            const value = params.filters[filter.key] ?? filter.clearValue;
+            const options = filterOptions[filter.key] ?? filter.options ?? [];
+            return (
+              <label key={filter.key} className="grid content-start gap-1.5 text-sm font-medium">
+                <span>{filter.label}</span>
+                {filter.kind === "combobox" ? (
+                  <ReportFilterCombobox
+                    key={`${filter.key}:${value}`}
+                    name={filter.key}
+                    value={value}
+                    options={options}
+                    label={filter.label}
+                    placeholder={filter.placeholder ?? filter.label}
+                  />
+                ) : filter.kind === "select" ? (
+                  <select
+                    key={`${filter.key}:${value}`}
+                    name={filter.key}
+                    defaultValue={value}
+                    className="h-10 rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                  >
+                    {options.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <Input
+                    key={`${filter.key}:${value}`}
+                    type={filter.kind === "text" ? "text" : filter.kind}
+                    name={filter.key}
+                    defaultValue={value === filter.clearValue ? "" : value}
+                    placeholder={filter.placeholder}
+                    maxLength={filter.kind === "text" ? 80 : undefined}
+                  />
+                )}
+              </label>
+            );
+          })}
+        </div>
+        {hiddenState(definition, params, new Set([
+          ...definition.filters.map((filter) => filter.key),
+          "page",
+        ]))}
+        <input type="hidden" name="page" value="1" />
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <Button type="submit">Apply filters</Button>
+          <Button asChild type="button" variant="outline">
+            <Link href={clearHref}>
+              <FilterX className="size-4" aria-hidden="true" />
+              Clear filters
+            </Link>
+          </Button>
+        </div>
+      </form>
+
+      <section className="overflow-hidden rounded-2xl border bg-card shadow-sm" aria-labelledby={`${definition.id}-table-title`}>
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b p-5">
+          <div>
+            <h2 id={`${definition.id}-table-title`} className="text-lg font-semibold">{definition.title}</h2>
+            <p className="text-sm text-muted-foreground">
+              {result.total === 0
+                ? "No rows"
+                : `Showing ${firstVisible}–${lastVisible} of ${result.total}`}
+            </p>
+          </div>
+          <Button asChild variant="outline">
+            <a href={exportHref}>
+              <Download className="size-4" aria-hidden="true" />
+              Export filtered CSV
+            </a>
+          </Button>
+        </div>
+
+        {result.sourceTruncated ? (
+          <p role="status" className="border-b border-amber-300 bg-amber-50 px-5 py-3 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
+            This aggregate reached its {REPORT_AGGREGATE_SOURCE_LIMIT.toLocaleString()}-row safety cap. Narrow the filters for complete results.
+          </p>
+        ) : null}
+
+        <DataTable
+          columns={columns}
+          rows={result.rows as ReportRow[]}
+          rowKey={(row, index) => String(row.clinic_id ?? row.invitation_id ?? row.audit_id ?? row.month ?? index)}
+          caption={`${definition.title} report`}
+          stickyHeader
+          empty={{
+            icon: result.hasAnyData ? FilterX : FileBarChart,
+            title: result.hasAnyData ? "No rows match these filters" : "No report data yet",
+            description: result.hasAnyData
+              ? "Clear the active filters to return to the full report data set."
+              : "Data appears here when the platform records the first matching event.",
+            action: result.hasAnyData ? (
+              <Button asChild variant="outline"><Link href={clearHref}>Clear filters</Link></Button>
+            ) : undefined,
+          }}
+        />
+
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t px-5 py-4">
+          <form method="get" className="flex items-center gap-2 text-sm">
+            {hiddenState(definition, params, new Set(["page", "pageSize"]))}
+            <input type="hidden" name="page" value="1" />
+            <label htmlFor={`${definition.id}-page-size`} className="text-muted-foreground">Rows per page</label>
+            <select
+              key={params.pageSize}
+              id={`${definition.id}-page-size`}
+              name="pageSize"
+              defaultValue={String(params.pageSize)}
+              className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+            >
+              {REPORT_PAGE_SIZES.map((size) => <option key={size} value={size}>{size}</option>)}
+            </select>
+            <Button type="submit" size="sm" variant="outline">Update</Button>
+          </form>
+
+          <nav aria-label={`${definition.title} pagination`} className="flex items-center gap-2">
+            <Button asChild variant="outline" size="sm" aria-disabled={result.page <= 1}>
+              <Link
+                href={reportHref(definition, params, { page: Math.max(1, result.page - 1) })}
+                tabIndex={result.page <= 1 ? -1 : undefined}
+                className={result.page <= 1 ? "pointer-events-none opacity-50" : undefined}
+              >
+                Previous
+              </Link>
+            </Button>
+            <span className="min-w-24 text-center text-sm tabular-nums text-muted-foreground">
+              Page {result.page} of {result.totalPages}
+            </span>
+            <Button asChild variant="outline" size="sm" aria-disabled={result.page >= result.totalPages}>
+              <Link
+                href={reportHref(definition, params, { page: Math.min(result.totalPages, result.page + 1) })}
+                tabIndex={result.page >= result.totalPages ? -1 : undefined}
+                className={result.page >= result.totalPages ? "pointer-events-none opacity-50" : undefined}
+              >
+                Next
+              </Link>
+            </Button>
+          </nav>
+        </div>
+        <p className="sr-only">CSV exports ignore pagination and are capped at {REPORT_EXPORT_LIMIT.toLocaleString()} filtered rows.</p>
+      </section>
+    </div>
   );
 }

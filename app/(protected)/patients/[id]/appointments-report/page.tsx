@@ -1,17 +1,17 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
-import { ChevronLeft, FileText } from "lucide-react";
 import { requireUser } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
 import { StatusBadge } from "@/components/appointments/status-badge";
 import { formatDoctorName } from "@/lib/format-doctor";
 import { formatTime } from "@/lib/format-time";
-import { PrintButton } from "@/components/patients/print-button";
 import { PrintHeader } from "@/components/shared/print-header";
+import { PatientReportHeader } from "@/components/patients/patient-report-header";
+import { resolveReturnTo } from "@/lib/navigation/return-url";
 import { ReportDateFilter } from "@/components/patients/report-date-filter";
 import { AppointmentsReportList } from "@/components/patients/appointments-report-list";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type {
   AppointmentPaymentRowData,
   SettlementEntry,
@@ -21,7 +21,7 @@ export const metadata: Metadata = { title: "Appointments Report" };
 
 interface PageProps {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ from?: string; to?: string }>;
+  searchParams: Promise<{ from?: string; to?: string; returnTo?: string }>;
 }
 
 export default async function AppointmentsReportPage({
@@ -29,7 +29,9 @@ export default async function AppointmentsReportPage({
   searchParams,
 }: PageProps) {
   const { id } = await params;
-  const { from, to } = await searchParams;
+  const { from, to, returnTo } = await searchParams;
+  const patientPath = `/patients/${id}`;
+  const patientHref = resolveReturnTo(returnTo, patientPath, [patientPath]);
   const user = await requireUser();
   const isDoctor = user.role === "doctor";
   const supabase = await createClient();
@@ -120,42 +122,14 @@ export default async function AppointmentsReportPage({
         documentName="Appointments Report"
         generatedAt={generatedAt}
       />
-      <div className="flex items-center gap-2 print:hidden text-sm text-muted-foreground">
-        <Link
-          href={`/patients/${id}`}
-          className="flex items-center gap-1 hover:text-foreground transition-colors"
-        >
-          <ChevronLeft className="h-4 w-4" />
-          Back to patient
-        </Link>
-      </div>
-
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <FileText className="h-5 w-5 text-muted-foreground print:hidden" aria-hidden />
-            <h1 className="text-2xl font-semibold tracking-tight">
-              Appointments Report
-            </h1>
-          </div>
-          <div className="mt-2 space-y-0.5 text-sm text-muted-foreground">
-            <p className="font-medium text-foreground text-base">
-              {patient.full_name}
-            </p>
-            {patient.file_number && (
-              <p>
-                File: <span className="font-mono">{patient.file_number}</span>
-              </p>
-            )}
-            {patient.phone && <p>Phone: {patient.phone}</p>}
-            <p>
-              {appts.length} appointment{appts.length !== 1 ? "s" : ""}
-              {(from || to) && " (filtered)"}
-            </p>
-          </div>
-        </div>
-        <PrintButton />
-      </div>
+      <PatientReportHeader
+        patientHref={patientHref}
+        patientName={patient.full_name}
+        fileNumber={patient.file_number}
+        phone={patient.phone}
+        title="Appointments Report"
+        countLabel={`${appts.length} appointment${appts.length !== 1 ? "s" : ""}${from || to ? " (filtered)" : ""}`}
+      />
 
       <ReportDateFilter from={from} to={to} />
 
@@ -217,30 +191,30 @@ function DoctorApptPrintTable({
   appts: any[];
 }) {
   return (
-    <table>
-      <thead>
-        <tr>
-          <th>Date &amp; Time</th>
-          <th>Doctor</th>
-          <th>Department</th>
-          <th>Status</th>
-        </tr>
-      </thead>
-      <tbody>
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Date &amp; Time</TableHead>
+          <TableHead>Doctor</TableHead>
+          <TableHead>Department</TableHead>
+          <TableHead>Status</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
         {appts.map((a) => {
           const packageLine = formatPackagePrintLine(a);
 
           return (
-            <tr key={a.id}>
-              <td style={{ whiteSpace: "nowrap" }}>
+            <TableRow key={a.id}>
+              <TableCell style={{ whiteSpace: "nowrap" }}>
                 {new Date(a.scheduled_at).toLocaleString("en-GB", {
                   timeZone: DEFAULT_TIME_ZONE,
                   dateStyle: "medium",
                   timeStyle: "short",
                 })}
-              </td>
-              <td>{formatDoctorName(a.profiles?.full_name)}</td>
-              <td>
+              </TableCell>
+              <TableCell>{formatDoctorName(a.profiles?.full_name)}</TableCell>
+              <TableCell>
                 <div>{a.departments?.name ?? "—"}</div>
                 {packageLine && (
                   <div
@@ -254,15 +228,15 @@ function DoctorApptPrintTable({
                     {packageLine}
                   </div>
                 )}
-              </td>
-              <td style={{ textTransform: "capitalize" }}>
+              </TableCell>
+              <TableCell style={{ textTransform: "capitalize" }}>
                 {a.status.replace("_", " ")}
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           );
         })}
-      </tbody>
-    </table>
+      </TableBody>
+    </Table>
   );
 }
 

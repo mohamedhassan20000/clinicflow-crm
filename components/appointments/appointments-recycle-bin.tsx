@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Loader2, RotateCcw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -250,68 +251,58 @@ export function AppointmentsRecycleBin({
         Appointments are permanently deleted after 30 days. Restore to bring
         them back.
       </p>
-      <div className="overflow-x-auto">
-        <table className="w-full table-fixed text-sm">
-          <colgroup>
-            <col />
-            <col className="w-44" />
-            <col className="w-40" />
-            <col className="w-56" />
-          </colgroup>
-          <thead className="border-b border-destructive/10 bg-destructive/5">
-            <tr>
-              <th className="px-4 py-2 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                Patient
-              </th>
-              <th className="px-4 py-2 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                Doctor
-              </th>
-              <th className="px-4 py-2 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                Date
-              </th>
-              <th className="px-4 py-2 text-right text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border/40">
-            {items.map((item) => {
-              const days = daysLeft(item.deletedAt);
-              return (
-                <tr key={item.id} className="hover:bg-muted/20 transition-colors">
-                  <td className="max-w-0 px-4 py-2.5">
-                    <p className="truncate font-medium text-muted-foreground line-through decoration-destructive/40">
-                      {item.patientName}
-                    </p>
-                    <p
-                      className={`text-xs ${days <= 3 ? "font-semibold text-destructive" : "text-muted-foreground/70"}`}
-                    >
-                      {days === 0
-                        ? "Expires today"
-                        : `${days} day${days !== 1 ? "s" : ""} left`}
-                    </p>
-                  </td>
-                  <td className="px-4 py-2.5 text-muted-foreground">
-                    {item.doctorName}
-                  </td>
-                  <td className="px-4 py-2.5 text-xs text-muted-foreground">
-                    {fmtDate(item.scheduledAt)}
-                  </td>
-                  <td className="px-4 py-2.5 text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <RestoreButton item={item} onRestore={onRestore} />
-                      <PermanentDeleteButton
-                        item={item}
-                        onPermanentDelete={onPermanentDelete}
-                      />
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      <Table className="table-fixed">
+        <colgroup>
+          <col />
+          <col className="w-44" />
+          <col className="w-40" />
+          <col className="w-56" />
+        </colgroup>
+        <TableHeader className="[&_tr]:border-b-2 [&_tr]:border-destructive/10 bg-destructive/5">
+          <TableRow>
+            <TableHead>Patient</TableHead>
+            <TableHead>Doctor</TableHead>
+            <TableHead>Date</TableHead>
+            <TableHead className="text-end">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {items.map((item) => {
+            const days = daysLeft(item.deletedAt);
+            return (
+              <TableRow key={item.id}>
+                <TableCell className="max-w-0">
+                  <p className="truncate font-medium text-muted-foreground line-through decoration-destructive/40">
+                    {item.patientName}
+                  </p>
+                  <p
+                    className={`text-xs ${days <= 3 ? "font-semibold text-destructive" : "text-muted-foreground/70"}`}
+                  >
+                    {days === 0
+                      ? "Expires today"
+                      : `${days} day${days !== 1 ? "s" : ""} left`}
+                  </p>
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {item.doctorName}
+                </TableCell>
+                <TableCell className="text-xs text-muted-foreground">
+                  {fmtDate(item.scheduledAt)}
+                </TableCell>
+                <TableCell className="text-end">
+                  <div className="flex items-center justify-end gap-1">
+                    <RestoreButton item={item} onRestore={onRestore} />
+                    <PermanentDeleteButton
+                      item={item}
+                      onPermanentDelete={onPermanentDelete}
+                    />
+                  </div>
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
     </div>
   );
 }

@@ -12,7 +12,16 @@ import { AppointmentCard } from "@/components/appointments/week-calendar";
 import { HourAppointmentsDialog } from "@/components/appointments/hour-appointments-dialog";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
 import type { ClinicWorkingHoursValues } from "@/lib/validations/settings";
-import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
+import {
+  CALENDAR_HEADER_HEIGHT_PX,
+  CALENDAR_STYLES,
+  CalendarNonWorkingBands,
+  CalendarNowIndicator,
+  getCalendarGridBounds,
+  getCalendarNonWorkingBands,
+  minutesInClinicTimeZone,
+  useCalendarNow,
+} from "@/components/appointments/calendar-visuals";
 
 type Appointment = AppointmentForDetail;
 
@@ -20,45 +29,8 @@ type Appointment = AppointmentForDetail;
 const BUCKET_H_PX = 420;
 const CARD_H_PX   = 110;
 
-function timeStrToMin(t: string): number {
-  const [h, m] = t.split(":").map(Number);
-  return (h ?? 0) * 60 + (m ?? 0);
-}
-
 function apptStartMin(appt: Appointment): number {
-  return timeStrToMin(
-    new Date(appt.scheduled_at).toLocaleTimeString("en-GB", {
-      hour: "2-digit",
-      minute: "2-digit",
-      timeZone: DEFAULT_TIME_ZONE,
-    }),
-  );
-}
-
-interface GridBounds { startMin: number; endMin: number; }
-interface BreakBand  { startMin: number; endMin: number; }
-
-function getGridBounds(clinicHours: ClinicWorkingHoursValues): GridBounds {
-  const allShifts = clinicHours.flatMap((d) => (d.open ? d.shifts : []));
-  if (allShifts.length === 0) return { startMin: 8 * 60, endMin: 18 * 60 };
-  const starts = allShifts.map((s) => timeStrToMin(s.shift_start));
-  const ends   = allShifts.map((s) => timeStrToMin(s.shift_end));
-  return { startMin: Math.min(...starts), endMin: Math.max(...ends) };
-}
-
-function getBreakBands(clinicHours: ClinicWorkingHoursValues, dow: number): BreakBand[] {
-  const day = clinicHours.find((d) => d.day_of_week === dow);
-  if (!day?.open || day.shifts.length < 2) return [];
-  const sorted = [...day.shifts].sort(
-    (a, b) => timeStrToMin(a.shift_start) - timeStrToMin(b.shift_start),
-  );
-  const bands: BreakBand[] = [];
-  for (let i = 0; i < sorted.length - 1; i++) {
-    const gapStart = timeStrToMin(sorted[i]!.shift_end);
-    const gapEnd   = timeStrToMin(sorted[i + 1]!.shift_start);
-    if (gapEnd > gapStart) bands.push({ startMin: gapStart, endMin: gapEnd });
-  }
-  return bands;
+  return minutesInClinicTimeZone(new Date(appt.scheduled_at));
 }
 
 function isDayClosed(clinicHours: ClinicWorkingHoursValues, dow: number): boolean {
@@ -100,6 +72,14 @@ function fmt(d: Date) {
 
 function dateToDow(d: Date): number { return d.getDay(); }
 
+function isSameDay(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 interface Props {
@@ -109,6 +89,7 @@ interface Props {
   currentUserId?: string;
   currentUserRole?: "admin" | "receptionist" | "manager" | "doctor";
   clinicHours?: ClinicWorkingHoursValues;
+  newAppointmentHref?: string;
 }
 
 export function DayCalendar({
@@ -118,8 +99,10 @@ export function DayCalendar({
   currentUserId,
   currentUserRole,
   clinicHours = [],
+  newAppointmentHref = "/appointments/new",
 }: Props) {
   const { formatSlotTime } = useClinicSettings();
+  const currentDate = useCalendarNow();
 
   const prev = addDays(date, -1);
   const next = addDays(date, 1);
@@ -133,16 +116,21 @@ export function DayCalendar({
     [appointments],
   );
 
-  const { startMin, endMin } = getGridBounds(clinicHours);
+  const bounds = getCalendarGridBounds(clinicHours);
+  const { startMin, endMin } = bounds;
   const hourRows: number[] = [];
   for (let m = startMin; m < endMin; m += 60) hourRows.push(m);
 
-  const breaks      = getBreakBands(clinicHours, dow);
   const closed      = isDayClosed(clinicHours, dow);
+  const nonWorkingBands = getCalendarNonWorkingBands(clinicHours, dow, bounds);
   const hourBuckets = groupByHourBucket(sorted);
+  const isToday     = isSameDay(date, currentDate);
+  const nowMin      = minutesInClinicTimeZone(currentDate);
+  const showNowLine = isToday && !closed && nowMin >= startMin && nowMin <= endMin;
+  const nowTopPx    = CALENDAR_HEADER_HEIGHT_PX + ((nowMin - startMin) / 60) * BUCKET_H_PX;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-calendar-view="day">
       {/* Navigation */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -167,7 +155,7 @@ export function DayCalendar({
         </div>
         {canEdit && (
           <Button asChild size="sm" className="shrink-0 gap-1.5">
-            <Link href="/appointments/new">
+            <Link href={newAppointmentHref}>
               <CalendarPlus className="h-4 w-4" />
               New appointment
             </Link>
@@ -176,19 +164,19 @@ export function DayCalendar({
       </div>
 
       {/* Time grid — same bucket layout as week view */}
-      <div className="overflow-x-auto rounded-xl border border-border/40 bg-card/40">
+      <div className={CALENDAR_STYLES.frame} data-calendar-grid>
         <div className="flex" style={{ minWidth: 320 }}>
 
           {/* Time axis */}
-          <div className="w-16 shrink-0 border-r border-border/30">
-            <div className="h-8 border-b border-border/30" />
+          <div className={CALENDAR_STYLES.timeAxis}>
+            <div className={CALENDAR_STYLES.timeAxisHeader} />
             {hourRows.map((hMin) => (
               <div
                 key={hMin}
-                className="border-b border-border/20 flex items-center justify-center"
+                className={`${CALENDAR_STYLES.hourRow} flex items-start justify-center pt-1`}
                 style={{ height: BUCKET_H_PX }}
               >
-                <span className="text-[9px] text-muted-foreground/50 leading-none whitespace-nowrap">
+                <span className={CALENDAR_STYLES.hourLabel} data-calendar-hour-label>
                   {formatSlotTime(`${String(Math.floor(hMin / 60)).padStart(2, "0")}:00`)}
                 </span>
               </div>
@@ -196,41 +184,42 @@ export function DayCalendar({
           </div>
 
           {/* Day column */}
-          <div className="flex-1 flex flex-col">
+          <div
+            data-calendar-today-body={isToday && !closed ? "true" : undefined}
+            className={`relative flex flex-1 flex-col ${
+              isToday && !closed ? CALENDAR_STYLES.todayBody : ""
+            }`}
+          >
             {/* Day header */}
-            <div className="h-8 flex items-center justify-center text-xs font-medium border-b border-border/30 bg-muted/30 text-muted-foreground">
+            <div
+              data-calendar-day-header
+              data-today={isToday ? "true" : undefined}
+              className={
+                isToday ? CALENDAR_STYLES.todayHeader : CALENDAR_STYLES.dayHeader
+              }
+            >
               {date.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}
             </div>
 
             {closed ? (
               <div
-                className="flex items-center justify-center bg-muted/40"
+                data-calendar-non-working="closed"
+                className="calendar-non-working-band flex items-center justify-center"
                 style={{ height: hourRows.length * BUCKET_H_PX }}
               >
-                <span className="text-[9px] text-muted-foreground/50 font-medium uppercase tracking-widest">
+                <span className={CALENDAR_STYLES.nonWorkingLabel}>
                   Closed
                 </span>
               </div>
             ) : (
               <>
-                {hourRows.map((hMin) => {
-                  const isBreak = breaks.some(
-                    (b) => b.startMin <= hMin && b.endMin >= hMin + 60,
-                  );
-                  if (isBreak) {
-                    return (
-                      <div
-                        key={hMin}
-                        className="border-b border-border/20 bg-muted/40 flex items-center justify-center"
-                        style={{ height: BUCKET_H_PX }}
-                      >
-                        <span className="text-[9px] text-muted-foreground/50 font-medium uppercase tracking-widest">
-                          Break
-                        </span>
-                      </div>
-                    );
-                  }
+                <CalendarNonWorkingBands
+                  bands={nonWorkingBands}
+                  gridStartMin={startMin}
+                  hourHeightPx={BUCKET_H_PX}
+                />
 
+                {hourRows.map((hMin) => {
                   const appts = hourBuckets.get(hMin) ?? [];
                   return (
                     <DayBucketCell
@@ -246,15 +235,26 @@ export function DayCalendar({
 
                 {sorted.length === 0 && (
                   <div
-                    className="flex items-center justify-center"
-                    style={{ height: hourRows.length * BUCKET_H_PX }}
+                    className="pointer-events-none absolute inset-x-0 z-10 flex items-center justify-center"
+                    style={{ top: CALENDAR_HEADER_HEIGHT_PX, height: hourRows.length * BUCKET_H_PX }}
                   >
-                    <span className="text-xs text-muted-foreground/40">
+                    <span className="text-xs text-foreground/70">
                       No appointments scheduled for this day.
                     </span>
                   </div>
                 )}
               </>
+            )}
+
+            {showNowLine && (
+              <CalendarNowIndicator
+                top={nowTopPx}
+                label={`Current time, ${formatSlotTime(
+                  `${String(Math.floor(nowMin / 60)).padStart(2, "0")}:${String(
+                    nowMin % 60,
+                  ).padStart(2, "0")}`,
+                )}`}
+              />
             )}
           </div>
         </div>
@@ -285,7 +285,7 @@ function DayBucketCell({
 
   return (
     <div
-      className="border-b border-border/20 px-0.5 py-0.5 flex flex-col gap-0.5 overflow-hidden"
+      className={`${CALENDAR_STYLES.hourRow} z-10 flex flex-col gap-0.5 overflow-hidden px-0.5 py-0.5`}
       style={{ height: BUCKET_H_PX }}
     >
       {visible.map((appt) => (
@@ -302,7 +302,7 @@ function DayBucketCell({
       {hasMore && (
         <button
           onClick={() => setShowAllOpen(true)}
-          className="mt-auto text-[9px] text-primary font-medium hover:underline text-left px-1 leading-none py-0.5 shrink-0"
+          className="mt-auto shrink-0 px-1 py-0.5 text-start text-[11px] font-medium leading-none text-foreground/70 hover:text-foreground hover:underline"
         >
           Show all ({appts.length})
         </button>

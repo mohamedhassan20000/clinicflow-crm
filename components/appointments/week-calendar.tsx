@@ -17,7 +17,16 @@ import { isDayClosed } from "@/lib/calendar-utils";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
 import { HourAppointmentsDialog } from "@/components/appointments/hour-appointments-dialog";
 import { DeleteConfirmDialog } from "@/components/appointments/delete-confirm-dialog";
-import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
+import {
+  CALENDAR_HEADER_HEIGHT_PX,
+  CALENDAR_STYLES,
+  CalendarNonWorkingBands,
+  CalendarNowIndicator,
+  getCalendarGridBounds,
+  getCalendarNonWorkingBands,
+  minutesInClinicTimeZone,
+  useCalendarNow,
+} from "@/components/appointments/calendar-visuals";
 
 type Appointment = AppointmentForDetail;
 
@@ -25,58 +34,9 @@ type Appointment = AppointmentForDetail;
 const BUCKET_H_PX = 420; // fixed height per hour row — fits 3 full compact cards
 const CARD_H_PX   = 110; // compact card: name + badge + time + doctor + dept
 
-function timeStrToMin(t: string): number {
-  const [h, m] = t.split(":").map(Number);
-  return (h ?? 0) * 60 + (m ?? 0);
-}
-
 // Returns the appointment's start time in minutes since midnight (Istanbul).
 function apptStartMin(appt: Appointment): number {
-  return timeStrToMin(
-    new Date(appt.scheduled_at).toLocaleTimeString("en-GB", {
-      hour: "2-digit",
-      minute: "2-digit",
-      timeZone: DEFAULT_TIME_ZONE,
-    }),
-  );
-}
-
-interface GridBounds {
-  startMin: number; // grid top edge in minutes
-  endMin: number;   // grid bottom edge in minutes
-}
-
-// Break periods = gaps between consecutive clinic shifts for a given day.
-interface BreakBand {
-  startMin: number;
-  endMin: number;
-}
-
-function getGridBounds(clinicHours: ClinicWorkingHoursValues): GridBounds {
-  const allShifts = clinicHours.flatMap((d) => (d.open ? d.shifts : []));
-  if (allShifts.length === 0) return { startMin: 8 * 60, endMin: 18 * 60 };
-  const starts = allShifts.map((s) => timeStrToMin(s.shift_start));
-  const ends = allShifts.map((s) => timeStrToMin(s.shift_end));
-  return { startMin: Math.min(...starts), endMin: Math.max(...ends) };
-}
-
-// Returns break bands for a specific day-of-week (0=Sun…6=Sat).
-function getBreakBands(
-  clinicHours: ClinicWorkingHoursValues,
-  dow: number,
-): BreakBand[] {
-  const day = clinicHours.find((d) => d.day_of_week === dow);
-  if (!day?.open || day.shifts.length < 2) return [];
-  const sorted = [...day.shifts].sort(
-    (a, b) => timeStrToMin(a.shift_start) - timeStrToMin(b.shift_start),
-  );
-  const bands: BreakBand[] = [];
-  for (let i = 0; i < sorted.length - 1; i++) {
-    const gapStart = timeStrToMin(sorted[i]!.shift_end);
-    const gapEnd = timeStrToMin(sorted[i + 1]!.shift_start);
-    if (gapEnd > gapStart) bands.push({ startMin: gapStart, endMin: gapEnd });
-  }
-  return bands;
+  return minutesInClinicTimeZone(new Date(appt.scheduled_at));
 }
 
 // Groups appointments by hour bucket (floor to nearest hour).
@@ -107,6 +67,7 @@ interface WeekCalendarProps {
   currentUserId?: string;
   currentUserRole?: "admin" | "receptionist" | "manager" | "doctor";
   clinicHours?: ClinicWorkingHoursValues;
+  newAppointmentHref?: string;
 }
 
 function addDays(date: Date, days: number) {
@@ -144,6 +105,7 @@ export function WeekCalendar({
   currentUserId,
   currentUserRole,
   clinicHours = [],
+  newAppointmentHref = "/appointments/new",
 }: WeekCalendarProps) {
   const { formatSlotTime, weekStart: configuredWeekStart } = useClinicSettings();
   const allDays = Array.from({ length: 7 }, (_, i) => ({
@@ -158,7 +120,8 @@ export function WeekCalendar({
   // Fall back to showing all 7 if no clinic hours are configured
   const displayDays = visibleDays.length > 0 ? visibleDays : allDays;
   const colCount = displayDays.length;
-  const today = new Date();
+  const today = useCalendarNow();
+  const nowMin = minutesInClinicTimeZone(today);
 
   const appointmentsByDate = useMemo(() => {
     const grouped = new Map<string, Appointment[]>();
@@ -176,7 +139,8 @@ export function WeekCalendar({
     return grouped;
   }, [appointments]);
 
-  const { startMin, endMin } = getGridBounds(clinicHours);
+  const bounds = getCalendarGridBounds(clinicHours);
+  const { startMin, endMin } = bounds;
 
   // One row per hour within the grid range
   const hourRows: number[] = [];
@@ -192,7 +156,7 @@ export function WeekCalendar({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-calendar-view="week">
       {/* Nav */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -216,7 +180,7 @@ export function WeekCalendar({
         </div>
         {canEdit && (
           <Button asChild size="sm" className="shrink-0 gap-1.5">
-            <Link href="/appointments/new">
+            <Link href={newAppointmentHref}>
               <CalendarPlus className="h-4 w-4" />
               New appointment
             </Link>
@@ -225,21 +189,21 @@ export function WeekCalendar({
       </div>
 
       {/* Grid */}
-      <div className="overflow-x-auto rounded-xl border border-border/40 bg-card/40">
+      <div className={CALENDAR_STYLES.frame} data-calendar-grid>
         <div className="flex" style={{ minWidth: `${colCount * 146}px` }}>
 
           {/* Time axis */}
-          <div className="w-16 shrink-0 border-r border-border/30">
+          <div className={CALENDAR_STYLES.timeAxis}>
             {/* Spacer for day-header row */}
-            <div className="h-8 border-b border-border/30" />
+            <div className={CALENDAR_STYLES.timeAxisHeader} />
             {/* Hour labels — one per row, aligned with day columns */}
             {hourRows.map((hMin) => (
               <div
                 key={hMin}
-                className="border-b border-border/20 flex items-center justify-center"
+                className={`${CALENDAR_STYLES.hourRow} flex items-start justify-center pt-1`}
                 style={{ height: BUCKET_H_PX }}
               >
-                <span className="text-[9px] text-muted-foreground/50 leading-none whitespace-nowrap">
+                <span className={CALENDAR_STYLES.hourLabel} data-calendar-hour-label>
                   {formatSlotTime(`${String(Math.floor(hMin / 60)).padStart(2, "0")}:00`)}
                 </span>
               </div>
@@ -248,7 +212,7 @@ export function WeekCalendar({
 
           {/* Day columns */}
           <div
-            className="grid flex-1 divide-x divide-border/30"
+            className="grid flex-1 divide-x divide-calendar-grid-strong"
             style={{ gridTemplateColumns: `repeat(${colCount}, minmax(0, 1fr))` }}
           >
             {displayDays.map(({ day, originalIndex }) => {
@@ -256,43 +220,49 @@ export function WeekCalendar({
               const isToday = isSameDay(day, today);
               const dayAppts = appointmentsByDate.get(localDateKey(day)) ?? [];
               const dow = dayIndexToDow(i, configuredWeekStart);
-              const breaks = getBreakBands(clinicHours, dow);
+              const nonWorkingBands = getCalendarNonWorkingBands(
+                clinicHours,
+                dow,
+                bounds,
+              );
               const hourBuckets = groupByHourBucket(dayAppts);
+              // Current-time indicator: only on today's column, only if now is
+              // within the visible grid range.
+              const showNowLine = isToday && nowMin >= startMin && nowMin <= endMin;
+              const nowTopPx =
+                CALENDAR_HEADER_HEIGHT_PX +
+                ((nowMin - startMin) / 60) * BUCKET_H_PX;
 
               return (
-                <div key={i} className="flex flex-col">
+                <div
+                  key={i}
+                  data-calendar-today-body={isToday ? "true" : undefined}
+                  className={`relative flex flex-col ${
+                    isToday ? CALENDAR_STYLES.todayBody : ""
+                  }`}
+                >
                   {/* Day header */}
                   <div
-                    className={`h-8 flex items-center justify-center gap-1 text-xs font-medium border-b border-border/30 ${
-                      isToday ? "bg-primary text-primary-foreground" : "bg-muted/30 text-muted-foreground"
-                    }`}
+                    data-calendar-day-header
+                    data-today={isToday ? "true" : undefined}
+                    className={`${
+                      isToday
+                        ? CALENDAR_STYLES.todayHeader
+                        : CALENDAR_STYLES.dayHeader
+                    } gap-1`}
                   >
-                    <span>{DAY_NAMES[dow]}</span>
-                    <span className={isToday ? "" : "text-foreground font-semibold"}>
-                      {day.getDate()}
-                    </span>
+                    <span className={isToday ? "" : CALENDAR_STYLES.secondaryLabel}>{DAY_NAMES[dow]}</span>
+                    <span>{day.getDate()}</span>
                   </div>
+
+                  <CalendarNonWorkingBands
+                    bands={nonWorkingBands}
+                    gridStartMin={startMin}
+                    hourHeightPx={BUCKET_H_PX}
+                  />
 
                   {/* Hour bucket rows */}
                   {hourRows.map((hMin) => {
-                    const isBreak = breaks.some(
-                      (b) => b.startMin <= hMin && b.endMin >= hMin + 60,
-                    );
-
-                    if (isBreak) {
-                      return (
-                        <div
-                          key={hMin}
-                          className="border-b border-border/20 bg-muted/40 flex items-center justify-center"
-                          style={{ height: BUCKET_H_PX }}
-                        >
-                          <span className="text-[9px] text-muted-foreground/50 font-medium uppercase tracking-widest">
-                            Break
-                          </span>
-                        </div>
-                      );
-                    }
-
                     const appts = hourBuckets.get(hMin) ?? [];
                     return (
                       <HourBucketRow
@@ -305,6 +275,17 @@ export function WeekCalendar({
                       />
                     );
                   })}
+
+                  {showNowLine && (
+                    <CalendarNowIndicator
+                      top={nowTopPx}
+                      label={`Current time, ${formatSlotTime(
+                        `${String(Math.floor(nowMin / 60)).padStart(2, "0")}:${String(
+                          nowMin % 60,
+                        ).padStart(2, "0")}`,
+                      )}`}
+                    />
+                  )}
                 </div>
               );
             })}
@@ -338,7 +319,7 @@ function HourBucketRow({
 
   return (
     <div
-      className="border-b border-border/20 px-0.5 py-0.5 flex flex-col gap-0.5 overflow-hidden"
+      className={`${CALENDAR_STYLES.hourRow} z-10 flex flex-col gap-0.5 overflow-hidden px-0.5 py-0.5`}
       style={{ height: BUCKET_H_PX }}
     >
       {visibleAppts.map((appt) => (
@@ -355,7 +336,7 @@ function HourBucketRow({
       {hasMore && (
         <button
           onClick={() => setShowAllOpen(true)}
-          className="mt-auto text-[9px] text-primary font-medium hover:underline text-left px-1 leading-none py-0.5"
+          className="mt-auto px-1 py-0.5 text-start text-[11px] font-medium leading-none text-foreground/70 hover:text-foreground hover:underline"
         >
           Show all ({appts.length})
         </button>
@@ -443,9 +424,11 @@ export function AppointmentCard({
       <div
         role="button"
         tabIndex={0}
+        aria-pressed={detailOpen}
+        data-calendar-event
         onClick={() => setDetailOpen(true)}
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setDetailOpen(true); }}
-        className="group relative h-full w-full overflow-hidden rounded-md border text-xs transition-colors hover:brightness-[1.02] cursor-pointer"
+        className="group relative h-full w-full cursor-pointer overflow-hidden rounded-md border text-xs transition-[filter,box-shadow] hover:brightness-[1.04] hover:ring-1 hover:ring-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary aria-pressed:ring-2 aria-pressed:ring-primary"
         style={{
           borderColor: `color-mix(in oklab, ${deptColor} 35%, transparent)`,
           backgroundColor: `color-mix(in oklab, ${deptColor} 8%, var(--card))`,
@@ -454,11 +437,11 @@ export function AppointmentCard({
         {/* Left accent bar */}
         <span
           aria-hidden
-          className="absolute inset-y-0 left-0 w-1 rounded-l-sm"
+          className="absolute inset-y-0 start-0 w-1 rounded-s-sm"
           style={{ backgroundColor: deptColor }}
         />
 
-        <div className="pl-2 pr-1 pt-0.5 h-full flex flex-col justify-start gap-0.5 min-w-0">
+        <div className="flex h-full min-w-0 flex-col justify-start gap-0.5 ps-2 pe-1 pt-0.5">
           <div className="flex items-start justify-between gap-1">
             <span className="font-medium text-foreground leading-tight truncate">
               {patientName}
@@ -478,19 +461,19 @@ export function AppointmentCard({
 
           {!compact && (
             <>
-              <div className="flex min-w-0 items-center justify-between gap-1 text-muted-foreground">
+              <div className="flex min-w-0 items-center justify-between gap-1 text-foreground/70">
                 <span>{time}</span>
                 <span
-                  className="max-w-[70px] truncate rounded-sm px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wider"
+                  className="max-w-[70px] truncate rounded-sm border px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-foreground"
                   style={{
                     backgroundColor: `color-mix(in oklab, ${deptColor} 18%, transparent)`,
-                    color: deptColor,
+                    borderColor: `color-mix(in oklab, ${deptColor} 45%, transparent)`,
                   }}
                 >
                   {deptName}
                 </span>
               </div>
-              <div className="text-muted-foreground/70 truncate">
+              <div className="truncate text-foreground/70">
                 {appt.profiles?.full_name ?? "—"}
               </div>
             </>
@@ -499,18 +482,18 @@ export function AppointmentCard({
           {compact && (
             <div className="flex flex-col gap-0.5 min-w-0">
               <StatusBadge status={appt.status} />
-              <span className="text-muted-foreground truncate text-[10px]">{time}</span>
+              <span className="truncate text-[10px] text-foreground/70">{time}</span>
               {appt.profiles?.full_name && (
-                <span className="text-muted-foreground/70 truncate text-[10px]">
+                <span className="truncate text-[10px] text-foreground/70">
                   Dr. {appt.profiles.full_name}
                 </span>
               )}
               {appt.departments?.name && (
                 <span
-                  className="truncate rounded-sm px-1 py-px text-[9px] font-semibold uppercase tracking-wider self-start"
+                  className="self-start truncate rounded-sm border px-1 py-px text-[10px] font-semibold uppercase tracking-wider text-foreground"
                   style={{
                     backgroundColor: `color-mix(in oklab, ${deptColor} 18%, transparent)`,
-                    color: deptColor,
+                    borderColor: `color-mix(in oklab, ${deptColor} 45%, transparent)`,
                   }}
                 >
                   {deptName}

@@ -16,6 +16,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 export interface TrashItem {
   id: string;
@@ -249,72 +250,66 @@ export function SettingsTrashSection({
       <p className="px-4 py-2 text-xs text-muted-foreground">
         Items are permanently deleted after 30 days. Restore to bring them back.
       </p>
-      <div className="overflow-x-auto">
-        <table className="w-full table-fixed text-sm">
-          <colgroup>
-            <col />
-            <col className="w-32" />
-            <col className={onPermanentDelete ? "w-56" : "w-24"} />
-          </colgroup>
-          <thead className="border-b border-destructive/10 bg-destructive/5">
-            <tr>
-              <th className="px-4 py-2 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                {entityLabel}
-              </th>
-              <th className="px-4 py-2 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                Deleted
-              </th>
-              <th className="px-4 py-2 text-right text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                <span className="sr-only">Actions</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border/40">
-            {items.map((item) => {
-              const days = daysLeft(item.deletedAt);
-              return (
-                <tr key={item.id} className="hover:bg-muted/20 transition-colors">
-                  <td className="max-w-0 px-4 py-2.5">
-                    <p className="truncate font-medium text-muted-foreground line-through decoration-destructive/40">
-                      {item.label}
+      <Table className="table-fixed">
+        <colgroup>
+          <col />
+          <col className="w-32" />
+          <col className={onPermanentDelete ? "w-56" : "w-24"} />
+        </colgroup>
+        <TableHeader className="[&_tr]:border-b-2 [&_tr]:border-destructive/10 bg-destructive/5">
+          <TableRow>
+            <TableHead>{entityLabel}</TableHead>
+            <TableHead>Deleted</TableHead>
+            <TableHead className="text-end">
+              <span className="sr-only">Actions</span>
+            </TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {items.map((item) => {
+            const days = daysLeft(item.deletedAt);
+            return (
+              <TableRow key={item.id}>
+                <TableCell className="max-w-0">
+                  <p className="truncate font-medium text-muted-foreground line-through decoration-destructive/40">
+                    {item.label}
+                  </p>
+                  {item.subtitle && (
+                    <p className="truncate text-xs text-muted-foreground/60">
+                      {item.subtitle}
                     </p>
-                    {item.subtitle && (
-                      <p className="truncate text-xs text-muted-foreground/60">
-                        {item.subtitle}
-                      </p>
-                    )}
-                  </td>
-                  <td className="px-4 py-2.5">
-                    <span
-                      className={`text-xs ${days <= 3 ? "font-semibold text-destructive" : "text-muted-foreground"}`}
-                    >
-                      {days === 0
-                        ? "Expires today"
-                        : `${days} day${days !== 1 ? "s" : ""} left`}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2.5 text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <RestoreButton
+                  )}
+                </TableCell>
+                <TableCell>
+                  <span
+                    className={`text-xs ${days <= 3 ? "font-semibold text-destructive" : "text-muted-foreground"}`}
+                  >
+                    {days === 0
+                      ? "Expires today"
+                      : `${days} day${days !== 1 ? "s" : ""} left`}
+                  </span>
+                </TableCell>
+                <TableCell className="text-end">
+                  <div className="flex items-center justify-end gap-1">
+                    <RestoreButton
+                      id={item.id}
+                      label={item.label}
+                      onRestore={onRestore}
+                    />
+                    {onPermanentDelete && (
+                      <PermanentDeleteButton
                         id={item.id}
                         label={item.label}
-                        onRestore={onRestore}
+                        onPermanentDelete={onPermanentDelete}
                       />
-                      {onPermanentDelete && (
-                        <PermanentDeleteButton
-                          id={item.id}
-                          label={item.label}
-                          onPermanentDelete={onPermanentDelete}
-                        />
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+                    )}
+                  </div>
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
     </div>
   );
 }

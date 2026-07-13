@@ -212,7 +212,12 @@ export function ClinicForm({ defaultValues, logoUrl: initialLogoUrl, readOnly = 
                 <FormItem>
                   <FormLabel>Phone</FormLabel>
                   <FormControl>
-                    <InternationalPhoneInput {...field} value={field.value ?? ""} disabled={isPending || readOnly} />
+                    <InternationalPhoneInput
+                      {...field}
+                      name={undefined}
+                      value={field.value ?? ""}
+                      disabled={isPending || readOnly}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

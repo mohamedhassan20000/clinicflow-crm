@@ -6,7 +6,7 @@ exports[`DashboardShell > persists, snapshots, and restores collapsed state 1`] 
     class="flex min-h-dvh bg-background"
   >
     <aside
-      class="shrink-0 flex-col border-e border-sidebar-border bg-sidebar text-sidebar-foreground sticky top-0 hidden h-dvh self-start md:flex transition-[width] duration-200 ease-out w-20"
+      class="shrink-0 flex-col border-e border-sidebar-border bg-sidebar text-sidebar-foreground sticky top-0 z-40 hidden h-dvh self-start md:flex transition-[width] duration-200 ease-out w-20"
       data-collapsed="true"
       data-testid="dashboard-sidebar"
     >
@@ -23,7 +23,7 @@ exports[`DashboardShell > persists, snapshots, and restores collapsed state 1`] 
         <button
           aria-expanded="false"
           aria-label="Expand sidebar"
-          class="absolute inset-e-0 top-1/2 flex size-7 translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-sidebar-border bg-sidebar text-sidebar-foreground shadow-sm transition-colors hover:bg-sidebar-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sidebar-ring rtl:-translate-x-1/2"
+          class="absolute inset-e-0 top-1/2 z-40 flex size-7 translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-sidebar-border bg-sidebar text-sidebar-foreground shadow-sm transition-colors before:absolute before:-inset-2.5 before:content-[''] hover:bg-sidebar-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sidebar-ring rtl:-translate-x-1/2"
           type="button"
         >
           <svg
@@ -273,7 +273,7 @@ exports[`DashboardShell > renders the header utilities and expanded navigation 1
     class="flex min-h-dvh bg-background"
   >
     <aside
-      class="shrink-0 flex-col border-e border-sidebar-border bg-sidebar text-sidebar-foreground sticky top-0 hidden h-dvh self-start md:flex transition-[width] duration-200 ease-out w-72"
+      class="shrink-0 flex-col border-e border-sidebar-border bg-sidebar text-sidebar-foreground sticky top-0 z-40 hidden h-dvh self-start md:flex transition-[width] duration-200 ease-out w-72"
       data-collapsed="false"
       data-testid="dashboard-sidebar"
     >
@@ -295,7 +295,7 @@ exports[`DashboardShell > renders the header utilities and expanded navigation 1
         <button
           aria-expanded="true"
           aria-label="Collapse sidebar"
-          class="absolute inset-e-0 top-1/2 flex size-7 translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-sidebar-border bg-sidebar text-sidebar-foreground shadow-sm transition-colors hover:bg-sidebar-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sidebar-ring rtl:-translate-x-1/2"
+          class="absolute inset-e-0 top-1/2 z-40 flex size-7 translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-sidebar-border bg-sidebar text-sidebar-foreground shadow-sm transition-colors before:absolute before:-inset-2.5 before:content-[''] hover:bg-sidebar-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sidebar-ring rtl:-translate-x-1/2"
           type="button"
         >
           <svg

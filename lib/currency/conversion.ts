@@ -19,7 +19,26 @@ export function convertForDisplay(value: number, from: string, to: string, rates
 
 export function formatMoney(money: DisplayMoney, locale = "en", options: Intl.NumberFormatOptions = {}) {
   const definition = getCurrency(money.displayCurrency);
-  const formatted = new Intl.NumberFormat(locale, { style: "currency", currency: money.displayCurrency, minimumFractionDigits: definition?.minorUnits, maximumFractionDigits: definition?.minorUnits, ...options }).format(money.display);
+  const resolved: Intl.NumberFormatOptions = {
+    style: "currency",
+    currency: money.displayCurrency,
+    minimumFractionDigits: definition?.minorUnits,
+    maximumFractionDigits: definition?.minorUnits,
+    ...options,
+  };
+  // Intl.NumberFormat throws a RangeError when min > max; a caller override of
+  // only one bound (e.g. { maximumFractionDigits: 0 } on a 2-minor-unit
+  // currency) must win over the registry default on the other bound.
+  const min = resolved.minimumFractionDigits;
+  const max = resolved.maximumFractionDigits;
+  if (typeof min === "number" && typeof max === "number" && min > max) {
+    if (options.maximumFractionDigits !== undefined && options.minimumFractionDigits === undefined) {
+      resolved.minimumFractionDigits = max;
+    } else {
+      resolved.maximumFractionDigits = min;
+    }
+  }
+  const formatted = new Intl.NumberFormat(locale, resolved).format(money.display);
   return money.approximate ? `≈ ${formatted}${money.stale ? " · stale rate" : ""}` : formatted;
 }
 

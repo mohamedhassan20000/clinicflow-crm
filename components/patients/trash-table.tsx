@@ -7,6 +7,8 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { TableEmptyState } from "@/components/shared/data-table";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,6 +21,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { restorePatient, archivePatient, archiveAllTrashPatients } from "@/actions/patients";
 import type { PatientStub } from "@/actions/patients";
+import { withReturnTo } from "@/lib/navigation/return-url";
 
 function daysAgo(iso: string | null): string {
   if (!iso) return "Unknown date";
@@ -102,9 +105,8 @@ export function TrashTable({ patients, isAdmin }: TrashTableProps) {
 
   if (patients.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border/60 py-16 text-center">
-        <p className="text-sm font-medium text-muted-foreground">Trash is empty</p>
-        <p className="mt-1 text-xs text-muted-foreground/70">Deleted patients appear here.</p>
+      <div className="rounded-xl border border-dashed border-border/60">
+        <TableEmptyState icon={User} title="Trash is empty" description="Deleted patients appear here." />
       </div>
     );
   }
@@ -150,31 +152,31 @@ export function TrashTable({ patients, isAdmin }: TrashTableProps) {
           </div>
 
           <div className="overflow-hidden rounded-xl border border-border/50">
-            <table className="w-full table-auto text-sm">
-              <thead>
-                <tr className="border-b border-border/50 bg-muted/30">
-                  <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Patient</th>
-                  <th className="hidden px-4 py-2.5 text-left font-medium text-muted-foreground sm:table-cell">File #</th>
-                  <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Deleted</th>
-                  {isAdmin && <th className="px-4 py-2.5 text-right font-medium text-muted-foreground">Actions</th>}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/50">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Patient</TableHead>
+                  <TableHead className="hidden sm:table-cell">File #</TableHead>
+                  <TableHead>Deleted</TableHead>
+                  {isAdmin && <TableHead className="text-end">Actions</TableHead>}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {group.patients.map((p) => {
                   const busy = isPending && pendingId === p.id;
                   const daysOld = p.deleted_at
                     ? Math.floor((Date.now() - new Date(p.deleted_at).getTime()) / (1000 * 60 * 60 * 24))
                     : null;
                   return (
-                    <tr key={p.id} className="hover:bg-muted/20 transition-colors">
-                      <td className="px-4 py-3">
+                    <TableRow key={p.id}>
+                      <TableCell>
                         <div className="flex items-center gap-2 min-w-0">
                           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted">
                             <User className="h-4 w-4 text-muted-foreground" />
                           </span>
                           <div className="min-w-0">
                             <Link
-                              href={`/patients/${p.id}`}
+                              href={withReturnTo(`/patients/${p.id}`, "/patients/trash")}
                               className="truncate font-medium hover:underline"
                             >
                               {p.full_name}
@@ -182,11 +184,11 @@ export function TrashTable({ patients, isAdmin }: TrashTableProps) {
                             <p className="truncate text-xs text-muted-foreground">{p.phone}</p>
                           </div>
                         </div>
-                      </td>
-                      <td className="hidden px-4 py-3 font-mono text-xs text-muted-foreground sm:table-cell">
+                      </TableCell>
+                      <TableCell className="hidden font-mono text-xs text-muted-foreground sm:table-cell">
                         {p.file_number}
-                      </td>
-                      <td className="px-4 py-3">
+                      </TableCell>
+                      <TableCell>
                         <div>
                           <p className="text-sm">{daysAgo(p.deleted_at)}</p>
                           <p className="text-xs text-muted-foreground">{fmtDate(p.deleted_at)}</p>
@@ -196,9 +198,9 @@ export function TrashTable({ patients, isAdmin }: TrashTableProps) {
                             </Badge>
                           )}
                         </div>
-                      </td>
+                      </TableCell>
                       {isAdmin && (
-                        <td className="px-4 py-3 text-right">
+                        <TableCell className="text-end">
                           <div className="flex items-center justify-end gap-1.5">
                             {busy ? (
                               <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
@@ -227,13 +229,13 @@ export function TrashTable({ patients, isAdmin }: TrashTableProps) {
                               </>
                             )}
                           </div>
-                        </td>
+                        </TableCell>
                       )}
-                    </tr>
+                    </TableRow>
                   );
                 })}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         </div>
       ))}

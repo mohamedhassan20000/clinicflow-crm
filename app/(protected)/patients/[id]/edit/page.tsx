@@ -1,20 +1,24 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft } from "lucide-react";
 import { requireRole } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
 import { PatientForm } from "@/components/patients/patient-form";
 import { updatePatient } from "@/actions/patients";
+import { PageHeader } from "@/components/shared/page-header";
+import { resolveReturnTo } from "@/lib/navigation/return-url";
 
 export const metadata: Metadata = { title: "Edit Patient" };
 
 interface PageProps {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ returnTo?: string }>;
 }
 
-export default async function EditPatientPage({ params }: PageProps) {
+export default async function EditPatientPage({ params, searchParams }: PageProps) {
   const { id } = await params;
+  const { returnTo } = await searchParams;
+  const patientPath = `/patients/${id}`;
+  const patientUrl = resolveReturnTo(returnTo, patientPath, [patientPath]);
   const user = await requireRole(["admin", "receptionist"]);
   const supabase = await createClient();
 
@@ -59,22 +63,16 @@ export default async function EditPatientPage({ params }: PageProps) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <Link
-          href={`/patients/${id}`}
-          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ChevronLeft className="h-4 w-4" />
-          {patient.full_name}
-        </Link>
-      </div>
-
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Edit patient</h1>
-        <p className="text-sm text-muted-foreground">
-          Update {patient.full_name}&apos;s record.
-        </p>
-      </div>
+      <PageHeader
+        back={{ href: patientUrl, label: patient.full_name }}
+        breadcrumbs={[
+          { label: "Patients", href: "/patients" },
+          { label: patient.full_name, href: patientUrl },
+          { label: "Edit" },
+        ]}
+        title="Edit patient"
+        description={<>Update {patient.full_name}&apos;s record.</>}
+      />
 
       <div className="max-w-2xl mx-auto rounded-xl border border-border/50 bg-card p-6">
         <PatientForm
@@ -83,6 +81,7 @@ export default async function EditPatientPage({ params }: PageProps) {
           doctors={doctors ?? []}
           insuranceProviders={insuranceProviders ?? []}
           patient={patient}
+          cancelHref={patientUrl}
           defaultValues={{
             full_name: patient.full_name,
             national_id: patient.national_id,

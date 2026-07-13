@@ -17,6 +17,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { RecordFollowupDialog } from "@/components/followups/record-dialog";
@@ -446,7 +447,7 @@ export function FollowupsView({
                     </span>
                   </header>
                   <div className="overflow-x-auto">
-                    <table className="w-full min-w-[1040px] table-fixed text-sm">
+                    <Table className="min-w-[1040px] table-fixed">
                       <colgroup>
                         <col className="w-36" />
                         <col className="w-[22%]" />
@@ -456,79 +457,62 @@ export function FollowupsView({
                         <col className="w-48" />
                         <col className="w-36 print:hidden" />
                       </colgroup>
-                      <thead className="border-b border-border/40 bg-muted/30 text-[10px] uppercase tracking-wider text-muted-foreground">
-                        <tr>
-                          <th className="px-4 py-2.5 text-left font-medium">
-                            Session
-                          </th>
-                          <th className="px-4 py-2.5 text-left font-medium">
-                            Patient
-                          </th>
-                          <th className="px-4 py-2.5 text-left font-medium">
-                            File #
-                          </th>
-                          <th className="px-4 py-2.5 text-left font-medium">
-                            National ID
-                          </th>
-                          <th className="px-4 py-2.5 text-left font-medium">
-                            Phone
-                          </th>
-                          <th className="px-4 py-2.5 text-left font-medium">
-                            Doctor
-                          </th>
-                          <th className="px-4 py-2.5 text-right font-medium print:hidden">
-                            Action
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-border/30">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Session</TableHead>
+                          <TableHead>Patient</TableHead>
+                          <TableHead>File #</TableHead>
+                          <TableHead>National ID</TableHead>
+                          <TableHead>Phone</TableHead>
+                          <TableHead>Doctor</TableHead>
+                          <TableHead className="text-end print:hidden">Action</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
                         {g.rows.map((a, i) => {
                           const groupKey = g.dept?.id ?? UNASSIGNED_KEY;
                           const gp = pendingPageFor(groupKey);
                           const onPage =
                             i >= (gp - 1) * PAGE_SIZE && i < gp * PAGE_SIZE;
                           return (
-                          <tr
+                          <TableRow
                             key={a.id}
-                            className={cn(
-                              "hover:bg-muted/20 transition-colors",
-                              !onPage && "hidden print:table-row",
-                            )}
+                            className={cn(!onPage && "hidden print:table-row")}
                           >
-                            <td className="px-4 py-3 text-xs whitespace-nowrap">
+                            <TableCell className="text-xs whitespace-nowrap">
                               {fmtDate(a.scheduled_at)}
-                            </td>
-                            <td className="max-w-0 px-4 py-3 font-medium">
+                            </TableCell>
+                            <TableCell className="max-w-0 font-medium">
                               <Link
                                 href={`/patients/${a.patient_id}`}
                                 className="block truncate hover:underline"
                               >
                                 {a.patients?.full_name ?? "—"}
                               </Link>
-                            </td>
-                            <td className="px-4 py-3 font-mono text-xs text-muted-foreground whitespace-nowrap">
+                            </TableCell>
+                            <TableCell className="font-mono text-xs text-muted-foreground whitespace-nowrap">
                               {a.patients?.file_number ?? "—"}
-                            </td>
-                            <td className="px-4 py-3 font-mono text-xs text-muted-foreground whitespace-nowrap">
+                            </TableCell>
+                            <TableCell className="font-mono text-xs text-muted-foreground whitespace-nowrap">
                               <span className="block min-w-0 truncate">
                                 {a.patients?.national_id ?? "—"}
                               </span>
-                            </td>
-                            <td className="px-4 py-3 text-xs whitespace-nowrap">
+                            </TableCell>
+                            <TableCell className="text-xs whitespace-nowrap">
                               <span className="inline-flex min-w-0 items-center gap-1.5 text-muted-foreground">
                                 <Phone className="h-3 w-3" />
                                 <span className="truncate">{a.patients?.phone ?? "—"}</span>
                               </span>
-                            </td>
-                            <td className="px-4 py-3 text-xs">
+                            </TableCell>
+                            <TableCell className="text-xs">
                               <span className="inline-flex min-w-0 items-center gap-1.5 text-muted-foreground">
                                 <Stethoscope className="h-3 w-3" />
                                 <span className="truncate">
                                   {formatDoctorName(a.profiles?.full_name)}
                                 </span>
                               </span>
-                            </td>
-                            <td className="px-4 py-3 text-right print:hidden">
+                            </TableCell>
+                            <TableCell className="text-end print:hidden">
                               {!readOnly && (
                                 <Button
                                   size="sm"
@@ -539,12 +523,12 @@ export function FollowupsView({
                                   Record follow-up
                                 </Button>
                               )}
-                            </td>
-                          </tr>
+                            </TableCell>
+                          </TableRow>
                           );
                         })}
-                      </tbody>
-                    </table>
+                      </TableBody>
+                    </Table>
                   </div>
                   {(() => {
                     const groupKey = g.dept?.id ?? UNASSIGNED_KEY;
@@ -728,7 +712,7 @@ export function FollowupsView({
                     </span>
                   </header>
                   <div className="overflow-x-auto">
-                    <table className="w-full table-fixed text-sm">
+                    <Table className="table-fixed">
                       <colgroup>
                         <col className="w-44" />
                         <col className="w-36" />
@@ -738,46 +722,29 @@ export function FollowupsView({
                         <col className="w-48" />
                         <col className="w-24 print:hidden" />
                       </colgroup>
-                      <thead className="border-b border-border/40 bg-muted/30 text-[10px] uppercase tracking-wider text-muted-foreground">
-                        <tr>
-                          <th className="px-4 py-2.5 text-left font-medium">
-                            Status
-                          </th>
-                          <th className="px-4 py-2.5 text-left font-medium">
-                            Recorded
-                          </th>
-                          <th className="px-4 py-2.5 text-left font-medium">
-                            Patient
-                          </th>
-                          <th className="px-4 py-2.5 text-left font-medium">
-                            Doctor
-                          </th>
-                          <th className="px-4 py-2.5 text-left font-medium">
-                            Outcome
-                          </th>
-                          <th className="px-4 py-2.5 text-left font-medium">
-                            Notes
-                          </th>
-                          <th className="px-4 py-2.5 text-right font-medium print:hidden">
-                            Action
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-border/30">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Recorded</TableHead>
+                          <TableHead>Patient</TableHead>
+                          <TableHead>Doctor</TableHead>
+                          <TableHead>Outcome</TableHead>
+                          <TableHead>Notes</TableHead>
+                          <TableHead className="text-end print:hidden">Action</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
                         {g.rows.map((d, i) => {
                           const onPage =
                             i >= (gp - 1) * PAGE_SIZE && i < gp * PAGE_SIZE;
                           const meta = OUTCOME_META[d.outcome];
                           const Icon = meta.icon;
                           return (
-                            <tr
+                            <TableRow
                               key={d.id}
-                              className={cn(
-                                "hover:bg-muted/20 transition-colors",
-                                !onPage && "hidden print:table-row",
-                              )}
+                              className={cn(!onPage && "hidden print:table-row")}
                             >
-                              <td className="px-4 py-3">
+                              <TableCell>
                                 <div className="flex flex-wrap items-center gap-1.5">
                                   <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
                                     <CheckCircle2 className="h-3 w-3" />
@@ -794,11 +761,11 @@ export function FollowupsView({
                                     {d.notes ? "Note taken" : "No note"}
                                   </span>
                                 </div>
-                              </td>
-                              <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
+                              </TableCell>
+                              <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
                                 {fmtDateTime(d.recorded_at)}
-                              </td>
-                              <td className="max-w-0 px-4 py-3 font-medium">
+                              </TableCell>
+                              <TableCell className="max-w-0 font-medium">
                                 <Link
                                   href={`/patients/${d.patient_id}`}
                                   className="block truncate hover:underline"
@@ -808,8 +775,8 @@ export function FollowupsView({
                                 <p className="truncate font-mono text-[10px] text-muted-foreground">
                                   {d.patients?.file_number ?? "—"}
                                 </p>
-                              </td>
-                              <td className="px-4 py-3 text-xs">
+                              </TableCell>
+                              <TableCell className="text-xs">
                                 {d.appointment?.profiles?.full_name ? (
                                   <span className="text-muted-foreground">
                                     {formatDoctorName(d.appointment.profiles.full_name)}
@@ -819,8 +786,8 @@ export function FollowupsView({
                                     —
                                   </span>
                                 )}
-                              </td>
-                              <td className="px-4 py-3">
+                              </TableCell>
+                              <TableCell>
                                 <span
                                   className={cn(
                                     "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium",
@@ -830,8 +797,8 @@ export function FollowupsView({
                                   <Icon className="h-3 w-3" />
                                   {meta.label}
                                 </span>
-                              </td>
-                              <td className="px-4 py-3 text-xs">
+                              </TableCell>
+                              <TableCell className="text-xs">
                                 {d.notes ? (
                                   <span className="text-foreground">
                                     &ldquo;{d.notes}&rdquo;
@@ -846,8 +813,8 @@ export function FollowupsView({
                                     by {d.recorded_by.full_name}
                                   </p>
                                 )}
-                              </td>
-                              <td className="px-4 py-3 text-right print:hidden">
+                              </TableCell>
+                              <TableCell className="text-end print:hidden">
                                 {!readOnly && (
                                   <Button
                                     type="button"
@@ -860,12 +827,12 @@ export function FollowupsView({
                                     Edit
                                   </Button>
                                 )}
-                              </td>
-                            </tr>
+                              </TableCell>
+                            </TableRow>
                           );
                         })}
-                      </tbody>
-                    </table>
+                      </TableBody>
+                    </Table>
                   </div>
                   {totalPages > 1 && (
                     <div className="flex items-center justify-between border-t border-border/40 bg-card px-4 py-2.5 text-xs text-muted-foreground print:hidden">

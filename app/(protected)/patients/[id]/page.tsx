@@ -6,7 +6,7 @@ import {
   clinicLocaleFromRow,
 } from "@/lib/datetime";
 import { getServerMoneyFormatter } from "@/lib/currency/server";
-import { AlertCircle, Archive, CalendarPlus, ChevronLeft, FileText, Pencil, Receipt, Trash2 } from "lucide-react";
+import { AlertCircle, Archive, CalendarPlus, FileText, Pencil, Receipt, Trash2 } from "lucide-react";
 import { StatusBadge } from "@/components/appointments/status-badge";
 import { requireUser } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
@@ -36,16 +36,33 @@ import { PatientAvatarPreview } from "@/components/patients/patient-avatar-previ
 import { listPatientDocuments, type PatientDocumentsData } from "@/actions/patient-documents";
 import type { MedicalNoteAttachmentItem } from "@/actions/medical-note-attachments";
 import { formatDoctorName } from "@/lib/format-doctor";
+import { PageHeader } from "@/components/shared/page-header";
+import { resolveReturnTo, withReturnTo } from "@/lib/navigation/return-url";
 
 export const metadata: Metadata = { title: "Patient" };
 
 interface PageProps {
   params: Promise<{ id: string }>;
+  searchParams?: Promise<{ returnTo?: string }>;
 }
 
-export default async function PatientDetailPage({ params }: PageProps) {
+export default async function PatientDetailPage({ params, searchParams }: PageProps) {
   const { id } = await params;
+  const pageSearchParams: { returnTo?: string } = searchParams ? await searchParams : {};
+  const { returnTo } = pageSearchParams;
   const user = await requireUser();
+  const allowedParentPaths = user.role === "admin" || user.role === "receptionist"
+    ? ["/patients", "/patients/archive", "/patients/trash"]
+    : ["/patients"];
+  const patientsUrl = resolveReturnTo(returnTo, "/patients", allowedParentPaths);
+  const parentPath = new URL(patientsUrl, "https://clinicflow.local").pathname;
+  const parentLabel = parentPath === "/patients/archive"
+    ? "archive"
+    : parentPath === "/patients/trash"
+      ? "trash"
+      : "patients";
+  const patientPath = `/patients/${id}`;
+  const patientUrl = withReturnTo(patientPath, patientsUrl);
   const supabase = await createClient();
   const { data: clinic } = await supabase
     .from("clinics")
@@ -368,16 +385,65 @@ export default async function PatientDetailPage({ params }: PageProps) {
     .join("");
   return (
     <div className="space-y-6">
-      {/* Breadcrumb */}
-      <div className="flex items-center gap-3 print:hidden">
-        <Link
-          href="/patients"
-          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ChevronLeft className="h-4 w-4" />
-          Patients
-        </Link>
-      </div>
+      <PageHeader
+        back={{ href: patientsUrl, label: parentLabel }}
+        breadcrumbs={[
+          { label: parentLabel[0].toUpperCase() + parentLabel.slice(1), href: patientsUrl },
+          { label: patient.full_name },
+        ]}
+        leading={
+          <PatientAvatarPreview
+            avatarUrl={avatarUrl}
+            fullName={patient.full_name}
+            initials={initials}
+          />
+        }
+        title={
+          <span className="flex flex-wrap items-center gap-2">
+            <span>{patient.full_name}</span>
+            {patient.file_number ? (
+              <Badge variant="secondary" className="font-mono text-[11px] tracking-wider">
+                {patient.file_number}
+              </Badge>
+            ) : null}
+            {patient.is_deleted ? <Badge variant="destructive">Deleted</Badge> : null}
+          </span>
+        }
+        description={
+          <div className="space-y-1">
+            <p>
+              {age} years old · {new Date(patient.date_of_birth).toLocaleDateString("en-GB")}
+              {patient.blood_type && ` · ${patient.blood_type}`}
+            </p>
+            {canEdit ? (
+              <PatientAvatarControls patientId={id} hasAvatar={Boolean(patient.avatar_path)} />
+            ) : null}
+          </div>
+        }
+        actions={
+          <>
+            {!isDoctor && !patient.is_deleted ? (
+              <Button asChild size="sm" className="gap-1.5">
+                <Link href={withReturnTo(`/appointments/new?patient_id=${id}`, patientUrl)}>
+                  <CalendarPlus className="size-3.5" aria-hidden="true" />
+                  Book appointment
+                </Link>
+              </Button>
+            ) : null}
+            {canEdit ? (
+              <>
+                <Button asChild variant="outline" size="sm" className="gap-1.5">
+                  <Link href={withReturnTo(`${patientPath}/edit`, patientUrl)}>
+                    <Pencil className="size-3.5" aria-hidden="true" />
+                    Edit
+                  </Link>
+                </Button>
+                {!patient.is_deleted ? <DeletePatientButton patientId={id} /> : null}
+              </>
+            ) : null}
+          </>
+        }
+      />
 
       {/* Status banner — shown for deleted / archived patients */}
       {patient.is_archived && (
@@ -416,74 +482,6 @@ export default async function PatientDetailPage({ params }: PageProps) {
           </Link>
         </div>
       )}
-
-      {/* Header */}
-      <div
-        className="flex flex-wrap items-start justify-between gap-4"
-      >
-        <div className="flex min-w-0 items-start gap-3">
-          <PatientAvatarPreview
-            avatarUrl={avatarUrl}
-            fullName={patient.full_name}
-            initials={initials}
-          />
-          <div className="min-w-0 space-y-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-semibold tracking-tight">
-                {patient.full_name}
-              </h1>
-              {patient.file_number && (
-                <Badge
-                  variant="secondary"
-                  className="font-mono text-[11px] tracking-wider"
-                >
-                  {patient.file_number}
-                </Badge>
-              )}
-              {patient.is_deleted && (
-                <Badge variant="destructive" className="text-xs">
-                  Deleted
-                </Badge>
-              )}
-            </div>
-            <p className="text-sm text-muted-foreground">
-              {age} years old ·{" "}
-              {new Date(patient.date_of_birth).toLocaleDateString("en-GB")}
-              {patient.blood_type && ` · ${patient.blood_type}`}
-            </p>
-            {canEdit && (
-              <PatientAvatarControls
-                patientId={id}
-                hasAvatar={Boolean(patient.avatar_path)}
-              />
-            )}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 print:hidden">
-          {!isDoctor && !patient.is_deleted && (
-            <Button asChild size="sm" className="gap-1.5">
-              <Link href={`/appointments/new?patient_id=${id}`}>
-                <CalendarPlus className="h-3.5 w-3.5" />
-                Book appointment
-              </Link>
-            </Button>
-          )}
-          {canEdit && (
-            <>
-            <Button asChild variant="outline" size="sm" className="gap-1.5">
-              <Link href={`/patients/${id}/edit`}>
-                <Pencil className="h-3.5 w-3.5" />
-                Edit
-              </Link>
-            </Button>
-            {!patient.is_deleted && (
-              <DeletePatientButton patientId={id} />
-            )}
-            </>
-          )}
-        </div>
-      </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Profile card */}
@@ -666,7 +664,7 @@ export default async function PatientDetailPage({ params }: PageProps) {
                   {appointments?.length !== 1 ? "s" : ""}
                 </span>
                 <Button asChild variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs">
-                  <Link href={`/patients/${id}/appointments-report`}>
+                  <Link href={withReturnTo(`${patientPath}/appointments-report`, patientUrl)}>
                     <FileText className="h-3 w-3" />
                     Full report
                   </Link>
@@ -713,7 +711,7 @@ export default async function PatientDetailPage({ params }: PageProps) {
                   {followups?.length ?? 0} record{followups?.length !== 1 ? "s" : ""}
                 </span>
                 <Button asChild variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs">
-                  <Link href={`/patients/${id}/followups-report`}>
+                  <Link href={withReturnTo(`${patientPath}/followups-report`, patientUrl)}>
                     <FileText className="h-3 w-3" />
                     Full report
                   </Link>
@@ -736,7 +734,7 @@ export default async function PatientDetailPage({ params }: PageProps) {
               </span>
               {canViewMedicalNotes && (
                 <Button asChild variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs">
-                  <Link href={`/patients/${id}/medical-notes-report`}>
+                  <Link href={withReturnTo(`${patientPath}/medical-notes-report`, patientUrl)}>
                     <FileText className="h-3 w-3" />
                     Full report
                   </Link>

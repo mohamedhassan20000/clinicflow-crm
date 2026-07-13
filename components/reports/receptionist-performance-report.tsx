@@ -3,6 +3,7 @@
 import type { ClinicPrintMeta, ReceptionistPerformanceReportResponse, ReportDateRange } from "@/types/reports";
 import { EmptyReportState, MetricGrid, ReportSectionShell } from "@/components/reports/report-section-shell";
 import { formatDateRangeLabel, formatNumber, formatPercent } from "@/components/reports/report-formatters";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
 
 export function ReceptionistPerformanceReport({
@@ -42,37 +43,37 @@ export function ReceptionistPerformanceReport({
       {data.receptionists.length === 0 ? (
         <EmptyReportState />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-border/50 print:overflow-visible print:border-black">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/40 text-left text-xs text-muted-foreground">
-              <tr>
-                <th className="px-3 py-2 font-medium">Receptionist</th>
-                <th className="px-3 py-2 text-right font-medium">Appointments booked</th>
-                <th className="px-3 py-2 text-right font-medium">Appointment share</th>
-                <th className="px-3 py-2 text-right font-medium">Follow-ups handled</th>
-                <th className="px-3 py-2 text-right font-medium">Follow-up share</th>
-              </tr>
-            </thead>
-            <tbody>
+        <div className="overflow-hidden rounded-lg border border-border/50 print:overflow-visible print:border-black">
+          <Table dense>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Receptionist</TableHead>
+                <TableHead className="text-end">Appointments booked</TableHead>
+                <TableHead className="text-end">Appointment share</TableHead>
+                <TableHead className="text-end">Follow-ups handled</TableHead>
+                <TableHead className="text-end">Follow-up share</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {data.receptionists.map((row) => (
-                <tr key={row.id} className="border-t border-border/50">
-                  <td className="px-3 py-2 font-medium">{row.name || "Unknown receptionist"}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">
+                <TableRow key={row.id}>
+                  <TableCell className="font-medium">{row.name || "Unknown receptionist"}</TableCell>
+                  <TableCell className="text-end tabular-nums">
                     {formatNumber(row.appointmentsBooked, locale)}
-                  </td>
-                  <td className="px-3 py-2 text-right tabular-nums">
+                  </TableCell>
+                  <TableCell className="text-end tabular-nums">
                     {formatPercent(row.appointmentShare, locale)}
-                  </td>
-                  <td className="px-3 py-2 text-right tabular-nums">
+                  </TableCell>
+                  <TableCell className="text-end tabular-nums">
                     {formatNumber(row.followupsHandled, locale)}
-                  </td>
-                  <td className="px-3 py-2 text-right tabular-nums">
+                  </TableCell>
+                  <TableCell className="text-end tabular-nums">
                     {formatPercent(row.followupShare, locale)}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       )}
     </ReportSectionShell>

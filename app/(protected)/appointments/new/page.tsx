@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { ChevronLeft } from "lucide-react";
 import { requireRole } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedDepartments, getCachedInsuranceProviders, getCachedStaff } from "@/lib/cache/reference-data";
 import { NewAppointmentLayout } from "@/components/appointments/new-appointment-layout";
 import { createAppointment } from "@/actions/appointments";
 import { getClinicWorkingHours } from "@/actions/settings";
+import { PageHeader } from "@/components/shared/page-header";
+import { resolveReturnTo } from "@/lib/navigation/return-url";
 
 export const metadata: Metadata = { title: "New Appointment" };
 
@@ -16,12 +16,19 @@ interface PageProps {
     doctor_id?: string;
     dept_id?: string;
     insurance_id?: string;
+    returnTo?: string;
   }>;
 }
 
 export default async function NewAppointmentPage({ searchParams }: PageProps) {
   const user = await requireRole(["admin", "receptionist"]);
-  const { patient_id, doctor_id, dept_id, insurance_id } = await searchParams;
+  const { patient_id, doctor_id, dept_id, insurance_id, returnTo } = await searchParams;
+  const allowedParentPaths = [
+    "/appointments",
+    ...(patient_id ? [`/patients/${patient_id}`] : []),
+  ];
+  const returnHref = resolveReturnTo(returnTo, "/appointments", allowedParentPaths);
+  const returnsToPatient = returnHref.startsWith("/patients/");
   const supabase = await createClient();
 
   const [{ data: patients }, { data: packageRows }, cachedStaff, cachedDepartments, cachedInsurance, clinicWorkingHours] =
@@ -61,22 +68,14 @@ export default async function NewAppointmentPage({ searchParams }: PageProps) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <Link
-          href="/appointments"
-          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ChevronLeft className="h-4 w-4" />
-          Appointments
-        </Link>
-      </div>
-
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">New appointment</h1>
-        <p className="text-sm text-muted-foreground">
-          Book a new appointment for a patient.
-        </p>
-      </div>
+      <PageHeader
+        back={{ href: returnHref, label: returnsToPatient ? "patient" : "appointments" }}
+        breadcrumbs={returnsToPatient
+          ? [{ label: "Patients", href: "/patients" }, { label: "Patient", href: returnHref }, { label: "New appointment" }]
+          : [{ label: "Appointments", href: returnHref }, { label: "New appointment" }]}
+        title="New appointment"
+        description="Book a new appointment for a patient."
+      />
 
       <NewAppointmentLayout
         action={createAppointment}
@@ -90,6 +89,7 @@ export default async function NewAppointmentPage({ searchParams }: PageProps) {
         defaultDepartmentId={dept_id}
         defaultInsuranceId={insurance_id}
         clinicWorkingHours={clinicWorkingHours}
+        cancelHref={returnHref}
       />
     </div>
   );

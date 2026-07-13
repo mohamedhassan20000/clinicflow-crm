@@ -1,5 +1,8 @@
+import { Gift } from "lucide-react";
 import { createCoupon, setCouponActive } from "@/actions/operator";
 import { OperatorActionForm } from "@/components/operator/operator-action-form";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { TableEmptyState } from "@/components/shared/data-table";
 import { listOperatorClinics } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -63,50 +66,58 @@ export default async function OperatorCouponsPage() {
         </OperatorActionForm>
       </section>
 
-      <section className="overflow-x-auto rounded-xl border bg-card">
-        <table className="w-full text-sm">
-          <thead className="border-b text-muted-foreground">
-            <tr>
-              {["Code", "Kind", "Value", "Expires", "Redemptions", "Assignment", "Active", "Actions"].map((heading) => (
-                <th key={heading} className="px-4 py-3 text-start font-medium">{heading}</th>
+      <section className="overflow-hidden rounded-xl border bg-card">
+        {(coupons.data ?? []).length === 0 ? (
+          <TableEmptyState
+            icon={Gift}
+            title="No coupons yet"
+            description="Coupons you create appear here with their redemption state."
+          />
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                {["Code", "Kind", "Value", "Expires", "Redemptions", "Assignment", "Active", "Actions"].map((heading) => (
+                  <TableHead key={heading}>{heading}</TableHead>
+                ))}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {(coupons.data ?? []).map((coupon) => (
+                <TableRow key={coupon.id}>
+                  <TableCell className="font-mono text-xs">{coupon.code}</TableCell>
+                  <TableCell>{coupon.kind.replaceAll("_", " ")}</TableCell>
+                  <TableCell>
+                    {coupon.kind === "months_free" ? `${coupon.months} months` : coupon.kind === "percent_discount" ? `${coupon.percent}%` : "∞"}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{coupon.expires_at?.slice(0, 10) ?? "never"}</TableCell>
+                  <TableCell className="tabular-nums">
+                    {coupon.redemption_count}{coupon.max_redemptions ? ` / ${coupon.max_redemptions}` : ""}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {coupon.clinic_id
+                      ? `clinic: ${clinicNames.get(coupon.clinic_id) ?? coupon.clinic_id}`
+                      : coupon.invitation_id
+                        ? "invitation"
+                        : "global"}
+                  </TableCell>
+                  <TableCell>{coupon.is_active ? "yes" : "no"}</TableCell>
+                  <TableCell>
+                    <OperatorActionForm
+                      action={setCouponActive}
+                      submitLabel={coupon.is_active ? "Deactivate" : "Activate"}
+                      submitVariant="outline"
+                      className="space-y-1"
+                    >
+                      <input type="hidden" name="couponId" value={coupon.id} />
+                      <input type="hidden" name="isActive" value={coupon.is_active ? "false" : "true"} />
+                    </OperatorActionForm>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tr>
-          </thead>
-          <tbody>
-            {(coupons.data ?? []).map((coupon) => (
-              <tr key={coupon.id} className="border-b last:border-0">
-                <td className="px-4 py-3 font-mono text-xs">{coupon.code}</td>
-                <td className="px-4 py-3">{coupon.kind.replaceAll("_", " ")}</td>
-                <td className="px-4 py-3">
-                  {coupon.kind === "months_free" ? `${coupon.months} months` : coupon.kind === "percent_discount" ? `${coupon.percent}%` : "∞"}
-                </td>
-                <td className="px-4 py-3 text-muted-foreground">{coupon.expires_at?.slice(0, 10) ?? "never"}</td>
-                <td className="px-4 py-3 tabular-nums">
-                  {coupon.redemption_count}{coupon.max_redemptions ? ` / ${coupon.max_redemptions}` : ""}
-                </td>
-                <td className="px-4 py-3 text-muted-foreground">
-                  {coupon.clinic_id
-                    ? `clinic: ${clinicNames.get(coupon.clinic_id) ?? coupon.clinic_id}`
-                    : coupon.invitation_id
-                      ? "invitation"
-                      : "global"}
-                </td>
-                <td className="px-4 py-3">{coupon.is_active ? "yes" : "no"}</td>
-                <td className="px-4 py-3">
-                  <OperatorActionForm
-                    action={setCouponActive}
-                    submitLabel={coupon.is_active ? "Deactivate" : "Activate"}
-                    submitVariant="outline"
-                    className="space-y-1"
-                  >
-                    <input type="hidden" name="couponId" value={coupon.id} />
-                    <input type="hidden" name="isActive" value={coupon.is_active ? "false" : "true"} />
-                  </OperatorActionForm>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+            </TableBody>
+          </Table>
+        )}
       </section>
     </>
   );

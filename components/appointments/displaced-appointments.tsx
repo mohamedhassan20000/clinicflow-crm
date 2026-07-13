@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { dismissDisplacedAppointment } from "@/actions/appointments";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
 import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
+import { withReturnTo } from "@/lib/navigation/return-url";
 
 export type DisplacedAppointmentItem = {
   id: string;
@@ -26,9 +27,10 @@ export type DisplacedAppointmentItem = {
 
 interface DisplacedAppointmentsProps {
   items: DisplacedAppointmentItem[];
+  returnHref?: string;
 }
 
-export function DisplacedAppointments({ items }: DisplacedAppointmentsProps) {
+export function DisplacedAppointments({ items, returnHref = "/appointments" }: DisplacedAppointmentsProps) {
   const { formatTime } = useClinicSettings();
   const [collapsed, setCollapsed] = useState(false);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
@@ -126,7 +128,7 @@ export function DisplacedAppointments({ items }: DisplacedAppointmentsProps) {
                       variant="outline"
                       className="h-7 gap-1.5 px-2.5 text-xs"
                     >
-                      <Link href={`/appointments/new?${rebookParams.toString()}`}>
+                      <Link href={withReturnTo(`/appointments/new?${rebookParams.toString()}`, returnHref)}>
                         <RefreshCw className="h-3 w-3" />
                         Rebook
                       </Link>

@@ -252,7 +252,12 @@ export function CreateStaffForm({
               <FormItem className="sm:col-span-2">
                 <FormLabel>Phone (optional)</FormLabel>
                 <FormControl>
-                  <InternationalPhoneInput {...field} value={field.value ?? ""} disabled={isPending} />
+                  <InternationalPhoneInput
+                    {...field}
+                    name={undefined}
+                    value={field.value ?? ""}
+                    disabled={isPending}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -419,7 +424,12 @@ export function EditStaffForm({
               <FormItem>
                 <FormLabel>Phone</FormLabel>
                 <FormControl>
-                  <InternationalPhoneInput {...field} value={field.value ?? ""} disabled={isPending} />
+                  <InternationalPhoneInput
+                    {...field}
+                    name={undefined}
+                    value={field.value ?? ""}
+                    disabled={isPending}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>

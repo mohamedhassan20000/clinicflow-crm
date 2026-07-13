@@ -1,4 +1,7 @@
+import { Mail } from "lucide-react";
 import { createClinicInvitation } from "@/actions/early-access";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { TableEmptyState } from "@/components/shared/data-table";
 import { issueInvitationForm, revokeInvitationForm } from "@/actions/operator";
 import { OperatorActionForm } from "@/components/operator/operator-action-form";
 import { InternationalPhoneField } from "@/components/shared/international-phone-input";
@@ -59,52 +62,60 @@ export default async function OperatorInvitationsPage() {
         </OperatorActionForm>
       </section>
 
-      <section className="overflow-x-auto rounded-xl border bg-card">
-        <table className="w-full text-sm">
-          <thead className="border-b text-muted-foreground">
-            <tr>
-              {["Clinic", "Owner", "Email", "Status", "Expires", "Actions"].map((heading) => (
-                <th key={heading} className="px-4 py-3 text-start font-medium">{heading}</th>
+      <section className="overflow-hidden rounded-xl border bg-card">
+        {rows.length === 0 ? (
+          <TableEmptyState
+            icon={Mail}
+            title="No invitations yet"
+            description="Early-access requests and invitations you issue appear here."
+          />
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                {["Clinic", "Owner", "Email", "Status", "Expires", "Actions"].map((heading) => (
+                  <TableHead key={heading}>{heading}</TableHead>
+                ))}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((row) => (
+                <TableRow key={row.id} className="align-top">
+                  <TableCell className="font-medium">{row.clinic_name}</TableCell>
+                  <TableCell>{row.owner_name}</TableCell>
+                  <TableCell>{row.email}</TableCell>
+                  <TableCell>
+                    {row.status === "pending" && !row.token_hash ? "requested" : row.status}
+                    {row.accepted_at ? ` (${row.accepted_at.slice(0, 10)})` : ""}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{row.expires_at ? row.expires_at.slice(0, 10) : "—"}{row.email_sent_at ? <span className="mt-1 block text-xs text-emerald-700">Email sent {row.email_sent_at.slice(0, 10)}</span> : null}</TableCell>
+                  <TableCell>
+                    {row.status === "pending" ? (
+                      <div className="flex flex-wrap items-start gap-3">
+                        <OperatorActionForm
+                          action={issueInvitationForm}
+                          submitLabel={row.token_hash ? "Resend (rotate token)" : "Issue"}
+                          submitVariant="outline"
+                          className="space-y-2"
+                        >
+                          <input type="hidden" name="invitationId" value={row.id} />
+                          <label className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <input type="checkbox" name="force" value="true" /> override limit
+                          </label>
+                        </OperatorActionForm>
+                        <OperatorActionForm action={revokeInvitationForm} submitLabel="Revoke" submitVariant="destructive" className="space-y-2">
+                          <input type="hidden" name="invitationId" value={row.id} />
+                        </OperatorActionForm>
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                </TableRow>
               ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={row.id} className="border-b align-top last:border-0">
-                <td className="px-4 py-3 font-medium">{row.clinic_name}</td>
-                <td className="px-4 py-3">{row.owner_name}</td>
-                <td className="px-4 py-3">{row.email}</td>
-                <td className="px-4 py-3">
-                  {row.status === "pending" && !row.token_hash ? "requested" : row.status}
-                  {row.accepted_at ? ` (${row.accepted_at.slice(0, 10)})` : ""}
-                </td>
-                <td className="px-4 py-3 text-muted-foreground">{row.expires_at ? row.expires_at.slice(0, 10) : "—"}{row.email_sent_at ? <span className="mt-1 block text-xs text-emerald-700">Email sent {row.email_sent_at.slice(0, 10)}</span> : null}</td>
-                <td className="px-4 py-3">
-                  {row.status === "pending" ? (
-                    <div className="flex flex-wrap items-start gap-3">
-                      <OperatorActionForm
-                        action={issueInvitationForm}
-                        submitLabel={row.token_hash ? "Resend (rotate token)" : "Issue"}
-                        submitVariant="outline"
-                        className="space-y-2"
-                      >
-                        <input type="hidden" name="invitationId" value={row.id} />
-                        <label className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <input type="checkbox" name="force" value="true" /> override limit
-                        </label>
-                      </OperatorActionForm>
-                      <OperatorActionForm action={revokeInvitationForm} submitLabel="Revoke" submitVariant="destructive" className="space-y-2">
-                        <input type="hidden" name="invitationId" value={row.id} />
-                      </OperatorActionForm>
-                    </div>
-                  ) : (
-                    <span className="text-muted-foreground">—</span>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+            </TableBody>
+          </Table>
+        )}
       </section>
     </>
   );

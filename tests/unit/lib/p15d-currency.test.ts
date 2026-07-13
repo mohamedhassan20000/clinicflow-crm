@@ -30,9 +30,42 @@ describe("P1.5D currency conversion", () => {
     expect(formatMoney(convertForDisplay(123.4, "JPY", "JPY", [], now))).not.toContain(".4");
   });
 
-  it("keeps registry metadata in one extensible definition", () => {
+  // BUG-1 (Pre-P2 WS0): dashboards call formatCurrency({ maximumFractionDigits: 0 })
+  // for compact figures; the registry's minimumFractionDigits default must never
+  // conflict with a caller override (Intl throws RangeError when min > max).
+  it("honors caller fraction-digit overrides without an Intl RangeError", () => {
+    const kwd = convertForDisplay(1234.567, "KWD", "KWD", [], now);
+    expect(() => formatMoney(kwd, "en", { maximumFractionDigits: 0 })).not.toThrow();
+    expect(formatMoney(kwd, "en", { maximumFractionDigits: 0 })).not.toContain(".");
+    // Converted path (approximate) with the same override
+    const converted = convertForDisplay(10, "KWD", "USD", rates(0), now);
+    expect(formatMoney(converted, "en", { maximumFractionDigits: 0 })).toMatch(/^≈ /);
+    // Integer/decimal report style: max 1 digit on a 3-minor-unit currency
+    expect(() => formatMoney(kwd, "en", { maximumFractionDigits: 1 })).not.toThrow();
+    // Caller raising only the minimum must also stay consistent (JPY min 0 default)
+    const jpy = convertForDisplay(5, "JPY", "JPY", [], now);
+    expect(() => formatMoney(jpy, "en", { minimumFractionDigits: 2 })).not.toThrow();
+    // No overrides: registry minor units still apply
+    expect(formatMoney(kwd)).toContain("1,234.567");
+  });
+
+  it("keeps registry metadata in one extensible definition with derived names/flags", () => {
     expect(CURRENCIES.map(({ code }) => code)).toEqual(expect.arrayContaining(["USD", "KWD", "SAR", "AED", "EGP", "TRY", "EUR", "GBP", "JPY"]));
     expect(getCurrency("KWD")?.minorUnits).toBe(3);
+    // WS4: registry expanded well beyond the original 12, still FX-covered
+    expect(CURRENCIES.length).toBeGreaterThanOrEqual(30);
+    // Every entry has a derived country name, currency name, and flag
+    for (const c of CURRENCIES) {
+      expect(c.countryName.length).toBeGreaterThan(0);
+      expect(c.currencyName.length).toBeGreaterThan(0);
+      expect(c.flag.length).toBeGreaterThan(0);
+      expect([0, 2, 3]).toContain(c.minorUnits);
+    }
+    // Money-critical minor units are correct for zero- and three-decimal cases
+    expect(getCurrency("JPY")?.minorUnits).toBe(0);
+    expect(getCurrency("KRW")?.minorUnits).toBe(0);
+    expect(getCurrency("BHD")?.minorUnits).toBe(3);
+    expect(getCurrency("OMR")?.minorUnits).toBe(3);
   });
 });
 

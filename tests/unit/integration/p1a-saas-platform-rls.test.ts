@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Database } from "@/types/database";
@@ -15,16 +16,16 @@ type Client = SupabaseClient<Database>;
 
 const suffix = `p1a-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 const password = "P1aTest12345";
-const clinicA = "91000000-0000-4000-8000-000000000001";
-const clinicB = "91000000-0000-4000-8000-000000000002";
-const subscriptionA = "92000000-0000-4000-8000-000000000001";
-const subscriptionB = "92000000-0000-4000-8000-000000000002";
-const couponA = "93000000-0000-4000-8000-000000000001";
-const couponB = "93000000-0000-4000-8000-000000000002";
-const invitation = "94000000-0000-4000-8000-000000000001";
-const patientA = "95000000-0000-4000-8000-000000000001";
-const appointmentA = "96000000-0000-4000-8000-000000000001";
-const noteA = "97000000-0000-4000-8000-000000000001";
+const clinicA = randomUUID();
+const clinicB = randomUUID();
+const subscriptionA = randomUUID();
+const subscriptionB = randomUUID();
+const couponA = randomUUID();
+const couponB = randomUUID();
+const invitation = randomUUID();
+const patientA = randomUUID();
+const appointmentA = randomUUID();
+const noteA = randomUUID();
 
 const service = createClient<Database>(url, secretKey, {
   auth: { autoRefreshToken: false, persistSession: false },

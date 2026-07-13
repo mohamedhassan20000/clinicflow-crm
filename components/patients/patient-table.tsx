@@ -7,8 +7,11 @@ import { UserPlus, ChevronLeft, ChevronRight, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { TableEmptyState } from "@/components/shared/data-table";
 import { cn } from "@/lib/utils";
 import { formatDoctorName } from "@/lib/format-doctor";
+import { pathWithSearch, withReturnTo } from "@/lib/navigation/return-url";
 type Patient = {
   id: string;
   file_number: string | null;
@@ -61,6 +64,8 @@ export function PatientTable({
     "";
   const totalPages = Math.ceil(total / pageSize);
   const isSearching = search.trim().length > 0;
+  const returnHref = pathWithSearch("/patients", params);
+  const newPatientHref = withReturnTo("/patients/new", returnHref);
 
   function pageHref(nextPage: number) {
     const next = new URLSearchParams(params.toString());
@@ -107,7 +112,7 @@ export function PatientTable({
       {canCreate && (
         <div className="flex items-center justify-end gap-3 print:hidden">
           <Button asChild size="sm" className="h-9 gap-1.5">
-            <Link href="/patients/new">
+            <Link href={newPatientHref}>
               <UserPlus className="h-4 w-4" />
               New patient
             </Link>
@@ -116,10 +121,28 @@ export function PatientTable({
       )}
 
       {data.length === 0 ? (
-        <div className="rounded-xl border border-border/50 bg-card px-4 py-12 text-center text-sm text-muted-foreground">
-          {isSearching
-            ? "No patients match your search."
-            : "No patients yet."}
+        <div className="rounded-xl border border-border/50 bg-card">
+          <TableEmptyState
+            icon={Users}
+            title={isSearching ? "No patients match your search" : "No patients yet"}
+            description={
+              isSearching
+                ? "Try a different name, file number, national ID, or phone."
+                : canCreate
+                  ? "Create the first patient record to get started."
+                  : "Patient records appear here once they are created."
+            }
+            action={
+              !isSearching && canCreate ? (
+                <Button asChild size="sm" className="h-9 gap-1.5">
+                  <Link href={newPatientHref}>
+                    <UserPlus className="h-4 w-4" />
+                    New patient
+                  </Link>
+                </Button>
+              ) : undefined
+            }
+          />
         </div>
       ) : isSearching ? (
         // Search active → flat result list, hide grouped departments.
@@ -129,6 +152,7 @@ export function PatientTable({
           patients={data}
           showDepartmentBadge
           isSearch
+          returnHref={returnHref}
         />
       ) : (
         // Default view → one table per department.
@@ -139,6 +163,7 @@ export function PatientTable({
               name={g.name}
               color={g.color}
               patients={g.patients}
+              returnHref={returnHref}
             />
           ))}
         </div>
@@ -195,12 +220,14 @@ function PatientGroupTable({
   patients,
   showDepartmentBadge = false,
   isSearch = false,
+  returnHref,
 }: {
   name: string;
   color: string;
   patients: Patient[];
   showDepartmentBadge?: boolean;
   isSearch?: boolean;
+  returnHref: string;
 }) {
   return (
     <section
@@ -239,57 +266,40 @@ function PatientGroupTable({
           {patients.length} patient{patients.length !== 1 ? "s" : ""}
         </span>
       </header>
-      <div className="overflow-x-auto">
-        <table className="w-full table-fixed text-sm">
-          <colgroup>
-            <col className="w-24" />
-            <col />
-            <col className={showDepartmentBadge ? "w-28" : "w-32"} />
-            {showDepartmentBadge && <col className="w-32" />}
-            <col className={showDepartmentBadge ? "w-36" : "w-40"} />
-            <col className={showDepartmentBadge ? "w-28" : "w-32"} />
-            <col className="w-16" />
-          </colgroup>
-          <thead className="border-b border-border/50 bg-muted/30">
-            <tr>
-              <th className="px-4 py-2.5 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                File #
-              </th>
-              <th className="px-4 py-2.5 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                Patient
-              </th>
-              <th className="px-4 py-2.5 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                National ID
-              </th>
-              {showDepartmentBadge && (
-                <th className="px-4 py-2.5 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                  Department
-                </th>
-              )}
-              <th className="px-4 py-2.5 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                Doctor
-              </th>
-              <th className="px-4 py-2.5 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                Phone
-              </th>
-              <th className="px-4 py-2.5 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                Blood
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {patients.map((p) => (
-              <PatientRow
-                key={p.id}
-                patient={p}
-                accentColor={color}
-                showDepartmentBadge={showDepartmentBadge}
-                highlight={isSearch}
-              />
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <Table className="table-fixed">
+        <colgroup>
+          <col className="w-24" />
+          <col />
+          <col className={showDepartmentBadge ? "w-28" : "w-32"} />
+          {showDepartmentBadge && <col className="w-32" />}
+          <col className={showDepartmentBadge ? "w-36" : "w-40"} />
+          <col className={showDepartmentBadge ? "w-28" : "w-32"} />
+          <col className="w-16" />
+        </colgroup>
+        <TableHeader sticky>
+          <TableRow>
+            <TableHead>File #</TableHead>
+            <TableHead>Patient</TableHead>
+            <TableHead>National ID</TableHead>
+            {showDepartmentBadge && <TableHead>Department</TableHead>}
+            <TableHead>Doctor</TableHead>
+            <TableHead>Phone</TableHead>
+            <TableHead>Blood</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {patients.map((p) => (
+            <PatientRow
+              key={p.id}
+              patient={p}
+              accentColor={color}
+              showDepartmentBadge={showDepartmentBadge}
+              highlight={isSearch}
+              returnHref={returnHref}
+            />
+          ))}
+        </TableBody>
+      </Table>
     </section>
   );
 }
@@ -299,14 +309,16 @@ function PatientRow({
   accentColor,
   showDepartmentBadge,
   highlight,
+  returnHref,
 }: {
   patient: Patient;
   accentColor: string;
   showDepartmentBadge: boolean;
   highlight: boolean;
+  returnHref: string;
 }) {
   const router = useRouter();
-  const href = `/patients/${patient.id}`;
+  const href = withReturnTo(`/patients/${patient.id}`, returnHref);
   const dept = patient.departments;
   const doc = patient.assigned_doctor;
   const blood = patient.blood_type;
@@ -318,7 +330,7 @@ function PatientRow({
   }
 
   return (
-    <tr
+    <TableRow
       role="link"
       tabIndex={0}
       onClick={go}
@@ -329,17 +341,16 @@ function PatientRow({
         }
       }}
       className={cn(
-        "cursor-pointer border-b border-border/30 transition-colors last:border-0",
-        "hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+        "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
         highlight && "bg-amber-50/40 dark:bg-amber-500/5",
       )}
     >
-      <td className="px-4 py-3">
+      <TableCell>
         <span className="font-mono text-xs text-muted-foreground">
           {patient.file_number ?? "—"}
         </span>
-      </td>
-      <td className="max-w-0 px-4 py-3">
+      </TableCell>
+      <TableCell className="max-w-0">
         <div className="flex min-w-0 items-center gap-2">
           <Avatar className="h-8 w-8 print:hidden">
             {patient.avatar_url && (
@@ -367,14 +378,14 @@ function PatientRow({
             </Badge>
           )}
         </div>
-      </td>
-      <td className="px-4 py-3">
+      </TableCell>
+      <TableCell>
         <span className="font-mono text-xs text-muted-foreground">
           {patient.national_id ?? "—"}
         </span>
-      </td>
+      </TableCell>
       {showDepartmentBadge && (
-        <td className="px-4 py-3">
+        <TableCell>
           {dept ? (
             <Badge
               variant="outline"
@@ -390,9 +401,9 @@ function PatientRow({
           ) : (
             <span className="text-muted-foreground/40">—</span>
           )}
-        </td>
+        </TableCell>
       )}
-      <td className="px-4 py-3">
+      <TableCell>
         {doc ? (
           <span className="text-xs text-muted-foreground">
             {formatDoctorName(doc.full_name)}
@@ -400,13 +411,13 @@ function PatientRow({
         ) : (
           <span className="text-muted-foreground/40">—</span>
         )}
-      </td>
-      <td className="px-4 py-3">
+      </TableCell>
+      <TableCell>
         <span className="whitespace-nowrap text-muted-foreground">
           {patient.phone ?? "—"}
         </span>
-      </td>
-      <td className="px-4 py-3">
+      </TableCell>
+      <TableCell>
         {blood ? (
           <Badge variant="secondary" className="font-mono text-xs">
             {blood}
@@ -414,7 +425,7 @@ function PatientRow({
         ) : (
           <span className="text-muted-foreground/40">—</span>
         )}
-      </td>
-    </tr>
+      </TableCell>
+    </TableRow>
   );
 }

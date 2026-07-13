@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { requireRole } from "@/lib/rbac";
 import { getCachedInsuranceProviders } from "@/lib/cache/reference-data";
 import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { InsuranceActions } from "@/components/settings/insurance-actions";
 import { AddInsuranceDialog } from "@/components/settings/add-insurance-dialog";
 import {
@@ -47,59 +48,57 @@ export default async function InsuranceSettingsPage() {
       </div>
 
       <div className="rounded-xl border border-border/50 overflow-hidden">
-        <table className="w-full table-fixed text-sm">
+        <Table className="table-fixed">
           <colgroup>
             <col />
             <col className="hidden w-28 sm:table-column" />
             <col className="w-24" />
             <col className="w-28" />
           </colgroup>
-          <thead>
-            <tr className="border-b border-border/50 bg-muted/30">
-              <th className="px-4 py-3 text-left font-medium text-muted-foreground">Provider</th>
-              <th className="hidden px-4 py-3 text-left font-medium text-muted-foreground sm:table-cell">
-                Code
-              </th>
-              <th className="px-4 py-3 text-left font-medium text-muted-foreground">Status</th>
-              <th className="px-4 py-3 text-right font-medium text-muted-foreground">
+          <TableHeader>
+            <TableRow>
+              <TableHead>Provider</TableHead>
+              <TableHead className="hidden sm:table-cell">Code</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="text-end">
                 <span className="sr-only">Actions</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border/50">
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {providers.length === 0 && (
-              <tr>
-                <td colSpan={4} className="py-10 text-center text-sm text-muted-foreground">
+              <TableRow>
+                <TableCell colSpan={4} className="py-10 text-center text-sm text-muted-foreground">
                   No insurance providers yet.
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             )}
             {providers.map((provider) => (
-              <tr key={provider.id} className="hover:bg-muted/20 transition-colors">
-                <td className="px-4 py-3 font-medium">{provider.name}</td>
-                <td className="hidden px-4 py-3 text-muted-foreground font-mono text-xs sm:table-cell">
+              <TableRow key={provider.id}>
+                <TableCell className="font-medium">{provider.name}</TableCell>
+                <TableCell className="hidden text-muted-foreground font-mono text-xs sm:table-cell">
                   {provider.code ?? <span className="text-muted-foreground/50 font-sans">—</span>}
-                </td>
-                <td className="px-4 py-3">
+                </TableCell>
+                <TableCell>
                   <Badge
                     variant={provider.is_active ? "default" : "secondary"}
                     className={`text-xs ${provider.is_active ? "bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/10 border-emerald-500/20" : ""}`}
                   >
                     {provider.is_active ? "Active" : "Inactive"}
                   </Badge>
-                </td>
-                <td className="px-4 py-3 text-right">
+                </TableCell>
+                <TableCell className="text-end">
                   <InsuranceActions
                     provider={provider}
                     updateAction={updateInsurance.bind(null, provider.id)}
                     toggleAction={toggleInsuranceActive.bind(null, provider.id)}
                     deleteAction={softDeleteInsurance.bind(null, provider.id)}
                   />
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
 
       <SettingsTrashSection

@@ -40,6 +40,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Label } from "@/components/ui/label";
 import { EditStaffForm } from "@/components/settings/staff-form";
 import { StaffProfileSheet } from "@/components/settings/staff-profile-sheet";
@@ -204,7 +205,7 @@ export function StaffTable({ staff, departments, currentUserId, lastSeenMap, isA
   return (
     <>
       <div className="rounded-xl border border-border/50 overflow-hidden">
-        <table className="w-full table-fixed text-sm">
+        <Table className="table-fixed">
           <colgroup>
             <col />
             <col className="hidden w-36 sm:table-column" />
@@ -212,39 +213,37 @@ export function StaffTable({ staff, departments, currentUserId, lastSeenMap, isA
             <col className="w-24" />
             <col className="w-12" />
           </colgroup>
-          <thead>
-            <tr className="border-b border-border/50 bg-muted/30">
-              <th className="px-4 py-3 text-left font-medium text-muted-foreground">Name</th>
-              <th className="hidden px-4 py-3 text-left font-medium text-muted-foreground sm:table-cell">
-                Department
-              </th>
-              <th className="px-4 py-3 text-left font-medium text-muted-foreground">Role</th>
-              <th className="px-4 py-3 text-left font-medium text-muted-foreground">Status</th>
-              <th className="px-4 py-3 text-right font-medium text-muted-foreground">
+          <TableHeader>
+            <TableRow>
+              <TableHead>Name</TableHead>
+              <TableHead className="hidden sm:table-cell">Department</TableHead>
+              <TableHead>Role</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="text-end">
                 <span className="sr-only">Actions</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border/50">
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {staff.length === 0 && (
-              <tr>
-                <td
+              <TableRow>
+                <TableCell
                   colSpan={5}
                   className="py-10 text-center text-sm text-muted-foreground"
                 >
                   No staff members yet.
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             )}
             {staff.map((s) => {
               const rowPending = pendingAction?.id === s.id;
               return (
-              <tr
+              <TableRow
                 key={s.id}
-                className="hover:bg-muted/20 transition-colors cursor-pointer"
+                className="cursor-pointer"
                 onClick={() => setProfileTarget(s)}
               >
-                <td className="px-4 py-3">
+                <TableCell>
                   <div className="flex min-w-0 items-center gap-3">
                     <Avatar className="h-9 w-9">
                       {s.avatar_url && (
@@ -263,25 +262,25 @@ export function StaffTable({ staff, departments, currentUserId, lastSeenMap, isA
                       )}
                     </div>
                   </div>
-                </td>
-                <td className="hidden px-4 py-3 text-muted-foreground sm:table-cell">
+                </TableCell>
+                <TableCell className="hidden text-muted-foreground sm:table-cell">
                   {s.departments?.name ?? <span className="text-muted-foreground/50">—</span>}
-                </td>
-                <td className="px-4 py-3">
+                </TableCell>
+                <TableCell>
                   <Badge variant={ROLE_VARIANTS[s.role] ?? "outline"} className="text-xs">
                     {ROLE_LABELS[s.role] ?? s.role}
                   </Badge>
-                </td>
-                <td className="px-4 py-3">
+                </TableCell>
+                <TableCell>
                   <Badge
                     variant={s.is_active ? "default" : "secondary"}
                     className={`text-xs ${s.is_active ? "bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/10 border-emerald-500/20" : ""}`}
                   >
                     {s.is_active ? "Active" : "Inactive"}
                   </Badge>
-                </td>
-                <td
-                  className="px-4 py-3 text-right"
+                </TableCell>
+                <TableCell
+                  className="text-end"
                   onClick={(e) => e.stopPropagation()}
                 >
                   {rowPending ? (
@@ -339,12 +338,12 @@ export function StaffTable({ staff, departments, currentUserId, lastSeenMap, isA
                       </DropdownMenuContent>
                     </DropdownMenu>
                   )}
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
               );
             })}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
 
       {/* Staff profile sheet */}

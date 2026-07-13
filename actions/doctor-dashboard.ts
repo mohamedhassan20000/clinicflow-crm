@@ -102,6 +102,25 @@ function firstRelation<T>(value: T | T[] | null): T | null {
   return value;
 }
 
+// Stats queries degrade to zeroed sections instead of crashing the dashboard,
+// but a failed query must still be visible in the server log.
+function logStatsQueryErrors<T extends readonly unknown[]>(results: T): T {
+  results.forEach((result, index) => {
+    if (
+      result &&
+      typeof result === "object" &&
+      "error" in result &&
+      (result as { error: unknown }).error
+    ) {
+      console.error(
+        `[doctor-dashboard] stats query #${index} failed`,
+        (result as { error: unknown }).error,
+      );
+    }
+  });
+  return results;
+}
+
 function toQueueItem(row: QueueAppointmentRow): DoctorQueueItem {
   const patient = firstRelation(row.patients);
   const service = firstRelation(row.services);
@@ -216,7 +235,7 @@ export async function fetchDoctorDashboardStats(
     { data: deptAppts },
     { data: clinicAppts },
     { data: myFollowUps },
-  ] = await Promise.all([
+  ] = logStatsQueryErrors(await Promise.all([
     supabase
       .from("appointments")
       .select("id", { count: "exact", head: true })
@@ -267,7 +286,7 @@ export async function fetchDoctorDashboardStats(
       .eq("clinic_id", clinicId)
       .gte("recorded_at", start)
       .lte("recorded_at", end),
-  ]);
+  ]));
 
   // Doctor stats
   const myPatientsSet = new Set<string>();

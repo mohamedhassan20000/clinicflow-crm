@@ -3,6 +3,7 @@
 import type { ClinicPrintMeta, FollowupsReportResponse, ReportDateRange } from "@/types/reports";
 import { EmptyReportState, MetricGrid, ReportSectionShell } from "@/components/reports/report-section-shell";
 import { formatDateRangeLabel, formatNumber, formatPercent } from "@/components/reports/report-formatters";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
 
 export function FollowupsReport({
@@ -45,34 +46,34 @@ export function FollowupsReport({
       {total === 0 ? (
         <EmptyReportState />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-border/50 print:overflow-visible print:border-black">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/40 text-left text-xs text-muted-foreground">
-              <tr>
-                <th className="px-3 py-2 font-medium">Outcome</th>
-                <th className="px-3 py-2 text-right font-medium">Count</th>
-                <th className="px-3 py-2 text-right font-medium">Rate</th>
-                <th className="px-3 py-2 font-medium print:hidden">Share</th>
-              </tr>
-            </thead>
-            <tbody>
+        <div className="overflow-hidden rounded-lg border border-border/50 print:overflow-visible print:border-black">
+          <Table dense>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Outcome</TableHead>
+                <TableHead className="text-end">Count</TableHead>
+                <TableHead className="text-end">Rate</TableHead>
+                <TableHead className="print:hidden">Share</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {rows.map((row) => (
-                <tr key={row.label} className="border-t border-border/50">
-                  <td className="px-3 py-2 font-medium">{row.label}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatNumber(row.count, locale)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatPercent(row.rate, locale)}</td>
-                  <td className="px-3 py-2 print:hidden">
+                <TableRow key={row.label}>
+                  <TableCell className="font-medium">{row.label}</TableCell>
+                  <TableCell className="text-end tabular-nums">{formatNumber(row.count, locale)}</TableCell>
+                  <TableCell className="text-end tabular-nums">{formatPercent(row.rate, locale)}</TableCell>
+                  <TableCell className="print:hidden">
                     <div className="h-2 overflow-hidden rounded-full bg-muted">
                       <div
                         className="h-full rounded-full bg-primary"
                         style={{ width: `${Math.min(100, Math.max(0, row.rate))}%` }}
                       />
                     </div>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       )}
     </ReportSectionShell>

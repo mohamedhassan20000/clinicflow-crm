@@ -27,6 +27,9 @@
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
+  --color-calendar-grid: var(--calendar-grid);
+  --color-calendar-grid-strong: var(--calendar-grid-strong);
+  --color-calendar-non-working: var(--calendar-non-working);
   --color-destructive: var(--destructive);
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
@@ -87,6 +90,11 @@
   --input: oklch(0.91 0.015 215);
   --ring: oklch(0.6 0.14 208);
 
+  /* Calendar structure: intentionally stronger than general card borders. */
+  --calendar-grid: oklch(0.84 0.018 215);
+  --calendar-grid-strong: oklch(0.74 0.025 215);
+  --calendar-non-working: oklch(0.94 0.012 215);
+
   --chart-1: oklch(0.6 0.14 208);
   --chart-2: oklch(0.78 0.13 205);
   --chart-3: oklch(0.78 0.16 75);
@@ -133,6 +141,9 @@
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.72 0.13 200);
+  --calendar-grid: oklch(1 0 0 / 18%);
+  --calendar-grid-strong: oklch(1 0 0 / 30%);
+  --calendar-non-working: oklch(0.27 0.045 228);
   --chart-1: oklch(0.72 0.13 200);
   --chart-2: oklch(0.7 0.12 200);
   --chart-3: oklch(0.82 0.16 75);
@@ -209,6 +220,17 @@
   }
 }
 
+.calendar-non-working-band {
+  background-color: var(--calendar-non-working);
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 7px,
+    color-mix(in oklab, var(--muted-foreground) 10%, transparent) 7px,
+    color-mix(in oklab, var(--muted-foreground) 10%, transparent) 8px
+  );
+}
+
 /* ─── Aurora animation for auth pages ─── */
 @keyframes aurora-drift {
   0%, 100% { transform: translate(0%, 0%) scale(1); opacity: 0.6; }
@@ -260,17 +282,112 @@
   animation: auth-feature-in 460ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-@keyframes marketing-reveal { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes marketing-float { 0%, 100% { transform: translateY(0) rotate(-0.4deg); } 50% { transform: translateY(-10px) rotate(0.4deg); } }
-.marketing-reveal { animation: marketing-reveal 700ms cubic-bezier(.22,1,.36,1) both; }
-.marketing-float { animation: marketing-float 7s ease-in-out infinite; }
-.marketing-card { transition: transform 240ms ease, box-shadow 240ms ease, border-color 240ms ease; }
-.marketing-card:hover { transform: translateY(-5px); border-color: color-mix(in oklab, var(--primary) 25%, transparent); box-shadow: 0 24px 50px -32px rgba(15, 118, 110, .45); }
+/* ─── Marketing: sea-glass product narrative ─── */
+.marketing-page {
+  color-scheme: light;
+  --m-paper: #f5fbfb;
+  --m-panel: #ffffff;
+  --m-soft: #e1f4f2;
+  --m-ink: #082f3c;
+  --m-muted: #436873;
+  --m-faint: #66838b;
+  --m-line: rgb(8 65 77 / 12%);
+  --m-line-strong: rgb(8 65 77 / 24%);
+  font-family: var(--font-dm-sans), system-ui, sans-serif;
+}
+
+.dark .marketing-page {
+  color-scheme: dark;
+  --m-paper: #061f28;
+  --m-panel: #092a34;
+  --m-soft: #0d3a43;
+  --m-ink: #effcfc;
+  --m-muted: #b2cfd3;
+  --m-faint: #8eb3b8;
+  --m-line: rgb(197 240 239 / 12%);
+  --m-line-strong: rgb(197 240 239 / 24%);
+}
+
+.marketing-eyebrow {
+  display: inline-flex;
+  min-height: 2rem;
+  align-items: center;
+  gap: .55rem;
+  border: 1px solid var(--m-line);
+  border-radius: 999px;
+  background: var(--m-panel);
+  padding: .35rem .75rem;
+  color: var(--m-muted);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: .68rem;
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.marketing-section-label {
+  color: #066d6a;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+
+.dark .marketing-section-label { color: #77ddd5; }
+
+.marketing-care-path {
+  background:
+    radial-gradient(circle at 12% 18%, rgb(19 199 216 / 8%), transparent 21rem),
+    radial-gradient(circle at 88% 72%, rgb(8 127 123 / 10%), transparent 25rem);
+}
+
+@keyframes marketing-hero-in {
+  from { opacity: 0; transform: translateY(22px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes marketing-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+@keyframes marketing-section-in {
+  from { transform: translateY(24px); }
+  to { transform: translateY(0); }
+}
+
+.marketing-hero-copy { animation: marketing-hero-in 700ms cubic-bezier(.22,1,.36,1) 80ms both; }
+.marketing-float { animation: marketing-hero-in 760ms cubic-bezier(.22,1,.36,1) 180ms both, marketing-float 8s ease-in-out 1s infinite; }
+.marketing-card,
+.marketing-product-frame {
+  transition: transform 240ms ease, box-shadow 240ms ease, border-color 240ms ease;
+}
+.marketing-card:hover { transform: translateY(-4px); box-shadow: 0 24px 50px -38px rgb(8 65 77 / 48%); }
+.marketing-product-frame:hover { transform: translateY(-3px); box-shadow: 0 38px 86px -44px rgb(4 47 60 / 58%); }
+
+@supports (animation-timeline: view()) {
+  .marketing-scroll-reveal {
+    animation: marketing-section-in linear both;
+    animation-timeline: view();
+    animation-range: entry 8% cover 28%;
+  }
+}
+
+@media (max-width: 767px) {
+  .marketing-hero-copy,
+  .marketing-float { animation: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .marketing-page { scroll-behavior: auto; }
-  .marketing-reveal, .marketing-float { animation: none; }
-  .marketing-card { transition: none; }
-  .marketing-card:hover { transform: none; }
+  .marketing-hero-copy,
+  .marketing-float,
+  .marketing-scroll-reveal { animation: none; }
+  .marketing-card,
+  .marketing-product-frame { transition: none; }
+  .marketing-card:hover,
+  .marketing-product-frame:hover { transform: none; }
 }
 
 .auth-right-panel {

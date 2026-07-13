@@ -8,6 +8,7 @@ import { getTenantShellNavigation } from "@/lib/dashboard-navigation";
 import { ClinicSettingsProvider } from "@/contexts/clinic-settings-context";
 import type { TimeFormat } from "@/lib/format-time";
 import { clinicLocaleFromRow } from "@/lib/datetime";
+import { loadDisplayContext } from "@/lib/currency/server";
 
 export default async function ProtectedLayout({
   children,
@@ -30,19 +31,20 @@ export default async function ProtectedLayout({
     .select("time_format, timezone, currency, locale, country, week_start, digits")
     .eq("id", user.clinicId)
     .single();
-  const [{ data: profile }, { data: fxRows }] = await Promise.all([
-    supabase.from("profiles").select("display_currency").eq("id", user.id).single(),
-    supabase.from("fx_rates").select("currency_code, rate, provider_timestamp, fetched_at"),
-  ]);
 
   const timeFormat: TimeFormat =
     clinic?.time_format === "12h" ? "12h" : "24h";
   const clinicLocale = clinicLocaleFromRow(clinic);
   const navItems = getTenantShellNavigation(visiblePages);
 
+  // Shared, request-memoized load (P15-P3): the same cache() the server money
+  // formatter uses, so converted pages add no duplicate queries.
+  const { displayCurrency: preferred, rates } = await loadDisplayContext(user.id);
+  const displayCurrency = preferred ?? clinicLocale.currency;
+
   return (
-    <ClinicSettingsProvider timeFormat={timeFormat} locale={clinicLocale} displayCurrency={profile?.display_currency ?? clinicLocale.currency} fxRates={(fxRows ?? []).map((row) => ({ currencyCode: row.currency_code, rate: Number(row.rate), providerTimestamp: row.provider_timestamp, fetchedAt: row.fetched_at }))}>
-      <DashboardShell navItems={navItems} user={{ fullName: user.fullName, email: user.email, roleLabel: user.role, avatarUrl: user.avatarUrl, profileHref: "/profile" }} theme={theme} displayCurrency={profile?.display_currency ?? clinicLocale.currency}>
+    <ClinicSettingsProvider timeFormat={timeFormat} locale={clinicLocale} displayCurrency={displayCurrency} fxRates={rates}>
+      <DashboardShell navItems={navItems} user={{ fullName: user.fullName, email: user.email, roleLabel: user.role, avatarUrl: user.avatarUrl, profileHref: "/profile" }} theme={theme}>
         {children}
       </DashboardShell>
     </ClinicSettingsProvider>

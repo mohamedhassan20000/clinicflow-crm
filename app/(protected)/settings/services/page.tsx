@@ -9,6 +9,7 @@ import { restoreService, deleteService, emptyServicesTrash } from "@/actions/set
 import { THIRTY_DAYS_MS } from "@/lib/constants";
 import { clinicLocaleFromRow } from "@/lib/datetime";
 import { getServerMoneyFormatter } from "@/lib/currency/server";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 export const metadata: Metadata = { title: "Services" };
 
@@ -106,33 +107,29 @@ export default async function ServicesSettingsPage() {
                   {rows.length} service{rows.length !== 1 ? "s" : ""}
                 </span>
               </div>
-              <table className="w-full table-fixed text-sm">
+              <Table dense className="table-fixed">
                 <colgroup>
                   <col />
                   <col className="w-36" />
                   <col className="w-36" />
                 </colgroup>
-                <thead className="border-b border-border/50 bg-muted/20">
-                  <tr>
-                    <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                      Service
-                    </th>
-                    <th className="px-4 py-2 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                      Price
-                    </th>
-                    <th className="px-4 py-2 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Service</TableHead>
+                    <TableHead className="text-end">Price</TableHead>
+                    <TableHead className="text-end">
                       <span className="sr-only">Actions</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/40">
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {rows.map((s) => (
-                    <tr key={s.id} className="hover:bg-muted/20 transition-colors">
-                      <td className="px-4 py-2.5 font-medium">{s.name}</td>
-                      <td className="px-4 py-2.5 text-right tabular-nums">
+                    <TableRow key={s.id}>
+                      <TableCell className="font-medium">{s.name}</TableCell>
+                      <TableCell className="text-end tabular-nums">
                         {fmtMoney(Number(s.price))}
-                      </td>
-                      <td className="px-4 py-2 text-right">
+                      </TableCell>
+                      <TableCell className="text-end">
                         <ServiceRowActions
                           service={{
                             id: s.id,
@@ -142,11 +139,11 @@ export default async function ServicesSettingsPage() {
                           }}
                           departments={deptList}
                         />
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
           ))}
         </div>

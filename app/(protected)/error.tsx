@@ -20,20 +20,28 @@ export default function Error({
       <div className="flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
         <AlertTriangle className="h-6 w-6 text-destructive" />
       </div>
-      <div>
+      <div className="max-w-md">
         <h2 className="text-lg font-semibold">Something went wrong</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          An unexpected error occurred. Please try again.
+          This page hit an unexpected error while loading. Your data is safe —
+          nothing was changed. Try again, or go back to the dashboard. If the
+          problem keeps happening, contact support and include the error ID
+          below.
         </p>
         {error.digest && (
-          <p className="mt-1 font-mono text-xs text-muted-foreground">
+          <p className="mt-2 font-mono text-xs text-muted-foreground">
             Error ID: {error.digest}
           </p>
         )}
       </div>
-      <Button onClick={reset} variant="outline" size="sm">
-        Try again
-      </Button>
+      <div className="flex items-center gap-2">
+        <Button onClick={reset} variant="default" size="sm">
+          Try again
+        </Button>
+        <Button asChild variant="outline" size="sm">
+          <a href="/dashboard">Go to dashboard</a>
+        </Button>
+      </div>
     </div>
   );
 }

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { requireRole } from "@/lib/rbac";
 import { getCachedDepartments } from "@/lib/cache/reference-data";
 import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   updateDepartment,
   toggleDepartmentActive,
@@ -47,36 +48,34 @@ export default async function DepartmentsSettingsPage() {
       </div>
 
       <div className="rounded-xl border border-border/50 overflow-hidden">
-        <table className="w-full table-fixed text-sm">
+        <Table className="table-fixed">
           <colgroup>
             <col className="w-40" />
             <col className="hidden sm:table-column" />
             <col className="w-24" />
             <col className="w-24" />
           </colgroup>
-          <thead>
-            <tr className="border-b border-border/50 bg-muted/30">
-              <th className="px-4 py-3 text-left font-medium text-muted-foreground">Department</th>
-              <th className="hidden px-4 py-3 text-left font-medium text-muted-foreground sm:table-cell">
-                Description
-              </th>
-              <th className="px-4 py-3 text-left font-medium text-muted-foreground">Status</th>
-              <th className="px-4 py-3 text-right font-medium text-muted-foreground">
+          <TableHeader>
+            <TableRow>
+              <TableHead>Department</TableHead>
+              <TableHead className="hidden sm:table-cell">Description</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="text-end">
                 <span className="sr-only">Actions</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border/50">
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {departments.length === 0 && (
-              <tr>
-                <td colSpan={4} className="py-10 text-center text-sm text-muted-foreground">
+              <TableRow>
+                <TableCell colSpan={4} className="py-10 text-center text-sm text-muted-foreground">
                   No departments yet.
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             )}
             {departments.map((dept) => (
-              <tr key={dept.id} className="hover:bg-muted/20 transition-colors">
-                <td className="px-4 py-3">
+              <TableRow key={dept.id}>
+                <TableCell>
                   <div className="flex items-center gap-2">
                     <div
                       className="h-3 w-3 rounded-full shrink-0"
@@ -84,30 +83,30 @@ export default async function DepartmentsSettingsPage() {
                     />
                     <span className="font-medium">{dept.name}</span>
                   </div>
-                </td>
-                <td className="hidden px-4 py-3 text-muted-foreground sm:table-cell">
+                </TableCell>
+                <TableCell className="hidden text-muted-foreground sm:table-cell">
                   {dept.description ?? <span className="text-muted-foreground/50">—</span>}
-                </td>
-                <td className="px-4 py-3">
+                </TableCell>
+                <TableCell>
                   <Badge
                     variant={dept.is_active ? "default" : "secondary"}
                     className={`text-xs ${dept.is_active ? "bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/10 border-emerald-500/20" : ""}`}
                   >
                     {dept.is_active ? "Active" : "Inactive"}
                   </Badge>
-                </td>
-                <td className="px-4 py-3 text-right">
+                </TableCell>
+                <TableCell className="text-end">
                   <DepartmentActions
                     dept={dept}
                     updateAction={updateDepartment.bind(null, dept.id)}
                     toggleAction={toggleDepartmentActive.bind(null, dept.id)}
                     deleteAction={softDeleteDepartment.bind(null, dept.id)}
                   />
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
 
       <SettingsTrashSection

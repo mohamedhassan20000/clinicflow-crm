@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ChevronsDownUp, ChevronsUpDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   AppointmentPaymentRow,
   type AppointmentPaymentRowData,
@@ -99,19 +100,19 @@ export function AppointmentsReportList({ appointments, settlementsByAppt }: Prop
       </div>
 
       <div className="hidden print:block">
-        <table>
-          <thead>
-            <tr>
-              <th>Date &amp; Time</th>
-              <th>Doctor</th>
-              <th>Department</th>
-              <th>Status</th>
-              <th>Total</th>
-              <th>Paid</th>
-              <th>Outstanding</th>
-            </tr>
-          </thead>
-          <tbody>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Date &amp; Time</TableHead>
+              <TableHead>Doctor</TableHead>
+              <TableHead>Department</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="text-end">Total</TableHead>
+              <TableHead className="text-end">Paid</TableHead>
+              <TableHead className="text-end">Outstanding</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {appointments.map((a) => {
               const packageLine = formatPackagePrintLine(a);
               const paid =
@@ -121,16 +122,16 @@ export function AppointmentsReportList({ appointments, settlementsByAppt }: Prop
                 (a.deposit_amount ?? 0);
 
               return (
-                <tr key={a.id}>
-                  <td style={{ whiteSpace: "nowrap" }}>
+                <TableRow key={a.id}>
+                  <TableCell style={{ whiteSpace: "nowrap" }}>
                     {new Date(a.scheduled_at).toLocaleString("en-GB", {
                       timeZone: DEFAULT_TIME_ZONE,
                       dateStyle: "medium",
                       timeStyle: "short",
                     })}
-                  </td>
-                  <td>{formatDoctorName(a.profiles?.full_name)}</td>
-                  <td>
+                  </TableCell>
+                  <TableCell>{formatDoctorName(a.profiles?.full_name)}</TableCell>
+                  <TableCell>
                     <div>{a.departments?.name ?? "-"}</div>
                     {packageLine && (
                       <div
@@ -144,20 +145,20 @@ export function AppointmentsReportList({ appointments, settlementsByAppt }: Prop
                         {packageLine}
                       </div>
                     )}
-                  </td>
-                  <td style={{ textTransform: "capitalize" }}>
+                  </TableCell>
+                  <TableCell style={{ textTransform: "capitalize" }}>
                     {a.status.replace("_", " ")}
-                  </td>
-                  <td style={moneyCellStyle}>{fmtMoney(a.total_amount ?? 0)}</td>
-                  <td style={moneyCellStyle}>{fmtMoney(paid)}</td>
-                  <td style={moneyCellStyle}>
+                  </TableCell>
+                  <TableCell style={moneyCellStyle}>{fmtMoney(a.total_amount ?? 0)}</TableCell>
+                  <TableCell style={moneyCellStyle}>{fmtMoney(paid)}</TableCell>
+                  <TableCell style={moneyCellStyle}>
                     {fmtMoney(a.outstanding_amount ?? 0)}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               );
             })}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
     </>
   );

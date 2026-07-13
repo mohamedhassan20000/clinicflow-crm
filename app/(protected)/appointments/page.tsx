@@ -27,6 +27,7 @@ import { getClinicWorkingHours } from "@/actions/settings";
 import { THIRTY_DAYS_MS } from "@/lib/constants";
 import { clinicLocaleFromRow, type ClinicLocale } from "@/lib/datetime";
 import type { Database } from "@/types/database";
+import { pathWithSearch, withReturnTo } from "@/lib/navigation/return-url";
 
 export const metadata: Metadata = { title: "Appointments" };
 
@@ -93,6 +94,7 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
     .single();
   const clinicLocale = clinicLocaleFromRow(clinic);
 
+  const appointmentSearchParams = await searchParams;
   const {
     view: viewParam,
     week,
@@ -105,7 +107,14 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
     nat,
     phone,
     name,
-  } = await searchParams;
+  } = appointmentSearchParams;
+  const currentAppointmentsUrl = pathWithSearch(
+    "/appointments",
+    new URLSearchParams(
+      Object.entries(appointmentSearchParams).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+    ),
+  );
+  const newAppointmentHref = withReturnTo("/appointments/new", currentAppointmentsUrl);
 
   const view: CalendarView =
     viewParam === "day" || viewParam === "month" ? viewParam : "week";
@@ -320,6 +329,7 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
           currentUserId={user.id}
           currentUserRole={user.role}
           clinicHours={clinicHours}
+          newAppointmentHref={newAppointmentHref}
         />
       ) : view === "month" ? (
         <MonthCalendar
@@ -327,6 +337,7 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
           monthStart={monthStart}
           canEdit={canEditAppointments}
           clinicHours={clinicHours}
+          newAppointmentHref={newAppointmentHref}
         />
       ) : (
         <WeekCalendar
@@ -336,6 +347,7 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
           currentUserId={user.id}
           currentUserRole={user.role}
           clinicHours={clinicHours}
+          newAppointmentHref={newAppointmentHref}
         />
       )}
 
@@ -349,7 +361,7 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
       )}
 
       {canEditAppointments && displacedItems.length > 0 && (
-        <DisplacedAppointments items={displacedItems} />
+        <DisplacedAppointments items={displacedItems} returnHref={currentAppointmentsUrl} />
       )}
     </div>
   );

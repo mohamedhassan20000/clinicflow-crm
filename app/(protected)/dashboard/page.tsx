@@ -171,6 +171,26 @@ function buildAnalyticsAggregates(
   return { initialInsuranceSeries, initialDoctors, initialDepartments };
 }
 
+// Dashboard queries degrade to empty sections (`?? []` / `?? 0`) instead of
+// crashing, but a failed query must never be silent: surface it in the server
+// log with enough context to identify the failing table.
+function logAndReturn<T extends readonly unknown[]>(role: string, results: T): T {
+  results.forEach((result, index) => {
+    if (
+      result &&
+      typeof result === "object" &&
+      "error" in result &&
+      (result as { error: unknown }).error
+    ) {
+      console.error(
+        `[dashboard] ${role} query #${index} failed`,
+        (result as { error: unknown }).error,
+      );
+    }
+  });
+  return results;
+}
+
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default async function DashboardPage() {
@@ -221,7 +241,7 @@ export default async function DashboardPage() {
       { data: aReceptionists },
       { data: aReceptionistAppts },
       { data: aFollowUps },
-    ] = await Promise.all([
+    ] = logAndReturn("admin", await Promise.all([
       supabase
         .from("appointments")
         .select("id", { count: "exact", head: true })
@@ -356,7 +376,7 @@ export default async function DashboardPage() {
         .eq("clinic_id", clinicId)
         .gte("recorded_at", thisMonth.start)
         .lte("recorded_at", thisMonth.end),
-    ]);
+    ]));
 
     // ── Revenue aggregation ──────────────────────────────────────────────
     type RevenueRow = {
@@ -480,7 +500,7 @@ export default async function DashboardPage() {
       { data: pendingAppts },
       { data: next2hAppts },
       inSessionGroups,
-    ] = await Promise.all([
+    ] = logAndReturn("receptionist", await Promise.all([
       supabase
         .from("appointments")
         .select("id", { count: "exact", head: true })
@@ -522,7 +542,7 @@ export default async function DashboardPage() {
         .not("status", "in", '("cancelled","completed")')
         .order("scheduled_at"),
       fetchReceptionInSessionBoard(),
-    ]);
+    ]));
 
     return (
       <ReceptionistDashboard
@@ -584,7 +604,7 @@ export default async function DashboardPage() {
     { data: mgrReceptionists },
     { data: mgrReceptionistAppts },
     { data: mgrFollowUps },
-  ] = await Promise.all([
+  ] = logAndReturn("manager", await Promise.all([
     supabase
       .from("appointments")
       .select("id", { count: "exact", head: true })
@@ -671,7 +691,7 @@ export default async function DashboardPage() {
       .eq("clinic_id", clinicId)
       .gte("recorded_at", thisMonth.start)
       .lte("recorded_at", thisMonth.end),
-  ]);
+  ]));
 
   const mc = monthCount ?? 0;
   const noShowRate = mc === 0 ? 0 : Math.round(((noShowCount ?? 0) / mc) * 100);

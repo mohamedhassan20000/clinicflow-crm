@@ -3,11 +3,10 @@
 import { useState, useSyncExternalStore } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { LogOut, Menu, UserRound } from "lucide-react";
+import { LogOut, Menu, SlidersHorizontal, UserRound } from "lucide-react";
 import { signOut } from "@/actions/auth";
 import { Sidebar } from "@/components/layout/sidebar";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
-import { CurrencySelector } from "@/components/layout/currency-selector";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -47,10 +46,9 @@ type DashboardShellProps = {
   theme: "light" | "dark";
   brandLabel?: string;
   contentClassName?: string;
-  displayCurrency?: string;
 };
 
-export function DashboardShell({ children, navItems, user, theme, brandLabel, contentClassName = "px-5 py-6 lg:px-10 lg:py-8", displayCurrency }: DashboardShellProps) {
+export function DashboardShell({ children, navItems, user, theme, brandLabel, contentClassName = "px-5 py-6 lg:px-10 lg:py-8" }: DashboardShellProps) {
   const collapsed = useSyncExternalStore(subscribeToSidebarState, getSidebarState, () => false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -71,7 +69,6 @@ export function DashboardShell({ children, navItems, user, theme, brandLabel, co
           <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setMobileOpen(true)} aria-label="Open navigation"><Menu className="size-5" /></Button>
           <span className="flex items-center gap-2 md:hidden"><Image src="/brand/clinicflow-mark.png" alt="ClinicFlow" width={28} height={24} className="h-6 w-auto" /><span className="text-sm font-semibold">{brandLabel ?? "ClinicFlow"}</span></span>
           <div className="flex-1" />
-          {displayCurrency ? <CurrencySelector value={displayCurrency} /> : null}
           <ThemeToggle currentTheme={theme} />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -84,6 +81,7 @@ export function DashboardShell({ children, navItems, user, theme, brandLabel, co
               <DropdownMenuLabel><span className="block truncate text-sm text-foreground">{user.fullName}</span>{user.email ? <span className="block truncate font-normal">{user.email}</span> : null}</DropdownMenuLabel>
               <DropdownMenuSeparator />
               {user.profileHref ? <DropdownMenuItem asChild><Link href={user.profileHref} className="gap-2 py-2"><UserRound />My profile</Link></DropdownMenuItem> : null}
+              <DropdownMenuItem asChild><Link href="/preferences" className="gap-2 py-2"><SlidersHorizontal />Preferences</Link></DropdownMenuItem>
               <form action={signOut}><DropdownMenuItem asChild variant="destructive" onSelect={(event) => event.preventDefault()}><button type="submit" className="w-full gap-2 py-2"><LogOut />Sign out</button></DropdownMenuItem></form>
             </DropdownMenuContent>
           </DropdownMenu>

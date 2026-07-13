@@ -1,7 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft, FileText } from "lucide-react";
 import { requireUser } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -9,16 +7,18 @@ import {
   type MedicalNoteWithAttachments,
 } from "@/components/patients/medical-notes-list";
 import { NoteComposer } from "@/components/patients/note-composer";
-import { PrintButton } from "@/components/patients/print-button";
 import { PrintHeader } from "@/components/shared/print-header";
+import { PatientReportHeader } from "@/components/patients/patient-report-header";
+import { resolveReturnTo } from "@/lib/navigation/return-url";
 import { ReportDateFilter } from "@/components/patients/report-date-filter";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { MedicalNoteAttachmentItem } from "@/actions/medical-note-attachments";
 
 export const metadata: Metadata = { title: "Medical Notes Report" };
 
 interface PageProps {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ from?: string; to?: string }>;
+  searchParams: Promise<{ from?: string; to?: string; returnTo?: string }>;
 }
 
 export default async function MedicalNotesReportPage({
@@ -26,7 +26,9 @@ export default async function MedicalNotesReportPage({
   searchParams,
 }: PageProps) {
   const { id } = await params;
-  const { from, to } = await searchParams;
+  const { from, to, returnTo } = await searchParams;
+  const patientPath = `/patients/${id}`;
+  const patientHref = resolveReturnTo(returnTo, patientPath, [patientPath]);
   const user = await requireUser();
   const isDoctor = user.role === "doctor";
   const isAdmin = user.role === "admin";
@@ -135,46 +137,14 @@ export default async function MedicalNotesReportPage({
         documentName="Medical Notes Report"
         generatedAt={generatedAt}
       />
-      <div className="flex items-center gap-2 print:hidden text-sm text-muted-foreground">
-        <Link
-          href={`/patients/${id}`}
-          className="flex items-center gap-1 hover:text-foreground transition-colors"
-        >
-          <ChevronLeft className="h-4 w-4" />
-          Back to patient
-        </Link>
-      </div>
-
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <FileText
-              className="h-5 w-5 text-muted-foreground print:hidden"
-              aria-hidden
-            />
-            <h1 className="text-2xl font-semibold tracking-tight">
-              Medical Notes Report
-            </h1>
-          </div>
-          <div className="mt-2 space-y-0.5 text-sm text-muted-foreground">
-            <p className="font-medium text-foreground text-base">
-              {patient.full_name}
-            </p>
-            {patient.file_number && (
-              <p>
-                File: <span className="font-mono">{patient.file_number}</span>
-              </p>
-            )}
-            {patient.phone && <p>Phone: {patient.phone}</p>}
-            <p>
-              {notesWithAttachments.length} note
-              {notesWithAttachments.length !== 1 ? "s" : ""}
-              {(from || to) && " (filtered)"}
-            </p>
-          </div>
-        </div>
-        <PrintButton />
-      </div>
+      <PatientReportHeader
+        patientHref={patientHref}
+        patientName={patient.full_name}
+        fileNumber={patient.file_number}
+        phone={patient.phone}
+        title="Medical Notes Report"
+        countLabel={`${notesWithAttachments.length} note${notesWithAttachments.length !== 1 ? "s" : ""}${from || to ? " (filtered)" : ""}`}
+      />
 
       <ReportDateFilter from={from} to={to} />
 
@@ -201,31 +171,31 @@ export default async function MedicalNotesReportPage({
         {notesWithAttachments.length === 0 ? (
           <p className="text-sm">No medical notes.</p>
         ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Doctor</th>
-                <th>Note</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Date</TableHead>
+                <TableHead>Doctor</TableHead>
+                <TableHead>Note</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {notesWithAttachments.map((note) => (
-                <tr key={note.id}>
-                  <td style={{ whiteSpace: "nowrap" }}>
+                <TableRow key={note.id}>
+                  <TableCell style={{ whiteSpace: "nowrap" }}>
                     {new Date(note.created_at).toLocaleString("en-GB", {
                       dateStyle: "medium",
                       timeStyle: "short",
                     })}
-                  </td>
-                  <td style={{ whiteSpace: "nowrap" }}>
+                  </TableCell>
+                  <TableCell style={{ whiteSpace: "nowrap" }}>
                     {note.profiles?.full_name ?? "Unknown"}
-                  </td>
-                  <td>{note.note}</td>
-                </tr>
+                  </TableCell>
+                  <TableCell>{note.note}</TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         )}
       </div>
     </div>

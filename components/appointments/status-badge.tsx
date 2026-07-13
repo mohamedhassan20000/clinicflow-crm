@@ -9,31 +9,31 @@ const STATUS_CONFIG: Record<
 > = {
   pending: {
     label: "Pending",
-    className: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400",
+    className: "bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-700",
   },
   confirmed: {
     label: "Confirmed",
-    className: "bg-primary/10 text-primary border-primary/20",
+    className: "bg-primary/10 text-foreground border-primary/40",
   },
   arrived: {
     label: "Arrived",
-    className: "bg-sky-100 text-sky-700 border-sky-200 dark:bg-sky-900/30 dark:text-sky-400",
+    className: "bg-sky-100 text-sky-800 border-sky-300 dark:bg-sky-900/40 dark:text-sky-300 dark:border-sky-700",
   },
   in_session: {
     label: "In session",
-    className: "bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-900/30 dark:text-violet-400",
+    className: "bg-violet-100 text-violet-800 border-violet-300 dark:bg-violet-900/40 dark:text-violet-300 dark:border-violet-700",
   },
   completed: {
     label: "Completed",
-    className: "bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400",
+    className: "bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-900/40 dark:text-emerald-300 dark:border-emerald-700",
   },
   cancelled: {
     label: "Cancelled",
-    className: "bg-destructive/10 text-destructive border-destructive/20",
+    className: "bg-destructive/10 text-foreground border-destructive/40",
   },
   no_show: {
     label: "No-show",
-    className: "bg-muted text-muted-foreground border-border",
+    className: "bg-muted text-foreground/80 border-calendar-grid",
   },
 };
 

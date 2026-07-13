@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft, FileText } from "lucide-react";
 import { requireUser } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
-import { PrintButton } from "@/components/patients/print-button";
 import { PrintHeader } from "@/components/shared/print-header";
+import { PatientReportHeader } from "@/components/patients/patient-report-header";
+import { resolveReturnTo } from "@/lib/navigation/return-url";
 import { ReportDateFilter } from "@/components/patients/report-date-filter";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   FollowupsList,
   type FollowupItem,
@@ -16,7 +16,7 @@ export const metadata: Metadata = { title: "Follow-up Report" };
 
 interface PageProps {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ from?: string; to?: string }>;
+  searchParams: Promise<{ from?: string; to?: string; returnTo?: string }>;
 }
 
 export default async function FollowupsReportPage({
@@ -24,7 +24,9 @@ export default async function FollowupsReportPage({
   searchParams,
 }: PageProps) {
   const { id } = await params;
-  const { from, to } = await searchParams;
+  const { from, to, returnTo } = await searchParams;
+  const patientPath = `/patients/${id}`;
+  const patientHref = resolveReturnTo(returnTo, patientPath, [patientPath]);
   const user = await requireUser();
   const isDoctor = user.role === "doctor";
   const supabase = await createClient();
@@ -83,45 +85,14 @@ export default async function FollowupsReportPage({
         documentName="Follow-up Report"
         generatedAt={generatedAt}
       />
-      <div className="flex items-center gap-2 print:hidden text-sm text-muted-foreground">
-        <Link
-          href={`/patients/${id}`}
-          className="flex items-center gap-1 hover:text-foreground transition-colors"
-        >
-          <ChevronLeft className="h-4 w-4" />
-          Back to patient
-        </Link>
-      </div>
-
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <FileText
-              className="h-5 w-5 text-muted-foreground print:hidden"
-              aria-hidden
-            />
-            <h1 className="text-2xl font-semibold tracking-tight">
-              Follow-up Report
-            </h1>
-          </div>
-          <div className="mt-2 space-y-0.5 text-sm text-muted-foreground">
-            <p className="font-medium text-foreground text-base">
-              {patient.full_name}
-            </p>
-            {patient.file_number && (
-              <p>
-                File: <span className="font-mono">{patient.file_number}</span>
-              </p>
-            )}
-            {patient.phone && <p>Phone: {patient.phone}</p>}
-            <p>
-              {rows.length} follow-up{rows.length !== 1 ? "s" : ""}
-              {(from || to) && " (filtered)"}
-            </p>
-          </div>
-        </div>
-        <PrintButton />
-      </div>
+      <PatientReportHeader
+        patientHref={patientHref}
+        patientName={patient.full_name}
+        fileNumber={patient.file_number}
+        phone={patient.phone}
+        title="Follow-up Report"
+        countLabel={`${rows.length} follow-up${rows.length !== 1 ? "s" : ""}${from || to ? " (filtered)" : ""}`}
+      />
 
       <ReportDateFilter from={from} to={to} />
 
@@ -135,45 +106,45 @@ export default async function FollowupsReportPage({
         {rows.length === 0 ? (
           <p className="text-sm">No follow-up notes.</p>
         ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Date Recorded</th>
-                <th>Session Date</th>
-                <th>Department</th>
-                <th>Outcome</th>
-                <th>Notes</th>
-                <th>Recorded By</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Date Recorded</TableHead>
+                <TableHead>Session Date</TableHead>
+                <TableHead>Department</TableHead>
+                <TableHead>Outcome</TableHead>
+                <TableHead>Notes</TableHead>
+                <TableHead>Recorded By</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {rows.map((f) => (
-                <tr key={f.id}>
-                  <td>
+                <TableRow key={f.id}>
+                  <TableCell>
                     {new Date(f.recorded_at).toLocaleString("en-GB", {
                       dateStyle: "medium",
                       timeStyle: "short",
                     })}
-                  </td>
-                  <td>
+                  </TableCell>
+                  <TableCell>
                     {f.appointment?.scheduled_at
                       ? new Date(f.appointment.scheduled_at).toLocaleDateString("en-GB", { dateStyle: "medium" })
                       : "—"}
-                  </td>
-                  <td>{f.appointment?.departments?.name ?? "—"}</td>
-                  <td>
+                  </TableCell>
+                  <TableCell>{f.appointment?.departments?.name ?? "—"}</TableCell>
+                  <TableCell>
                     {f.outcome === "all_fine"
                       ? "Everything fine"
                       : f.outcome === "has_problem"
                       ? "Reported problem"
                       : "No response"}
-                  </td>
-                  <td>{f.notes ?? "—"}</td>
-                  <td>{f.recorded_by?.full_name ?? "—"}</td>
-                </tr>
+                  </TableCell>
+                  <TableCell>{f.notes ?? "—"}</TableCell>
+                  <TableCell>{f.recorded_by?.full_name ?? "—"}</TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         )}
       </div>
     </div>

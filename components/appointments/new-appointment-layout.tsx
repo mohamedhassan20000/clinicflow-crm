@@ -25,6 +25,7 @@ interface NewAppointmentLayoutProps {
   defaultDepartmentId?: string;
   defaultInsuranceId?: string;
   clinicWorkingHours?: ClinicWorkingHoursValues;
+  cancelHref?: string;
 }
 
 function getInitials(name: string): string {
@@ -141,6 +142,7 @@ export function NewAppointmentLayout({
   defaultDepartmentId,
   defaultInsuranceId,
   clinicWorkingHours,
+  cancelHref,
 }: NewAppointmentLayoutProps) {
   const [selectedPatient, setSelectedPatient] =
     useState<PatientWithDoctor | null>(
@@ -165,6 +167,7 @@ export function NewAppointmentLayout({
           defaultInsuranceId={defaultInsuranceId}
           clinicWorkingHours={clinicWorkingHours}
           onPatientChange={setSelectedPatient}
+          cancelHref={cancelHref}
         />
       </div>
       <PatientPreviewPanel

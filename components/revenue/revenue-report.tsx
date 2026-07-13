@@ -21,6 +21,7 @@ import { useTransition } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { formatDoctorName } from "@/lib/format-doctor";
 import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
@@ -447,59 +448,59 @@ export function RevenueReport({
 
         {/* Transactions table */}
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/40 text-[10px] uppercase tracking-wider text-muted-foreground">
-              <tr>
-                <th className="px-4 py-2.5 text-left font-medium">Paid at</th>
-                <th className="px-4 py-2.5 text-left font-medium">Patient</th>
-                <th className="px-4 py-2.5 text-left font-medium">Doctor / Dept.</th>
-                <th className="px-4 py-2.5 text-right font-medium">Total</th>
-                <th className="px-4 py-2.5 text-left font-medium">Primary</th>
-                <th className="px-4 py-2.5 text-left font-medium">Secondary</th>
-                <th className="px-4 py-2.5 text-right font-medium">Insurance</th>
-                <th className="px-4 py-2.5 text-right font-medium">From deposit</th>
-                <th className="px-4 py-2.5 text-right font-medium">Outstanding</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/40">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Paid at</TableHead>
+                <TableHead>Patient</TableHead>
+                <TableHead>Doctor / Dept.</TableHead>
+                <TableHead className="text-end">Total</TableHead>
+                <TableHead>Primary</TableHead>
+                <TableHead>Secondary</TableHead>
+                <TableHead className="text-end">Insurance</TableHead>
+                <TableHead className="text-end">From deposit</TableHead>
+                <TableHead className="text-end">Outstanding</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {rows.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                <TableRow>
+                  <TableCell colSpan={9} className="px-4 py-10 text-center text-sm text-muted-foreground">
                     No transactions in this period.
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ) : (
                 rows.map((r) => <TxnRow key={r.id} row={r} />)
               )}
-            </tbody>
+            </TableBody>
             {summary.transactionCount > 0 && (
-              <tbody className="bg-muted/30 font-semibold print:break-inside-avoid">
-                <tr className="border-t border-border/60 print:border-black">
-                  <td className="px-4 py-3 text-xs uppercase tracking-wider text-muted-foreground" colSpan={3}>
+              <TableFooter className="print:break-inside-avoid">
+                <TableRow className="print:border-black">
+                  <TableCell className="px-4 py-3 text-xs uppercase tracking-wider text-muted-foreground" colSpan={3}>
                     Totals
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums">
+                  </TableCell>
+                  <TableCell className="px-4 py-3 text-end tabular-nums">
                     {fmtMoney(summary.totalAmount)}
-                  </td>
-                  <td className="px-4 py-3 text-left tabular-nums">
+                  </TableCell>
+                  <TableCell className="px-4 py-3 text-start tabular-nums">
                     {fmtMoney(primaryTotal)}
-                  </td>
-                  <td className="px-4 py-3 text-left tabular-nums">
+                  </TableCell>
+                  <TableCell className="px-4 py-3 text-start tabular-nums">
                     {fmtMoney(secondaryTotal)}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums">
+                  </TableCell>
+                  <TableCell className="px-4 py-3 text-end tabular-nums">
                     {fmtMoney(insuranceTotal)}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-violet-600 dark:text-violet-400">
+                  </TableCell>
+                  <TableCell className="px-4 py-3 text-end tabular-nums text-violet-600 dark:text-violet-400">
                     {fmtMoney(depositTotal)}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-amber-600 dark:text-amber-400">
+                  </TableCell>
+                  <TableCell className="px-4 py-3 text-end tabular-nums text-amber-600 dark:text-amber-400">
                     {fmtMoney(outstandingTotal)}
-                  </td>
-                </tr>
-              </tbody>
+                  </TableCell>
+                </TableRow>
+              </TableFooter>
             )}
-          </table>
+          </Table>
         </div>
 
         {/* Pagination — appears when there are more than one page of rows */}
@@ -625,45 +626,37 @@ export function RevenueReport({
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/40 text-[10px] uppercase tracking-wider text-muted-foreground">
-                <tr>
-                  <th className="px-4 py-2.5 text-left font-medium">
-                    Settled at
-                  </th>
-                  <th className="px-4 py-2.5 text-left font-medium">Patient</th>
-                  <th className="px-4 py-2.5 text-left font-medium">
-                    Department &amp; Doctor
-                  </th>
-                  <th className="px-4 py-2.5 text-left font-medium">Method</th>
-                  <th className="px-4 py-2.5 text-right font-medium">
-                    Amount paid
-                  </th>
-                  <th className="px-4 py-2.5 text-right font-medium">
-                    Remaining balance
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/40">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Settled at</TableHead>
+                  <TableHead>Patient</TableHead>
+                  <TableHead>Department &amp; Doctor</TableHead>
+                  <TableHead>Method</TableHead>
+                  <TableHead className="text-end">Amount paid</TableHead>
+                  <TableHead className="text-end">Remaining balance</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {settlements.map((s) => (
                   <SettlementTxnRow key={s.id} row={s} />
                 ))}
-              </tbody>
-              <tbody className="bg-muted/30 font-semibold print:bg-transparent">
-                <tr className="border-t border-border/60 print:border-black">
-                  <td
+              </TableBody>
+              <TableFooter className="print:bg-transparent">
+                <TableRow className="print:border-black">
+                  <TableCell
                     className="px-4 py-3 text-xs uppercase tracking-wider text-muted-foreground"
                     colSpan={4}
                   >
                     Total settled
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-emerald-600 dark:text-emerald-400">
+                  </TableCell>
+                  <TableCell className="px-4 py-3 text-end tabular-nums text-emerald-600 dark:text-emerald-400">
                     {fmtMoney(settlementsTotal)}
-                  </td>
-                  <td className="px-4 py-3" />
-                </tr>
-              </tbody>
-            </table>
+                  </TableCell>
+                  <TableCell className="px-4 py-3" />
+                </TableRow>
+              </TableFooter>
+            </Table>
           </div>
 
           <div className="hidden print:block px-6 py-4 text-[10px] text-muted-foreground border-t border-border">
@@ -722,14 +715,14 @@ function SettlementTxnRow({ row }: { row: SettlementRow }) {
   const remaining = appt?.outstanding_amount ?? 0;
 
   return (
-    <tr className="hover:bg-muted/30 transition-colors">
-      <td className="px-4 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
+    <TableRow>
+      <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
         {fmtDateTime(row.settled_at)}
-      </td>
-      <td className="px-4 py-2.5 font-medium">
+      </TableCell>
+      <TableCell className="font-medium">
         {row.patient?.full_name ?? "Unknown"}
-      </td>
-      <td className="px-4 py-2.5">
+      </TableCell>
+      <TableCell>
         {appt ? (
           <div className="space-y-1">
             <div className="flex flex-wrap items-center gap-1.5">
@@ -776,17 +769,17 @@ function SettlementTxnRow({ row }: { row: SettlementRow }) {
             &ldquo;{row.note}&rdquo;
           </p>
         )}
-      </td>
-      <td className="px-4 py-2.5">
+      </TableCell>
+      <TableCell>
         <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/30 bg-amber-500/5 px-2 py-0.5 text-xs">
           {MethodIcon && <MethodIcon className="h-3 w-3" />}
           {meta?.label ?? row.payment_method}
         </span>
-      </td>
-      <td className="px-4 py-2.5 text-right tabular-nums font-semibold text-emerald-600 dark:text-emerald-400">
+      </TableCell>
+      <TableCell className="text-end tabular-nums font-semibold text-emerald-600 dark:text-emerald-400">
         {fmtMoney(row.amount)}
-      </td>
-      <td className="px-4 py-2.5 text-right tabular-nums">
+      </TableCell>
+      <TableCell className="text-end tabular-nums">
         {remaining > 0 ? (
           <span className="text-amber-600 dark:text-amber-400 font-medium">
             {fmtMoney(remaining)}
@@ -796,8 +789,8 @@ function SettlementTxnRow({ row }: { row: SettlementRow }) {
             Settled
           </span>
         )}
-      </td>
-    </tr>
+      </TableCell>
+    </TableRow>
   );
 }
 
@@ -810,19 +803,16 @@ function TxnRow({ row, hidden }: { row: RevenueRow; hidden?: boolean }) {
   const deptColor = row.departments?.color ?? "#64748b";
 
   return (
-    <tr
-      className={cn(
-        "hover:bg-muted/30 transition-colors",
-        hidden && "hidden print:table-row",
-      )}
+    <TableRow
+      className={cn(hidden && "hidden print:table-row")}
     >
-      <td className="px-4 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
+      <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
         {row.paid_at ? fmtDateTime(row.paid_at) : "—"}
-      </td>
-      <td className="px-4 py-2.5 font-medium">
+      </TableCell>
+      <TableCell className="font-medium">
         {row.patients?.full_name ?? "Unknown"}
-      </td>
-      <td className="px-4 py-2.5">
+      </TableCell>
+      <TableCell>
         <div className="text-xs">{formatDoctorName(row.profiles?.full_name)}</div>
         {row.departments?.name && (
           <span
@@ -835,11 +825,11 @@ function TxnRow({ row, hidden }: { row: RevenueRow; hidden?: boolean }) {
             {row.departments.name}
           </span>
         )}
-      </td>
-      <td className="px-4 py-2.5 text-right tabular-nums font-medium">
+      </TableCell>
+      <TableCell className="text-end tabular-nums font-medium">
         {fmtMoney(row.total_amount ?? 0)}
-      </td>
-      <td className="px-4 py-2.5">
+      </TableCell>
+      <TableCell>
         {primary ? (
           <span className="inline-flex items-center gap-1 text-xs">
             <primary.icon className="h-3 w-3 text-muted-foreground" />
@@ -851,8 +841,8 @@ function TxnRow({ row, hidden }: { row: RevenueRow; hidden?: boolean }) {
         ) : (
           <span className="text-xs text-muted-foreground">—</span>
         )}
-      </td>
-      <td className="px-4 py-2.5">
+      </TableCell>
+      <TableCell>
         {secondary && (row.secondary_amount ?? 0) > 0 ? (
           <span className="inline-flex items-center gap-1 text-xs">
             <secondary.icon className="h-3 w-3 text-muted-foreground" />
@@ -864,18 +854,18 @@ function TxnRow({ row, hidden }: { row: RevenueRow; hidden?: boolean }) {
         ) : (
           <span className="text-xs text-muted-foreground">—</span>
         )}
-      </td>
-      <td className="px-4 py-2.5 text-right tabular-nums text-sky-600 dark:text-sky-400">
+      </TableCell>
+      <TableCell className="text-end tabular-nums text-sky-600 dark:text-sky-400">
         {(row.insurance_amount ?? 0) > 0
           ? fmtMoney(row.insurance_amount ?? 0)
           : "—"}
-      </td>
-      <td className="px-4 py-2.5 text-right tabular-nums text-violet-600 dark:text-violet-400">
+      </TableCell>
+      <TableCell className="text-end tabular-nums text-violet-600 dark:text-violet-400">
         {(row.deposit_amount ?? 0) > 0
           ? fmtMoney(row.deposit_amount ?? 0)
           : "—"}
-      </td>
-      <td className="px-4 py-2.5 text-right tabular-nums">
+      </TableCell>
+      <TableCell className="text-end tabular-nums">
         {(row.outstanding_amount ?? 0) > 0 ? (
           <span className="text-amber-600 dark:text-amber-400 font-medium">
             {fmtMoney(row.outstanding_amount ?? 0)}
@@ -883,7 +873,7 @@ function TxnRow({ row, hidden }: { row: RevenueRow; hidden?: boolean }) {
         ) : (
           <span className="text-xs text-muted-foreground">—</span>
         )}
-      </td>
-    </tr>
+      </TableCell>
+    </TableRow>
   );
 }

@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
 import { redirect } from "next/navigation";
-import { ChevronLeft } from "lucide-react";
 import { requireUser } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
 import { RevenueReport } from "@/components/revenue/revenue-report";
@@ -11,6 +9,7 @@ import {
   PrintButton,
   PrintSettlementsButton,
 } from "@/components/revenue/print-button";
+import { PageHeader } from "@/components/shared/page-header";
 
 export const metadata: Metadata = { title: "Revenue transactions" };
 
@@ -286,20 +285,13 @@ export default async function RevenuePage({ searchParams }: PageProps) {
   return (
     <div className="space-y-6">
       {/* Header — hidden in print */}
-      <div className="print:hidden flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <Link
-            href="/dashboard"
-            className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <ChevronLeft className="h-4 w-4" />
-            Dashboard
-          </Link>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Revenue &amp; Transactions
-          </h1>
-        </div>
-      </div>
+      <PageHeader
+        back={{ href: "/dashboard", label: "dashboard" }}
+        breadcrumbs={[{ label: "Dashboard", href: "/dashboard" }, { label: "Revenue & Transactions" }]}
+        title="Revenue & Transactions"
+        description="Review collected payments, settlements, and outstanding balances."
+        className="print:hidden"
+      />
 
       <div className="print:hidden">
         <RevenueFilters

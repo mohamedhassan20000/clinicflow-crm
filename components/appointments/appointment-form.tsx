@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { startTransition, useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -56,6 +57,7 @@ import { checkSameDayPatient, type ActionResult } from "@/actions/appointments";
 import { getAvailableTimeSlots, type SlotInfo } from "@/actions/time-slots";
 import type { Tables } from "@/types/database";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
+import { CALENDAR_STYLES } from "@/components/appointments/calendar-visuals";
 
 export type Patient = Pick<
   Tables<"patients">,
@@ -93,6 +95,7 @@ interface AppointmentFormProps {
   defaultInsuranceId?: string;
   clinicWorkingHours?: ClinicWorkingHoursValues;
   onPatientChange?: (patient: PatientWithDoctor | null) => void;
+  cancelHref?: string;
 }
 
 
@@ -165,6 +168,7 @@ export function AppointmentForm({
   defaultInsuranceId,
   clinicWorkingHours,
   onPatientChange,
+  cancelHref = "/appointments",
 }: AppointmentFormProps) {
   const closedDays = clinicWorkingHours ? getClosedDaysOfWeek(clinicWorkingHours) : new Set<number>();
   const { formatCurrency, formatSlotTime } = useClinicSettings();
@@ -695,7 +699,10 @@ export function AppointmentForm({
                     disabled={isPending || slotsLoading}
                   >
                     <FormControl>
-                      <SelectTrigger>
+                      <SelectTrigger
+                        data-calendar-slot-selected={timeVal ? "true" : undefined}
+                        className={timeVal ? CALENDAR_STYLES.selectedSlotTrigger : undefined}
+                      >
                         {slotsLoading ? (
                           <span className="flex items-center gap-1.5 text-muted-foreground">
                             <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -725,13 +732,12 @@ export function AppointmentForm({
                             key={slot.time}
                             value={slot.time}
                             disabled={isDisabled}
-                            className={
-                              slot.label === "Break"
-                                ? "text-muted-foreground italic"
-                                : slot.label
-                                  ? "text-amber-600"
-                                  : undefined
-                            }
+                            className={cn(
+                              CALENDAR_STYLES.selectedSlotItem,
+                              slot.label === "Break" && "text-muted-foreground italic",
+                              slot.label && slot.label !== "Break" &&
+                                "text-amber-700 dark:text-amber-300",
+                            )}
                           >
                             {slot.label ? `${formatSlotTime(slot.time)} — ${slot.label}` : formatSlotTime(slot.time)}
                           </SelectItem>
@@ -833,13 +839,15 @@ export function AppointmentForm({
         />
 
         <div className="flex justify-end gap-3 pt-2">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => window.history.back()}
-            disabled={isPending}
-          >
-            Cancel
+          <Button asChild type="button" variant="outline">
+            <Link
+              href={cancelHref}
+              aria-disabled={isPending}
+              tabIndex={isPending ? -1 : undefined}
+              className={isPending ? "pointer-events-none opacity-50" : undefined}
+            >
+              Cancel
+            </Link>
           </Button>
           <Button type="submit" disabled={isPending || checkingDay} className="gap-2">
             {isPending || checkingDay ? (

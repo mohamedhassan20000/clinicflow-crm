@@ -8,10 +8,10 @@ import {
   formatClinicCurrency,
   formatClinicNumber,
   formatClinicPercent,
-  toNumberingLocale,
   type ClinicLocale,
 } from "@/lib/datetime";
-import { convertForDisplay, formatMoney, type FxRate } from "@/lib/currency/conversion";
+import type { FxRate } from "@/lib/currency/conversion";
+import { composeDisplayMoney } from "@/lib/currency/format";
 
 interface ClinicSettingsContextValue {
   timeFormat: TimeFormat;
@@ -69,12 +69,8 @@ export function ClinicSettingsProvider({
         formatSlotTime: (s) => formatSlotTime(s, timeFormat, resolvedLocale),
         formatNumber: (n) => formatClinicNumber(n, resolvedLocale),
         formatPercent: (n) => formatClinicPercent(n, resolvedLocale),
-        formatCurrency: (n, options) => {
-          const canonical = Number(n ?? 0);
-          const money = convertForDisplay(canonical, resolvedLocale.currency, preferredCurrency, fxRates);
-          const display = formatMoney(money, toNumberingLocale(resolvedLocale), options);
-          return money.approximate ? `${display} (${formatClinicCurrency(canonical, resolvedLocale, options)})` : display;
-        },
+        formatCurrency: (n, options) =>
+          composeDisplayMoney(n, resolvedLocale, preferredCurrency, fxRates, options),
       }}
     >
       {children}

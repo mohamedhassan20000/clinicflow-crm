@@ -39,3 +39,49 @@ local production build at `http://127.0.0.1:3100/` produced:
 Command used for each run (with the output path numbered 1–3):
 
 `pnpm dlx lighthouse http://127.0.0.1:3100/ --only-categories=performance,accessibility --form-factor=mobile --output=json --output-path=/tmp/p15-r1-lighthouse-1.json --chrome-flags='--headless --no-sandbox --disable-gpu' --quiet`
+
+## PRE-P2 WS9 redesign verification — 2026-07-13
+
+The redesigned RSC marketing shell was measured from the production build at
+`http://127.0.0.1:3105/` on worktree base `cf240b3` (the WS0–WS9 integrated,
+uncommitted worktree). The only client-side marketing islands remain the
+existing early-access dialog and the mobile navigation sheet. Hero and product
+screenshots are optimized AVIF assets with explicit dimensions.
+
+| Run | Performance | Accessibility | Simulated LCP | Initial script transfer | Result |
+|---|---:|---:|---:|---:|---|
+| 1 | **92** | **100** | 3.30 s | 207 KB | PASS |
+| 2 | **92** | **100** | 3.29 s | 207 KB | PASS |
+| 3 | **92** | **100** | 3.30 s | 207 KB | PASS |
+
+All three mandatory ≥90 Performance / ≥90 Accessibility runs pass, accessibility
+remains 100, and initial script transfer stays below the approximately 260 KB
+baseline. The practical LCP ≤2.5 s target remains aspirational in Lighthouse's
+simulated mobile result; the trace identified the server-rendered hero heading
+as LCP, with only approximately 55 ms TTFB plus 61 ms element-render delay in
+run 1 and no blocking-script regression.
+
+Command used for each run (with the output path numbered 1–3):
+
+`pnpm dlx lighthouse@13.4.0 http://127.0.0.1:3105/ --only-categories=performance,accessibility --form-factor=mobile --output=json --output-path=/tmp/ws9-lighthouse-1.json --chrome-flags='--headless --no-sandbox --disable-gpu' --quiet`
+
+## Final shippable-tree validation — Final Validation Cycle 2 (2026-07-13)
+
+The measurements above remain part of the historical record. After Final Validation
+Cycle 2 changed the marketing entry path, the resulting integrated Pre-P2 tree was rebuilt
+and audited three times at `http://127.0.0.1:3112/`. These are the latest verified results
+for the tree intended to ship, as recorded in `docs/reviews/PRE_P2_FINAL_VALIDATION.md`.
+
+| Run | Performance | Accessibility | Best Practices | SEO | Simulated LCP | Initial script transfer | Result |
+|---|---:|---:|---:|---:|---:|---:|---|
+| 1 | **91** | **100** | **100** | **100** | 3.5 s | 198,703 bytes | PASS |
+| 2 | **90** | **100** | **100** | **100** | 3.7 s | 198,703 bytes | PASS |
+| 3 | **91** | **100** | **100** | **100** | 3.5 s | 198,703 bytes | PASS |
+
+All three mandatory ≥90 Performance / ≥90 Accessibility runs pass. Initial script
+transfer improved from the preceding WS9 measurement of approximately 207 KB to
+198,703 bytes. The ≤2.5 s LCP target remains aspirational and is not represented as met.
+
+Command used for each run (with the output path numbered 1–3):
+
+`pnpm dlx lighthouse@13.4.0 http://127.0.0.1:3112/ --quiet --chrome-flags="--headless --no-sandbox" --only-categories=performance,accessibility,best-practices,seo --output=json --output-path=/tmp/pre-p2-fix-lighthouse-run-1.json`

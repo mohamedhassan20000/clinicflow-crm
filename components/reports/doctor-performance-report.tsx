@@ -7,6 +7,7 @@ import {
   formatNumber,
   formatPercent,
 } from "@/components/reports/report-formatters";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
 
 export function DoctorPerformanceReport({
@@ -49,47 +50,47 @@ export function DoctorPerformanceReport({
       {data.doctors.length === 0 ? (
         <EmptyReportState />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-border/50 print:overflow-visible print:border-black">
-          <table className="min-w-[1120px] text-sm print:min-w-0">
-            <thead className="bg-muted/40 text-left text-xs text-muted-foreground">
-              <tr>
-                <th className="px-3 py-2 font-medium">Doctor</th>
-                <th className="px-3 py-2 text-right font-medium">Sessions</th>
-                <th className="px-3 py-2 text-right font-medium">Completed</th>
-                <th className="px-3 py-2 text-right font-medium">Cancelled</th>
-                <th className="px-3 py-2 text-right font-medium">No-show</th>
-                <th className="px-3 py-2 text-right font-medium">Patients</th>
-                <th className="px-3 py-2 text-right font-medium">Revenue</th>
-                <th className="px-3 py-2 text-right font-medium">Complete</th>
-                <th className="px-3 py-2 text-right font-medium">Cancel</th>
-                <th className="px-3 py-2 text-right font-medium">No-show</th>
-                <th className="px-3 py-2 text-right font-medium">Dept patients</th>
-                <th className="px-3 py-2 text-right font-medium">Clinic patients</th>
-                <th className="px-3 py-2 text-right font-medium">Dept revenue</th>
-                <th className="px-3 py-2 text-right font-medium">Clinic revenue</th>
-              </tr>
-            </thead>
-            <tbody>
+        <div className="overflow-hidden rounded-lg border border-border/50 print:overflow-visible print:border-black">
+          <Table dense className="min-w-[1120px] print:min-w-0">
+            <TableHeader>
+              <TableRow>
+                <TableHead>Doctor</TableHead>
+                <TableHead className="text-end">Sessions</TableHead>
+                <TableHead className="text-end">Completed</TableHead>
+                <TableHead className="text-end">Cancelled</TableHead>
+                <TableHead className="text-end">No-show</TableHead>
+                <TableHead className="text-end">Patients</TableHead>
+                <TableHead className="text-end">Revenue</TableHead>
+                <TableHead className="text-end">Complete</TableHead>
+                <TableHead className="text-end">Cancel</TableHead>
+                <TableHead className="text-end">No-show</TableHead>
+                <TableHead className="text-end">Dept patients</TableHead>
+                <TableHead className="text-end">Clinic patients</TableHead>
+                <TableHead className="text-end">Dept revenue</TableHead>
+                <TableHead className="text-end">Clinic revenue</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {data.doctors.map((row) => (
-                <tr key={row.doctorId} className="border-t border-border/50">
-                  <td className="px-3 py-2 font-medium">{row.doctorName || "Unknown doctor"}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatNumber(row.sessions, locale)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatNumber(row.completed, locale)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatNumber(row.cancelled, locale)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatNumber(row.noShow, locale)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatNumber(row.uniquePatients, locale)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(row.revenue)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatPercent(row.completionRate, locale)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatPercent(row.cancellationRate, locale)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatPercent(row.noShowRate, locale)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatPercent(row.deptPatientShare, locale)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatPercent(row.clinicPatientShare, locale)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatPercent(row.deptRevenueShare, locale)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatPercent(row.clinicRevenueShare, locale)}</td>
-                </tr>
+                <TableRow key={row.doctorId}>
+                  <TableCell className="font-medium">{row.doctorName || "Unknown doctor"}</TableCell>
+                  <TableCell className="text-end tabular-nums">{formatNumber(row.sessions, locale)}</TableCell>
+                  <TableCell className="text-end tabular-nums">{formatNumber(row.completed, locale)}</TableCell>
+                  <TableCell className="text-end tabular-nums">{formatNumber(row.cancelled, locale)}</TableCell>
+                  <TableCell className="text-end tabular-nums">{formatNumber(row.noShow, locale)}</TableCell>
+                  <TableCell className="text-end tabular-nums">{formatNumber(row.uniquePatients, locale)}</TableCell>
+                  <TableCell className="text-end tabular-nums">{formatCurrency(row.revenue)}</TableCell>
+                  <TableCell className="text-end tabular-nums">{formatPercent(row.completionRate, locale)}</TableCell>
+                  <TableCell className="text-end tabular-nums">{formatPercent(row.cancellationRate, locale)}</TableCell>
+                  <TableCell className="text-end tabular-nums">{formatPercent(row.noShowRate, locale)}</TableCell>
+                  <TableCell className="text-end tabular-nums">{formatPercent(row.deptPatientShare, locale)}</TableCell>
+                  <TableCell className="text-end tabular-nums">{formatPercent(row.clinicPatientShare, locale)}</TableCell>
+                  <TableCell className="text-end tabular-nums">{formatPercent(row.deptRevenueShare, locale)}</TableCell>
+                  <TableCell className="text-end tabular-nums">{formatPercent(row.clinicRevenueShare, locale)}</TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       )}
     </ReportSectionShell>

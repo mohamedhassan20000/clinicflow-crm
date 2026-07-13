@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { startTransition, useActionState, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
@@ -39,6 +40,7 @@ import type { Tables } from "@/types/database";
 import { formatDoctorName } from "@/lib/format-doctor";
 import { uploadPatientAvatar } from "@/actions/patient-avatar";
 import { uploadPatientDocument } from "@/actions/patient-documents";
+import { withReturnTo } from "@/lib/navigation/return-url";
 
 const BLOOD_TYPES = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"] as const;
 
@@ -66,6 +68,8 @@ interface PatientFormProps {
   departments?: Department[];
   doctors?: Doctor[];
   insuranceProviders?: InsuranceProvider[];
+  cancelHref?: string;
+  profileReturnTo?: string;
 }
 
 // ── Upload step after new patient creation ────────────────────────────────────
@@ -284,6 +288,8 @@ export function PatientForm({
   doctors = [],
   insuranceProviders = [],
   patient,
+  cancelHref = "/patients",
+  profileReturnTo,
 }: PatientFormProps) {
   const router = useRouter();
   const [state, formAction, isPending] = useActionState(action, null);
@@ -327,7 +333,10 @@ export function PatientForm({
 
   function navigateToProfile() {
     if (!createdPatientId) return;
-    startNav(() => router.push(`/patients/${createdPatientId}`));
+    const profileHref = profileReturnTo
+      ? withReturnTo(`/patients/${createdPatientId}`, profileReturnTo)
+      : `/patients/${createdPatientId}`;
+    startNav(() => router.push(profileHref));
   }
 
   // After creation — show upload step
@@ -597,7 +606,12 @@ export function PatientForm({
               <FormItem>
                 <FormLabel>Phone number</FormLabel>
                 <FormControl>
-                  <PatientPhoneInput {...field} value={field.value ?? ""} disabled={isPending} />
+                  <PatientPhoneInput
+                    {...field}
+                    name={undefined}
+                    value={field.value ?? ""}
+                    disabled={isPending}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -625,13 +639,15 @@ export function PatientForm({
         </div>
 
         <div className="flex justify-end gap-3 pt-2">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => window.history.back()}
-            disabled={isPending}
-          >
-            Cancel
+          <Button asChild type="button" variant="outline">
+            <Link
+              href={cancelHref}
+              aria-disabled={isPending}
+              tabIndex={isPending ? -1 : undefined}
+              className={isPending ? "pointer-events-none opacity-50" : undefined}
+            >
+              Cancel
+            </Link>
           </Button>
           <Button type="submit" disabled={isPending} className="gap-2">
             {isPending ? (

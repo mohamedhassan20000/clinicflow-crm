@@ -7,8 +7,11 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { TableEmptyState } from "@/components/shared/data-table";
 import { restoreArchivedPatient } from "@/actions/patients";
 import type { PatientStub } from "@/actions/patients";
+import { withReturnTo } from "@/lib/navigation/return-url";
 
 function fmtDate(iso: string | null): string {
   if (!iso) return "—";
@@ -66,9 +69,8 @@ export function ArchiveTable({ patients, isAdmin }: ArchiveTableProps) {
 
   if (patients.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border/60 py-16 text-center">
-        <p className="text-sm font-medium text-muted-foreground">Archive is empty</p>
-        <p className="mt-1 text-xs text-muted-foreground/70">Archived patients appear here.</p>
+      <div className="rounded-xl border border-dashed border-border/60">
+        <TableEmptyState icon={User} title="Archive is empty" description="Archived patients appear here." />
       </div>
     );
   }
@@ -88,28 +90,28 @@ export function ArchiveTable({ patients, isAdmin }: ArchiveTableProps) {
           </div>
 
           <div className="overflow-hidden rounded-xl border border-border/50">
-            <table className="w-full table-auto text-sm">
-              <thead>
-                <tr className="border-b border-border/50 bg-muted/30">
-                  <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Patient</th>
-                  <th className="hidden px-4 py-2.5 text-left font-medium text-muted-foreground sm:table-cell">File #</th>
-                  <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Archived</th>
-                  {isAdmin && <th className="px-4 py-2.5 text-right font-medium text-muted-foreground">Actions</th>}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/50">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Patient</TableHead>
+                  <TableHead className="hidden sm:table-cell">File #</TableHead>
+                  <TableHead>Archived</TableHead>
+                  {isAdmin && <TableHead className="text-end">Actions</TableHead>}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {group.patients.map((p) => {
                   const busy = isPending && pendingId === p.id;
                   return (
-                    <tr key={p.id} className="hover:bg-muted/20 transition-colors">
-                      <td className="px-4 py-3">
+                    <TableRow key={p.id}>
+                      <TableCell>
                         <div className="flex items-center gap-2 min-w-0">
                           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-500/10">
                             <User className="h-4 w-4 text-amber-700" />
                           </span>
                           <div className="min-w-0">
                             <Link
-                              href={`/patients/${p.id}`}
+                              href={withReturnTo(`/patients/${p.id}`, "/patients/archive")}
                               className="truncate font-medium hover:underline"
                             >
                               {p.full_name}
@@ -117,18 +119,18 @@ export function ArchiveTable({ patients, isAdmin }: ArchiveTableProps) {
                             <p className="truncate text-xs text-muted-foreground">{p.phone}</p>
                           </div>
                         </div>
-                      </td>
-                      <td className="hidden px-4 py-3 font-mono text-xs text-muted-foreground sm:table-cell">
+                      </TableCell>
+                      <TableCell className="hidden font-mono text-xs text-muted-foreground sm:table-cell">
                         {p.file_number}
-                      </td>
-                      <td className="px-4 py-3">
+                      </TableCell>
+                      <TableCell>
                         <div>
                           <p className="text-sm">{fmtRelative(p.archived_at)}</p>
                           <p className="text-xs text-muted-foreground">{fmtDate(p.archived_at)}</p>
                         </div>
-                      </td>
+                      </TableCell>
                       {isAdmin && (
-                        <td className="px-4 py-3 text-right">
+                        <TableCell className="text-end">
                           {busy ? (
                             <Loader2 className="ml-auto h-4 w-4 animate-spin text-muted-foreground" />
                           ) : (
@@ -143,13 +145,13 @@ export function ArchiveTable({ patients, isAdmin }: ArchiveTableProps) {
                               Restore
                             </Button>
                           )}
-                        </td>
+                        </TableCell>
                       )}
-                    </tr>
+                    </TableRow>
                   );
                 })}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         </div>
       ))}

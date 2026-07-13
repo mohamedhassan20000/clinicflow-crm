@@ -2,6 +2,7 @@ import "server-only";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
 import type { FxSnapshot } from "@/lib/currency/provider";
+import { requirePlatformAdmin } from "@/lib/rbac";
 
 /**
  * Service-role Supabase client. Server-only.
@@ -124,19 +125,155 @@ export const OPERATOR_CLINIC_LIST_LIMIT = 500;
  * passed requirePlatformAdmin() first. Returns an exact total count plus the
  * newest OPERATOR_CLINIC_LIST_LIMIT rows.
  */
-export async function listOperatorClinics() {
-  return createAdminClient()
+export async function listOperatorClinics(filters: { search?: string; country?: string } = {}) {
+  let query = createAdminClient()
     .from("clinics")
     .select("id, name, phone, country, locale, timezone, onboarding_completed_at, created_at", {
       count: "exact",
-    })
-    .order("created_at", { ascending: false })
-    .limit(OPERATOR_CLINIC_LIST_LIMIT);
+    });
+
+  if (filters.search) query = query.ilike("name", `%${filters.search}%`);
+  if (filters.country) query = query.eq("country", filters.country);
+
+  return query.order("created_at", { ascending: false }).limit(OPERATOR_CLINIC_LIST_LIMIT);
 }
 
 /** Reviewed metadata-only read for executive growth and registry reports. */
 export async function listOperatorClinicMetadata() {
   return createAdminClient().from("clinics").select("id, name, country, created_at").order("created_at", { ascending: false }).limit(1000);
+}
+
+type OperatorClinicReportInput = {
+  country?: string;
+  onboarding?: "complete" | "incomplete";
+  createdFrom?: string;
+  createdToExclusive?: string;
+  sort: "name" | "country" | "created_at";
+  ascending: boolean;
+  from: number;
+  to: number;
+  count?: boolean;
+};
+
+/**
+ * Reviewed metadata-only WS7 query. The caller must re-guard with
+ * requirePlatformAdmin(); this helper exists because clinic RLS deliberately
+ * grants platform admins no direct tenant-row access.
+ */
+export async function queryOperatorClinicReport(input: OperatorClinicReportInput) {
+  let query = createAdminClient()
+    .from("clinics")
+    .select("id, name, country, onboarding_completed_at, created_at", {
+      count: input.count === false ? undefined : "exact",
+    });
+  if (input.country) query = query.eq("country", input.country);
+  if (input.onboarding === "complete") {
+    query = query.not("onboarding_completed_at", "is", null);
+  } else if (input.onboarding === "incomplete") {
+    query = query.is("onboarding_completed_at", null);
+  }
+  if (input.createdFrom) query = query.gte("created_at", input.createdFrom);
+  if (input.createdToExclusive) query = query.lt("created_at", input.createdToExclusive);
+  return query
+    .order(input.sort, { ascending: input.ascending })
+    .range(input.from, input.to);
+}
+
+export async function countAllOperatorClinics() {
+  return createAdminClient().from("clinics").select("id", { count: "exact", head: true });
+}
+
+const OPERATOR_REPORT_SOURCE_CHUNK = 1_000;
+
+async function collectOperatorRows<Row>(
+  limit: number,
+  load: (from: number, to: number) => PromiseLike<{
+    data: Row[] | null;
+    error: { message: string } | null;
+    count: number | null;
+  }>,
+): Promise<
+  | { data: Row[]; count: number; truncated: boolean; error: null }
+  | { data: null; count: number; truncated: false; error: { message: string } }
+> {
+  const rows: Row[] = [];
+  let exactCount = 0;
+  for (let from = 0; from < limit; from += OPERATOR_REPORT_SOURCE_CHUNK) {
+    const to = Math.min(limit, from + OPERATOR_REPORT_SOURCE_CHUNK) - 1;
+    const result = await load(from, to);
+    if (result.error) {
+      return { data: null, count: 0, truncated: false, error: result.error };
+    }
+    if (from === 0) exactCount = result.count ?? result.data?.length ?? 0;
+    rows.push(...(result.data ?? []));
+    if ((result.data?.length ?? 0) < to - from + 1) break;
+  }
+  return {
+    data: rows,
+    count: exactCount,
+    truncated: exactCount > rows.length,
+    error: null,
+  };
+}
+
+/**
+ * Bounded aggregate inputs for the Users report. PostgREST aggregates are
+ * disabled in the local/production-compatible configuration (PGRST123), so
+ * this keeps the existing no-PHI shape while refusing an unbounded profile
+ * materialization. Only clinic ids/names and profile clinic/timestamps cross
+ * this boundary.
+ */
+export async function loadOperatorUserAggregateSource(input: {
+  clinicId?: string;
+  limit: number;
+}) {
+  const db = createAdminClient();
+  const clinics = await collectOperatorRows(input.limit, (from, to) => {
+    let query = db
+      .from("clinics")
+      .select("id, name", { count: "exact" })
+      .order("name", { ascending: true });
+    if (input.clinicId) query = query.eq("id", input.clinicId);
+    return query.range(from, to);
+  });
+  if (clinics.error) return { data: null, error: clinics.error };
+
+  const profiles = await collectOperatorRows(input.limit, (from, to) => {
+    let query = db
+      .from("profiles")
+      .select("clinic_id, created_at", { count: "exact" })
+      .order("created_at", { ascending: false });
+    if (input.clinicId) query = query.eq("clinic_id", input.clinicId);
+    return query.range(from, to);
+  });
+  if (profiles.error) return { data: null, error: profiles.error };
+
+  return {
+    data: {
+      clinics: clinics.data,
+      profiles: profiles.data,
+      truncated: clinics.truncated || profiles.truncated,
+    },
+    error: null,
+  };
+}
+
+/** Bounded clinic timestamps used only to derive month-level Growth rows. */
+export async function loadOperatorGrowthSource(input: {
+  createdFrom?: string;
+  createdToExclusive?: string;
+  limit: number;
+}) {
+  const db = createAdminClient();
+  return collectOperatorRows(input.limit, (from, to) => {
+    let query = db
+      .from("clinics")
+      .select("created_at", { count: "exact" })
+      .order("created_at", { ascending: true });
+    if (input.createdFrom) query = query.gte("created_at", input.createdFrom);
+    if (input.createdToExclusive) query = query.lt("created_at", input.createdToExclusive);
+    return query.range(from, to);
+  });
 }
 
 export async function getOperatorAggregateInputs() {
@@ -181,6 +318,267 @@ export async function getOperatorClinic(clinicId: string) {
     .select("id, name, phone, country, locale, timezone, onboarding_completed_at, created_at")
     .eq("id", clinicId)
     .maybeSingle();
+}
+
+export const OPERATOR_CLINIC_USAGE_PAGE_SIZES = [25, 50, 100] as const;
+export const OPERATOR_CLINIC_USAGE_METRICS = [
+  "ai_messages",
+  "wa_messages",
+  "sms_messages",
+  "emails",
+] as const satisfies readonly Database["public"]["Enums"]["usage_metric"][];
+
+export type OperatorClinicUsageParams = {
+  metric: Database["public"]["Enums"]["usage_metric"] | "all";
+  page: number;
+  pageSize: (typeof OPERATOR_CLINIC_USAGE_PAGE_SIZES)[number];
+};
+
+export function parseOperatorClinicUsageParams(input: {
+  usageMetric?: string;
+  usagePage?: string;
+  usagePageSize?: string;
+}): OperatorClinicUsageParams {
+  const metric = OPERATOR_CLINIC_USAGE_METRICS.includes(
+    input.usageMetric as (typeof OPERATOR_CLINIC_USAGE_METRICS)[number],
+  )
+    ? (input.usageMetric as OperatorClinicUsageParams["metric"])
+    : "all";
+  const parsedPage = Number.parseInt(input.usagePage ?? "1", 10);
+  const parsedPageSize = Number.parseInt(input.usagePageSize ?? "25", 10);
+  const pageSize = OPERATOR_CLINIC_USAGE_PAGE_SIZES.includes(
+    parsedPageSize as OperatorClinicUsageParams["pageSize"],
+  )
+    ? (parsedPageSize as OperatorClinicUsageParams["pageSize"])
+    : 25;
+  return {
+    metric,
+    page: Number.isSafeInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1,
+    pageSize,
+  };
+}
+
+const SAFE_OPERATOR_CLINIC_AUDIT_ACTIONS = [
+  "subscription.granted",
+  "subscription.cancelled",
+  "feature_override.upserted",
+  "feature_override.removed",
+  "invitation.issued",
+  "invitation.revoked",
+  "invitation.email_sent",
+  "coupon.redeemed",
+] as const;
+const OPERATOR_CLINIC_AUDIT_SOURCE_LIMIT = 10_000;
+
+function auditPayload(payload: Database["public"]["Tables"]["platform_audit_logs"]["Row"]["payload"]) {
+  return payload && typeof payload === "object" && !Array.isArray(payload)
+    ? payload as Record<string, unknown>
+    : {};
+}
+
+function safeAuditSummary(row: {
+  id: string;
+  action: string;
+  target_type: string;
+  target_id: string | null;
+  payload: Database["public"]["Tables"]["platform_audit_logs"]["Row"]["payload"];
+  created_at: string;
+}) {
+  const payload = auditPayload(row.payload);
+  switch (row.action) {
+    case "subscription.granted": {
+      const plan = typeof payload.planSlug === "string" ? payload.planSlug : null;
+      const months = typeof payload.months === "number" ? `${payload.months} months` : "unbounded";
+      return {
+        id: row.id,
+        title: "Manual subscription granted or extended",
+        detail: [plan ? `Plan: ${plan}` : null, `Duration: ${months}`].filter(Boolean).join(" · "),
+        createdAt: row.created_at,
+      };
+    }
+    case "subscription.cancelled":
+      return { id: row.id, title: "Manual subscription cancelled", detail: null, createdAt: row.created_at };
+    case "feature_override.upserted":
+      return {
+        id: row.id,
+        title: "Feature override changed",
+        detail: `${row.target_id ?? "Feature"}: ${payload.enabled === true ? "enabled" : "disabled"}`,
+        createdAt: row.created_at,
+      };
+    case "feature_override.removed":
+      return {
+        id: row.id,
+        title: "Feature override removed",
+        detail: row.target_id,
+        createdAt: row.created_at,
+      };
+    case "invitation.issued":
+      return {
+        id: row.id,
+        title: payload.force === true ? "Invitation reissued" : "Invitation issued",
+        detail: typeof payload.expiresAt === "string" ? `Expires ${payload.expiresAt}` : null,
+        createdAt: row.created_at,
+      };
+    case "invitation.revoked":
+      return { id: row.id, title: "Invitation revoked", detail: null, createdAt: row.created_at };
+    case "invitation.email_sent":
+      return { id: row.id, title: "Invitation email sent", detail: null, createdAt: row.created_at };
+    case "coupon.redeemed":
+      return {
+        id: row.id,
+        title: "Coupon redeemed",
+        detail: typeof payload.kind === "string" ? `Kind: ${payload.kind.replaceAll("_", " ")}` : null,
+        createdAt: row.created_at,
+      };
+    default:
+      return null;
+  }
+}
+
+/**
+ * Read-only WS8 clinic-history boundary. Every field is clinic metadata,
+ * platform commercial data, or a count/limit. Patient and clinical tables are
+ * deliberately unreachable from this query path. Audit payloads are converted
+ * to an allowlisted summary before leaving this server-only module.
+ */
+export async function getOperatorClinicHistory(
+  clinicId: string,
+  usage: OperatorClinicUsageParams,
+) {
+  await requirePlatformAdmin();
+  const db = createAdminClient();
+
+  async function loadUsagePage() {
+    let countQuery = db
+      .from("usage_counters")
+      .select("id", { count: "exact", head: true })
+      .eq("clinic_id", clinicId);
+    if (usage.metric !== "all") countQuery = countQuery.eq("metric", usage.metric);
+    const countResult = await countQuery;
+    if (countResult.error) return { data: null, error: countResult.error };
+
+    const total = countResult.count ?? 0;
+    const pageCount = Math.max(1, Math.ceil(total / usage.pageSize));
+    const page = Math.min(usage.page, pageCount);
+    const from = (page - 1) * usage.pageSize;
+    let rowsQuery = db
+      .from("usage_counters")
+      .select("id, period_start, metric, used, limit_snapshot, created_at, updated_at")
+      .eq("clinic_id", clinicId);
+    if (usage.metric !== "all") rowsQuery = rowsQuery.eq("metric", usage.metric);
+    const rows = await rowsQuery
+      .order("period_start", { ascending: false })
+      .order("metric", { ascending: true })
+      .range(from, from + usage.pageSize - 1);
+    if (rows.error) return { data: null, error: rows.error };
+    return {
+      data: {
+        rows: rows.data ?? [],
+        total,
+        page,
+        pageSize: usage.pageSize,
+        pageCount,
+        metric: usage.metric,
+      },
+      error: null,
+    };
+  }
+
+  const [clinic, subscription, workingHours, invitations, redemptions, overrides, usageRows, plans] =
+    await Promise.all([
+      db
+        .from("clinics")
+        .select(
+          "id, name, country, timezone, locale, currency, created_at, onboarding_completed_at, working_hours_start, working_hours_end",
+        )
+        .eq("id", clinicId)
+        .maybeSingle(),
+      db
+        .from("subscriptions")
+        .select(
+          "id, status, trial_ends_at, current_period_start, current_period_end, provider, provider_subscription_id, created_at, updated_at, plans(slug, name_en)",
+        )
+        .eq("clinic_id", clinicId)
+        .maybeSingle(),
+      db
+        .from("clinic_working_hours")
+        .select("id, day_of_week, shift_start, shift_end")
+        .eq("clinic_id", clinicId)
+        .order("day_of_week")
+        .order("shift_start"),
+      db
+        .from("clinic_invitations")
+        .select("id, status, created_at, expires_at, email_sent_at, accepted_at, revoked_at, updated_at")
+        .eq("accepted_clinic_id", clinicId)
+        .order("created_at", { ascending: false }),
+      db
+        .from("coupon_redemptions")
+        .select("id, redeemed_at, coupon_id, coupons(code, kind, months, percent, expires_at, is_active)")
+        .eq("clinic_id", clinicId)
+        .order("redeemed_at", { ascending: false }),
+      db
+        .from("clinic_feature_overrides")
+        .select("id, feature_key, enabled, created_at, updated_at")
+        .eq("clinic_id", clinicId)
+        .order("feature_key"),
+      loadUsagePage(),
+      db.from("plans").select("slug, name_en").eq("is_active", true).order("slug"),
+    ]);
+
+  if (clinic.error) return { data: null, error: clinic.error };
+  if (!clinic.data) return { data: null, error: null };
+  const firstError = [subscription, workingHours, invitations, redemptions, overrides, usageRows, plans]
+    .map((result) => result.error)
+    .find(Boolean);
+  if (firstError) return { data: null, error: firstError };
+
+  const invitationIds = (invitations.data ?? []).map((invitation) => invitation.id);
+  const clinicAudit = await collectOperatorRows(OPERATOR_CLINIC_AUDIT_SOURCE_LIMIT, (from, to) =>
+    db
+      .from("platform_audit_logs")
+      .select("id, action, target_type, target_id, payload, created_at", { count: "exact" })
+      .eq("clinic_id", clinicId)
+      .in("action", [...SAFE_OPERATOR_CLINIC_AUDIT_ACTIONS])
+      .order("created_at", { ascending: false })
+      .range(from, to),
+  );
+  if (clinicAudit.error) return { data: null, error: clinicAudit.error };
+
+  const invitationAudit = invitationIds.length > 0
+    ? await collectOperatorRows(OPERATOR_CLINIC_AUDIT_SOURCE_LIMIT, (from, to) =>
+        db
+          .from("platform_audit_logs")
+          .select("id, action, target_type, target_id, payload, created_at", { count: "exact" })
+          .eq("target_type", "clinic_invitation")
+          .in("target_id", invitationIds)
+          .in("action", ["invitation.issued", "invitation.revoked", "invitation.email_sent"])
+          .order("created_at", { ascending: false })
+          .range(from, to),
+      )
+    : { data: [], count: 0, truncated: false, error: null };
+  if (invitationAudit.error) return { data: null, error: invitationAudit.error };
+
+  const safeAudit = new Map<string, NonNullable<ReturnType<typeof safeAuditSummary>>>();
+  for (const row of [...clinicAudit.data, ...invitationAudit.data]) {
+    const event = safeAuditSummary(row);
+    if (event) safeAudit.set(event.id, event);
+  }
+
+  return {
+    data: {
+      clinic: clinic.data,
+      subscription: subscription.data,
+      workingHours: workingHours.data ?? [],
+      invitations: invitations.data ?? [],
+      redemptions: redemptions.data ?? [],
+      overrides: overrides.data ?? [],
+      usage: usageRows.data!,
+      plans: plans.data ?? [],
+      auditEvents: [...safeAudit.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+      auditTruncated: clinicAudit.truncated || invitationAudit.truncated,
+    },
+    error: null,
+  };
 }
 
 // Safety bound for the Auth-user scan below: 500 pages × 100 users. The scan

@@ -228,6 +228,28 @@
     letter-spacing: -0.02em;
     font-weight: 600;
   }
+
+  /*
+    P2A — Arabic typography (AI_AGENT_PLAN.md §4.3). Scoped to `lang="ar"` so the English UI
+    renders byte-identically: Latin keeps Manrope, and nothing below applies until the root
+    element is Arabic.
+
+    thmanyah sans has no 600 weight, so the -0.02em tracking tuned for Manrope is dropped for
+    Arabic headings (Arabic letterforms connect — negative tracking damages the joins).
+  */
+  html[lang="ar"] {
+    --font-sans: var(--font-thmanyah), var(--font-plex-arabic), "Segoe UI", system-ui, sans-serif;
+    --font-heading: var(--font-thmanyah), var(--font-plex-arabic), "Segoe UI", system-ui, sans-serif;
+    --font-display: var(--font-thmanyah), var(--font-plex-arabic), "Segoe UI", system-ui, sans-serif;
+  }
+  html[lang="ar"] h1,
+  html[lang="ar"] h2,
+  html[lang="ar"] h3,
+  html[lang="ar"] h4,
+  html[lang="ar"] h5,
+  html[lang="ar"] h6 {
+    letter-spacing: normal;
+  }
 }
 
 /* MP5: fixed country-picker rhythm without changing the shared combobox shell. */
@@ -598,6 +620,94 @@
   .marketing-cta:active { transform: none; }
 }
 
+/* ── P2C: accent typography ────────────────────────────────────────────────────────────────────
+   One accent treatment, used sparingly and only where the eye should land first: the clause that
+   carries the hero headline, the statistics figures, the cohort percentage, and the workflow clock
+   times. Deliberately *not* applied to body copy, section titles, card headings, or links — an
+   accent that appears everywhere stops being an accent and starts being a colour scheme.
+
+   Implemented as a gradient clipped to the glyphs, which is what gives it the slight depth a flat
+   fill cannot. Two safeguards make that safe rather than clever:
+
+     • The solid `color` declared first is a real fallback. Browsers without `background-clip: text`
+       (and, more importantly, forced-colors / high-contrast modes, where `-webkit-text-fill-color`
+       is overridden) render legible accent text instead of an invisible transparent block. Text
+       that can vanish is not a decoration, it is a bug.
+     • The gradient runs `to bottom`, not `to right`. A horizontal gradient is a physical direction
+       and would run the bright stop to the wrong end of an Arabic headline; a vertical one is
+       direction-neutral and reads identically in both scripts.
+
+   Light and dark each get their own stops, tuned against `--m-paper` / `--m-panel` for contrast. */
+.marketing-accent {
+  color: var(--m-accent-text);
+  background-image: linear-gradient(to bottom, #0a8f8a 0%, #067e7c 55%, #0a6f74 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.marketing-page.dark .marketing-accent {
+  background-image: linear-gradient(to bottom, #8ff3e6 0%, #6ee7dc 55%, #4fd4cd 100%);
+}
+
+@supports not (background-clip: text) {
+  .marketing-accent {
+    -webkit-text-fill-color: currentcolor;
+  }
+}
+
+@media (forced-colors: active) {
+  .marketing-accent {
+    background-image: none;
+    -webkit-text-fill-color: currentcolor;
+    color: currentcolor;
+  }
+}
+
+.marketing-stat-figure {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* ── P2C: premium section backgrounds ──────────────────────────────────────────────────────────
+   Three very restrained textures whose entire job is to separate adjacent sections without adding
+   artwork. Each is a `::before` overlay: it paints, it never participates in layout, so none of the
+   approved spacing moves by a pixel. Opacities sit between 3% and 5.5% — visible as *depth*, not as
+   pattern. All are `inset-inline`/`inset-block`, so they hold in RTL, and all are pointer-inert. */
+.marketing-tex-mesh::before,
+.marketing-tex-glow::before,
+.marketing-tex-grid::before {
+  position: absolute;
+  z-index: 0;
+  inset-block: 0;
+  inset-inline: 0;
+  content: "";
+  pointer-events: none;
+}
+
+/* Statistics band — a soft teal mesh that lifts the figures off the panel. */
+.marketing-tex-mesh::before {
+  background:
+    radial-gradient(ellipse 60% 80% at 15% 0%, rgb(19 199 216 / 9%), transparent 60%),
+    radial-gradient(ellipse 50% 70% at 85% 100%, rgb(8 127 123 / 8%), transparent 62%);
+}
+
+/* Cohort + pricing — one wide, low-contrast bloom, offset so it never sits behind the headline. */
+.marketing-tex-glow::before {
+  background: radial-gradient(ellipse 70% 60% at 78% 30%, rgb(20 197 207 / 7%), transparent 66%);
+}
+
+/* Features + FAQ — a hairline geometric grid. Masked to fade at the edges so it reads as texture
+   rather than as a table someone forgot to remove. */
+.marketing-tex-grid::before {
+  background-image:
+    linear-gradient(to bottom, color-mix(in oklab, var(--m-ink) 100%, transparent) 1px, transparent 1px),
+    linear-gradient(to right, color-mix(in oklab, var(--m-ink) 100%, transparent) 1px, transparent 1px);
+  background-size: 72px 72px;
+  mask-image: radial-gradient(ellipse 80% 70% at 50% 40%, black 10%, transparent 78%);
+  opacity: .035;
+}
+
 .auth-right-panel {
   background:
     radial-gradient(ellipse 90% 60% at top, oklch(0.96 0.03 208) 0%, var(--background) 60%);
@@ -827,8 +937,7 @@ body:has(.forced-dark-scope) .toaster {
     flex-direction: column;
     position: fixed;
     top: 0;
-    left: 0;
-    right: 0;
+    inset-inline: 0;
     z-index: 40;
     background: #fff;
     padding: 5px 10mm 0;
@@ -882,8 +991,7 @@ body:has(.forced-dark-scope) .toaster {
   }
   [data-report-section] [data-slot="card-content"],
   [data-report-section] [data-slot="card-header"] {
-    padding-left: 0 !important;
-    padding-right: 0 !important;
+    padding-inline: 0 !important;
   }
 
 }

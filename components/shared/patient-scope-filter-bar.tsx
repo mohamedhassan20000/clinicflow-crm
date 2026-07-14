@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { formatDoctorFirstName, formatDoctorName } from "@/lib/format-doctor";
+import { useTranslations } from "next-intl";
 
 export type PatientFilterKey =
   | "doctor"
@@ -75,12 +76,12 @@ const ICONS: Record<
 };
 
 const LABELS: Record<PatientFilterKey, string> = {
-  doctor: "Doctor",
-  dept: "Department",
-  file: "File #",
-  nat: "National ID",
-  phone: "Phone",
-  name: "Name",
+  doctor: "doctor",
+  dept: "department",
+  file: "fileNumber",
+  nat: "nationalId",
+  phone: "phone",
+  name: "name",
 };
 
 const DEFAULT_PARAM_NAMES: Record<PatientFilterKey, string> = {
@@ -105,6 +106,7 @@ export function PatientScopeFilterBar({
   clearExtraParams = [],
   actions,
 }: PatientScopeFilterBarProps) {
+  const t = useTranslations("shared");
   const router = useRouter();
   const params = useSearchParams();
   const [, startTransition] = useTransition();
@@ -163,8 +165,7 @@ export function PatientScopeFilterBar({
     >
       <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
         <Filter className="h-3.5 w-3.5" />
-        Filter
-      </span>
+        {t("filter")}</span>
 
       {!hideDoctorFilter && (
         <FilterChip
@@ -203,7 +204,7 @@ export function PatientScopeFilterBar({
 
       <FilterChip filterKey="nat" active={!!active.nat} value={active.nat}>
         <TextFilter
-          placeholder="National ID"
+          placeholder={t("nationalId")}
           current={active.nat}
           onApply={(value) => apply("nat", value)}
         />
@@ -215,7 +216,7 @@ export function PatientScopeFilterBar({
         value={active.phone}
       >
         <TextFilter
-          placeholder="05XX XXX XX XX"
+          placeholder={t("05xxXxxXxXx")}
           current={active.phone}
           onApply={(value) => apply("phone", value)}
         />
@@ -223,7 +224,7 @@ export function PatientScopeFilterBar({
 
       <FilterChip filterKey="name" active={!!active.name} value={active.name}>
         <TextFilter
-          placeholder="Patient name"
+          placeholder={t("patientName")}
           current={active.name}
           onApply={(value) => apply("name", value)}
         />
@@ -237,11 +238,10 @@ export function PatientScopeFilterBar({
           onClick={clearAll}
         >
           <X className="h-3.5 w-3.5" />
-          Clear all
-        </Button>
+          {t("clearAll")}</Button>
       )}
 
-      {actions && <span className="ml-auto flex items-center gap-2">{actions}</span>}
+      {actions && <span className="ms-auto flex items-center gap-2">{actions}</span>}
     </div>
   );
 }
@@ -257,6 +257,7 @@ function FilterChip({
   value: string | null | undefined;
   children: React.ReactNode;
 }) {
+  const t = useTranslations("shared");
   const Icon = ICONS[filterKey];
   return (
     <Popover>
@@ -272,7 +273,7 @@ function FilterChip({
           )}
         >
           <Icon className="h-3.5 w-3.5" />
-          {LABELS[filterKey]}
+          {t(LABELS[filterKey])}
           {active && value && (
             <span className="max-w-[120px] truncate font-semibold">
               : {value}
@@ -294,6 +295,7 @@ function FileNumberFilter({
   current: string | null;
   onApply: (value: string | null) => void;
 }) {
+  const t = useTranslations("shared");
   const [val, setVal] = useState(fileNumberDigits(current));
   return (
     <form
@@ -304,9 +306,8 @@ function FileNumberFilter({
       }}
     >
       <div className="flex overflow-hidden rounded-md border border-input bg-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-1">
-        <span className="inline-flex h-8 items-center border-r border-border bg-muted/60 px-2 font-mono text-sm font-medium text-muted-foreground">
-          CF-
-        </span>
+        <span className="inline-flex h-8 items-center border-e border-border bg-muted/60 px-2 font-mono text-sm font-medium text-muted-foreground">
+          {t("cf")}</span>
         <Input
           value={val}
           onChange={(event) => setVal(event.target.value.replace(/\D/g, ""))}
@@ -328,12 +329,10 @@ function FileNumberFilter({
               onApply(null);
             }}
           >
-            Clear
-          </Button>
+            {t("clear")}</Button>
         )}
         <Button type="submit" size="sm" className="h-7 text-xs">
-          Apply
-        </Button>
+          {t("apply")}</Button>
       </div>
     </form>
   );
@@ -350,6 +349,7 @@ function TextFilter({
   uppercase?: boolean;
   onApply: (value: string | null) => void;
 }) {
+  const t = useTranslations("shared");
   const [val, setVal] = useState(current ?? "");
   return (
     <form
@@ -380,12 +380,10 @@ function TextFilter({
               onApply(null);
             }}
           >
-            Clear
-          </Button>
+            {t("clear")}</Button>
         )}
         <Button type="submit" size="sm" className="h-7 text-xs">
-          Apply
-        </Button>
+          {t("apply")}</Button>
       </div>
     </form>
   );
@@ -410,11 +408,12 @@ function DoctorFilter({
   doctors: { id: string; full_name: string }[];
   onApply: (value: string | null) => void;
 }) {
+  const t = useTranslations("shared");
   return (
     <div className="space-y-2">
       <Select value={current ?? ""} onValueChange={(value) => onApply(value || null)}>
         <SelectTrigger className="h-8 text-sm">
-          <SelectValue placeholder="Select doctor" />
+          <SelectValue placeholder={t("selectDoctor")} />
         </SelectTrigger>
         <SelectContent>
           {doctors.map((doctor) => (
@@ -433,8 +432,7 @@ function DoctorFilter({
             className="h-7 text-xs"
             onClick={() => onApply(null)}
           >
-            Clear
-          </Button>
+            {t("clear")}</Button>
         </div>
       )}
     </div>
@@ -450,11 +448,12 @@ function DeptFilter({
   departments: { id: string; name: string; color: string }[];
   onApply: (value: string | null) => void;
 }) {
+  const t = useTranslations("shared");
   return (
     <div className="space-y-2">
       <Select value={current ?? ""} onValueChange={(value) => onApply(value || null)}>
         <SelectTrigger className="h-8 text-sm">
-          <SelectValue placeholder="Select department" />
+          <SelectValue placeholder={t("selectDepartment")} />
         </SelectTrigger>
         <SelectContent>
           {departments.map((department) => (
@@ -480,8 +479,7 @@ function DeptFilter({
             className="h-7 text-xs"
             onClick={() => onApply(null)}
           >
-            Clear
-          </Button>
+            {t("clear")}</Button>
         </div>
       )}
     </div>

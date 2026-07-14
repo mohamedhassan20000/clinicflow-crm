@@ -35,6 +35,20 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      # P2B: fails on physical-direction styles (ml-, pr-, left-, text-right, border-l, …) and on
+      # directional icons with no RTL mirror. Both are invisible in English and break Arabic.
+      - name: RTL gate (logical properties + icon mirroring)
+        run: pnpm lint:rtl
+
+      - name: i18n source gate
+        run: pnpm lint:i18n
+
+      - name: i18n catalog structure and ICU parity
+        run: pnpm i18n:missing
+
+      - name: i18n unused-key gate
+        run: pnpm i18n:unused
+
       - name: Typecheck
         run: pnpm typecheck
 

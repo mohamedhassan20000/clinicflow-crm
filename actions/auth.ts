@@ -1,11 +1,14 @@
 "use server";
 
+import { actionError } from "@/lib/i18n/action-errors";
+import { localizeZodFieldErrors } from "@/lib/validations/server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { z } from "zod";
 import { createClient as createSupabaseJs } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
+import { THEME_COOKIE } from "@/lib/i18n/config";
 import {
   deleteSignupAuthUser,
   findResumableSignupUser,
@@ -56,13 +59,13 @@ const changePasswordSchema = z
   .object({
     password: z
       .string()
-      .min(8, "Password must be at least 8 characters")
-      .regex(/[A-Z]/, "Must contain an uppercase letter")
-      .regex(/[0-9]/, "Must contain a number"),
+      .min(8, "validation.passwordMinLength")
+      .regex(/[A-Z]/, "validation.passwordUppercase")
+      .regex(/[0-9]/, "validation.passwordNumber"),
     confirmPassword: z.string(),
   })
   .refine((d) => d.password === d.confirmPassword, {
-    message: "Passwords do not match",
+    message: "validation.passwordsDoNotMatch",
     path: ["confirmPassword"],
   });
 
@@ -83,21 +86,21 @@ export async function signIn(
 
   const parsed = signInSchema.safeParse(raw);
   if (!parsed.success) {
-    return { fieldErrors: parsed.error.flatten().fieldErrors };
+    return { fieldErrors: await localizeZodFieldErrors(parsed.error) };
   }
 
   const loginLimit = await checkRateLimit("login", await requestIp(), {
     limit: 10, windowSeconds: 15 * 60, failureMode: "open",
   });
   if (!loginLimit.allowed) {
-    return { error: "Too many sign-in attempts. Please try again later." };
+    return { error: await actionError("auth.tooManySignInAttemptsPleaseTryAgainLater") };
   }
 
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signInWithPassword(parsed.data);
 
   if (error || !data.user) {
-    return { error: "Invalid email or password." };
+    return { error: await actionError("auth.invalidEmailOrPassword") };
   }
 
   const { data: profile } = await supabase
@@ -114,10 +117,10 @@ export async function signIn(
       .maybeSingle();
     if (platformAdmin) return { ok: true, redirectTo: "/operator" };
     await supabase.auth.signOut();
-    return { error: "Profile not found. Contact your administrator." };
+    return { error: await actionError("auth.profileNotFoundContactYourAdministrator") };
   }
   if (!profile.is_active || profile.is_deleted || profile.deleted_at) {
-    return { error: "Your account is inactive. Contact your administrator." };
+    return { error: await actionError("auth.yourAccountIsInactiveContactYourAdministrator") };
   }
 
   const { error: lastLoginError } = await supabase.rpc(
@@ -163,6 +166,13 @@ export async function signIn(
 export async function signOut(): Promise<void> {
   const supabase = await createClient();
   await supabase.auth.signOut();
+
+  // P2A (§4.5): the theme cookie is only a pre-render hint for the account that set it. Leaving it
+  // behind would hand the next user on this browser the previous user's theme before their own row
+  // is read. The stored preference itself is untouched — it follows the user to any device.
+  const cookieStore = await cookies();
+  cookieStore.delete(THEME_COOKIE);
+
   redirect("/login");
 }
 
@@ -177,7 +187,7 @@ export async function changePassword(
 
   const parsed = changePasswordSchema.safeParse(raw);
   if (!parsed.success) {
-    return { fieldErrors: parsed.error.flatten().fieldErrors };
+    return { fieldErrors: await localizeZodFieldErrors(parsed.error) };
   }
 
   try {
@@ -189,7 +199,7 @@ export async function changePassword(
     if (!user) {
       return {
         error:
-          "Your session expired. Sign in again with your temporary password to set a new password.",
+          await actionError("auth.yourSessionExpiredSignInAgainWithYourTemporaryPassword"),
       };
     }
 
@@ -200,11 +210,11 @@ export async function changePassword(
 
     if (error) {
       return {
-        error: `Failed to update password: ${error.message}`,
+        error: await actionError("auth.weCouldNotCompleteThisRequestPleaseTryAgain"),
       };
     }
     if (updatedUserId && updatedUserId !== user.id) {
-      return { error: "Password update returned an unexpected user." };
+      return { error: await actionError("auth.passwordUpdateReturnedAnUnexpectedUser") };
     }
 
     const { error: rpcError } = await supabase.rpc(
@@ -214,7 +224,7 @@ export async function changePassword(
     if (rpcError) {
       return {
         error:
-          `Password updated, but the forced-password flag clear failed: ${rpcError.message}`,
+          await actionError("auth.weCouldNotCompleteThisRequestPleaseTryAgain"),
       };
     }
 
@@ -225,28 +235,28 @@ export async function changePassword(
       redirectTo: "/login?password_changed=1",
     };
   } catch (err) {
+    console.error("Forced password change failed", { error: errorMessage(err) });
     return {
-      error:
-        `Unexpected forced password error: ${errorMessage(err) ?? "unknown error"}`,
+      error: await actionError("auth.weCouldNotCompleteThisRequestPleaseTryAgain"),
     };
   }
 }
 
 const forgotSchema = z.object({
-  email: z.string().email("Enter a valid email address."),
+  email: z.string().email("validation.invalidEmail"),
 });
 
 const resetSchema = z
   .object({
     password: z
       .string()
-      .min(8, "Password must be at least 8 characters")
-      .regex(/[A-Z]/, "Must contain an uppercase letter")
-      .regex(/[0-9]/, "Must contain a number"),
+      .min(8, "validation.passwordMinLength")
+      .regex(/[A-Z]/, "validation.passwordUppercase")
+      .regex(/[0-9]/, "validation.passwordNumber"),
     confirmPassword: z.string(),
   })
   .refine((d) => d.password === d.confirmPassword, {
-    message: "Passwords do not match",
+    message: "validation.passwordsDoNotMatch",
     path: ["confirmPassword"],
   });
 
@@ -268,7 +278,7 @@ export async function requestPasswordReset(
 ): Promise<AuthActionResult> {
   const parsed = forgotSchema.safeParse({ email: formData.get("email") });
   if (!parsed.success) {
-    return { fieldErrors: parsed.error.flatten().fieldErrors };
+    return { fieldErrors: await localizeZodFieldErrors(parsed.error) };
   }
 
   const passwordResetLimit = await checkRateLimit("password-reset", await requestIp(), {
@@ -316,9 +326,8 @@ const clinicSignupSchema = z.object({
   locale: z.enum(["ar", "en"]),
 });
 
-const SIGNUP_EXISTS_MESSAGE =
-  "An account already exists for this email. Sign in or reset its password.";
-const SIGNUP_RETRY_MESSAGE = "Signup failed. Please try again.";
+const SIGNUP_EXISTS_ERROR_KEY = "auth.accountAlreadyExistsForThisEmail";
+const SIGNUP_RETRY_ERROR_KEY = "auth.signupFailedPleaseTryAgain";
 
 // Supabase Auth error codes that mean "this email is already registered".
 // They only occur when email-enumeration protection is disabled; with it
@@ -344,18 +353,18 @@ type SignUpAuthError = {
 // enumeration-neutral.
 function mapSignUpFailure(error: SignUpAuthError): string {
   if (SIGNUP_RATE_LIMIT_CODES.has(error.code ?? "")) {
-    return "Too many signup attempts right now. Please try again in a little while.";
+    return "auth.tooManySignupAttemptsPleaseTryAgainLater";
   }
   if (SIGNUP_DISABLED_CODES.has(error.code ?? "")) {
-    return "Signup is temporarily unavailable. Please try again later.";
+    return "auth.signupIsTemporarilyUnavailablePleaseTryAgainLater";
   }
   if (error.code === "weak_password") {
-    return "This password was rejected. Choose a stronger password.";
+    return "auth.passwordWasRejectedChooseAStrongerPassword";
   }
   if (error.code === "unexpected_failure" || (error.status ?? 0) >= 500) {
-    return "We couldn't send your confirmation email. Please try again shortly.";
+    return "auth.couldNotSendConfirmationEmailPleaseTryAgain";
   }
-  return SIGNUP_RETRY_MESSAGE;
+  return SIGNUP_RETRY_ERROR_KEY;
 }
 
 function createThrowawayAuthClient() {
@@ -400,14 +409,14 @@ export async function signUpClinic(
     email: formData.get("email"), password: formData.get("password"),
     locale: formData.get("locale"),
   });
-  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  if (!parsed.success) return { fieldErrors: await localizeZodFieldErrors(parsed.error) };
   const normalizedPhone = normalizePhone(parsed.data.phone, parsed.data.phoneCountry);
-  if (!normalizedPhone) return { fieldErrors: { phone: ["Enter a valid international phone number"] } };
+  if (!normalizedPhone) return { fieldErrors: { phone: [await actionError("auth.enterAValidInternationalPhoneNumber")] } };
 
   const rateLimit = await checkRateLimit("clinic-signup", await requestIp(), {
     limit: 5, windowSeconds: 60 * 60, failureMode: "closed",
   });
-  if (!rateLimit.allowed) return { error: "Signup is temporarily unavailable. Please try again later." };
+  if (!rateLimit.allowed) return { error: await actionError("auth.signupIsTemporarilyUnavailablePleaseTryAgainLater") };
 
   const email = normalizeEmail(parsed.data.email);
   const tokenHash = parsed.data.token ? hashInvitationToken(parsed.data.token) : null;
@@ -416,8 +425,8 @@ export async function signUpClinic(
     "validate_clinic_signup", { p_token_hash: tokenHash ?? undefined },
   );
   const state = validation?.[0];
-  if (validationError || !state?.allowed) return { error: "This invitation is invalid or has expired." };
-  if (state.email && normalizeEmail(state.email) !== email) return { error: "Use the email address this invitation was sent to." };
+  if (validationError || !state?.allowed) return { error: await actionError("auth.thisInvitationIsInvalidOrHasExpired") };
+  if (state.email && normalizeEmail(state.email) !== email) return { error: await actionError("auth.useTheEmailAddressThisInvitationWasSentTo") };
 
   const origin = await siteOrigin();
   const confirmRedirectTo = `${origin}/auth/confirm?next=/onboarding`;
@@ -438,7 +447,7 @@ export async function signUpClinic(
       status: signUpError.status != null ? String(signUpError.status) : null,
       invitationId: state.invitation_id,
     });
-    return { error: mapSignUpFailure(signUpError) };
+    return { error: await actionError(mapSignUpFailure(signUpError)) };
   }
 
   let ownerId = signUpData.user?.id ?? null;
@@ -457,9 +466,9 @@ export async function signUpClinic(
       logSupabaseError("clinic_signup_resume_lookup_failed", resumable.error, {
         invitationId: state.invitation_id,
       });
-      return { error: SIGNUP_RETRY_MESSAGE };
+      return { error: await actionError(SIGNUP_RETRY_ERROR_KEY) };
     }
-    if (!resumable.data) return { error: SIGNUP_EXISTS_MESSAGE };
+    if (!resumable.data) return { error: await actionError(SIGNUP_EXISTS_ERROR_KEY) };
 
     const verifier = createThrowawayAuthClient();
     const verified = await verifier.auth.signInWithPassword({
@@ -496,16 +505,16 @@ export async function signUpClinic(
         logSupabaseError("clinic_signup_orphan_reset_failed", reset.error, {
           userId: resumable.data.userId,
         });
-        return { error: SIGNUP_RETRY_MESSAGE };
+        return { error: await actionError(SIGNUP_RETRY_ERROR_KEY) };
       }
       ownerId = resumable.data.userId;
       await resendSignupConfirmation(email, confirmRedirectTo);
     } else {
-      return { error: SIGNUP_EXISTS_MESSAGE };
+      return { error: await actionError(SIGNUP_EXISTS_ERROR_KEY) };
     }
     createdNow = false;
   }
-  if (!ownerId) return { error: SIGNUP_RETRY_MESSAGE };
+  if (!ownerId) return { error: await actionError(SIGNUP_RETRY_ERROR_KEY) };
 
   const { error: provisionError } = await provisionClinicOwner({
     ownerId, tokenHash,
@@ -523,7 +532,7 @@ export async function signUpClinic(
       const { error: cleanupError } = await deleteSignupAuthUser(ownerId);
       if (cleanupError) console.error("signup_compensation_failed", { userId: ownerId });
     }
-    return { error: "Clinic setup could not be completed. Please retry with the same details." };
+    return { error: await actionError("auth.clinicSetupCouldNotBeCompletedPleaseRetryWithThe") };
   }
 
   // The public signup flow must never hand its session state to the next
@@ -549,7 +558,7 @@ export async function setNewPassword(
   };
   const parsed = resetSchema.safeParse(raw);
   if (!parsed.success) {
-    return { fieldErrors: parsed.error.flatten().fieldErrors };
+    return { fieldErrors: await localizeZodFieldErrors(parsed.error) };
   }
 
   const supabase = await createClient();
@@ -559,7 +568,7 @@ export async function setNewPassword(
   if (!user) {
     return {
       error:
-        "Reset link expired or invalid. Request a new password reset email.",
+        await actionError("auth.resetLinkExpiredOrInvalidRequestANewPasswordReset"),
     };
   }
 
@@ -567,7 +576,7 @@ export async function setNewPassword(
     password: parsed.data.password,
   });
   if (error) {
-    return { error: "Failed to update password. Please try again." };
+    return { error: await actionError("auth.failedToUpdatePasswordPleaseTryAgain") };
   }
 
   // Sign out so the user is forced to log back in with the new password.

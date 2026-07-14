@@ -30,6 +30,7 @@ import {
   restorePackageTemplate,
   updatePackageTemplate,
 } from "@/actions/package-templates";
+import { useTranslations } from "next-intl";
 
 export interface PackageTemplateRowData {
   id: string;
@@ -53,6 +54,7 @@ export function PackageTemplateRowActions({
   departments,
   canMutate,
 }: Props) {
+  const t = useTranslations("settings");
   const [editOpen, setEditOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
@@ -72,12 +74,11 @@ export function PackageTemplateRowActions({
                 className="h-7 gap-1 px-2 text-xs"
               >
                 <Pencil className="h-3.5 w-3.5" />
-                Edit
-              </Button>
+                {t("edit")}</Button>
             </DialogTrigger>
             <DialogContent className="max-w-lg">
               <DialogHeader>
-                <DialogTitle>Edit package template</DialogTitle>
+                <DialogTitle>{t("editPackageTemplate")}</DialogTitle>
               </DialogHeader>
               <PackageTemplateForm
                 action={updatePackageTemplate}
@@ -91,7 +92,7 @@ export function PackageTemplateRowActions({
                   total_price: template.total_price,
                   notes: template.notes,
                 }}
-                submitLabel="Save changes"
+                submitLabel={t("saveChanges")}
                 onSuccess={() => {
                   setEditOpen(false);
                   router.refresh();
@@ -113,24 +114,19 @@ export function PackageTemplateRowActions({
                 ) : (
                   <PowerOff className="h-3.5 w-3.5" />
                 )}
-                Deactivate
-              </Button>
+                {t("deactivate2")}</Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>
-                  Deactivate &ldquo;{template.name}&rdquo;?
+                  {t("deactivateNamedTemplate", { name: template.name })}
                 </AlertDialogTitle>
                 <AlertDialogDescription>
-                  The template will be hidden from the patient Add Package
-                  dialog. You can restore it from the deactivated section.
-                  Existing patient packages are unaffected.
-                </AlertDialogDescription>
+                  {"The template will be hidden from the patient Add Package dialog. You can restore it from the deactivated section. Existing patient packages are unaffected."}</AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel disabled={isPending}>
-                  Cancel
-                </AlertDialogCancel>
+                  {t("cancel")}</AlertDialogCancel>
                 <AlertDialogAction
                   disabled={isPending}
                   onClick={() =>
@@ -140,15 +136,14 @@ export function PackageTemplateRowActions({
                       const res = await deactivatePackageTemplate(template.id);
                       if (res.error) toast.error(res.error);
                       else {
-                        toast.success(`"${template.name}" deactivated.`);
+                        toast.success(t("namedItemDeactivated", { name: template.name }));
                         router.refresh();
                       }
                       pendingRef.current = false;
                     })
                   }
                 >
-                  Deactivate
-                </AlertDialogAction>
+                  {t("deactivate")}</AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
@@ -167,7 +162,7 @@ export function PackageTemplateRowActions({
                 const res = await restorePackageTemplate(template.id);
                 if (res.error) toast.error(res.error);
                 else {
-                  toast.success(`"${template.name}" restored.`);
+                  toast.success(t("namedItemRestored", { name: template.name }));
                   router.refresh();
                 }
                 pendingRef.current = false;
@@ -179,8 +174,7 @@ export function PackageTemplateRowActions({
             ) : (
               <RotateCcw className="h-3.5 w-3.5" />
             )}
-            Restore
-          </Button>
+            {t("restore")}</Button>
 
           <AlertDialog>
             <AlertDialogTrigger asChild>
@@ -191,23 +185,19 @@ export function PackageTemplateRowActions({
                 disabled={isPending}
               >
                 <Trash2 className="h-3.5 w-3.5" />
-                Delete
-              </Button>
+                {t("delete2")}</Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>
-                  Permanently delete &ldquo;{template.name}&rdquo;?
+                  {t("permanentlyDeleteNamedTemplate", { name: template.name })}
                 </AlertDialogTitle>
                 <AlertDialogDescription>
-                  This cannot be undone. Existing patient packages will keep
-                  their current data.
-                </AlertDialogDescription>
+                  {t("thisCannotBeUndoneExistingPatient")}</AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel disabled={isPending}>
-                  Cancel
-                </AlertDialogCancel>
+                  {t("cancel")}</AlertDialogCancel>
                 <AlertDialogAction
                   disabled={isPending}
                   onClick={() =>
@@ -217,15 +207,14 @@ export function PackageTemplateRowActions({
                       const res = await deletePackageTemplate(template.id);
                       if (res.error) toast.error(res.error);
                       else {
-                        toast.success(`"${template.name}" deleted.`);
+                        toast.success(t("namedItemDeleted", { name: template.name }));
                         router.refresh();
                       }
                       pendingRef.current = false;
                     })
                   }
                 >
-                  Delete
-                </AlertDialogAction>
+                  {t("delete")}</AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>

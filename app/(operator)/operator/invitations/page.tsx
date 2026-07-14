@@ -6,8 +6,10 @@ import { issueInvitationForm, revokeInvitationForm } from "@/actions/operator";
 import { OperatorActionForm } from "@/components/operator/operator-action-form";
 import { InternationalPhoneField } from "@/components/shared/international-phone-input";
 import { createClient } from "@/lib/supabase/server";
+import { getTranslations } from "next-intl/server";
 
 export default async function OperatorInvitationsPage() {
+  const t = await getTranslations("operator");
   const supabase = await createClient();
   // The open-invitation total is an exact count query, not a filter over the
   // bounded 200-row list, so the quota banner matches the issuance guard.
@@ -34,31 +36,27 @@ export default async function OperatorInvitationsPage() {
   return (
     <>
       <header>
-        <h1 className="text-3xl font-bold tracking-tight">Invitations</h1>
+        <h1 className="text-3xl font-bold tracking-tight">{t("invitations")}</h1>
         <p className="mt-1 text-muted-foreground">
-          {registration?.accepted_clinics_this_week ?? 0} accepted this week · {openCount} open invitations · limit {limit}.
+          {registration?.accepted_clinics_this_week ?? 0} {t("acceptedThisWeek")}{openCount} {t("openInvitationsLimit")}{limit}.
         </p>
         {projected >= limit ? (
           <p className="mt-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm dark:border-amber-700 dark:bg-amber-950">
-            Conservative projection ({projected}): accepted this week plus all open invitations, whichever week they were
-            issued in — not an exact weekly total. New issuance is soft-blocked unless you tick the override; acceptance is
-            never blocked and issued invitations always stay redeemable (§3.2).
-          </p>
+            {t("conservativeProjection")}{projected}{"): accepted this week plus all open invitations, whichever week they were issued in — not an exact weekly total. New issuance is soft-blocked unless you tick the override; acceptance is never blocked and issued invitations always stay redeemable (§3.2)."}</p>
         ) : null}
       </header>
 
       <section className="rounded-xl border bg-card p-5">
-        <h2 className="font-semibold">Create invitation</h2>
-        <OperatorActionForm action={createClinicInvitation} submitLabel="Create & issue">
+        <h2 className="font-semibold">{t("createInvitation")}</h2>
+        <OperatorActionForm action={createClinicInvitation} submitLabel={t("createAndIssue")}>
           <div className="grid gap-3 sm:grid-cols-2">
-            <input name="clinicName" placeholder="Clinic name" required className="rounded-md border bg-background px-2 py-1 text-sm" />
-            <input name="ownerName" placeholder="Owner name" required className="rounded-md border bg-background px-2 py-1 text-sm" />
+            <input name="clinicName" placeholder={t("clinicName")} required className="rounded-md border bg-background px-2 py-1 text-sm" />
+            <input name="ownerName" placeholder={t("ownerName")} required className="rounded-md border bg-background px-2 py-1 text-sm" />
             <InternationalPhoneField name="phone" required />
-            <input name="email" type="email" placeholder="owner@example.com" required className="rounded-md border bg-background px-2 py-1 text-sm" />
+            <input name="email" type="email" placeholder={t("ownerExampleCom")} required className="rounded-md border bg-background px-2 py-1 text-sm" />
           </div>
           <label className="flex items-center gap-2 text-sm text-muted-foreground">
-            <input type="checkbox" name="force" value="true" /> Override the weekly limit
-          </label>
+            <input type="checkbox" name="force" value="true" /> {t("overrideTheWeeklyLimit")}</label>
         </OperatorActionForm>
       </section>
 
@@ -66,14 +64,14 @@ export default async function OperatorInvitationsPage() {
         {rows.length === 0 ? (
           <TableEmptyState
             icon={Mail}
-            title="No invitations yet"
-            description="Early-access requests and invitations you issue appear here."
+            title={t("noInvitationsYet")}
+            description={t("earlyAccessRequestsAndInvitationsYou")}
           />
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
-                {["Clinic", "Owner", "Email", "Status", "Expires", "Actions"].map((heading) => (
+                {[t("clinic"), t("owner"), t("email"), t("status"), t("expires"), t("actions")].map((heading) => (
                   <TableHead key={heading}>{heading}</TableHead>
                 ))}
               </TableRow>
@@ -88,22 +86,21 @@ export default async function OperatorInvitationsPage() {
                     {row.status === "pending" && !row.token_hash ? "requested" : row.status}
                     {row.accepted_at ? ` (${row.accepted_at.slice(0, 10)})` : ""}
                   </TableCell>
-                  <TableCell className="text-muted-foreground">{row.expires_at ? row.expires_at.slice(0, 10) : "—"}{row.email_sent_at ? <span className="mt-1 block text-xs text-emerald-700">Email sent {row.email_sent_at.slice(0, 10)}</span> : null}</TableCell>
+                  <TableCell className="text-muted-foreground">{row.expires_at ? row.expires_at.slice(0, 10) : "—"}{row.email_sent_at ? <span className="mt-1 block text-xs text-emerald-700">{t("emailSent")}{row.email_sent_at.slice(0, 10)}</span> : null}</TableCell>
                   <TableCell>
                     {row.status === "pending" ? (
                       <div className="flex flex-wrap items-start gap-3">
                         <OperatorActionForm
                           action={issueInvitationForm}
-                          submitLabel={row.token_hash ? "Resend (rotate token)" : "Issue"}
+                          submitLabel={row.token_hash ? t("resendRotateToken") : t("issue")}
                           submitVariant="outline"
                           className="space-y-2"
                         >
                           <input type="hidden" name="invitationId" value={row.id} />
                           <label className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <input type="checkbox" name="force" value="true" /> override limit
-                          </label>
+                            <input type="checkbox" name="force" value="true" /> {t("overrideLimit")}</label>
                         </OperatorActionForm>
-                        <OperatorActionForm action={revokeInvitationForm} submitLabel="Revoke" submitVariant="destructive" className="space-y-2">
+                        <OperatorActionForm action={revokeInvitationForm} submitLabel={t("revoke")} submitVariant="destructive" className="space-y-2">
                           <input type="hidden" name="invitationId" value={row.id} />
                         </OperatorActionForm>
                       </div>

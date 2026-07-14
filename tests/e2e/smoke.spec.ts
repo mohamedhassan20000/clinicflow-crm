@@ -332,17 +332,17 @@ async function deleteAuthUsers() {
 
 async function login(page: Page, email: string) {
   await page.goto("/login");
-  await page.getByLabel(/email/i).fill(email);
+  await page.locator('input[type="email"]').fill(email);
   await page.locator('input[type="password"]').fill(password);
-  await page.getByRole("button", { name: /sign in/i }).click();
+  await page.getByRole("button", { name: /sign in|تسجيل الدخول/i }).click();
   await expect(page).toHaveURL(/\/(dashboard|change-password)/);
 }
 
 async function loginOperator(page: Page) {
   await page.goto("/login");
-  await page.getByLabel(/email/i).fill(emails.operator);
+  await page.locator('input[type="email"]').fill(emails.operator);
   await page.locator('input[type="password"]').fill(password);
-  await page.getByRole("button", { name: /sign in/i }).click();
+  await page.getByRole("button", { name: /sign in|تسجيل الدخول/i }).click();
   await expect(page).toHaveURL(/\/operator/);
 }
 
@@ -363,7 +363,22 @@ async function delayNextMutation(page: Page) {
   });
 }
 
-const WS5_SCREENSHOT_DIR = "docs/reviews/assets/pre-p2-ws5";
+/**
+ * Generated calendar-treatment screenshots (Pre-P2 WS5).
+ *
+ * This **must never point back into `docs/reviews/assets/`**. It did until P2C, and the consequence
+ * was a standing trap: every `pnpm test:e2e` run silently overwrote 13 *tracked, approved* review
+ * artifacts belonging to a sub-phase that had already shipped, and only a manual `git restore` kept
+ * them out of the next diff. Three consecutive phases carried that landmine (recorded in
+ * `docs/reviews/P2B_PHASE_REVIEW.md` §7); one forgotten restore would have replaced another
+ * sub-phase's evidence with a screenshot of whatever the tree happened to look like that day.
+ *
+ * `test-results/` is Playwright's own output directory and is already gitignored, so a run can no
+ * longer reach a tracked file. The approved WS5 artifacts stay where they are, read-only by virtue
+ * of nothing writing to them. A unit test (`tests/unit/lib/p2c-i18n.test.ts`) asserts this path
+ * never drifts back under `docs/`.
+ */
+const WS5_SCREENSHOT_DIR = "test-results/ws5-calendar-treatment";
 const WS5_BASELINE_CSS = `
   [data-calendar-grid] {
     border-color: color-mix(in oklab, var(--border) 40%, transparent) !important;
@@ -680,7 +695,7 @@ test("operator shell renders and persists theme without a clinic profile", async
   await service.from("clinic_invitations").delete().eq("email", gbEmail);
 });
 
-test("MP6: the operator header drops Preferences and reserves the language slot; clinic users keep it", async ({ browser }) => {
+test("MP6/P2A: the operator header drops Preferences and now fills the language slot; clinic users keep Preferences", async ({ browser }) => {
   const operatorContext = await browser.newContext();
   const doctorContext = await browser.newContext();
   const operatorPage = await operatorContext.newPage();
@@ -688,34 +703,72 @@ test("MP6: the operator header drops Preferences and reserves the language slot;
 
   try {
     // Operator (Platform Admin): /preferences is a clinic-user route they cannot use, so the entry
-    // is gone. That position is reserved for the P2 Operator Language Switcher and ships nothing.
+    // is gone (MP6). P2A fills the position MP6 reserved — and the placeholder-free rule ends here:
+    // the control that landed is a real switcher, asserted below to actually change the language.
     await loginOperator(operatorPage);
     // The theme toggle stays: the Platform Admin's theme is their own (§6.C). Asserted before the
     // menu opens, since the dropdown makes the rest of the page inert.
     await expect(operatorPage.getByRole("button", { name: /switch to (dark|light) mode/i })).toBeVisible();
+    await expect(
+      operatorPage.getByTestId("dashboard-header").getByTestId("language-switcher-account"),
+    ).toBeVisible();
+
     await operatorPage.getByRole("button", { name: /open user menu/i }).click();
     await expect(operatorPage.getByRole("menuitem", { name: /sign out/i })).toBeVisible();
     await expect(operatorPage.getByRole("menuitem", { name: /preferences/i })).toHaveCount(0);
     await expect(operatorPage.locator('a[href="/preferences"]')).toHaveCount(0);
-    await expect(operatorPage.getByRole("menu").getByText(/language/i)).toHaveCount(0);
-    await expect(operatorPage.getByTestId("dashboard-header").getByText(/language/i)).toHaveCount(0);
+    await operatorPage.keyboard.press("Escape");
 
     // Clinic user (doctor): Preferences is untouched and still opens.
     await login(doctorPage, emails.doctor);
+    // §6.A: the clinic dashboard header gets NO language control — clinic users switch in Preferences.
+    await expect(
+      doctorPage.getByTestId("dashboard-header").getByTestId("language-switcher-account"),
+    ).toHaveCount(0);
+
     await doctorPage.getByRole("button", { name: /open user menu/i }).click();
     await doctorPage.getByRole("menuitem", { name: /preferences/i }).click();
     await expect(doctorPage).toHaveURL(/\/preferences/);
     await expect(doctorPage.getByRole("heading", { name: "Preferences" })).toBeVisible();
-    // No language *control* was added anywhere — the pre-existing read-only card is untouched.
-    await expect(doctorPage.getByRole("button", { name: /language/i })).toHaveCount(0);
-    await expect(doctorPage.getByRole("combobox", { name: /language/i })).toHaveCount(0);
+    // P2A: the formerly read-only "English (US)" card is now a real per-user control.
+    await expect(doctorPage.getByTestId("language-switcher-account")).toBeVisible();
   } finally {
     await operatorContext.close();
     await doctorContext.close();
   }
 });
 
-test("theme cookies stay isolated between authenticated users in separate browser contexts", async ({ browser }) => {
+/** Drives the header toggle to a known theme, whatever the account's stored theme currently is. */
+async function setDashboardTheme(page: Page, theme: "light" | "dark") {
+  const toggle = page.getByRole("button", {
+    name: theme === "dark" ? /switch to dark mode/i : /switch to light mode/i,
+  });
+  // The account may already be in the target theme — under P2A the stored preference can arrive in a
+  // context that has never written a theme cookie, which is the whole point of the store.
+  const switched = (await toggle.count()) > 0;
+  if (switched) await toggle.click();
+
+  if (theme === "dark") await expect(page.locator("html")).toHaveClass(/dark/);
+  else await expect(page.locator("html")).not.toHaveClass(/dark/);
+
+  // The toggle updates the DOM optimistically, so the class alone does not prove the preference was
+  // stored. `setTheme` writes the cookie hint only after the row write succeeds, so waiting for the
+  // cookie is what makes a subsequent reload assert persistence rather than a race.
+  if (switched) {
+    await expect
+      .poll(async () => {
+        const cookies = await page.context().cookies();
+        return cookies.find((cookie) => cookie.name === "theme")?.value;
+      })
+      .toBe(theme);
+  }
+}
+
+test("P2A: theme follows the user, not the browser, and stays private to each account", async ({ browser }) => {
+  // Before P2A this test asserted the *device* semantics: a fresh browser context always started
+  // light, because the theme lived in a cookie. §4.5 deliberately replaced that — the theme is now a
+  // property of the account — so the assertions below encode the new contract, including the two
+  // gaps the polish sprint documented and left open.
   const receptionistContext = await browser.newContext();
   const doctorContext = await browser.newContext();
   const receptionistPage = await receptionistContext.newPage();
@@ -725,14 +778,32 @@ test("theme cookies stay isolated between authenticated users in separate browse
     await login(receptionistPage, emails.receptionist);
     await login(doctorPage, emails.doctor);
 
-    await receptionistPage.getByRole("button", { name: /switch to dark mode/i }).click();
-    await expect(receptionistPage.locator("html")).toHaveClass(/dark/);
-    await expect(doctorPage.locator("html")).not.toHaveClass(/dark/);
+    await setDashboardTheme(receptionistPage, "dark");
 
+    // A second user on the same browser gets their own theme — not the one the receptionist chose.
     await doctorPage.reload();
     await expect(doctorPage.locator("html")).not.toHaveClass(/dark/);
+
     await receptionistPage.reload();
     await expect(receptionistPage.locator("html")).toHaveClass(/dark/);
+
+    // ...and the receptionist's theme follows them to a second device: a brand-new context, with no
+    // theme cookie at all, still renders dark because the preference belongs to the account.
+    const secondDevice = await browser.newContext();
+    const secondDevicePage = await secondDevice.newPage();
+    try {
+      await login(secondDevicePage, emails.receptionist);
+      await expect(secondDevicePage.locator("html")).toHaveClass(/dark/);
+    } finally {
+      await secondDevice.close();
+    }
+
+    // Switching back persists just as durably, and still leaves the doctor alone.
+    await setDashboardTheme(receptionistPage, "light");
+    await receptionistPage.reload();
+    await expect(receptionistPage.locator("html")).not.toHaveClass(/dark/);
+    await doctorPage.reload();
+    await expect(doctorPage.locator("html")).not.toHaveClass(/dark/);
   } finally {
     await receptionistContext.close();
     await doctorContext.close();
@@ -766,7 +837,9 @@ test("WS7 operator report filters persist in the URL and exports match active fi
   const sortLink = page.getByRole("link", { name: "Sort by Clinic ascending" });
   const sortHref = await sortLink.getAttribute("href");
   expect(new URL(sortHref!, "http://localhost").searchParams.get("sort")).toBe("name");
-  await sortLink.click();
+  await sortLink.focus();
+  await expect(sortLink).toBeFocused();
+  await page.keyboard.press("Enter");
   await expect
     .poll(() => new URL(page.url()).searchParams.get("sort"), { timeout: 15_000 })
     .toBe("name");
@@ -794,10 +867,15 @@ test("WS7 operator report filters persist in the URL and exports match active fi
   expect(csv).toContain(clinic.data.name);
   expect(csv).not.toMatch(/Patient|National ID|Medical note|Phone|Email/i);
 
-  await page.getByRole("link", { name: "Clear filters" }).click();
-  await expect
-    .poll(() => new URL(page.url()).searchParams.get("country"))
-    .toBe("all");
+  const clearFilters = page.getByRole("link", { name: "Clear filters" });
+  await expect(clearFilters).toHaveAttribute("href", /[?&]country=all(?:&|$)/);
+  await clearFilters.focus();
+  await expect(clearFilters).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(
+    (url) => url.searchParams.get("country") === "all",
+    { timeout: 15_000 },
+  );
   await expect(page.getByRole("combobox", { name: "Country" })).toContainText("All");
 });
 
@@ -882,7 +960,10 @@ test("WS6 operator clinic detail returns to the filtered list by keyboard on mob
   await page.goto(`/operator/clinics?q=Smoke%20Clinic&country=${country}`);
   await expect(page.getByLabel("Search clinics")).toHaveValue("Smoke Clinic");
   await expect(page.getByLabel("Country code")).toHaveValue(country);
-  await expect(page.locator("html")).not.toHaveClass(/dark/);
+  // P2A: the operator's theme is stored on their account, so a fresh context no longer implies
+  // light — an earlier test may have left them dark. Drive the starting theme instead of assuming
+  // it; this test is about both themes rendering correctly, not about what the default is.
+  await setDashboardTheme(page, "light");
 
   const clinicLink = page.getByRole("link", { name: `Smoke Clinic ${suffix}` });
   await clinicLink.focus();
@@ -1108,4 +1189,283 @@ test("settlement dialog validates totals and disables while submitting", async (
       .eq("patient_id", ids.settlementPatient);
     return result.data?.reduce((sum, row) => sum + Number(row.amount), 0) ?? 0;
   }, { timeout: 15_000 }).toBe(75);
+});
+
+test("P2A: the language switcher really switches, and one account's language reaches no other", async ({ browser }) => {
+  const operatorContext = await browser.newContext();
+  const doctorContext = await browser.newContext();
+  const receptionistContext = await browser.newContext();
+  const operatorPage = await operatorContext.newPage();
+  const doctorPage = await doctorContext.newPage();
+  const receptionistPage = await receptionistContext.newPage();
+
+  try {
+    // Everyone starts on the English default.
+    await loginOperator(operatorPage);
+    await login(doctorPage, emails.doctor);
+    await login(receptionistPage, emails.receptionist);
+    for (const page of [operatorPage, doctorPage, receptionistPage]) {
+      await expect(page.locator("html")).toHaveAttribute("lang", "en");
+      await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
+    }
+
+    // The Platform Admin switches the operator dashboard to Arabic from the header slot. No sign-out,
+    // no full reload — the root re-resolves lang/dir.
+    await operatorPage.getByTestId("language-switcher-account").click();
+    await operatorPage.getByRole("option", { name: "العربية" }).click();
+    await expect(operatorPage.locator("html")).toHaveAttribute("lang", "ar");
+    await expect(operatorPage.locator("html")).toHaveAttribute("dir", "rtl");
+    // It survives a reload, i.e. it was persisted to the account and not just to the DOM.
+    await operatorPage.reload();
+    await expect(operatorPage.locator("html")).toHaveAttribute("lang", "ar");
+
+    // The Platform Admin's language has absolutely no effect on any clinic user (§6.A).
+    await doctorPage.reload();
+    await expect(doctorPage.locator("html")).toHaveAttribute("lang", "en");
+
+    // A clinic user switches their own language in Preferences.
+    await doctorPage.goto("/preferences");
+    await doctorPage.getByTestId("language-switcher-account").click();
+    await doctorPage.getByRole("option", { name: "العربية" }).click();
+    await expect(doctorPage.locator("html")).toHaveAttribute("lang", "ar");
+    await expect(doctorPage.locator("html")).toHaveAttribute("dir", "rtl");
+
+    // A Doctor on Arabic and a Receptionist on English use the same clinic simultaneously. There is
+    // no clinic language: one user's choice moves nobody else.
+    await receptionistPage.reload();
+    await expect(receptionistPage.locator("html")).toHaveAttribute("lang", "en");
+    await expect(receptionistPage.locator("html")).toHaveAttribute("dir", "ltr");
+
+    // ...and no clinic user's language reaches the operator dashboard either.
+    await operatorPage.reload();
+    await expect(operatorPage.locator("html")).toHaveAttribute("lang", "ar");
+  } finally {
+    await operatorContext.close();
+    await doctorContext.close();
+    await receptionistContext.close();
+  }
+});
+
+test("P2A: the anonymous marketing locale is independent of every account", async ({ page, browser }) => {
+  // An anonymous visitor reads the marketing site in Arabic...
+  await page.goto("/");
+  await page.getByTestId("language-switcher-marketing").click();
+  await page.getByRole("option", { name: "العربية" }).click();
+  await expect(page.locator("html")).toHaveAttribute("lang", "ar");
+  await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
+
+  // ...and that cookie must not become the language of the account they then sign in to. The
+  // receptionist's stored preference is English, and it wins.
+  await login(page, emails.receptionist);
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
+
+  // The marketing site stays Arabic for anonymous visitors on this browser.
+  const anonContext = await browser.newContext();
+  const anonPage = await anonContext.newPage();
+  await anonPage.goto("/");
+  await expect(anonPage.locator("html")).toHaveAttribute("lang", "en"); // a fresh browser has no cookie
+  await anonContext.close();
+});
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * P2B — RTL retrofit
+ *
+ * The retrofit's whole risk profile is that it is invisible in English. `pe-4` and `pr-4` render
+ * identically under `dir="ltr"`, so the entire English suite — snapshots included — stays green
+ * whether the conversion is right, wrong, or absent. These tests are therefore the only ones that
+ * can actually fail on a bad retrofit: they drive a real browser in `dir="rtl"` and read back
+ * *computed geometry*, not class names.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/** Switches the signed-in account to a locale through the real control, as a user would. */
+async function setAccountLocale(page: Page, locale: "en" | "ar") {
+  await page.goto("/preferences");
+  await page.getByTestId("language-switcher-account").click();
+  await page.getByRole("option", { name: locale === "ar" ? "العربية" : "English" }).click();
+  await expect(page.locator("html")).toHaveAttribute("lang", locale);
+}
+
+/** The five highest-traffic clinic surfaces (§8, P2B "spot-check RTL rendering"). */
+const RTL_PAGES = ["/dashboard", "/patients", "/appointments", "/settings/staff", "/revenue"] as const;
+
+test("P2C: Arabic locale renders translated staff copy and keeps the authenticated session", async ({ page }) => {
+  await login(page, emails.receptionist);
+  await setAccountLocale(page, "ar");
+  await page.goto("/dashboard");
+
+  await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
+  await expect(page.getByText("حجز موعد", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Book appointment", { exact: true })).toHaveCount(0);
+  await expect(page.getByTestId("dashboard-sidebar")).toBeVisible();
+
+  await setAccountLocale(page, "en");
+  await page.goto("/dashboard");
+  await expect(page.getByText("Book appointment", { exact: true }).first()).toBeVisible();
+});
+
+test("P2B: every high-traffic page is direction-safe — sidebar flips, nothing overflows", async ({ page }) => {
+  await login(page, emails.doctor);
+
+  // Locale now lives on the *account* (P2A), and these specs run serially — an earlier test
+  // legitimately leaves this doctor in Arabic. Drive the starting locale rather than assume it.
+  await setAccountLocale(page, "en");
+
+  // ── Baseline: English. Record where things sit, so "RTL mirrors LTR" is a measured claim.
+  const ltr: Record<string, { sidebarStart: number; overflow: number }> = {};
+  for (const path of RTL_PAGES) {
+    await page.goto(path);
+    await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
+
+    const sidebar = page.getByTestId("dashboard-sidebar");
+    const box = await sidebar.boundingBox();
+    if (!box) throw new Error(`no sidebar on ${path}`);
+
+    ltr[path] = {
+      sidebarStart: box.x,
+      overflow: await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      ),
+    };
+
+    // In English the sidebar hugs the left edge.
+    expect(box.x, `${path} sidebar should start at the left edge in LTR`).toBeLessThan(8);
+    expect(ltr[path].overflow, `${path} must not scroll horizontally in LTR`).toBeLessThanOrEqual(1);
+  }
+
+  // ── Switch to Arabic. Same account, same session, no sign-out.
+  await setAccountLocale(page, "ar");
+
+  for (const path of RTL_PAGES) {
+    await page.goto(path);
+    await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
+    await expect(page.locator("html")).toHaveAttribute("lang", "ar");
+
+    const viewport = page.viewportSize();
+    if (!viewport) throw new Error("no viewport");
+
+    const sidebar = page.getByTestId("dashboard-sidebar");
+    const box = await sidebar.boundingBox();
+    if (!box) throw new Error(`no sidebar on ${path} in RTL`);
+
+    // The sidebar must have crossed to the right edge. This is the single loudest RTL signal: if
+    // the shell's insets were still physical, the sidebar would not move at all.
+    expect(box.x + box.width, `${path} sidebar should reach the right edge in RTL`).toBeGreaterThan(
+      viewport.width - 8,
+    );
+    expect(box.x, `${path} sidebar should not be on the left in RTL`).toBeGreaterThan(viewport.width / 2);
+
+    // Horizontal overflow is how a missed physical property announces itself: a stray `left-0` or an
+    // unflipped margin pushes content past the viewport and the page gains a scrollbar it never had
+    // in English.
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow, `${path} must not scroll horizontally in RTL`).toBeLessThanOrEqual(1);
+  }
+});
+
+test("P2B: logical properties and directional icons actually resolve under dir=rtl", async ({ page }) => {
+  await login(page, emails.receptionist);
+  await setAccountLocale(page, "en");
+
+  // The calendar's day-nav chevrons are the retrofit's canonical directional icons, and unlike the
+  // patient pagination they are always rendered regardless of how much data the clinic has.
+  await page.goto("/appointments?view=day");
+  const chevron = page.locator('[aria-label="Next day"] svg');
+  await expect(chevron).toBeVisible();
+
+  // Tailwind v4 compiles `rotate-180` to the standalone `rotate` property, not to `transform`.
+  // LTR: the chevron is not mirrored.
+  expect(await chevron.evaluate((node) => getComputedStyle(node).rotate)).toBe("none");
+
+  await setAccountLocale(page, "ar");
+  await page.goto("/appointments?view=day");
+  await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
+
+  // RTL: `rtl:rotate-180` must have produced a real half-turn, so "next" points the other way.
+  const rotated = await page
+    .locator('[aria-label="في اليوم التالي"] svg')
+    .evaluate((node) => getComputedStyle(node).rotate);
+  expect(rotated).toBe("180deg");
+
+  // And a logical spacing utility must resolve to the mirrored physical side. `ms-auto` is
+  // margin-left in English; under dir=rtl the very same class must compute to margin-right.
+  const mirrored = await page.evaluate(() => {
+    const probe = document.createElement("div");
+    // `rtl:-scale-x-100` is the mirror used for diagonal glyphs (ArrowUpRight, Send, ExternalLink),
+    // where a 180° rotation would point them down-left instead of flipping them.
+    probe.className = "ms-4 pe-8 text-end rtl:-scale-x-100";
+    document.body.appendChild(probe);
+    const style = getComputedStyle(probe);
+    const result = {
+      marginLeft: style.marginLeft,
+      marginRight: style.marginRight,
+      paddingLeft: style.paddingLeft,
+      paddingRight: style.paddingRight,
+      textAlign: style.textAlign,
+      scale: style.scale,
+    };
+    probe.remove();
+    return result;
+  });
+
+  // ms-4 → margin-inline-start → margin-RIGHT in RTL (and 0 on the left).
+  expect(mirrored.marginRight).toBe("16px");
+  expect(mirrored.marginLeft).toBe("0px");
+  // pe-8 → padding-inline-end → padding-LEFT in RTL.
+  expect(mirrored.paddingLeft).toBe("32px");
+  expect(mirrored.paddingRight).toBe("0px");
+  // text-end → right in English, left here.
+  expect(mirrored.textAlign).toMatch(/^(right|end)$/);
+  // The horizontal-flip mirror resolves under dir=rtl (x negated, y untouched).
+  expect(mirrored.scale).toMatch(/^-1 1$/);
+});
+
+test("P2B: the mobile nav drawer opens from the inline start in both directions", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await login(page, emails.doctor);
+  await setAccountLocale(page, "en");
+
+  // English: the drawer is anchored to the left.
+  await page.goto("/dashboard");
+  await page.getByRole("button", { name: "Open navigation" }).click();
+  const ltrDrawer = page.locator('[data-slot="sheet-content"]');
+  await expect(ltrDrawer).toBeVisible();
+  await expect(ltrDrawer).toHaveAttribute("data-side", "inline-start");
+
+  const ltrBox = await ltrDrawer.boundingBox();
+  if (!ltrBox) throw new Error("no drawer in LTR");
+  expect(ltrBox.x, "drawer should hug the left edge in English").toBeLessThan(8);
+  await page.keyboard.press("Escape");
+
+  // Arabic: the *same* `inline-start` anchor must now resolve to the right edge. A physical
+  // `side="left"` would have left the drawer exactly where it was.
+  await setAccountLocale(page, "ar");
+  await page.goto("/dashboard");
+  await page.getByRole("button", { name: "افتح التنقل" }).click();
+
+  const rtlDrawer = page.locator('[data-slot="sheet-content"]');
+  await expect(rtlDrawer).toBeVisible();
+  const rtlBox = await rtlDrawer.boundingBox();
+  if (!rtlBox) throw new Error("no drawer in RTL");
+  expect(rtlBox.x + rtlBox.width, "drawer should hug the right edge in Arabic").toBeGreaterThan(390 - 8);
+});
+
+test("P2B: the marketing site is direction-safe for an anonymous visitor", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
+  const ltrOverflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(ltrOverflow).toBeLessThanOrEqual(1);
+
+  await page.getByTestId("language-switcher-marketing").click();
+  await page.getByRole("option", { name: "العربية" }).click();
+  await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
+
+  const rtlOverflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(rtlOverflow, "the landing page must not scroll horizontally in RTL").toBeLessThanOrEqual(1);
 });

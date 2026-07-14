@@ -10,10 +10,15 @@ import { THIRTY_DAYS_MS } from "@/lib/constants";
 import { clinicLocaleFromRow } from "@/lib/datetime";
 import { getServerMoneyFormatter } from "@/lib/currency/server";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { getTranslations } from "next-intl/server";
 
-export const metadata: Metadata = { title: "Services" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("protected");
+  return { title: t("metadataServices") };
+}
 
 export default async function ServicesSettingsPage() {
+  const t = await getTranslations("protected");
   const user = await requireRole(["admin", "manager"]);
   const supabase = await createClient();
 
@@ -61,10 +66,9 @@ export default async function ServicesSettingsPage() {
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="font-semibold">Services &amp; pricing</h2>
+          <h2 className="font-semibold">{t("servicesPricing")}</h2>
           <p className="text-sm text-muted-foreground">
-            {svcList.length} service{svcList.length !== 1 ? "s" : ""} across{" "}
-            {groups.length} department{groups.length !== 1 ? "s" : ""}.
+            {t("servicesAcrossDepartments", { services: svcList.length, departments: groups.length })}
           </p>
         </div>
         <AddServiceDialog departments={deptList} />
@@ -72,17 +76,13 @@ export default async function ServicesSettingsPage() {
 
       {deptList.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border/60 bg-muted/20 px-6 py-10 text-center text-sm text-muted-foreground">
-          Add at least one department in{" "}
+          {t("addAtLeastOneDepartmentIn")}{" "}
           <a href="/settings/departments" className="underline">
-            Departments
-          </a>{" "}
-          before creating services.
-        </div>
+            {t("departments")}</a>{" "}
+          {t("beforeCreatingServices")}</div>
       ) : svcList.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border/60 bg-muted/20 px-6 py-10 text-center text-sm text-muted-foreground">
-          No services yet. Click &ldquo;Add service&rdquo; to create one — e.g. Consultation
-          1000, Examination 500.
-        </div>
+          {t("noServicesYetClickAddService")}</div>
       ) : (
         <div className="space-y-6">
           {groups.map(({ dept, rows }) => (
@@ -103,8 +103,8 @@ export default async function ServicesSettingsPage() {
                   style={{ backgroundColor: dept.color }}
                 />
                 {dept.name}
-                <span className="ml-auto text-[11px] font-normal opacity-80">
-                  {rows.length} service{rows.length !== 1 ? "s" : ""}
+                <span className="ms-auto text-[11px] font-normal opacity-80">
+                  {t("serviceCount", { count: rows.length })}
                 </span>
               </div>
               <Table dense className="table-fixed">
@@ -115,10 +115,10 @@ export default async function ServicesSettingsPage() {
                 </colgroup>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Service</TableHead>
-                    <TableHead className="text-end">Price</TableHead>
+                    <TableHead>{t("service")}</TableHead>
+                    <TableHead className="text-end">{t("price")}</TableHead>
                     <TableHead className="text-end">
-                      <span className="sr-only">Actions</span>
+                      <span className="sr-only">{t("actions")}</span>
                     </TableHead>
                   </TableRow>
                 </TableHeader>

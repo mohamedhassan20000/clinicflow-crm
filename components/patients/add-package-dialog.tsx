@@ -29,6 +29,7 @@ import type {
   PatientPackageService,
   PatientPackageTemplate,
 } from "./patient-packages-section";
+import { useTranslations } from "next-intl";
 
 interface AddPackageDialogProps {
   patientId: string;
@@ -60,6 +61,7 @@ export function AddPackageDialog({
   packageTemplates,
   patientDepartmentId,
 }: AddPackageDialogProps) {
+  const t = useTranslations("patients");
   const router = useRouter();
   const initialDepartmentId = patientDepartmentId ?? "none";
   const [open, setOpen] = useState(false);
@@ -133,7 +135,7 @@ export function AddPackageDialog({
       return;
     }
     if (state.success) {
-      toast.success("Package added.");
+      toast.success(t("packageAdded"));
       router.refresh();
       queueMicrotask(() => {
         setOpen(false);
@@ -160,8 +162,7 @@ export function AddPackageDialog({
         onClick={() => setOpen(true)}
       >
         <PackagePlus className="h-3.5 w-3.5" />
-        Add package
-      </Button>
+        {t("addPackage")}</Button>
 
       <Dialog
         open={open}
@@ -173,10 +174,9 @@ export function AddPackageDialog({
       >
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Add patient package</DialogTitle>
+            <DialogTitle>{t("addPatientPackage")}</DialogTitle>
             <DialogDescription>
-              Choose a package template or create a custom bundle for this patient.
-            </DialogDescription>
+              {t("chooseAPackageTemplateOrCreate")}</DialogDescription>
           </DialogHeader>
 
           <form action={formAction} className="space-y-4">
@@ -193,7 +193,7 @@ export function AddPackageDialog({
             />
 
             <div className="space-y-1.5">
-              <Label className="text-xs">Department</Label>
+              <Label className="text-xs">{t("department")}</Label>
               <Select
                 value={departmentId}
                 onValueChange={(value) => {
@@ -210,11 +210,11 @@ export function AddPackageDialog({
                 disabled={isPending || departmentLocked}
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select department" />
+                  <SelectValue placeholder={t("selectDepartment")} />
                 </SelectTrigger>
                 <SelectContent>
                   {!patientDepartmentId && (
-                    <SelectItem value="none">Select department</SelectItem>
+                    <SelectItem value="none">{t("selectDepartment")}</SelectItem>
                   )}
                   {departments.map((department) => (
                     <SelectItem key={department.id} value={department.id}>
@@ -225,8 +225,7 @@ export function AddPackageDialog({
               </Select>
               {patientDepartmentId && (
                 <p className="text-xs text-muted-foreground">
-                  This patient&apos;s department is used for package templates.
-                </p>
+                  {t("thisPatientSDepartmentIsUsed")}</p>
               )}
               {fieldError(state?.fieldErrors, "department_id") && (
                 <p className="text-xs text-destructive">
@@ -238,17 +237,17 @@ export function AddPackageDialog({
             {isTemplateMode ? (
               <>
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Package template</Label>
+                  <Label className="text-xs">{t("packageTemplate")}</Label>
                   <Select
                     value={templateId}
                     onValueChange={selectTemplate}
                     disabled={isPending || departmentId === "none"}
                   >
                     <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select template" />
+                      <SelectValue placeholder={t("selectTemplate")} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">Select template</SelectItem>
+                      <SelectItem value="none">{t("selectTemplate")}</SelectItem>
                       {filteredTemplates.map((template) => (
                         <SelectItem key={template.id} value={template.id}>
                           {template.name}
@@ -258,17 +257,14 @@ export function AddPackageDialog({
                   </Select>
                   {departmentId !== "none" && filteredTemplates.length === 0 && (
                     <p className="text-xs text-muted-foreground">
-                      No active templates for this department. Create templates in
-                      Settings, or use a custom package.
-                    </p>
+                      {t("noActiveTemplatesForThisDepartment")}</p>
                   )}
                 </div>
 
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-1.5 sm:col-span-2">
                     <Label htmlFor="package-name" className="text-xs">
-                      Package name
-                    </Label>
+                      {t("packageName")}</Label>
                     <Input
                       id="package-name"
                       name="name"
@@ -277,7 +273,7 @@ export function AddPackageDialog({
                       readOnly={Boolean(selectedTemplate)}
                       disabled={isPending}
                       maxLength={120}
-                      placeholder="Selected template name"
+                      placeholder={t("selectedTemplateName")}
                       aria-invalid={Boolean(fieldError(state?.fieldErrors, "name"))}
                     />
                     {fieldError(state?.fieldErrors, "name") && (
@@ -289,8 +285,7 @@ export function AddPackageDialog({
 
                   <div className="space-y-1.5">
                     <Label htmlFor="package-total" className="text-xs">
-                      Total sessions
-                    </Label>
+                      {t("totalSessions")}</Label>
                     <Input
                       id="package-total"
                       name="total_sessions"
@@ -315,8 +310,7 @@ export function AddPackageDialog({
 
                   <div className="space-y-1.5">
                     <Label htmlFor="package-price" className="text-xs">
-                      Price per session
-                    </Label>
+                      {t("pricePerSession")}</Label>
                     <Input
                       id="package-price"
                       name="price_per_session"
@@ -361,8 +355,7 @@ export function AddPackageDialog({
             {isTemplateMode && (
               <div className="space-y-1.5">
                 <Label htmlFor="package-notes" className="text-xs">
-                  Notes
-                </Label>
+                  {t("notes")}</Label>
                 <Textarea
                   id="package-notes"
                   name="notes"
@@ -372,7 +365,7 @@ export function AddPackageDialog({
                   maxLength={500}
                   rows={3}
                   className="resize-none"
-                  placeholder="Optional internal notes"
+                  placeholder={t("optionalInternalNotes")}
                 />
                 {fieldError(state?.fieldErrors, "notes") && (
                   <p className="text-xs text-destructive">
@@ -398,8 +391,7 @@ export function AddPackageDialog({
                     setNotes("");
                   }}
                 >
-                  Create custom package
-                </Button>
+                  {t("createCustomPackage")}</Button>
               ) : (
                 <Button
                   type="button"
@@ -416,8 +408,7 @@ export function AddPackageDialog({
                     setNotes("");
                   }}
                 >
-                  Use a package template
-                </Button>
+                  {t("useAPackageTemplate")}</Button>
               )}
             </div>
 
@@ -428,12 +419,10 @@ export function AddPackageDialog({
                 onClick={() => setOpen(false)}
                 disabled={isPending}
               >
-                Cancel
-              </Button>
+                {t("cancel")}</Button>
               <Button type="submit" disabled={isPending || invalid} className="gap-2">
                 {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-                Create package
-              </Button>
+                {t("createPackage")}</Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -471,13 +460,13 @@ function CustomPackageFields({
   setServiceId: (value: string) => void;
   filteredServices: PatientPackageService[];
 }) {
+  const t = useTranslations("patients");
   return (
     <>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5 sm:col-span-2">
           <Label htmlFor="package-name" className="text-xs">
-            Package name
-          </Label>
+            {t("packageName")}</Label>
           <Input
             id="package-name"
             name="name"
@@ -485,7 +474,7 @@ function CustomPackageFields({
             onChange={(event) => setName(event.target.value)}
             disabled={isPending}
             maxLength={120}
-            placeholder="10-session physiotherapy package"
+            placeholder={t("10SessionPhysiotherapyPackage")}
             autoFocus
             aria-invalid={Boolean(fieldError(state?.fieldErrors, "name"))}
           />
@@ -498,8 +487,7 @@ function CustomPackageFields({
 
         <div className="space-y-1.5">
           <Label htmlFor="package-total" className="text-xs">
-            Total sessions
-          </Label>
+            {t("totalSessions")}</Label>
           <Input
             id="package-total"
             name="total_sessions"
@@ -523,8 +511,7 @@ function CustomPackageFields({
 
         <div className="space-y-1.5">
           <Label htmlFor="package-price" className="text-xs">
-            Price per session
-          </Label>
+            {t("pricePerSession")}</Label>
           <Input
             id="package-price"
             name="price_per_session"
@@ -548,17 +535,17 @@ function CustomPackageFields({
         </div>
 
         <div className="space-y-1.5 sm:col-span-2">
-          <Label className="text-xs">Service</Label>
+          <Label className="text-xs">{t("service")}</Label>
           <Select
             value={serviceId}
             onValueChange={setServiceId}
             disabled={isPending}
           >
             <SelectTrigger className="w-full">
-              <SelectValue placeholder="Optional" />
+              <SelectValue placeholder={t("optional")} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="none">No service</SelectItem>
+              <SelectItem value="none">{t("noService")}</SelectItem>
               {filteredServices.map((service) => (
                 <SelectItem key={service.id} value={service.id}>
                   {service.name}
@@ -576,8 +563,7 @@ function CustomPackageFields({
 
       <div className="space-y-1.5">
         <Label htmlFor="package-notes" className="text-xs">
-          Notes
-        </Label>
+          {t("notes")}</Label>
         <Textarea
           id="package-notes"
           name="notes"
@@ -587,7 +573,7 @@ function CustomPackageFields({
           maxLength={500}
           rows={3}
           className="resize-none"
-          placeholder="Optional internal notes"
+          placeholder={t("optionalInternalNotes")}
         />
         {fieldError(state?.fieldErrors, "notes") && (
           <p className="text-xs text-destructive">

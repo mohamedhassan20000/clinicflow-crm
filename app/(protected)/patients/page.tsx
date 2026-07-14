@@ -8,8 +8,13 @@ import { PatientsFilterBar } from "@/components/patients/filter-bar";
 import { formatDoctorName } from "@/lib/format-doctor";
 import { PrintHeader } from "@/components/shared/print-header";
 import { Button } from "@/components/ui/button";
+import { getTranslations } from "next-intl/server";
+import { clinicLocaleFromRow, formatClinicDate } from "@/lib/datetime";
 
-export const metadata: Metadata = { title: "Patients" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("protected");
+  return { title: t("metadataPatients") };
+}
 
 const PAGE_SIZE = 20;
 
@@ -27,6 +32,7 @@ interface PageProps {
 }
 
 export default async function PatientsPage({ searchParams }: PageProps) {
+  const t = await getTranslations("protected");
   const user = await requireUser();
   const isDoctor = user.role === "doctor";
 
@@ -147,14 +153,16 @@ export default async function PatientsPage({ searchParams }: PageProps) {
 
   const { data: clinic } = await supabase
     .from("clinics")
-    .select("name, address, phone, logo_url")
+    .select("name, address, phone, logo_url, timezone, locale, digits")
     .eq("id", user.clinicId)
     .single();
+  const clinicLocale = clinicLocaleFromRow(clinic);
 
-  const generatedAt = new Date().toLocaleString("en-GB", {
+  const generatedAt = formatClinicDate(new Date(), clinicLocale, {
     dateStyle: "long",
     timeStyle: "short",
   });
+  const patientScope = isDoctor ? t("inYourDepartment") : t("inYourClinic");
 
   return (
     <div className="space-y-6">
@@ -163,17 +171,19 @@ export default async function PatientsPage({ searchParams }: PageProps) {
         clinicAddress={clinic?.address ?? null}
         clinicPhone={clinic?.phone ?? null}
         logoUrl={clinic?.logo_url ?? null}
-        documentName="Patient Roster"
+        documentName={t("patientRoster")}
         generatedAt={generatedAt}
       />
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Patients</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{t("patients")}</h1>
           <p className="text-sm text-muted-foreground">
-            {count ?? 0} patient{count !== 1 ? "s" : ""}
-            {isDoctor ? " in your department" : " in your clinic"}
-            {activeDept && ` · ${activeDept.name}`}
-            {activeDoctor && ` · ${formatDoctorName(activeDoctor.full_name)}`}.
+            {t("patientCountScope", {
+              count: count ?? 0,
+              scope: patientScope,
+              department: activeDept ? ` · ${activeDept.name}` : "",
+              doctor: activeDoctor ? ` · ${formatDoctorName(activeDoctor.full_name)}` : "",
+            })}
           </p>
         </div>
         {!isDoctor && user.role !== "doctor" && (
@@ -181,14 +191,12 @@ export default async function PatientsPage({ searchParams }: PageProps) {
             <Button asChild variant="outline" size="sm" className="gap-1.5">
               <Link href="/patients/trash">
                 <Trash2 className="h-3.5 w-3.5" />
-                Trash
-              </Link>
+                {t("trash")}</Link>
             </Button>
             <Button asChild variant="outline" size="sm" className="gap-1.5">
               <Link href="/patients/archive">
                 <Archive className="h-3.5 w-3.5" />
-                Archive
-              </Link>
+                {t("archive")}</Link>
             </Button>
           </div>
         )}
@@ -204,20 +212,20 @@ export default async function PatientsPage({ searchParams }: PageProps) {
 
       {/* Print-only header */}
       <div className="hidden print:block print:mb-4">
-        <h1 className="text-xl font-semibold">Patient roster</h1>
+        <h1 className="text-xl font-semibold">{t("patientRoster")}</h1>
         <p className="text-xs text-muted-foreground">
-          {count ?? 0} patient{count !== 1 ? "s" : ""}
+          {t("patientCount", { count: count ?? 0 })}
           {" · "}
           {activeDept
-            ? `Department: ${activeDept.name}`
+            ? t("departmentnamed", { department: activeDept.name })
             : activeDoctor
-              ? `Doctor: ${formatDoctorName(activeDoctor.full_name)}`
-              : "All patients"}
+              ? t("doctornamed", { doctor: formatDoctorName(activeDoctor.full_name) })
+              : t("allpatients")}
           {activeDept &&
             activeDoctor &&
-            ` · Doctor: ${formatDoctorName(activeDoctor.full_name)}`}
+            t("doctorNamedSuffix", { doctor: formatDoctorName(activeDoctor.full_name) })}
           {" · "}
-          Printed {new Date().toLocaleDateString("en-GB")}
+          {t("printed")}{formatClinicDate(new Date(), clinicLocale)}
         </p>
       </div>
 

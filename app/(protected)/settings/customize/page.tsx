@@ -2,14 +2,19 @@ import type { Metadata } from "next";
 import { requireRole } from "@/lib/rbac";
 import { listStaffPagePermissions } from "@/actions/page-permissions";
 import { PageVisibilityCustomizer } from "@/components/settings/page-visibility-customizer";
+import { getTranslations } from "next-intl/server";
 
-export const metadata: Metadata = { title: "Customize" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("protected");
+  return { title: t("metadataCustomize") };
+}
 
 interface PageProps {
   searchParams: Promise<{ staff?: string }>;
 }
 
 export default async function CustomizeSettingsPage({ searchParams }: PageProps) {
+  const t = await getTranslations("protected");
   await requireRole("admin");
   const params = await searchParams;
   const { data, error } = await listStaffPagePermissions();
@@ -17,10 +22,9 @@ export default async function CustomizeSettingsPage({ searchParams }: PageProps)
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="font-semibold">Page visibility</h2>
+        <h2 className="font-semibold">{t("pageVisibility")}</h2>
         <p className="text-sm text-muted-foreground">
-          Choose which role-eligible pages are visible for each staff member.
-        </p>
+          {t("chooseWhichRoleEligiblePagesAre")}</p>
       </div>
 
       {error ? (

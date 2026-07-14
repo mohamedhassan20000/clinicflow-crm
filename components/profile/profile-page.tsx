@@ -25,6 +25,8 @@ import {
   updateProfile,
   uploadAvatar,
 } from "@/actions/profile";
+import { useTranslations } from "next-intl";
+import { useClinicSettings } from "@/contexts/clinic-settings-context";
 
 interface ProfileData {
   id: string;
@@ -38,13 +40,13 @@ interface ProfileData {
 }
 
 export function ProfilePage({ profile }: { profile: ProfileData }) {
+  const t = useTranslations("profile");
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">My profile</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">{t("myProfile")}</h1>
         <p className="text-sm text-muted-foreground">
-          Update your photo, personal details, and password.
-        </p>
+          {t("updateYourPhotoPersonalDetailsAnd")}</p>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -68,6 +70,8 @@ function initials(name: string) {
 }
 
 function ProfileCard({ profile }: { profile: ProfileData }) {
+  const t = useTranslations("profile");
+  const { formatDate } = useClinicSettings();
   const fileRef = useRef<HTMLInputElement>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [avatarRemoved, setAvatarRemoved] = useState(false);
@@ -84,7 +88,7 @@ function ProfileCard({ profile }: { profile: ProfileData }) {
     handledRef.current = state;
     if (state.error) toast.error(state.error);
     else if (state.ok) {
-      toast.success("Profile photo updated.");
+      toast.success(t("profilePhotoUpdated"));
       queueMicrotask(() => {
         setAvatarRemoved(false);
         setPreviewUrl(null);
@@ -97,7 +101,7 @@ function ProfileCard({ profile }: { profile: ProfileData }) {
     removeHandledRef.current = removeState;
     if (removeState.error) toast.error(removeState.error);
     else if (removeState.ok) {
-      toast.success("Profile photo removed.");
+      toast.success(t("profilePhotoRemoved"));
       queueMicrotask(() => {
         setPreviewUrl(null);
         setAvatarRemoved(true);
@@ -150,8 +154,8 @@ function ProfileCard({ profile }: { profile: ProfileData }) {
             type="button"
             onClick={() => fileRef.current?.click()}
             disabled={avatarActionPending}
-            className="absolute bottom-1 right-1 inline-flex h-9 w-9 items-center justify-center rounded-full border-2 border-background bg-primary text-primary-foreground shadow-md transition-transform hover:scale-105 active:scale-95 disabled:opacity-60"
-            aria-label="Change profile photo"
+            className="absolute bottom-1 end-1 inline-flex h-9 w-9 items-center justify-center rounded-full border-2 border-background bg-primary text-primary-foreground shadow-md transition-transform hover:scale-105 active:scale-95 disabled:opacity-60"
+            aria-label={t("changeProfilePhoto")}
           >
             <Camera className="h-4 w-4" />
           </button>
@@ -174,12 +178,11 @@ function ProfileCard({ profile }: { profile: ProfileData }) {
             onClick={() => fileRef.current?.click()}
           >
             <Upload className="h-3.5 w-3.5" />
-            {isPending ? "Uploading…" : "Upload new photo"}
+            {isPending ? t("uploading") : t("uploadnewphoto")}
           </Button>
         </div>
         <p className="text-center text-[11px] text-muted-foreground">
-          JPEG / PNG / WebP / GIF · up to 5 MB
-        </p>
+          {t("jpegPngWebpGifUpTo")}</p>
       </form>
       {avatar && (
         <form action={removeAction} className="flex justify-center">
@@ -195,35 +198,30 @@ function ProfileCard({ profile }: { profile: ProfileData }) {
             ) : (
               <Trash2 className="h-3.5 w-3.5" />
             )}
-            Remove photo
-          </Button>
+            {t("removePhoto")}</Button>
         </form>
       )}
 
       <div className="space-y-2 border-t border-border/40 pt-4 text-sm">
         <div>
           <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-            Full name
-          </p>
+            {t("fullName")}</p>
           <p className="font-medium">{profile.full_name}</p>
         </div>
         <div>
           <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-            Email
-          </p>
+            {t("email")}</p>
           <p className="break-all text-sm">{profile.email}</p>
         </div>
         <div>
           <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-            Role
-          </p>
+            {t("role")}</p>
           <p className="capitalize">{profile.role}</p>
         </div>
         {profile.department && (
           <div>
             <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-              Department
-            </p>
+              {t("department")}</p>
             <p className="inline-flex items-center gap-1.5">
               <span
                 aria-hidden
@@ -236,9 +234,8 @@ function ProfileCard({ profile }: { profile: ProfileData }) {
         )}
         <div>
           <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-            Joined
-          </p>
-          <p>{new Date(profile.created_at).toLocaleDateString("en-GB")}</p>
+            {t("joined")}</p>
+          <p>{formatDate(profile.created_at)}</p>
         </div>
       </div>
     </div>
@@ -246,6 +243,7 @@ function ProfileCard({ profile }: { profile: ProfileData }) {
 }
 
 function DetailsForm({ profile }: { profile: ProfileData }) {
+  const t = useTranslations("profile");
   const [state, formAction, isPending] = useActionState(updateProfile, null);
   const [fullName, setFullName] = useState(profile.full_name);
   const [phone, setPhone] = useState(profile.phone ?? "");
@@ -255,7 +253,7 @@ function DetailsForm({ profile }: { profile: ProfileData }) {
     if (!state || handledRef.current === state) return;
     handledRef.current = state;
     if (state.error) toast.error(state.error);
-    else if (state.ok) toast.success("Profile updated.");
+    else if (state.ok) toast.success(t("profileUpdated"));
   }, [state]);
 
   return (
@@ -266,22 +264,20 @@ function DetailsForm({ profile }: { profile: ProfileData }) {
       <div className="flex items-center gap-2">
         <User className="h-4 w-4 text-muted-foreground" />
         <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-          Personal details
-        </h2>
+          {t("personalDetails")}</h2>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="profile-name" className="text-xs">
-            Full name
-          </Label>
+            {t("fullName")}</Label>
           <Input
             id="profile-name"
             name="full_name"
             value={fullName}
             disabled={isPending}
             onChange={(e) => setFullName(e.target.value)}
-            placeholder="Jane Doe"
+            placeholder={t("janeDoe")}
             maxLength={100}
             required
           />
@@ -293,8 +289,7 @@ function DetailsForm({ profile }: { profile: ProfileData }) {
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="profile-phone" className="text-xs">
-            Phone
-          </Label>
+            {t("phone")}</Label>
           <InternationalPhoneInput id="profile-phone" name="phone" value={phone} disabled={isPending} onChange={setPhone} />
           {state?.fieldErrors?.phone && (
             <p className="text-xs text-destructive">
@@ -311,14 +306,14 @@ function DetailsForm({ profile }: { profile: ProfileData }) {
           ) : (
             <Save className="h-3.5 w-3.5" />
           )}
-          Save changes
-        </Button>
+          {t("saveChanges")}</Button>
       </div>
     </form>
   );
 }
 
 function PasswordForm() {
+  const t = useTranslations("profile");
   const [state, formAction, isPending] = useActionState(changeMyPassword, null);
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -331,7 +326,7 @@ function PasswordForm() {
     handledRef.current = state;
     if (state.error) toast.error(state.error);
     else if (state.ok) {
-      toast.success("Password updated.");
+      toast.success(t("passwordUpdated"));
       queueMicrotask(() => {
         setPassword("");
         setConfirm("");
@@ -347,15 +342,13 @@ function PasswordForm() {
       <div className="flex items-center gap-2">
         <KeyRound className="h-4 w-4 text-muted-foreground" />
         <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-          Change password
-        </h2>
+          {t("changePassword")}</h2>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="profile-pwd" className="text-xs">
-            New password
-          </Label>
+            {t("newPassword")}</Label>
           <div className="relative">
             <Input
               id="profile-pwd"
@@ -366,7 +359,7 @@ function PasswordForm() {
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
               autoComplete="new-password"
-              className="pr-10"
+              className="pe-10"
               minLength={8}
               required
             />
@@ -374,8 +367,8 @@ function PasswordForm() {
               type="button"
               onClick={() => setShowPwd((v) => !v)}
               disabled={isPending}
-              aria-label={showPwd ? "Hide password" : "Show password"}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
+              aria-label={showPwd ? t("hidepassword") : t("showpassword")}
+              className="absolute end-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
             >
               {showPwd ? (
                 <EyeOff className="h-4 w-4" />
@@ -390,13 +383,11 @@ function PasswordForm() {
             </p>
           )}
           <p className="text-[10px] text-muted-foreground">
-            8+ characters, with an uppercase letter and a number.
-          </p>
+            {t("8CharactersWithAnUppercaseLetter")}</p>
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="profile-pwd2" className="text-xs">
-            Confirm new password
-          </Label>
+            {t("confirmNewPassword")}</Label>
           <div className="relative">
             <Input
               id="profile-pwd2"
@@ -407,7 +398,7 @@ function PasswordForm() {
               onChange={(e) => setConfirm(e.target.value)}
               placeholder="••••••••"
               autoComplete="new-password"
-              className="pr-10"
+              className="pe-10"
               minLength={8}
               required
             />
@@ -415,8 +406,8 @@ function PasswordForm() {
               type="button"
               onClick={() => setShowConfirm((v) => !v)}
               disabled={isPending}
-              aria-label={showConfirm ? "Hide password" : "Show password"}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
+              aria-label={showConfirm ? t("hidepassword") : t("showpassword")}
+              className="absolute end-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
             >
               {showConfirm ? (
                 <EyeOff className="h-4 w-4" />
@@ -440,8 +431,7 @@ function PasswordForm() {
           ) : (
             <KeyRound className="h-3.5 w-3.5" />
           )}
-          Update password
-        </Button>
+          {t("updatePassword")}</Button>
       </div>
     </form>
   );

@@ -6,6 +6,7 @@ import { Dialog as SheetPrimitive } from "radix-ui"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { XIcon } from "lucide-react"
+import { useTranslations } from "next-intl"
 
 function Sheet({ ...props }: React.ComponentProps<typeof SheetPrimitive.Root>) {
   return <SheetPrimitive.Root data-slot="sheet" {...props} />
@@ -45,16 +46,26 @@ function SheetOverlay({
   )
 }
 
+/**
+ * Sides are **logical**, not physical (P2B). `inline-start` / `inline-end` follow the document
+ * direction, so a nav drawer anchored to `inline-start` opens from the left in English and from
+ * the right in Arabic — which is what every caller actually means. shadcn's upstream sheet still
+ * uses physical `left`/`right`, and its RTL codemod does not convert them (it exempts inset
+ * utilities under `data-[side=left|right]` while still flipping their borders, which leaves the
+ * panel pinned to one edge with its divider on the other). Naming the sides logically removes the
+ * ambiguity rather than papering over it.
+ */
 function SheetContent({
   className,
   children,
-  side = "right",
+  side = "inline-end",
   showCloseButton = true,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Content> & {
-  side?: "top" | "right" | "bottom" | "left"
+  side?: "top" | "bottom" | "inline-start" | "inline-end"
   showCloseButton?: boolean
 }) {
+  const t = useTranslations("shared")
   return (
     <SheetPortal>
       <SheetOverlay />
@@ -62,7 +73,7 @@ function SheetContent({
         data-slot="sheet-content"
         data-side={side}
         className={cn(
-          "fixed z-50 flex flex-col gap-4 bg-popover bg-clip-padding text-sm text-popover-foreground shadow-lg transition duration-200 ease-in-out data-[side=bottom]:inset-x-0 data-[side=bottom]:bottom-0 data-[side=bottom]:h-auto data-[side=bottom]:border-t data-[side=left]:inset-y-0 data-[side=left]:left-0 data-[side=left]:h-full data-[side=left]:w-3/4 data-[side=left]:border-r data-[side=right]:inset-y-0 data-[side=right]:right-0 data-[side=right]:h-full data-[side=right]:w-3/4 data-[side=right]:border-l data-[side=top]:inset-x-0 data-[side=top]:top-0 data-[side=top]:h-auto data-[side=top]:border-b data-[side=left]:sm:max-w-sm data-[side=right]:sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-[side=bottom]:data-open:slide-in-from-bottom-10 data-[side=left]:data-open:slide-in-from-left-10 data-[side=right]:data-open:slide-in-from-right-10 data-[side=top]:data-open:slide-in-from-top-10 data-closed:animate-out data-closed:fade-out-0 data-[side=bottom]:data-closed:slide-out-to-bottom-10 data-[side=left]:data-closed:slide-out-to-left-10 data-[side=right]:data-closed:slide-out-to-right-10 data-[side=top]:data-closed:slide-out-to-top-10",
+          "fixed z-50 flex flex-col gap-4 bg-popover bg-clip-padding text-sm text-popover-foreground shadow-lg transition duration-200 ease-in-out data-[side=bottom]:inset-x-0 data-[side=bottom]:bottom-0 data-[side=bottom]:h-auto data-[side=bottom]:border-t data-[side=inline-start]:inset-y-0 data-[side=inline-start]:start-0 data-[side=inline-start]:h-full data-[side=inline-start]:w-3/4 data-[side=inline-start]:border-e data-[side=inline-end]:inset-y-0 data-[side=inline-end]:end-0 data-[side=inline-end]:h-full data-[side=inline-end]:w-3/4 data-[side=inline-end]:border-s data-[side=top]:inset-x-0 data-[side=top]:top-0 data-[side=top]:h-auto data-[side=top]:border-b data-[side=inline-start]:sm:max-w-sm data-[side=inline-end]:sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-[side=bottom]:data-open:slide-in-from-bottom-10 data-[side=inline-start]:data-open:slide-in-from-start-10 data-[side=inline-end]:data-open:slide-in-from-end-10 data-[side=top]:data-open:slide-in-from-top-10 data-closed:animate-out data-closed:fade-out-0 data-[side=bottom]:data-closed:slide-out-to-bottom-10 data-[side=inline-start]:data-closed:slide-out-to-start-10 data-[side=inline-end]:data-closed:slide-out-to-end-10 data-[side=top]:data-closed:slide-out-to-top-10",
           className
         )}
         {...props}
@@ -73,12 +84,12 @@ function SheetContent({
             <Button
               type="button"
               variant="ghost"
-              className="absolute top-3 right-3"
+              className="absolute top-3 end-3"
               size="icon-sm"
             >
               <XIcon
               />
-              <span className="sr-only">Close</span>
+              <span className="sr-only">{t("close")}</span>
             </Button>
           </SheetPrimitive.Close>
         )}

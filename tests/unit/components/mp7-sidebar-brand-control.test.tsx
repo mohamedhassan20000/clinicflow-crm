@@ -15,8 +15,8 @@ vi.mock("next/image", () => ({
 }));
 
 const items = [
-  { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
-  { href: "/patients", label: "Patients", icon: "patients" },
+  { href: "/dashboard", labelKey: "tenant.dashboard", icon: "dashboard" },
+  { href: "/patients", labelKey: "tenant.patients", icon: "patients" },
 ] as const;
 
 function CollapsibleSidebar() {

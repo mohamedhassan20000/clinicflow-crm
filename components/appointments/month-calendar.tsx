@@ -9,6 +9,7 @@ import type { ClinicWorkingHoursValues } from "@/lib/validations/settings";
 import { isDayClosed } from "@/lib/calendar-utils";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
 import { CALENDAR_STYLES, useCalendarNow } from "@/components/appointments/calendar-visuals";
+import { useTranslations } from "next-intl";
 
 type Appointment = Pick<
   Tables<"appointments">,
@@ -65,10 +66,9 @@ function colIndexToDow(col: number, weekStart: number): number {
   return (weekStart + col) % 7;
 }
 
-const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
 export function MonthCalendar({ appointments, monthStart, canEdit, clinicHours = [], newAppointmentHref = "/appointments/new" }: Props) {
-  const { formatTime, weekStart } = useClinicSettings();
+  const t = useTranslations("appointments");
+  const { formatTime, formatDate, weekStart } = useClinicSettings();
   const today = useCalendarNow();
   const currentTimeLabel = formatTime(today.toISOString());
   const prevMonth = addMonths(monthStart, -1);
@@ -119,19 +119,19 @@ export function MonthCalendar({ appointments, monthStart, canEdit, clinicHours =
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <Button asChild variant="outline" size="sm" className="h-8 w-8 p-0">
-            <Link href={`/appointments?view=month&month=${fmtMonth(prevMonth)}`} aria-label="Previous month">
-              <ChevronLeft className="h-4 w-4" />
+            <Link href={`/appointments?view=month&month=${fmtMonth(prevMonth)}`} aria-label={t("previousMonth")}>
+              <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
             </Link>
           </Button>
           <span className="min-w-0 text-sm font-medium">
-            {monthStart.toLocaleDateString("en-GB", {
+            {formatDate(monthStart, {
               month: "long",
               year: "numeric",
             })}
           </span>
           <Button asChild variant="outline" size="sm" className="h-8 w-8 p-0">
-            <Link href={`/appointments?view=month&month=${fmtMonth(nextMonth)}`} aria-label="Next month">
-              <ChevronRight className="h-4 w-4" />
+            <Link href={`/appointments?view=month&month=${fmtMonth(nextMonth)}`} aria-label={t("nextMonth")}>
+              <ChevronRight className="h-4 w-4 rtl:rotate-180" />
             </Link>
           </Button>
         </div>
@@ -140,8 +140,7 @@ export function MonthCalendar({ appointments, monthStart, canEdit, clinicHours =
           <Button asChild size="sm" className="shrink-0 gap-1.5">
             <Link href={newAppointmentHref}>
               <CalendarPlus className="h-4 w-4" />
-              New appointment
-            </Link>
+              {t("newAppointment")}</Link>
           </Button>
         )}
       </div>
@@ -149,9 +148,9 @@ export function MonthCalendar({ appointments, monthStart, canEdit, clinicHours =
       <div className={CALENDAR_STYLES.frame} data-calendar-grid>
         <div className="min-w-[860px]">
           <div className="grid grid-cols-7 border-b-2 border-calendar-grid-strong bg-muted text-xs font-semibold uppercase tracking-wider text-foreground">
-            {Array.from({ length: 7 }, (_, i) => DAY_NAMES[(weekStart + i) % 7]).map((d) => (
-              <div key={d} data-calendar-day-header className="px-2 py-2.5 text-center">
-                {d}
+            {Array.from({ length: 7 }, (_, i) => new Date(2024, 0, 7 + ((weekStart + i) % 7))).map((d) => (
+              <div key={d.toISOString()} data-calendar-day-header className="px-2 py-2.5 text-center">
+                {formatDate(d, { weekday: "short" })}
               </div>
             ))}
           </div>
@@ -187,17 +186,16 @@ export function MonthCalendar({ appointments, monthStart, canEdit, clinicHours =
                       {isToday && (
                         <span
                           data-calendar-now-indicator
-                          aria-label={`Current time, ${currentTimeLabel}`}
+                          aria-label={t("currentTimeNamed", { time: currentTimeLabel })}
                           className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-foreground"
                         >
                           <span aria-hidden className="size-1.5 rounded-full bg-primary" />
-                          Now · {currentTimeLabel}
+                          {t("now")}{currentTimeLabel}
                         </span>
                       )}
                       {closed ? (
                         <span className="text-[10px] font-semibold uppercase tracking-wider text-foreground/70">
-                          Closed
-                        </span>
+                          {t("closed")}</span>
                       ) : dayAppts.length > 0 ? (
                         <span className="rounded-full bg-muted px-1.5 text-[10px] font-medium tabular-nums text-foreground/70">
                           {dayAppts.length}
@@ -239,7 +237,7 @@ export function MonthCalendar({ appointments, monthStart, canEdit, clinicHours =
                       })}
                       {dayAppts.length > 3 && (
                         <div className="px-1 text-[10px] text-foreground/70">
-                          +{dayAppts.length - 3} more
+                {t("moreCount", { count: dayAppts.length - 3 })}
                         </div>
                       )}
                     </div>

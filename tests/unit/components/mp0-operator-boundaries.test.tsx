@@ -24,7 +24,13 @@ describe("Post-Pre-P2 MP0 operator route boundaries", () => {
     expect(
       screen.getByRole("heading", { name: "Operator page could not be loaded" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Error ID: mp0-safe-digest")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        (_, element) =>
+          element?.tagName === "P" &&
+          element.textContent === "Error ID:mp0-safe-digest",
+      ),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/Private Patient|SECRET/)).not.toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "Go to Mission Control" }),

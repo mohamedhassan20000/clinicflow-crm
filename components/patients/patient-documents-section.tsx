@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useTranslations } from "next-intl";
 
 type DocumentCategory = "national_id" | "insurance" | "other";
 
@@ -86,6 +87,7 @@ export function PatientDocumentsSection({
   initialDocuments,
   hasLoadError = false,
 }: PatientDocumentsSectionProps) {
+  const t = useTranslations("patients");
   const [documents, setDocuments] = useState(initialDocuments);
   const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -118,7 +120,7 @@ export function PatientDocumentsSection({
         toast.error(result.error);
       } else {
         if (result.data) setDocuments(result.data);
-        toast.success("Document uploaded.");
+        toast.success(t("documentUploaded"));
       }
       event.target.value = "";
       setPendingKey(null);
@@ -133,10 +135,10 @@ export function PatientDocumentsSection({
         toast.error(result.error);
       } else {
         if (result.data) setDocuments(result.data);
-        toast.success("Document moved to trash.", {
+        toast.success(t("documentMovedToTrash"), {
           duration: 15000,
           action: {
-            label: "Undo",
+            label: t("undo"),
             onClick: async () => {
               const restored = await restorePatientDocument(patientId, document.id);
               if (restored.error) {
@@ -144,7 +146,7 @@ export function PatientDocumentsSection({
                 return;
               }
               if (restored.data) setDocuments(restored.data);
-              toast.success("Document restored.");
+              toast.success(t("documentRestored"));
             },
           },
         });
@@ -174,10 +176,9 @@ export function PatientDocumentsSection({
           className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground"
         >
           <FileText className="h-4 w-4" />
-          Documents
-        </h2>
+          {t("documents")}</h2>
         <span className="text-xs text-muted-foreground">
-          {totalCount} file{totalCount !== 1 ? "s" : ""}
+          {t("fileCount", { count: totalCount })}
         </span>
       </div>
 
@@ -185,12 +186,12 @@ export function PatientDocumentsSection({
         {hasLoadError && (
           <div className="flex items-start gap-2 border-b border-border/30 bg-destructive/5 px-4 py-3 text-xs text-destructive">
             <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-            <p>Could not load patient documents. Refresh the page and try again.</p>
+            <p>{t("couldNotLoadPatientDocumentsRefresh")}</p>
           </div>
         )}
         <div className="divide-y divide-border/30">
           <DocumentSlot
-            title="National ID"
+            title={t("nationalId")}
             category="national_id"
             document={documents.nationalId}
             inputRef={nationalInputRef}
@@ -201,7 +202,7 @@ export function PatientDocumentsSection({
             onDelete={onDelete}
           />
           <DocumentSlot
-            title="Insurance"
+            title={t("insurance")}
             category="insurance"
             document={documents.insurance}
             inputRef={insuranceInputRef}
@@ -216,15 +217,14 @@ export function PatientDocumentsSection({
         <div className="border-t border-border/30 p-4">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h3 className="text-sm font-medium">Other documents</h3>
+              <h3 className="text-sm font-medium">{t("otherDocuments")}</h3>
               <p className="text-xs text-muted-foreground">
-                PDF, JPG, PNG, or WebP. Max 10 MB.
-              </p>
+                {t("pdfJpgPngOrWebpMax")}</p>
             </div>
             <input
               ref={otherInputRef}
               type="file"
-              aria-label="Upload other document"
+              aria-label={t("uploadOtherDocument")}
               accept={ACCEPTED_DOCUMENTS}
               className="hidden"
               onChange={(event) => onUpload("other", event)}
@@ -237,13 +237,13 @@ export function PatientDocumentsSection({
               disabled={isPending}
               onClick={() => inputFor("other").current?.click()}
             >
+              {/* i18n-allow: internal pending-operation identifier, never rendered */}
               {pendingKey === "upload:other" ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : (
                 <Upload className="h-3.5 w-3.5" />
               )}
-              Add document
-            </Button>
+              {t("addDocument")}</Button>
           </div>
 
           {documents.other.length > 0 ? (
@@ -261,8 +261,7 @@ export function PatientDocumentsSection({
             </ul>
           ) : (
             <div className="rounded-lg border border-dashed border-border/60 px-4 py-5 text-center text-sm text-muted-foreground">
-              No other documents uploaded yet.
-            </div>
+              {t("noOtherDocumentsUploadedYet")}</div>
           )}
         </div>
       </div>
@@ -294,12 +293,13 @@ function DocumentSlot({
   onView: (document: PatientDocumentItem) => void;
   onDelete: (document: PatientDocumentItem) => void;
 }) {
+  const t = useTranslations("patients");
   return (
     <div className="p-4">
       <input
         ref={inputRef}
         type="file"
-        aria-label={`Upload ${title} document`}
+        aria-label={t("uploadNamedDocument", { title })}
         accept={ACCEPTED_DOCUMENTS}
         className="hidden"
         onChange={(event) => onUpload(category, event)}
@@ -311,8 +311,7 @@ function DocumentSlot({
             <h3 className="text-sm font-medium">{title}</h3>
           </div>
           <p className="mt-1 text-xs text-muted-foreground">
-            PDF, JPG, PNG, or WebP. Max 10 MB.
-          </p>
+            {t("pdfJpgPngOrWebpMax")}</p>
         </div>
         {!document && (
           <Button
@@ -323,13 +322,13 @@ function DocumentSlot({
             disabled={isPending}
             onClick={() => inputRef.current?.click()}
           >
+            {/* i18n-allow: internal pending-operation identifier, never rendered */}
             {pendingKey === `upload:${category}` ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
             ) : (
               <Upload className="h-3.5 w-3.5" />
             )}
-            Upload
-          </Button>
+            {t("upload")}</Button>
         )}
       </div>
 
@@ -345,12 +344,11 @@ function DocumentSlot({
             />
           </div>
           <p className="mt-2 text-xs text-muted-foreground">
-            Delete this document before uploading a replacement.
-          </p>
+            {t("deleteThisDocumentBeforeUploadingA")}</p>
         </>
       ) : (
         <div className="mt-3 rounded-lg border border-dashed border-border/60 px-4 py-5 text-center text-sm text-muted-foreground">
-          No {formatEmptySlotTitle(title)} document uploaded yet.
+          {t("emptyDocumentSlot", { title: formatEmptySlotTitle(title) })}
         </div>
       )}
     </div>
@@ -370,6 +368,7 @@ function DocumentRow({
   onView: (document: PatientDocumentItem) => void;
   onDelete: (document: PatientDocumentItem) => void;
 }) {
+  const t = useTranslations("patients");
   const viewPending = pendingKey === `view:${document.id}`;
   const deletePending = pendingKey === `delete:${document.id}`;
 
@@ -384,7 +383,7 @@ function DocumentRow({
           <Badge variant="secondary">{formatMime(document.mimeType)}</Badge>
         </div>
         <p className="text-xs text-muted-foreground">
-          {formatBytes(document.sizeBytes)} · Uploaded {formatDate(document.createdAt)}
+          {formatBytes(document.sizeBytes)} {t("uploaded")}{formatDate(document.createdAt)}
           {document.uploadedByName ? ` by ${document.uploadedByName}` : ""}
         </p>
       </div>
@@ -394,7 +393,7 @@ function DocumentRow({
           variant="outline"
           size="sm"
           className="gap-1.5"
-          aria-label={`View ${document.fileName}`}
+          aria-label={t("viewNamedFile", { file: document.fileName })}
           disabled={isPending}
           onClick={() => onView(document)}
         >
@@ -403,8 +402,7 @@ function DocumentRow({
           ) : (
             <Eye className="h-3.5 w-3.5" />
           )}
-          View
-        </Button>
+          {t("view")}</Button>
         <DeleteDocumentDialog
           document={document}
           disabled={isPending}
@@ -427,6 +425,7 @@ function DeleteDocumentDialog({
   pending: boolean;
   onDelete: (document: PatientDocumentItem) => void;
 }) {
+  const t = useTranslations("patients");
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
@@ -435,30 +434,27 @@ function DeleteDocumentDialog({
           variant="outline"
           size="sm"
           className="gap-1.5 text-destructive hover:text-destructive"
-          aria-label={`Delete ${document.fileName}`}
+          aria-label={t("deleteNamedFile", { file: document.fileName })}
           disabled={disabled}
         >
           <Trash2 className="h-3.5 w-3.5" />
-          Delete
-        </Button>
+          {t("delete")}</Button>
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete document?</AlertDialogTitle>
+          <AlertDialogTitle>{t("deleteDocument")}</AlertDialogTitle>
           <AlertDialogDescription>
-            This removes {document.fileName} from the active patient documents.
-          </AlertDialogDescription>
+            {t("thisRemoves")}{document.fileName} {t("fromTheActivePatientDocuments")}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
+          <AlertDialogCancel disabled={pending}>{t("cancel")}</AlertDialogCancel>
           <AlertDialogAction
             onClick={() => onDelete(document)}
             disabled={pending}
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90 gap-2"
           >
             {pending && <Loader2 className="h-4 w-4 animate-spin" />}
-            Delete
-          </AlertDialogAction>
+            {t("delete")}</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

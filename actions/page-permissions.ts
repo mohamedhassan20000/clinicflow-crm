@@ -1,5 +1,6 @@
 "use server";
 
+import { actionError } from "@/lib/i18n/action-errors";
 import { revalidatePath } from "next/cache";
 import { createClinicScopedAdminClient } from "@/lib/supabase/admin";
 import { requireMutationRole, requireRole } from "@/lib/rbac";
@@ -15,7 +16,12 @@ type UserRole = Database["public"]["Enums"]["user_role"];
 
 export type StaffPagePermission = {
   slug: PageSlug;
-  label: string;
+  /**
+   * P2C — no `label` here on purpose. This crosses a server/client boundary, and an English label
+   * baked in on the server would render in English no matter what language the reader chose. The
+   * consumer translates `nav.tenant.<slug>`, which is the same key the sidebar uses, so the two can
+   * never disagree about what a page is called.
+   */
   isVisible: boolean;
   alwaysVisible: boolean;
 };
@@ -51,7 +57,7 @@ export async function ensureDefaultPagePermissions(
   clinicId: string,
 ): Promise<PagePermissionResult> {
   const actor = await requireMutationRole(["admin", "manager"]);
-  if (actor.clinicId !== clinicId) return { error: "Clinic scope mismatch." };
+  if (actor.clinicId !== clinicId) return { error: await actionError("page-permissions.clinicScopeMismatch") };
   const adminClient = createClinicScopedAdminClient(clinicId);
   const rows = getRolePageSlugs(role).map((pageSlug) => ({
     user_id: userId,
@@ -67,7 +73,7 @@ export async function ensureDefaultPagePermissions(
   if (isMissingPermissionsTable(error)) {
     return ensureDefaultPagePermissionsFallback(userId, role, clinicId);
   }
-  if (error) return { error: error.message };
+  if (error) return { error: await actionError("page-permissions.weCouldNotCompleteThisRequestPleaseTryAgain") };
   return { success: true };
 }
 
@@ -87,7 +93,7 @@ async function ensureDefaultPagePermissionsFallback(
       .eq("clinic_id", clinicId)
       .eq("feature", "_visible")
       .eq("page", pageSlug);
-    if (deleteError) return { error: deleteError.message };
+    if (deleteError) return { error: await actionError("page-permissions.weCouldNotCompleteThisRequestPleaseTryAgain") };
   }
 
   const rows = pages.map((pageSlug) => ({
@@ -100,7 +106,7 @@ async function ensureDefaultPagePermissionsFallback(
   const { error } = await adminClient
     .from("user_customizations")
     .upsert(rows, { onConflict: "profile_id,page,feature" });
-  if (error) return { error: error.message };
+  if (error) return { error: await actionError("page-permissions.weCouldNotCompleteThisRequestPleaseTryAgain") };
   return { success: true };
 }
 
@@ -113,7 +119,7 @@ export async function listStaffPagePermissions(): Promise<{
     user.role === "admin" &&
     !(await isPrimaryClinicAdmin(user.id, user.clinicId))
   ) {
-    return { error: "Only the primary clinic admin can customize page visibility." };
+    return { error: await actionError("page-permissions.onlyThePrimaryClinicAdminCanCustomizePageVisibility") };
   }
   const adminClient = createClinicScopedAdminClient(user.clinicId);
   const primaryAdminId = await getPrimaryClinicAdminId(user.clinicId);
@@ -126,7 +132,7 @@ export async function listStaffPagePermissions(): Promise<{
     .neq("id", primaryAdminId ?? "")
     .order("full_name");
 
-  if (staffError) return { error: staffError.message };
+  if (staffError) return { error: await actionError("page-permissions.weCouldNotCompleteThisRequestPleaseTryAgain") };
   const staff =
     user.role === "manager"
       ? (staffRows ?? []).filter((member) => member.role !== "admin")
@@ -151,7 +157,7 @@ export async function listStaffPagePermissions(): Promise<{
           .in("profile_id", ids)
       : { data: [], error: null };
 
-    if (fallbackError) return { error: fallbackError.message };
+    if (fallbackError) return { error: await actionError("page-permissions.weCouldNotCompleteThisRequestPleaseTryAgain") };
 
     return {
       data: staff.map((member) =>
@@ -166,7 +172,7 @@ export async function listStaffPagePermissions(): Promise<{
       ),
     };
   }
-  if (permissionsError) return { error: permissionsError.message };
+  if (permissionsError) return { error: await actionError("page-permissions.weCouldNotCompleteThisRequestPleaseTryAgain") };
 
   return {
     data: staff.map((member) => buildStaffRow(member, stored ?? [])),
@@ -200,7 +206,6 @@ function buildStaffRow(
     permissions: PAGE_DEFINITIONS.filter((page) => roleSlugs.has(page.slug)).map(
       (page) => ({
         slug: page.slug,
-        label: page.label,
         isVisible: page.alwaysVisible ? true : (storedForUser.get(page.slug) ?? true),
         alwaysVisible: Boolean(page.alwaysVisible),
       }),
@@ -218,9 +223,9 @@ export async function updateUserPageVisibility(
     user.role === "admin" &&
     !(await isPrimaryClinicAdmin(user.id, user.clinicId))
   ) {
-    return { error: "Only the primary clinic admin can customize page visibility." };
+    return { error: await actionError("page-permissions.onlyThePrimaryClinicAdminCanCustomizePageVisibility") };
   }
-  if (pageSlug === "dashboard") return { error: "Dashboard cannot be hidden." };
+  if (pageSlug === "dashboard") return { error: await actionError("page-permissions.dashboardCannotBeHidden") };
 
   const adminClient = createClinicScopedAdminClient(user.clinicId);
   const { data: target, error: targetError } = await adminClient
@@ -230,15 +235,15 @@ export async function updateUserPageVisibility(
     .eq("clinic_id", user.clinicId)
     .single();
 
-  if (targetError || !target) return { error: "Staff member not found." };
+  if (targetError || !target) return { error: await actionError("page-permissions.staffMemberNotFound") };
   if (user.role === "manager" && target.role === "admin") {
-    return { error: "Only admins can customize admin users." };
+    return { error: await actionError("page-permissions.onlyAdminsCanCustomizeAdminUsers") };
   }
   if (target.id === await getPrimaryClinicAdminId(user.clinicId)) {
-    return { error: "The primary clinic admin cannot be customized." };
+    return { error: await actionError("page-permissions.thePrimaryClinicAdminCannotBeCustomized") };
   }
   if (!getRolePageSlugs(target.role).includes(pageSlug)) {
-    return { error: "This page is not available for that user's role." };
+    return { error: await actionError("page-permissions.thisPageIsNotAvailableForThatUserSRole") };
   }
 
   const { error } = await adminClient.from("user_page_permissions").upsert(
@@ -259,7 +264,7 @@ export async function updateUserPageVisibility(
       isVisible,
     );
   }
-  if (error) return { error: error.message };
+  if (error) return { error: await actionError("page-permissions.weCouldNotCompleteThisRequestPleaseTryAgain") };
 
   revalidatePath("/settings/customize");
   return { success: true };
@@ -274,11 +279,11 @@ export async function saveUserPageVisibilityChanges(
     user.role === "admin" &&
     !(await isPrimaryClinicAdmin(user.id, user.clinicId))
   ) {
-    return { error: "Only the primary clinic admin can customize page visibility." };
+    return { error: await actionError("page-permissions.onlyThePrimaryClinicAdminCanCustomizePageVisibility") };
   }
   const primaryAdminId = await getPrimaryClinicAdminId(user.clinicId);
   if (targetUserId === primaryAdminId) {
-    return { error: "The primary clinic admin cannot be customized." };
+    return { error: await actionError("page-permissions.thePrimaryClinicAdminCannotBeCustomized") };
   }
 
   const adminClient = createClinicScopedAdminClient(user.clinicId);
@@ -289,9 +294,9 @@ export async function saveUserPageVisibilityChanges(
     .eq("clinic_id", user.clinicId)
     .single();
 
-  if (targetError || !target) return { error: "Staff member not found." };
+  if (targetError || !target) return { error: await actionError("page-permissions.staffMemberNotFound") };
   if (user.role === "manager" && target.role === "admin") {
-    return { error: "Only admins can customize admin users." };
+    return { error: await actionError("page-permissions.onlyAdminsCanCustomizeAdminUsers") };
   }
 
   const roleSlugs = new Set(getRolePageSlugs(target.role));
@@ -320,7 +325,7 @@ export async function saveUserPageVisibilityChanges(
       })),
     );
   }
-  if (error) return { error: error.message };
+  if (error) return { error: await actionError("page-permissions.weCouldNotCompleteThisRequestPleaseTryAgain") };
 
   revalidatePath("/settings/customize");
   return { success: true };
@@ -338,9 +343,9 @@ export async function resetUserPageVisibilityToRoleDefaults(
     .eq("clinic_id", user.clinicId)
     .single();
 
-  if (targetError || !target) return { error: "Staff member not found." };
+  if (targetError || !target) return { error: await actionError("page-permissions.staffMemberNotFound") };
   if (user.role === "manager" && target.role === "admin") {
-    return { error: "Only admins can reset admin users." };
+    return { error: await actionError("page-permissions.onlyAdminsCanResetAdminUsers") };
   }
 
   const { error: deleteError } = await adminClient
@@ -356,7 +361,7 @@ export async function resetUserPageVisibilityToRoleDefaults(
       target.clinic_id,
     );
   }
-  if (deleteError) return { error: deleteError.message };
+  if (deleteError) return { error: await actionError("page-permissions.weCouldNotCompleteThisRequestPleaseTryAgain") };
 
   const ensured = await ensureDefaultPagePermissions(
     target.id,
@@ -401,7 +406,7 @@ async function saveUserPageVisibilityChangesFallback(
         },
         { onConflict: "profile_id,page,feature" },
       );
-    if (upsertError) return { error: upsertError.message };
+    if (upsertError) return { error: await actionError("page-permissions.weCouldNotCompleteThisRequestPleaseTryAgain") };
   }
 
   revalidatePath("/settings/customize");

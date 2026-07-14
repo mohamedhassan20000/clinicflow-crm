@@ -28,8 +28,12 @@ import { THIRTY_DAYS_MS } from "@/lib/constants";
 import { clinicLocaleFromRow, type ClinicLocale } from "@/lib/datetime";
 import type { Database } from "@/types/database";
 import { pathWithSearch, withReturnTo } from "@/lib/navigation/return-url";
+import { getTranslations } from "next-intl/server";
 
-export const metadata: Metadata = { title: "Appointments" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("protected");
+  return { title: t("metadataAppointments") };
+}
 
 type AppointmentStatus = Database["public"]["Enums"]["appointment_status"];
 
@@ -84,6 +88,7 @@ function parseLocalMonth(iso: string): Date {
 }
 
 export default async function AppointmentsPage({ searchParams }: PageProps) {
+  const t = await getTranslations("protected");
   const user = await requireUser();
   const isDoctor = user.role === "doctor";
   const supabase = await createClient();
@@ -261,8 +266,8 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
   const trashItems: AppointmentTrashItem[] = ((deletedAppointments ?? []) as any[]).map(
     (a) => ({
       id: a.id as string,
-      patientName: (a.patients as { full_name: string } | null)?.full_name ?? "Unknown",
-      doctorName: (a.profiles as { full_name: string } | null)?.full_name ?? "Unassigned",
+      patientName: (a.patients as { full_name: string } | null)?.full_name ?? t("unknown"),
+      doctorName: (a.profiles as { full_name: string } | null)?.full_name ?? t("unassigned"),
       scheduledAt: a.scheduled_at as string,
       deletedAt: a.deleted_at as string,
     }),
@@ -278,8 +283,8 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
     doctor_id: a.doctor_id as string,
     department_id: a.department_id as string | null,
     insurance_provider_id: a.insurance_provider_id as string | null,
-    patientName: (a.patients as { full_name: string } | null)?.full_name ?? "Unknown",
-    doctorName: (a.profiles as { full_name: string } | null)?.full_name ?? "Unassigned",
+    patientName: (a.patients as { full_name: string } | null)?.full_name ?? t("unknown"),
+    doctorName: (a.profiles as { full_name: string } | null)?.full_name ?? t("unassigned"),
     departmentName: (a.departments as { name: string } | null)?.name ?? null,
     departmentColor: (a.departments as { color: string | null } | null)?.color ?? null,
   }));
@@ -296,19 +301,22 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
 
   const rangeLabel =
     view === "day"
-      ? "this day"
+      ? t("thisday")
       : view === "month"
-        ? "this month"
-        : "this week";
+        ? t("thismonth")
+        : t("thisweek");
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Appointments</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{t("appointments")}</h1>
           <p className="text-sm text-muted-foreground">
-            {total} appointment{total !== 1 ? "s" : ""} {rangeLabel}
-            {activeFilterCount > 0 && " matching filters"}.
+            {t("appointmentCountRange", {
+              count: total,
+              range: rangeLabel,
+              filters: activeFilterCount > 0 ? t("matchingFilters") : "",
+            })}
           </p>
         </div>
         <ViewSwitcher current={view} />

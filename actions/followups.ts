@@ -1,5 +1,6 @@
 "use server";
 
+import { actionError } from "@/lib/i18n/action-errors";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireMutationRole } from "@/lib/rbac";
@@ -39,19 +40,19 @@ export async function recordFollowup(
     | null;
 
   if (!appointmentId || !patientId) {
-    return { error: "Missing appointment or patient." };
+    return { error: await actionError("followups.missingAppointmentOrPatient") };
   }
   if (!VALID_OUTCOMES.includes(outcomeRaw as FollowupOutcome)) {
-    return { error: "Pick an outcome." };
+    return { error: await actionError("followups.pickAnOutcome") };
   }
   const outcome = outcomeRaw as FollowupOutcome;
   if (outcome === "has_problem" && !notes) {
     return {
-      error: "Describe the problem in the notes when the patient reports one.",
+      error: await actionError("followups.describeTheProblemInTheNotesWhenThePatientReports"),
     };
   }
   if (notes && notes.length > 1000) {
-    return { error: "Note must be 1000 characters or less." };
+    return { error: await actionError("followups.noteMustBe1000CharactersOrLess") };
   }
 
   const supabase = await createClient();
@@ -65,12 +66,12 @@ export async function recordFollowup(
     .is("deleted_at", null)
     .single();
 
-  if (!appt) return { error: "Appointment not found." };
+  if (!appt) return { error: await actionError("followups.appointmentNotFound") };
   if (appt.status !== "completed") {
-    return { error: "Follow-ups can only be recorded for completed sessions." };
+    return { error: await actionError("followups.followUpsCanOnlyBeRecordedForCompletedSessions") };
   }
   if (appt.patient_id !== patientId) {
-    return { error: "Patient mismatch on appointment." };
+    return { error: await actionError("followups.patientMismatchOnAppointment") };
   }
 
   const { data: inserted, error: insertError } = await supabase
@@ -88,9 +89,9 @@ export async function recordFollowup(
 
   if (insertError) {
     if (insertError.code === "23505") {
-      return { error: "A follow-up has already been recorded for this session." };
+      return { error: await actionError("followups.aFollowUpHasAlreadyBeenRecordedForThisSession") };
     }
-    return { error: insertError.message || "Failed to save follow-up." };
+    return { error: await actionError("followups.failedToSaveFollowUp") };
   }
 
   revalidatePath("/followups");
@@ -111,16 +112,16 @@ export async function updateFollowup(
     | string
     | null;
 
-  if (!followupId || !patientId) return { error: "Missing follow-up." };
+  if (!followupId || !patientId) return { error: await actionError("followups.missingFollowUp") };
   if (!VALID_OUTCOMES.includes(outcomeRaw as FollowupOutcome)) {
-    return { error: "Pick an outcome." };
+    return { error: await actionError("followups.pickAnOutcome") };
   }
   const outcome = outcomeRaw as FollowupOutcome;
   if (outcome === "has_problem" && !notes) {
-    return { error: "Describe the problem in the notes when the patient reports one." };
+    return { error: await actionError("followups.describeTheProblemInTheNotesWhenThePatientReports") };
   }
   if (notes && notes.length > 1000) {
-    return { error: "Note must be 1000 characters or less." };
+    return { error: await actionError("followups.noteMustBe1000CharactersOrLess") };
   }
 
   const supabase = await createClient();
@@ -133,7 +134,7 @@ export async function updateFollowup(
     .select("id, appointment_id, patient_id, outcome, notes")
     .single();
 
-  if (error || !data) return { error: error?.message || "Failed to update follow-up." };
+  if (error || !data) return { error: await actionError("followups.failedToUpdateFollowUp") };
 
   revalidatePath("/followups");
   revalidatePath(`/patients/${patientId}`);
@@ -151,7 +152,7 @@ export async function deleteFollowup(followupId: string): Promise<ActionResult> 
     .select("id, appointment_id, patient_id, outcome, notes")
     .single();
 
-  if (error || !data) return { error: error?.message || "Failed to delete follow-up." };
+  if (error || !data) return { error: await actionError("followups.failedToDeleteFollowUp") };
 
   revalidatePath("/followups");
   revalidatePath(`/patients/${data.patient_id}`);
@@ -177,7 +178,7 @@ export async function restoreFollowup(
     .select("id, appointment_id, patient_id, outcome, notes")
     .single();
 
-  if (error || !inserted) return { error: error?.message || "Failed to restore follow-up." };
+  if (error || !inserted) return { error: await actionError("followups.failedToRestoreFollowUp") };
 
   revalidatePath("/followups");
   revalidatePath(`/patients/${data.patient_id}`);

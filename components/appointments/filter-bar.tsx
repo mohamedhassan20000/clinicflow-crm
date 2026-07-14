@@ -19,19 +19,20 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import type { Database } from "@/types/database";
+import { useTranslations } from "next-intl";
 
 type AppointmentStatus = Database["public"]["Enums"]["appointment_status"];
 
 const ALL_STATUSES_VALUE = "__all__";
 
-const STATUS_OPTIONS: { value: AppointmentStatus; label: string }[] = [
-  { value: "pending", label: "Pending" },
-  { value: "confirmed", label: "Confirmed" },
-  { value: "arrived", label: "Arrived" },
-  { value: "in_session", label: "In session" },
-  { value: "completed", label: "Completed" },
-  { value: "cancelled", label: "Cancelled" },
-  { value: "no_show", label: "No-show" },
+const STATUS_OPTIONS: { value: AppointmentStatus; labelKey: string }[] = [
+  { value: "pending", labelKey: "statusPending" },
+  { value: "confirmed", labelKey: "statusConfirmed" },
+  { value: "arrived", labelKey: "statusArrived" },
+  { value: "in_session", labelKey: "statusInSession" },
+  { value: "completed", labelKey: "statusCompleted" },
+  { value: "cancelled", labelKey: "statusCancelled" },
+  { value: "no_show", labelKey: "statusNoShow" },
 ];
 
 interface Props {
@@ -61,13 +62,14 @@ export function AppointmentsFilterBar({
 }
 
 function StatusFilter() {
+  const t = useTranslations("appointments");
   const router = useRouter();
   const params = useSearchParams();
   const [, startTransition] = useTransition();
   const current = params.get("status");
   const active = STATUS_OPTIONS.some((option) => option.value === current);
   const label =
-    STATUS_OPTIONS.find((option) => option.value === current)?.label ?? null;
+    STATUS_OPTIONS.find((option) => option.value === current)?.labelKey ?? null;
 
   function apply(value: string) {
     const next = new URLSearchParams(params.toString());
@@ -92,10 +94,9 @@ function StatusFilter() {
           )}
         >
           <ClipboardList className="h-3.5 w-3.5" />
-          Status
-          {active && label && (
+          {t("status")}{active && label && (
             <span className="max-w-[120px] truncate font-semibold">
-              : {label}
+              : {t(label)}
             </span>
           )}
         </Button>
@@ -107,13 +108,13 @@ function StatusFilter() {
             onValueChange={apply}
           >
             <SelectTrigger className="h-8 text-sm">
-              <SelectValue placeholder="All statuses" />
+              <SelectValue placeholder={t("allStatuses")} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={ALL_STATUSES_VALUE}>All statuses</SelectItem>
+              <SelectItem value={ALL_STATUSES_VALUE}>{t("allStatuses")}</SelectItem>
               {STATUS_OPTIONS.map((option) => (
                 <SelectItem key={option.value} value={option.value}>
-                  {option.label}
+                  {t(option.labelKey)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -127,8 +128,7 @@ function StatusFilter() {
                 className="h-7 text-xs"
                 onClick={() => apply(ALL_STATUSES_VALUE)}
               >
-                Clear
-              </Button>
+                {t("clear")}</Button>
             </div>
           )}
         </div>

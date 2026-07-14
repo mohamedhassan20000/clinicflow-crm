@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
+import { useTranslations } from "next-intl";
 
 const EMPTY_QUEUE: DoctorDashboardQueue = {
   inSession: [],
@@ -108,6 +109,7 @@ declare global {
 }
 
 export function DoctorQueue() {
+  const t = useTranslations("dashboard");
   const [queue, setQueue] = useState<DoctorDashboardQueue>(EMPTY_QUEUE);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -177,9 +179,9 @@ export function DoctorQueue() {
     <section className="space-y-3">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-lg font-semibold tracking-tight">My Queue</h2>
+          <h2 className="text-lg font-semibold tracking-tight">{t("myQueue")}</h2>
           <p className="text-xs text-muted-foreground">
-            {hasLoaded ? `${total} queue appointment${total === 1 ? "" : "s"}` : "Loading queue..."}
+            {hasLoaded ? t("queueAppointmentCount", { count: total }) : t("loadingqueue")}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -191,16 +193,15 @@ export function DoctorQueue() {
             onClick={() => setEnabled((value) => !value)}
           >
             {enabled ? <Volume2 className="h-3.5 w-3.5" /> : <VolumeX className="h-3.5 w-3.5" />}
-            Arrival sound
-          </Button>
+            {t("arrivalSound")}</Button>
           <Button
             type="button"
             variant="outline"
             size="icon-sm"
             onClick={refreshQueue}
             disabled={isPending}
-            aria-label="Refresh queue"
-            title="Refresh queue"
+            aria-label={t("refreshQueue")}
+            title={t("refreshQueue")}
           >
             <RefreshCcw className={cn("h-3.5 w-3.5", isPending && "animate-spin")} />
           </Button>
@@ -210,35 +211,35 @@ export function DoctorQueue() {
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="space-y-4">
           <QueueCard
-            title="In Session"
+            title={t("inSession")}
             items={queue.inSession}
             loading={!hasLoaded}
             variant="inSession"
             onQueueRefresh={() => loadQueue({ playArrivalSound: false })}
           />
           <QueueCard
-            title="Completed Today"
+            title={t("completedToday")}
             items={queue.completedToday}
             loading={!hasLoaded}
             variant="completed"
             onQueueRefresh={() => loadQueue({ playArrivalSound: false })}
           />
           <QueueCard
-            title="Arrived"
+            title={t("arrived")}
             items={queue.arrived}
             loading={!hasLoaded}
             variant="arrived"
             onQueueRefresh={() => loadQueue({ playArrivalSound: false })}
           />
           <QueueCard
-            title="Confirmed Today"
+            title={t("confirmedToday")}
             items={queue.confirmedToday}
             loading={!hasLoaded}
             onQueueRefresh={() => loadQueue({ playArrivalSound: false })}
           />
         </div>
         <QueueCard
-          title="Tomorrow Confirmed"
+          title={t("tomorrowConfirmed")}
           items={queue.confirmedTomorrow}
           loading={!hasLoaded}
           onQueueRefresh={() => loadQueue({ playArrivalSound: false })}
@@ -261,6 +262,7 @@ function QueueCard({
   variant?: "default" | "arrived" | "inSession" | "completed";
   onQueueRefresh: () => Promise<void>;
 }) {
+  const t = useTranslations("dashboard");
   return (
     <div
       className={cn(
@@ -286,8 +288,7 @@ function QueueCard({
         </div>
       ) : items.length === 0 ? (
         <p className="rounded-lg border border-dashed border-border/70 px-3 py-5 text-center text-sm text-muted-foreground">
-          No appointments
-        </p>
+          {t("noAppointments")}</p>
       ) : (
         <div className="space-y-2">
           {items.map((item) => (
@@ -313,6 +314,7 @@ function QueueRow({
   highlighted: boolean;
   onQueueRefresh: () => Promise<void>;
 }) {
+  const t = useTranslations("dashboard");
   const router = useRouter();
   const [isStartingSession, setIsStartingSession] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -336,7 +338,7 @@ function QueueRow({
           : null);
 
       if (!redirectTo) {
-        toast.error("Session started, but the patient notes page could not be opened.");
+        toast.error(t("sessionStartedButThePatientNotes"));
         router.refresh();
         return;
       }
@@ -346,7 +348,7 @@ function QueueRow({
       router.refresh();
       router.push(redirectTo);
     } catch {
-      toast.error("Failed to start appointment session.");
+      toast.error(t("failedToStartAppointmentSession"));
     } finally {
       setIsStartingSession(false);
     }
@@ -356,7 +358,7 @@ function QueueRow({
     <div
       className={cn(
         "flex flex-col gap-3 rounded-lg border border-border/60 bg-background p-3 sm:flex-row sm:items-center sm:justify-between",
-        highlighted && "border-l-4 border-l-violet-500",
+        highlighted && "border-s-4 border-s-violet-500",
       )}
     >
       <div className="min-w-0 space-y-1">
@@ -366,7 +368,7 @@ function QueueRow({
         </div>
         <p className="truncate text-sm font-medium">{item.patientName}</p>
         <p className="truncate text-xs text-muted-foreground">
-          {item.serviceName ?? "No service"}
+          {item.serviceName ?? t("noService")}
           {item.departmentName ? ` · ${item.departmentName}` : ""}
         </p>
       </div>
@@ -379,29 +381,28 @@ function QueueRow({
             disabled={isStartingSession}
           >
             <Play className="h-3.5 w-3.5" />
-            {isStartingSession ? "Starting..." : "Start Session"}
+            {isStartingSession ? t("starting") : t("startsession")}
           </Button>
         ) : null}
         <Button asChild variant={canStartSession ? "ghost" : "outline"} size="sm">
           <Link href={`/patients/${item.patientId}`}>
-            Open patient
-            <ExternalLink className="h-3.5 w-3.5" />
+            {t("openPatient")}<ExternalLink className="h-3.5 w-3.5 rtl:-scale-x-100" />
           </Link>
         </Button>
       </div>
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Start this session?</AlertDialogTitle>
+            <AlertDialogTitle>{t("startThisSession")}</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to start this session? Duration: {item.durationMinutes}{" "}
+              {t("areYouSureYouWantTo")}{item.durationMinutes}{" "}
               {item.durationMinutes === 1 ? "minute" : "minutes"}.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isStartingSession}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={isStartingSession}>{t("cancel")}</AlertDialogCancel>
             <Button type="button" onClick={handleStartSession} disabled={isStartingSession}>
-              {isStartingSession ? "Starting..." : "Start Session"}
+              {isStartingSession ? t("starting") : t("startsession")}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>

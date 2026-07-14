@@ -16,8 +16,10 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { softDeletePatient } from "@/actions/patients";
+import { useTranslations } from "next-intl";
 
 export function DeletePatientButton({ patientId }: { patientId: string }) {
+  const t = useTranslations("patients");
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 
@@ -36,27 +38,23 @@ export function DeletePatientButton({ patientId }: { patientId: string }) {
       <AlertDialogTrigger asChild>
         <Button variant="destructive" size="sm" className="gap-1.5">
           <Trash2 className="h-3.5 w-3.5" />
-          Delete
-        </Button>
+          {t("delete")}</Button>
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete patient?</AlertDialogTitle>
+          <AlertDialogTitle>{t("deletePatient")}</AlertDialogTitle>
           <AlertDialogDescription>
-            This patient will be soft-deleted and hidden from the list. An admin
-            can restore them later.
-          </AlertDialogDescription>
+            {"This patient will be soft-deleted and hidden from the list. An admin can restore them later."}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
+          <AlertDialogCancel disabled={isPending}>{t("cancel")}</AlertDialogCancel>
           <AlertDialogAction
             onClick={handleDelete}
             disabled={isPending}
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90 gap-2"
           >
             {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-            Delete
-          </AlertDialogAction>
+            {t("delete")}</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

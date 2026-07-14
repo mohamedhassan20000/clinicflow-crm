@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useTranslations } from "next-intl";
 import {
   saveUserPageVisibilityChanges,
   type StaffPagePermissionsRow,
@@ -19,6 +20,8 @@ export function PageVisibilityCustomizer({
   staff: StaffPagePermissionsRow[];
   initialSelectedId?: string;
 }) {
+  const t = useTranslations("settings");
+  const tNav = useTranslations("nav.tenant");
   const [rows, setRows] = useState(staff);
   const [savedRows, setSavedRows] = useState(staff);
   const [selectedId, setSelectedId] = useState(
@@ -91,7 +94,7 @@ export function PageVisibilityCustomizer({
         setRows(savedRows);
       } else {
         setSavedRows(rows);
-        toast.success("Page visibility saved.");
+        toast.success(t("pageVisibilitySaved"));
       }
     });
   }
@@ -99,7 +102,7 @@ export function PageVisibilityCustomizer({
   if (rows.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-border py-12 text-center text-sm text-muted-foreground">
-        No staff members found.
+        {t("noStaffMembersFound")}
       </div>
     );
   }
@@ -113,7 +116,7 @@ export function PageVisibilityCustomizer({
             type="button"
             onClick={() => setSelectedId(member.id)}
             className={cn(
-              "flex w-full items-center justify-between gap-3 border-b border-border/40 px-3 py-3 text-left last:border-b-0",
+              "flex w-full items-center justify-between gap-3 border-b border-border/40 px-3 py-3 text-start last:border-b-0",
               selected?.id === member.id
                 ? "bg-primary/10 text-foreground"
                 : "hover:bg-muted/50",
@@ -124,7 +127,7 @@ export function PageVisibilityCustomizer({
                 {member.fullName}
               </span>
               <span className="block truncate text-xs text-muted-foreground">
-                {member.departmentName ?? "No department"}
+                {member.departmentName ?? t("noDepartment")}
               </span>
             </span>
             <Badge variant="secondary" className="shrink-0 capitalize">
@@ -144,7 +147,7 @@ export function PageVisibilityCustomizer({
               </Badge>
             </div>
             <p className="text-xs text-muted-foreground">
-              Toggle only the pages available to this role.
+              {t("toggleOnlyThePagesAvailableTo")}
             </p>
           </div>
 
@@ -156,10 +159,10 @@ export function PageVisibilityCustomizer({
                   className="flex items-center justify-between gap-4 px-4 py-3"
                 >
                   <div>
-                    <p className="text-sm font-medium">{permission.label}</p>
+                    <p className="text-sm font-medium">{tNav(permission.slug)}</p>
                     {permission.alwaysVisible && (
                       <p className="text-xs text-muted-foreground">
-                        Dashboard is always visible.
+                        {t("dashboardIsAlwaysVisible")}
                       </p>
                     )}
                   </div>
@@ -183,7 +186,7 @@ export function PageVisibilityCustomizer({
               disabled={!hasChanges || isSaving}
               onClick={() => setRows(savedRows)}
             >
-              Discard
+              {t("discard")}
             </Button>
             <Button
               type="button"
@@ -192,7 +195,7 @@ export function PageVisibilityCustomizer({
               className="gap-2"
             >
               {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
-              Save Changes
+              {t("saveChanges")}
             </Button>
           </div>
         </section>

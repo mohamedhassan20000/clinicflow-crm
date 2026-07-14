@@ -13,6 +13,7 @@ import {
 import { PrintSectionButton, type ReportPrintSection } from "@/components/reports/print-all-button";
 import type { ClinicPrintMeta } from "@/types/reports";
 import { cn } from "@/lib/utils";
+import { useTranslations } from "next-intl";
 
 export function ReportSectionShell({
   section,
@@ -56,9 +57,10 @@ export function ReportSectionShell({
 }
 
 export function EmptyReportState({ message }: { message?: string }) {
+  const t = useTranslations("reports");
   return (
     <div className="rounded-lg border border-dashed border-border/70 bg-muted/25 px-4 py-6 text-center text-sm text-muted-foreground print:border-black print:bg-white print:text-black">
-      {message ?? "No data for the selected date range."}
+      {message ?? t("noDataForSelectedDateRange")}
     </div>
   );
 }

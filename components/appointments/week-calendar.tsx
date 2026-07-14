@@ -27,6 +27,7 @@ import {
   minutesInClinicTimeZone,
   useCalendarNow,
 } from "@/components/appointments/calendar-visuals";
+import { useTranslations } from "next-intl";
 
 type Appointment = AppointmentForDetail;
 
@@ -107,7 +108,8 @@ export function WeekCalendar({
   clinicHours = [],
   newAppointmentHref = "/appointments/new",
 }: WeekCalendarProps) {
-  const { formatSlotTime, weekStart: configuredWeekStart } = useClinicSettings();
+  const t = useTranslations("appointments");
+  const { formatSlotTime, formatDate, weekStart: configuredWeekStart } = useClinicSettings();
   const allDays = Array.from({ length: 7 }, (_, i) => ({
     day: addDays(weekStart, i),
     originalIndex: i,
@@ -161,20 +163,20 @@ export function WeekCalendar({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <Button asChild variant="outline" size="sm" className="h-8 w-8 p-0">
-            <Link href={`/appointments?week=${fmt(prevWeek)}`} aria-label="Previous week">
-              <ChevronLeft className="h-4 w-4" />
+            <Link href={`/appointments?week=${fmt(prevWeek)}`} aria-label={t("previousWeek")}>
+              <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
             </Link>
           </Button>
           <span className="min-w-0 text-sm font-medium">
-            {weekStart.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}{" "}
+            {formatDate(weekStart, { day: "numeric", month: "short" })}{" "}
             —{" "}
-            {addDays(weekStart, 6).toLocaleDateString("en-GB", {
+            {formatDate(addDays(weekStart, 6), {
               day: "numeric", month: "short", year: "numeric",
             })}
           </span>
           <Button asChild variant="outline" size="sm" className="h-8 w-8 p-0">
-            <Link href={`/appointments?week=${fmt(nextWeek)}`} aria-label="Next week">
-              <ChevronRight className="h-4 w-4" />
+            <Link href={`/appointments?week=${fmt(nextWeek)}`} aria-label={t("nextWeek")}>
+              <ChevronRight className="h-4 w-4 rtl:rotate-180" />
             </Link>
           </Button>
         </div>
@@ -182,8 +184,7 @@ export function WeekCalendar({
           <Button asChild size="sm" className="shrink-0 gap-1.5">
             <Link href={newAppointmentHref}>
               <CalendarPlus className="h-4 w-4" />
-              New appointment
-            </Link>
+              {t("newAppointment")}</Link>
           </Button>
         )}
       </div>
@@ -279,11 +280,11 @@ export function WeekCalendar({
                   {showNowLine && (
                     <CalendarNowIndicator
                       top={nowTopPx}
-                      label={`Current time, ${formatSlotTime(
+                      label={t("currentTimeNamed", { time: formatSlotTime(
                         `${String(Math.floor(nowMin / 60)).padStart(2, "0")}:${String(
                           nowMin % 60,
                         ).padStart(2, "0")}`,
-                      )}`}
+                      ) })}
                     />
                   )}
                 </div>
@@ -313,6 +314,7 @@ function HourBucketRow({
   currentUserId?: string;
   currentUserRole?: "admin" | "receptionist" | "manager" | "doctor";
 }) {
+  const t = useTranslations("appointments");
   const [showAllOpen, setShowAllOpen] = useState(false);
   const hasMore = appts.length > MAX_VISIBLE;
   const visibleAppts = hasMore ? appts.slice(0, 3) : appts;
@@ -338,7 +340,7 @@ function HourBucketRow({
           onClick={() => setShowAllOpen(true)}
           className="mt-auto px-1 py-0.5 text-start text-[11px] font-medium leading-none text-foreground/70 hover:text-foreground hover:underline"
         >
-          Show all ({appts.length})
+          {t("showAll")}{appts.length})
         </button>
       )}
       {showAllOpen && (
@@ -371,6 +373,7 @@ export function AppointmentCard({
   currentUserRole?: "admin" | "receptionist" | "manager" | "doctor";
   compact?: boolean;
 }) {
+  const t = useTranslations("appointments");
   const { formatTime } = useClinicSettings();
   const [deleted, setDeleted] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -382,8 +385,8 @@ export function AppointmentCard({
   const time = formatTime(appt.scheduled_at);
 
   const deptColor = appt.departments?.color ?? "#64748b";
-  const deptName = appt.departments?.name ?? "General";
-  const patientName = appt.patients?.full_name ?? "Unknown";
+  const deptName = appt.departments?.name ?? t("general");
+  const patientName = appt.patients?.full_name ?? t("unknown");
 
   if (deleted) return null;
 
@@ -395,10 +398,10 @@ export function AppointmentCard({
         toast.error(res.error);
       } else {
         setDeleted(true);
-        toast.success(`Appointment for ${patientName} moved to trash.`, {
+        toast.success(t("appointmentMovedToTrashForPatient", { patient: patientName }), {
           duration: 10000,
           action: {
-            label: "Undo",
+            label: t("undo"),
             onClick: () => {
               if (isRestoringRef.current) return;
               isRestoringRef.current = true;
@@ -452,7 +455,7 @@ export function AppointmentCard({
                 onClick={(e) => { e.stopPropagation(); setConfirmOpen(true); }}
                 disabled={isDeleting || isRestoring}
                 className="shrink-0 p-1 opacity-0 group-hover:opacity-100 text-muted-foreground/40 hover:text-destructive transition-opacity"
-                title="Move to trash"
+                title={t("moveToTrash")}
               >
                 <Trash2 className="h-4 w-4" />
               </button>
@@ -485,7 +488,7 @@ export function AppointmentCard({
               <span className="truncate text-[10px] text-foreground/70">{time}</span>
               {appt.profiles?.full_name && (
                 <span className="truncate text-[10px] text-foreground/70">
-                  Dr. {appt.profiles.full_name}
+                  {t("dr")}{appt.profiles.full_name}
                 </span>
               )}
               {appt.departments?.name && (

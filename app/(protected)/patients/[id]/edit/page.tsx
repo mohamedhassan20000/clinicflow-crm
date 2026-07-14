@@ -6,8 +6,12 @@ import { PatientForm } from "@/components/patients/patient-form";
 import { updatePatient } from "@/actions/patients";
 import { PageHeader } from "@/components/shared/page-header";
 import { resolveReturnTo } from "@/lib/navigation/return-url";
+import { getTranslations } from "next-intl/server";
 
-export const metadata: Metadata = { title: "Edit Patient" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("protected");
+  return { title: t("metadataEditPatient") };
+}
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -15,6 +19,7 @@ interface PageProps {
 }
 
 export default async function EditPatientPage({ params, searchParams }: PageProps) {
+  const t = await getTranslations("protected");
   const { id } = await params;
   const { returnTo } = await searchParams;
   const patientPath = `/patients/${id}`;
@@ -66,12 +71,12 @@ export default async function EditPatientPage({ params, searchParams }: PageProp
       <PageHeader
         back={{ href: patientUrl, label: patient.full_name }}
         breadcrumbs={[
-          { label: "Patients", href: "/patients" },
+          { label: t("patients"), href: "/patients" },
           { label: patient.full_name, href: patientUrl },
-          { label: "Edit" },
+          { label: t("edit") },
         ]}
-        title="Edit patient"
-        description={<>Update {patient.full_name}&apos;s record.</>}
+        title={t("editPatient")}
+        description={t("updatePatientRecord", { patient: patient.full_name })}
       />
 
       <div className="max-w-2xl mx-auto rounded-xl border border-border/50 bg-card p-6">

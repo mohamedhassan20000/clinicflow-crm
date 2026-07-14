@@ -2,8 +2,10 @@
 
 import { Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useTranslations } from "next-intl";
 
 export function PrintButton() {
+  const t = useTranslations("patients");
   return (
     <Button
       variant="outline"
@@ -12,7 +14,6 @@ export function PrintButton() {
       onClick={() => window.print()}
     >
       <Printer className="h-3.5 w-3.5" />
-      Print
-    </Button>
+      {t("print")}</Button>
   );
 }

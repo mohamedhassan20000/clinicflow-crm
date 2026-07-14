@@ -19,6 +19,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { requestPasswordReset } from "@/actions/auth";
+import { useTranslations } from "next-intl";
 
 const schema = z.object({
   email: z.string().email("Enter a valid email"),
@@ -27,6 +28,7 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>;
 
 export function ForgotPasswordForm() {
+  const t = useTranslations("auth");
   const [state, formAction, isPending] = useActionState(
     requestPasswordReset,
     null,
@@ -54,19 +56,16 @@ export function ForgotPasswordForm() {
           <div className="flex items-start gap-2.5">
             <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
             <div>
-              <p className="font-medium text-foreground">Check your inbox</p>
+              <p className="font-medium text-foreground">{t("checkYourInbox")}</p>
               <p className="mt-1 text-muted-foreground">
-                If an account exists for the address you entered, a password
-                reset link is on its way. The link expires in 1 hour.
-              </p>
+                {t("ifAnAccountExistsForThe")}</p>
             </div>
           </div>
         </div>
         <Button asChild variant="outline" className="w-full gap-2">
           <Link href="/login">
-            <ArrowLeft className="h-4 w-4" />
-            Back to sign in
-          </Link>
+            <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
+            {t("backToSignIn")}</Link>
         </Button>
       </div>
     );
@@ -84,13 +83,13 @@ export function ForgotPasswordForm() {
           name="email"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Email address</FormLabel>
+              <FormLabel>{t("emailAddress")}</FormLabel>
               <FormControl>
                 <Input
                   {...field}
                   type="email"
                   autoComplete="email"
-                  placeholder="you@clinic.com"
+                  placeholder={t("youClinicCom")}
                   disabled={isPending}
                   className="h-10"
                 />
@@ -107,20 +106,17 @@ export function ForgotPasswordForm() {
           {isPending ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" />
-              Sending…
-            </>
+              {t("sending")}</>
           ) : (
             <>
               <Mail className="h-4 w-4" />
-              Send reset link
-            </>
+              {t("sendResetLink")}</>
           )}
         </Button>
         <Button asChild variant="ghost" className="h-9 w-full gap-2 text-xs">
           <Link href="/login">
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Back to sign in
-          </Link>
+            <ArrowLeft className="h-3.5 w-3.5 rtl:rotate-180" />
+            {t("backToSignIn")}</Link>
         </Button>
       </form>
     </Form>

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { useTranslations } from "next-intl";
 
 function safeNext(value: string | null): string {
   if (!value) return "/dashboard";
@@ -15,6 +16,7 @@ function safeNext(value: string | null): string {
 // (`#access_token=…&refresh_token=…`). PKCE `?code=` and token-hash
 // `?token_hash=` are handled server-side in app/auth/confirm/page.tsx.
 export function ConfirmRunner() {
+  const t = useTranslations("auth");
   const router = useRouter();
   const params = useSearchParams();
   const [error, setError] = useState<string | null>(null);
@@ -34,7 +36,7 @@ export function ConfirmRunner() {
         const refreshToken = hashParams.get("refresh_token");
 
         if (!accessToken || !refreshToken) {
-          throw new Error("Confirmation link is missing or invalid.");
+          throw new Error(t("confirmationLinkMissingOrInvalid"));
         }
 
         const { error: e } = await supabase.auth.setSession({
@@ -47,7 +49,7 @@ export function ConfirmRunner() {
       } catch (e) {
         if (!active) return;
         setError(
-          e instanceof Error ? e.message : "Reset link expired or invalid.",
+          e instanceof Error ? e.message : t("resetLinkExpiredOrInvalid"),
         );
         setTimeout(() => {
           if (active) router.replace("/forgot-password?expired=1");
@@ -59,8 +61,7 @@ export function ConfirmRunner() {
     return () => {
       active = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [params, router, t]);
 
   return (
     <div className="flex min-h-[40vh] flex-col items-center justify-center gap-3 text-center">
@@ -68,15 +69,13 @@ export function ConfirmRunner() {
         <>
           <p className="text-sm font-medium text-destructive">{error}</p>
           <p className="text-xs text-muted-foreground">
-            Redirecting you to request a new link…
-          </p>
+            {t("redirectingYouToRequestANew")}</p>
         </>
       ) : (
         <>
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           <p className="text-sm text-muted-foreground">
-            Confirming your reset link…
-          </p>
+            {t("confirmingYourResetLink")}</p>
         </>
       )}
     </div>

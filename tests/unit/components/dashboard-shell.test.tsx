@@ -14,8 +14,8 @@ vi.mock("@/actions/auth", () => ({ signOut: vi.fn() }));
 vi.mock("@/actions/theme", () => ({ setTheme: vi.fn() }));
 
 const items = [
-  { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
-  { href: "/patients", label: "Patients", icon: "patients" },
+  { href: "/dashboard", labelKey: "tenant.dashboard", icon: "dashboard" },
+  { href: "/patients", labelKey: "tenant.patients", icon: "patients" },
 ] as const;
 
 describe("DashboardShell", () => {

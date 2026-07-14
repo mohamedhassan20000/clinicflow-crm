@@ -13,14 +13,19 @@ import { DoctorPerformanceReport } from "@/components/reports/doctor-performance
 import { ReportPageHeader } from "@/components/reports/report-page-header";
 import { ReportSelectFilter } from "@/components/reports/report-select-filter";
 import { ReportsDateFilter } from "@/components/reports/reports-date-filter";
+import { getTranslations } from "next-intl/server";
 
-export const metadata: Metadata = { title: "Doctor Performance Report" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("protected");
+  return { title: t("metadataDoctorPerformanceReport") };
+}
 
 type PageProps = {
   searchParams: Promise<ReportsSearchParams>;
 };
 
 export default async function DoctorPerformanceReportPage({ searchParams }: PageProps) {
+  const t = await getTranslations("protected");
   const user = await requireRole(["admin", "manager"]);
   const sp = await searchParams;
   const range = resolveReportsRange(sp);
@@ -35,15 +40,15 @@ export default async function DoctorPerformanceReportPage({ searchParams }: Page
   return (
     <div className="space-y-6">
       <ReportPageHeader
-        title="Doctor Performance Report"
-        description="Doctor sessions, outcomes, revenue, and clinic share."
+        title={t("doctorPerformanceReport")}
+        description={t("doctorSessionsOutcomesRevenueAndClinic")}
       />
       <ReportsDateFilter range={range} />
       <ReportSelectFilter
         name="doctor"
-        label="Doctor"
+        label={t("doctor")}
         value={doctorId ?? ALL_FILTER_VALUE}
-        allLabel="All doctors"
+        allLabel={t("allDoctors")}
         options={doctors}
       />
       <DoctorPerformanceReport data={data} range={range} clinic={clinic} />

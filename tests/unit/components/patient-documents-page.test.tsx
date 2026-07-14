@@ -134,6 +134,7 @@ describe("patient documents page gating", () => {
 
     const jsx = await page.default({
       params: Promise.resolve({ id: PATIENT_ID }),
+      searchParams: Promise.resolve({}),
     });
     render(jsx);
 
@@ -148,6 +149,7 @@ describe("patient documents page gating", () => {
 
     const jsx = await page.default({
       params: Promise.resolve({ id: PATIENT_ID }),
+      searchParams: Promise.resolve({}),
     });
     render(jsx);
 
@@ -165,6 +167,7 @@ describe("patient documents page gating", () => {
 
     const jsx = await page.default({
       params: Promise.resolve({ id: PATIENT_ID }),
+      searchParams: Promise.resolve({}),
     });
     render(jsx);
 
@@ -180,6 +183,7 @@ describe("patient documents page gating", () => {
 
     const jsx = await page.default({
       params: Promise.resolve({ id: PATIENT_ID }),
+      searchParams: Promise.resolve({}),
     });
     render(jsx);
 
@@ -194,6 +198,7 @@ describe("patient documents page gating", () => {
 
     const jsx = await page.default({
       params: Promise.resolve({ id: PATIENT_ID }),
+      searchParams: Promise.resolve({}),
     });
     render(jsx);
 
@@ -220,6 +225,7 @@ describe("patient documents page gating", () => {
 
     const jsx = await page.default({
       params: Promise.resolve({ id: PATIENT_ID }),
+      searchParams: Promise.resolve({}),
     });
     render(jsx);
 

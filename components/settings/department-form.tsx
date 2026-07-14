@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/form";
 import { departmentSchema, type DepartmentValues } from "@/lib/validations/settings";
 import type { ActionResult } from "@/actions/settings";
+import { useTranslations } from "next-intl";
 
 const PRESET_COLORS = [
   "#0D9488", "#6366F1", "#F59E0B", "#EF4444", "#10B981",
@@ -36,6 +37,7 @@ export function DepartmentForm({
   submitLabel = "Create department",
   onSuccess,
 }: DepartmentFormProps) {
+  const t = useTranslations("settings");
   const [state, formAction, isPending] = useActionState(action, null);
 
   const form = useForm<DepartmentValues>({
@@ -50,7 +52,7 @@ export function DepartmentForm({
 
   useEffect(() => {
     if (state?.success) {
-      toast.success("Department saved.");
+      toast.success(t("departmentSaved"));
       onSuccess?.();
     }
   }, [state, onSuccess]);
@@ -79,9 +81,9 @@ export function DepartmentForm({
           name="name"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Name</FormLabel>
+              <FormLabel>{t("name")}</FormLabel>
               <FormControl>
-                <Input {...field} disabled={isPending} placeholder="Cardiology" />
+                <Input {...field} disabled={isPending} placeholder={t("cardiology")} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -93,7 +95,7 @@ export function DepartmentForm({
           name="color"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Color</FormLabel>
+              <FormLabel>{t("color")}</FormLabel>
               <div className="space-y-2">
                 {/* Preset palette */}
                 <div className="flex flex-wrap gap-2">
@@ -137,13 +139,13 @@ export function DepartmentForm({
           name="description"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Description (optional)</FormLabel>
+              <FormLabel>{t("descriptionOptional")}</FormLabel>
               <FormControl>
                 <Input
                   {...field}
                   value={field.value ?? ""}
                   disabled={isPending}
-                  placeholder="Brief description…"
+                  placeholder={t("briefDescription")}
                 />
               </FormControl>
               <FormMessage />

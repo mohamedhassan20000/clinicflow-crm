@@ -9,21 +9,28 @@ export type PageSlug =
   | "reports"
   | "settings";
 
+/**
+ * P2C — a page definition is authorization data, and carries no display copy.
+ *
+ * The label lived here until P2C and was the reason the sidebar could not be translated: it was
+ * resolved on the server and serialized into the client as a finished English string. Every consumer
+ * now translates `nav.tenant.<slug>` from the message catalog instead, so the page's name and the
+ * page's permissions are no longer the same object's problem.
+ */
 export type PageDefinition = {
   slug: PageSlug;
   href: string;
-  label: string;
   alwaysVisible?: boolean;
 };
 
 export const PAGE_DEFINITIONS: PageDefinition[] = [
-  { slug: "dashboard", href: "/dashboard", label: "Dashboard", alwaysVisible: true },
-  { slug: "patients", href: "/patients", label: "Patients" },
-  { slug: "appointments", href: "/appointments", label: "Appointments" },
-  { slug: "followups", href: "/followups", label: "Follow-ups" },
-  { slug: "revenue", href: "/revenue", label: "Revenue" },
-  { slug: "reports", href: "/reports", label: "Reports" },
-  { slug: "settings", href: "/settings", label: "Settings" },
+  { slug: "dashboard", href: "/dashboard", alwaysVisible: true },
+  { slug: "patients", href: "/patients" },
+  { slug: "appointments", href: "/appointments" },
+  { slug: "followups", href: "/followups" },
+  { slug: "revenue", href: "/revenue" },
+  { slug: "reports", href: "/reports" },
+  { slug: "settings", href: "/settings" },
 ];
 
 export const ROLE_PAGE_SLUGS: Record<PermissionUserRole, PageSlug[]> = {

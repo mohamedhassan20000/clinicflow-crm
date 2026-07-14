@@ -33,6 +33,7 @@ import {
 import type { ActionResult } from "@/actions/settings";
 import type { Tables } from "@/types/database";
 import { formatDoctorName } from "@/lib/format-doctor";
+import { useTranslations } from "next-intl";
 
 type Department = Pick<Tables<"departments">, "id" | "name">;
 type StaffRole = "admin" | "doctor" | "receptionist" | "manager";
@@ -65,6 +66,7 @@ export function CreateStaffForm({
   onSuccess,
   onCreated,
 }: CreateStaffFormProps) {
+  const t = useTranslations("settings");
   const [state, formAction, isPending] = useActionState(action, null);
   const router = useRouter();
 
@@ -90,7 +92,7 @@ export function CreateStaffForm({
 
   useEffect(() => {
     if (state?.success) {
-      toast.success("Staff member created. They will be prompted to set their password on first login.");
+      toast.success(t("staffMemberCreatedTheyWillBe"));
       if (state.staffId && onCreated) {
         const values = form.getValues();
         const deptName =
@@ -142,9 +144,9 @@ export function CreateStaffForm({
             name="full_name"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Full name</FormLabel>
+                <FormLabel>{t("fullName")}</FormLabel>
                 <FormControl>
-                  <Input {...field} disabled={isPending} placeholder="Dr. Ayşe Kaya" />
+                  <Input {...field} disabled={isPending} placeholder={t("drAyEKaya")} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -155,13 +157,13 @@ export function CreateStaffForm({
             name="email"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Email</FormLabel>
+                <FormLabel>{t("email")}</FormLabel>
                 <FormControl>
                   <Input
                     {...field}
                     type="email"
                     disabled={isPending}
-                    placeholder="ayse@clinic.com"
+                    placeholder={t("ayseClinicCom")}
                   />
                 </FormControl>
                 <FormMessage />
@@ -173,14 +175,14 @@ export function CreateStaffForm({
             name="temporary_password"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Temporary password</FormLabel>
+                <FormLabel>{t("temporaryPassword")}</FormLabel>
                 <FormControl>
                   <Input
                     {...field}
                     type="password"
                     autoComplete="new-password"
                     disabled={isPending}
-                    placeholder="Clinic@123"
+                    placeholder={t("clinic123")}
                   />
                 </FormControl>
                 <FormMessage />
@@ -192,7 +194,7 @@ export function CreateStaffForm({
             name="role"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Role</FormLabel>
+                <FormLabel>{t("role")}</FormLabel>
                 <Select
                   value={field.value}
                   onValueChange={field.onChange}
@@ -204,10 +206,10 @@ export function CreateStaffForm({
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    {canCreateAdmin && <SelectItem value="admin">Admin</SelectItem>}
-                    <SelectItem value="doctor">Doctor</SelectItem>
-                    <SelectItem value="receptionist">Receptionist</SelectItem>
-                    <SelectItem value="manager">Manager</SelectItem>
+                    {canCreateAdmin && <SelectItem value="admin">{t("admin")}</SelectItem>}
+                    <SelectItem value="doctor">{t("doctor")}</SelectItem>
+                    <SelectItem value="receptionist">{t("receptionist")}</SelectItem>
+                    <SelectItem value="manager">{t("manager")}</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormMessage />
@@ -220,7 +222,7 @@ export function CreateStaffForm({
               name="department_id"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Department (optional)</FormLabel>
+                  <FormLabel>{t("departmentOptional")}</FormLabel>
                   <Select
                     value={field.value ?? "__none__"}
                     onValueChange={(v) => field.onChange(v === "__none__" ? null : v)}
@@ -228,11 +230,11 @@ export function CreateStaffForm({
                   >
                     <FormControl>
                       <SelectTrigger>
-                        <SelectValue placeholder="None" />
+                        <SelectValue placeholder={t("none")} />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="__none__">None</SelectItem>
+                      <SelectItem value="__none__">{t("none")}</SelectItem>
                       {departments.map((d) => (
                         <SelectItem key={d.id} value={d.id}>
                           {d.name}
@@ -250,7 +252,7 @@ export function CreateStaffForm({
             name="phone"
             render={({ field }) => (
               <FormItem className="sm:col-span-2">
-                <FormLabel>Phone (optional)</FormLabel>
+                <FormLabel>{t("phoneOptional")}</FormLabel>
                 <FormControl>
                   <InternationalPhoneInput
                     {...field}
@@ -272,7 +274,7 @@ export function CreateStaffForm({
             ) : (
               <UserPlus className="h-4 w-4" />
             )}
-            Create staff member
+            {t("createStaffMember")}
           </Button>
         </div>
       </form>
@@ -295,6 +297,7 @@ export function EditStaffForm({
   defaultValues,
   onSuccess,
 }: EditStaffFormProps) {
+  const t = useTranslations("settings");
   const [state, formAction, isPending] = useActionState(action, null);
   const router = useRouter();
 
@@ -313,7 +316,7 @@ export function EditStaffForm({
 
   useEffect(() => {
     if (state?.success) {
-      toast.success("Staff member updated.");
+      toast.success(t("staffMemberUpdated"));
       router.refresh();
       onSuccess?.();
     }
@@ -351,7 +354,7 @@ export function EditStaffForm({
             name="full_name"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Full name</FormLabel>
+                <FormLabel>{t("fullName")}</FormLabel>
                 <FormControl>
                   <Input {...field} disabled={isPending} />
                 </FormControl>
@@ -364,7 +367,7 @@ export function EditStaffForm({
             name="role"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Role</FormLabel>
+                <FormLabel>{t("role")}</FormLabel>
                 <Select
                   value={field.value}
                   onValueChange={field.onChange}
@@ -376,10 +379,10 @@ export function EditStaffForm({
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="admin">Admin</SelectItem>
-                    <SelectItem value="doctor">Doctor</SelectItem>
-                    <SelectItem value="receptionist">Receptionist</SelectItem>
-                    <SelectItem value="manager">Manager</SelectItem>
+                    <SelectItem value="admin">{t("admin")}</SelectItem>
+                    <SelectItem value="doctor">{t("doctor")}</SelectItem>
+                    <SelectItem value="receptionist">{t("receptionist")}</SelectItem>
+                    <SelectItem value="manager">{t("manager")}</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormMessage />
@@ -392,7 +395,7 @@ export function EditStaffForm({
               name="department_id"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Department</FormLabel>
+                  <FormLabel>{t("department")}</FormLabel>
                   <Select
                     value={field.value ?? "__none__"}
                     onValueChange={(v) => field.onChange(v === "__none__" ? null : v)}
@@ -400,11 +403,11 @@ export function EditStaffForm({
                   >
                     <FormControl>
                       <SelectTrigger>
-                        <SelectValue placeholder="None" />
+                        <SelectValue placeholder={t("none")} />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="__none__">None</SelectItem>
+                      <SelectItem value="__none__">{t("none")}</SelectItem>
                       {departments.map((d) => (
                         <SelectItem key={d.id} value={d.id}>
                           {d.name}
@@ -422,7 +425,7 @@ export function EditStaffForm({
             name="phone"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Phone</FormLabel>
+                <FormLabel>{t("phone")}</FormLabel>
                 <FormControl>
                   <InternationalPhoneInput
                     {...field}
@@ -440,7 +443,7 @@ export function EditStaffForm({
             name="is_active"
             render={({ field }) => (
               <FormItem className="sm:col-span-2">
-                <FormLabel>Status</FormLabel>
+                <FormLabel>{t("status")}</FormLabel>
                 <Select
                   value={String(field.value)}
                   onValueChange={(v) => field.onChange(v === "true")}
@@ -452,8 +455,8 @@ export function EditStaffForm({
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="true">Active</SelectItem>
-                    <SelectItem value="false">Deactivated</SelectItem>
+                    <SelectItem value="true">{t("active")}</SelectItem>
+                    <SelectItem value="false">{t("deactivated")}</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormMessage />
@@ -469,7 +472,7 @@ export function EditStaffForm({
             ) : (
               <Save className="h-4 w-4" />
             )}
-            Save changes
+            {t("saveChanges")}
           </Button>
         </div>
       </form>

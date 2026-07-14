@@ -26,6 +26,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { addPatientDeposit } from "@/actions/patients";
+import { useTranslations } from "next-intl";
 
 type PaymentMethod =
   | "cash"
@@ -36,14 +37,14 @@ type PaymentMethod =
 
 const METHODS: {
   value: PaymentMethod;
-  label: string;
+  labelKey: string;
   icon: React.ComponentType<{ className?: string }>;
 }[] = [
-  { value: "cash", label: "Cash", icon: Banknote },
-  { value: "credit_card", label: "Credit card", icon: CreditCard },
-  { value: "paypal", label: "PayPal", icon: Wallet },
-  { value: "bank_transfer", label: "Bank transfer", icon: Landmark },
-  { value: "insurance", label: "Insurance", icon: ShieldCheck },
+  { value: "cash", labelKey: "paymentCash", icon: Banknote },
+  { value: "credit_card", labelKey: "paymentCreditCard", icon: CreditCard },
+  { value: "paypal", labelKey: "paymentPaypal", icon: Wallet },
+  { value: "bank_transfer", labelKey: "paymentBankTransfer", icon: Landmark },
+  { value: "insurance", labelKey: "paymentInsurance", icon: ShieldCheck },
 ];
 
 interface Props {
@@ -52,6 +53,7 @@ interface Props {
 }
 
 export function AddDepositDialog({ patientId, patientName }: Props) {
+  const t = useTranslations("patients");
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState<string>("");
   const [method, setMethod] = useState<PaymentMethod>("cash");
@@ -68,7 +70,7 @@ export function AddDepositDialog({ patientId, patientName }: Props) {
     if (state.error) {
       toast.error(state.error);
     } else if (!state.fieldErrors) {
-      toast.success("Deposit added to patient account.");
+      toast.success(t("depositAddedToPatientAccount"));
       router.refresh();
       queueMicrotask(() => {
         setOpen(false);
@@ -91,8 +93,7 @@ export function AddDepositDialog({ patientId, patientName }: Props) {
         onClick={() => setOpen(true)}
       >
         <PiggyBank className="h-3.5 w-3.5" />
-        Add deposit
-      </Button>
+        {t("addDeposit2")}</Button>
 
       <Dialog
         open={open}
@@ -103,10 +104,9 @@ export function AddDepositDialog({ patientId, patientName }: Props) {
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Add deposit</DialogTitle>
+            <DialogTitle>{t("addDeposit")}</DialogTitle>
             <DialogDescription>
-              Top up {patientName}&apos;s account. The balance will be available
-              to apply against future invoices.
+              {t("topUpPatientAccount", { patient: patientName })}
             </DialogDescription>
           </DialogHeader>
 
@@ -116,8 +116,7 @@ export function AddDepositDialog({ patientId, patientName }: Props) {
 
             <div className="space-y-1.5">
               <Label htmlFor="deposit-amount" className="text-xs">
-                Amount
-              </Label>
+                {t("amount")}</Label>
               <Input
                 id="deposit-amount"
                 name="amount"
@@ -134,9 +133,9 @@ export function AddDepositDialog({ patientId, patientName }: Props) {
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs">Payment method</Label>
+              <Label className="text-xs">{t("paymentMethod")}</Label>
               <div className="grid grid-cols-5 gap-1.5">
-                {METHODS.map(({ value, label, icon: Icon }) => {
+                {METHODS.map(({ value, labelKey, icon: Icon }) => {
                   const active = method === value;
                   return (
                     <button
@@ -154,7 +153,7 @@ export function AddDepositDialog({ patientId, patientName }: Props) {
                       <Icon
                         className={cn("h-4 w-4", active ? "text-primary" : "")}
                       />
-                      {label}
+                      {t(labelKey)}
                     </button>
                   );
                 })}
@@ -163,13 +162,12 @@ export function AddDepositDialog({ patientId, patientName }: Props) {
 
             <div className="space-y-1.5">
               <Label htmlFor="deposit-note" className="text-xs">
-                Note (optional)
-              </Label>
+                {t("noteOptional")}</Label>
               <Textarea
                 id="deposit-note"
                 name="note"
                 rows={2}
-                placeholder="Receipt number, context, etc."
+                placeholder={t("receiptNumberContextEtc")}
                 value={note}
                 disabled={isPending}
                 onChange={(e) => setNote(e.target.value)}
@@ -184,16 +182,14 @@ export function AddDepositDialog({ patientId, patientName }: Props) {
                 onClick={() => setOpen(false)}
                 disabled={isPending}
               >
-                Cancel
-              </Button>
+                {t("cancel")}</Button>
               <Button
                 type="submit"
                 disabled={isPending || invalid}
                 className="gap-2"
               >
                 {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-                Add deposit
-              </Button>
+                {t("addDeposit2")}</Button>
             </DialogFooter>
           </form>
         </DialogContent>

@@ -68,8 +68,12 @@ describe("Post-Pre-P2 quick UI polish", () => {
     const backToTop = source("components/marketing/back-to-top-button.tsx");
     const styles = source("app/globals.css");
 
-    expect(marketingPage).toContain("<BackToTopButton />");
-    expect(backToTop).toContain('aria-label="Back to top"');
+    // P2C: the control is still landing-only and still the same control — but its accessible name
+    // is now a translated string, so the assertion is that the label is *passed in* rather than
+    // hardcoded. A screen-reader user on Arabic must not hear "Back to top" in English.
+    expect(marketingPage).toContain("<BackToTopButton label={copy.backToTop} />");
+    expect(backToTop).toContain("aria-label={label}");
+    expect(backToTop).not.toContain('aria-label="Back to top"');
     expect(backToTop).toContain('behavior: prefersReducedMotion ? "auto" : "smooth"');
     expect(backToTop).toContain("z-30");
     expect(styles).toContain(".marketing-back-to-top { transition: none; }");

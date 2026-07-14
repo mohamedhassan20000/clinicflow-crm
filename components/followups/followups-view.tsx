@@ -24,15 +24,16 @@ import { RecordFollowupDialog } from "@/components/followups/record-dialog";
 import { PatientScopeFilterBar } from "@/components/shared/patient-scope-filter-bar";
 import { PrintHeader } from "@/components/shared/print-header";
 import { formatDoctorName } from "@/lib/format-doctor";
-import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
+import { useTranslations } from "next-intl";
+import { useClinicSettings } from "@/contexts/clinic-settings-context";
 
 type Scope = "day" | "yesterday" | "week" | "month";
 
-const SCOPE_OPTIONS: { value: Scope; label: string }[] = [
-  { value: "day", label: "Today" },
-  { value: "yesterday", label: "Yesterday" },
-  { value: "week", label: "Last week" },
-  { value: "month", label: "Last month" },
+const SCOPE_OPTIONS: { value: Scope; labelKey: string }[] = [
+  { value: "day", labelKey: "scopeToday" },
+  { value: "yesterday", labelKey: "scopeYesterday" },
+  { value: "week", labelKey: "scopeLastWeek" },
+  { value: "month", labelKey: "scopeLastMonth" },
 ];
 
 const UNASSIGNED_COLOR = "#94a3b8";
@@ -122,42 +123,23 @@ interface Props {
 
 const OUTCOME_META = {
   all_fine: {
-    label: "All fine",
+    labelKey: "outcomeAllFine",
     className:
       "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
     icon: CheckCircle2,
   },
   has_problem: {
-    label: "Has a problem",
+    labelKey: "outcomeHasProblem",
     className:
       "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400",
     icon: AlertCircle,
   },
   no_response: {
-    label: "No response",
+    labelKey: "outcomeNoResponse",
     className: "border-border/60 bg-muted/40 text-muted-foreground",
     icon: PhoneOff,
   },
 } as const;
-
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-GB", {
-    timeZone: DEFAULT_TIME_ZONE,
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-}
-function fmtDateTime(iso: string) {
-  return new Date(iso).toLocaleString("en-GB", {
-    timeZone: DEFAULT_TIME_ZONE,
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-}
 
 export function FollowupsView({
   pending,
@@ -182,6 +164,10 @@ export function FollowupsView({
   clinicLogoUrl,
   generatedAt,
 }: Props) {
+  const t = useTranslations("followups");
+  const { formatDate, formatDateTime } = useClinicSettings();
+  const fmtDate = (value: string) => formatDate(value, { day: "2-digit", month: "short", year: "numeric" });
+  const fmtDateTime = (value: string) => formatDateTime(value, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
   const router = useRouter();
   const params = useSearchParams();
   const [, startTransition] = useTransition();
@@ -273,8 +259,8 @@ export function FollowupsView({
           clinicAddress={clinicAddress}
           clinicPhone={clinicPhone}
           logoUrl={clinicLogoUrl}
-          documentName="Patient Follow-ups"
-          generatedAt={generatedAt ?? new Date().toLocaleString("en-GB", { dateStyle: "long", timeStyle: "short" })}
+          documentName={t("patientFollowUps")}
+          generatedAt={generatedAt ?? formatDateTime(new Date(), { dateStyle: "long", timeStyle: "short" })}
         />
       )}
 
@@ -284,32 +270,28 @@ export function FollowupsView({
             href="/dashboard"
             className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
-            <ChevronLeft className="h-4 w-4" />
-            Dashboard
-          </Link>
+            <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
+            {t("dashboard")}</Link>
           <h1 className="text-2xl font-semibold tracking-tight">
-            Patient follow-ups
-          </h1>
+            {t("patientFollowUps")}</h1>
         </div>
       </div>
 
       {/* Print-only document subtitle */}
       <div className="hidden print:block print:mb-4">
-        <h1 className="text-xl font-semibold">Patient follow-ups</h1>
+        <h1 className="text-xl font-semibold">{t("patientFollowUps")}</h1>
         <p className="text-xs text-muted-foreground">
-          {SCOPE_OPTIONS.find((o) => o.value === scope)?.label ?? scope} ·{" "}
+          {t(SCOPE_OPTIONS.find((o) => o.value === scope)?.labelKey ?? t("scopetoday"))} ·{" "}
           {periodLabel}
-          {activeDept && ` · Department: ${
-            departments.find((d) => d.id === activeDept)?.name ?? "—"
-          }`}
-          {activeQuery && ` · Patient: ${activeQuery}`}
+          {activeDept && t("departmentFilter", { department: departments.find((d) => d.id === activeDept)?.name ?? "—" })}
+          {activeQuery && t("patientFilter", { patient: activeQuery })}
         </p>
       </div>
 
       {/* Period toggle — independent from the search/filter row below */}
       <div className="flex flex-wrap items-center gap-3 print:hidden">
         <div className="inline-flex flex-wrap items-center gap-0.5 rounded-lg border border-border/60 bg-muted/40 p-0.5">
-          {SCOPE_OPTIONS.map(({ value, label }) => {
+          {SCOPE_OPTIONS.map(({ value, labelKey }) => {
             const active = scope === value;
             return (
               <button
@@ -324,7 +306,7 @@ export function FollowupsView({
                 )}
               >
                 <CalendarDays className="h-3.5 w-3.5" />
-                {label}
+                {t(labelKey)}
               </button>
             );
           })}
@@ -343,8 +325,7 @@ export function FollowupsView({
             onClick={() => update({ date: null })}
           >
             <X className="h-3.5 w-3.5" />
-            Clear date
-          </Button>
+            {t("clearDate")}</Button>
         )}
         <span className="text-xs text-muted-foreground">{periodLabel}</span>
       </div>
@@ -375,19 +356,19 @@ export function FollowupsView({
 
       {/* Summary strip */}
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border/50 bg-border/40 sm:grid-cols-4">
-        <SummaryCell label="Awaiting follow-up" value={summary.pendingCount} />
+        <SummaryCell label={t("awaitingFollowUp")} value={summary.pendingCount} />
         <SummaryCell
-          label="All fine"
+          label={t("allFine")}
           value={summary.allFineCount}
           accent="text-emerald-600 dark:text-emerald-400"
         />
         <SummaryCell
-          label="Reported a problem"
+          label={t("reportedAProblem")}
           value={summary.hasProblemCount}
           accent="text-amber-600 dark:text-amber-400"
         />
         <SummaryCell
-          label="No response"
+          label={t("noResponse")}
           value={summary.noResponseCount}
           accent="text-muted-foreground"
         />
@@ -397,22 +378,20 @@ export function FollowupsView({
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-            Awaiting follow-up
-          </h2>
+            {t("awaitingFollowUp")}</h2>
           <span className="text-xs text-muted-foreground">
-            {summary.pendingCount} patient{summary.pendingCount !== 1 ? "s" : ""}
+            {t("patientCount", { count: summary.pendingCount })}
           </span>
         </div>
 
         {summary.pendingCount === 0 ? (
           <div className="rounded-xl border border-border/50 bg-card px-4 py-10 text-center text-sm text-muted-foreground">
-            All caught up — no completed sessions waiting for a follow-up call.
-          </div>
+            {t("allCaughtUpNoCompletedSessions")}</div>
         ) : (
           <div className="space-y-5">
             {pendingGroups.map((g) => {
               const color = g.dept?.color ?? UNASSIGNED_COLOR;
-              const name = g.dept?.name ?? "Unassigned";
+              const name = g.dept?.name ?? t("unassigned");
               return (
                 <section
                   data-print-table-section
@@ -443,7 +422,7 @@ export function FollowupsView({
                       </h3>
                     </div>
                     <span className="text-[11px] font-medium" style={{ color }}>
-                      {g.rows.length} patient{g.rows.length !== 1 ? "s" : ""}
+                      {t("patientCount", { count: g.rows.length })}
                     </span>
                   </header>
                   <div className="overflow-x-auto">
@@ -459,13 +438,13 @@ export function FollowupsView({
                       </colgroup>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Session</TableHead>
-                          <TableHead>Patient</TableHead>
-                          <TableHead>File #</TableHead>
-                          <TableHead>National ID</TableHead>
-                          <TableHead>Phone</TableHead>
-                          <TableHead>Doctor</TableHead>
-                          <TableHead className="text-end print:hidden">Action</TableHead>
+                          <TableHead>{t("session")}</TableHead>
+                          <TableHead>{t("patient")}</TableHead>
+                          <TableHead>{t("file")}</TableHead>
+                          <TableHead>{t("nationalId")}</TableHead>
+                          <TableHead>{t("phone")}</TableHead>
+                          <TableHead>{t("doctor")}</TableHead>
+                          <TableHead className="text-end print:hidden">{t("action")}</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -520,8 +499,7 @@ export function FollowupsView({
                                   className="h-7 px-2 text-[11px]"
                                   onClick={() => setActiveRow(a)}
                                 >
-                                  Record follow-up
-                                </Button>
+                                  {t("recordFollowUp")}</Button>
                               )}
                             </TableCell>
                           </TableRow>
@@ -543,11 +521,11 @@ export function FollowupsView({
                     return (
                       <div className="flex items-center justify-between border-t border-border/40 bg-card px-4 py-2.5 text-xs text-muted-foreground print:hidden">
                         <span>
-                          Showing{" "}
+                          {t("showing")}{" "}
                           <span className="font-medium text-foreground tabular-nums">
                             {start}–{end}
                           </span>{" "}
-                          of{" "}
+                          {t("of")}{" "}
                           <span className="font-medium text-foreground tabular-nums">
                             {g.rows.length}
                           </span>
@@ -559,16 +537,16 @@ export function FollowupsView({
                             className="h-7 w-7 p-0"
                             disabled={gp <= 1}
                             onClick={() => setPendingPage(groupKey, gp - 1)}
-                            aria-label="Previous page"
+                            aria-label={t("previousPage")}
                           >
-                            <ChevronLeft className="h-3.5 w-3.5" />
+                            <ChevronLeft className="h-3.5 w-3.5 rtl:rotate-180" />
                           </Button>
                           <span className="tabular-nums">
-                            Page{" "}
+                            {t("page")}{" "}
                             <span className="font-medium text-foreground">
                               {gp}
                             </span>{" "}
-                            of{" "}
+                            {t("of")}{" "}
                             <span className="font-medium text-foreground">
                               {totalPages}
                             </span>
@@ -579,9 +557,9 @@ export function FollowupsView({
                             className="h-7 w-7 p-0"
                             disabled={gp >= totalPages}
                             onClick={() => setPendingPage(groupKey, gp + 1)}
-                            aria-label="Next page"
+                            aria-label={t("nextPage")}
                           >
-                            <ChevronRight className="h-3.5 w-3.5" />
+                            <ChevronRight className="h-3.5 w-3.5 rtl:rotate-180" />
                           </Button>
                         </div>
                       </div>
@@ -592,10 +570,10 @@ export function FollowupsView({
             })}
             {summary.pendingCount > pending.length && (
               <div className="rounded-lg border border-border/50 bg-muted/20 px-4 py-2 text-xs text-muted-foreground print:hidden">
-                Showing the first {pendingPreviewLimit} awaiting follow-ups.
-                Narrow the filters to work through the remaining{" "}
-                {summary.pendingCount - pending.length} patient
-                {summary.pendingCount - pending.length !== 1 ? "s" : ""}.
+                {t("awaitingPreviewNotice", {
+                  limit: pendingPreviewLimit,
+                  remaining: summary.pendingCount - pending.length,
+                })}
               </div>
             )}
           </div>
@@ -606,30 +584,29 @@ export function FollowupsView({
       <section className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-            Completed follow-ups
-          </h2>
+            {t("completedFollowUps")}</h2>
           <span className="text-xs text-muted-foreground">
-            {summary.completedCount} record{summary.completedCount !== 1 ? "s" : ""}
+            {t("recordCount", { count: summary.completedCount })}
           </span>
         </div>
 
         <div className="inline-flex flex-wrap items-center gap-0.5 rounded-lg border border-border/60 bg-muted/40 p-0.5 print:hidden">
           {(
             [
-              { value: null, label: "All", count: summary.completedCount },
+              { value: null, label: t("all"), count: summary.completedCount },
               {
                 value: "has_problem" as const,
-                label: "Reported a problem",
+                label: t("reportedAProblem2"),
                 count: summary.hasProblemCount,
               },
               {
                 value: "all_fine" as const,
-                label: "All fine",
+                label: t("allFine2"),
                 count: summary.allFineCount,
               },
               {
                 value: "no_response" as const,
-                label: "No response",
+                label: t("noResponse2"),
                 count: summary.noResponseCount,
               },
             ] as const
@@ -665,13 +642,12 @@ export function FollowupsView({
 
         {summary.completedCount === 0 ? (
           <div className="rounded-xl border border-border/50 bg-card px-4 py-10 text-center text-sm text-muted-foreground">
-            No follow-ups recorded in this period yet.
-          </div>
+            {t("noFollowUpsRecordedInThis")}</div>
         ) : (
           <div className="space-y-5">
             {doneGroups.map((g) => {
               const color = g.dept?.color ?? UNASSIGNED_COLOR;
-              const name = g.dept?.name ?? "Unassigned";
+              const name = g.dept?.name ?? t("unassigned");
               const groupKey = `done-${g.dept?.id ?? UNASSIGNED_KEY}`;
               const totalPages = Math.max(
                 1,
@@ -708,7 +684,7 @@ export function FollowupsView({
                       </h3>
                     </div>
                     <span className="text-[11px] font-medium" style={{ color }}>
-                      {g.rows.length} record{g.rows.length !== 1 ? "s" : ""}
+                      {t("recordCount", { count: g.rows.length })}
                     </span>
                   </header>
                   <div className="overflow-x-auto">
@@ -724,13 +700,13 @@ export function FollowupsView({
                       </colgroup>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Status</TableHead>
-                          <TableHead>Recorded</TableHead>
-                          <TableHead>Patient</TableHead>
-                          <TableHead>Doctor</TableHead>
-                          <TableHead>Outcome</TableHead>
-                          <TableHead>Notes</TableHead>
-                          <TableHead className="text-end print:hidden">Action</TableHead>
+                          <TableHead>{t("status")}</TableHead>
+                          <TableHead>{t("recorded")}</TableHead>
+                          <TableHead>{t("patient")}</TableHead>
+                          <TableHead>{t("doctor")}</TableHead>
+                          <TableHead>{t("outcome")}</TableHead>
+                          <TableHead>{t("notes")}</TableHead>
+                          <TableHead className="text-end print:hidden">{t("action")}</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -748,8 +724,7 @@ export function FollowupsView({
                                 <div className="flex flex-wrap items-center gap-1.5">
                                   <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
                                     <CheckCircle2 className="h-3 w-3" />
-                                    Completed
-                                  </span>
+                                    {t("completed")}</span>
                                   <span
                                     className={cn(
                                       "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-medium",
@@ -758,7 +733,7 @@ export function FollowupsView({
                                         : "border-border/60 bg-muted/40 text-muted-foreground",
                                     )}
                                   >
-                                    {d.notes ? "Note taken" : "No note"}
+                                    {d.notes ? t("notetaken") : t("nonote")}
                                   </span>
                                 </div>
                               </TableCell>
@@ -795,7 +770,7 @@ export function FollowupsView({
                                   )}
                                 >
                                   <Icon className="h-3 w-3" />
-                                  {meta.label}
+                                  {t(meta.labelKey)}
                                 </span>
                               </TableCell>
                               <TableCell className="text-xs">
@@ -805,12 +780,11 @@ export function FollowupsView({
                                   </span>
                                 ) : (
                                   <span className="italic text-muted-foreground/70">
-                                    No additional notes
-                                  </span>
+                                    {t("noAdditionalNotes")}</span>
                                 )}
                                 {d.recorded_by?.full_name && (
                                   <p className="mt-0.5 text-[10px] text-muted-foreground">
-                                    by {d.recorded_by.full_name}
+                                    {t("byName", { name: d.recorded_by.full_name })}
                                   </p>
                                 )}
                               </TableCell>
@@ -824,8 +798,7 @@ export function FollowupsView({
                                     onClick={() => setEditRow(d)}
                                   >
                                     <Pencil className="h-3 w-3" />
-                                    Edit
-                                  </Button>
+                                    {t("edit")}</Button>
                                 )}
                               </TableCell>
                             </TableRow>
@@ -837,12 +810,12 @@ export function FollowupsView({
                   {totalPages > 1 && (
                     <div className="flex items-center justify-between border-t border-border/40 bg-card px-4 py-2.5 text-xs text-muted-foreground print:hidden">
                       <span>
-                        Showing{" "}
+                        {t("showing")}{" "}
                         <span className="font-medium text-foreground tabular-nums">
                           {(gp - 1) * PAGE_SIZE + 1}–
                           {Math.min(gp * PAGE_SIZE, g.rows.length)}
                         </span>{" "}
-                        of{" "}
+                        {t("of")}{" "}
                         <span className="font-medium text-foreground tabular-nums">
                           {g.rows.length}
                         </span>
@@ -854,16 +827,16 @@ export function FollowupsView({
                           className="h-7 w-7 p-0"
                           disabled={gp <= 1}
                           onClick={() => setDonePage(groupKey, gp - 1)}
-                          aria-label="Previous page"
+                          aria-label={t("previousPage")}
                         >
-                          <ChevronLeft className="h-3.5 w-3.5" />
+                          <ChevronLeft className="h-3.5 w-3.5 rtl:rotate-180" />
                         </Button>
                         <span className="tabular-nums">
-                          Page{" "}
+                          {t("page")}{" "}
                           <span className="font-medium text-foreground">
                             {gp}
                           </span>{" "}
-                          of{" "}
+                          {t("of")}{" "}
                           <span className="font-medium text-foreground">
                             {totalPages}
                           </span>
@@ -874,9 +847,9 @@ export function FollowupsView({
                           className="h-7 w-7 p-0"
                           disabled={gp >= totalPages}
                           onClick={() => setDonePage(groupKey, gp + 1)}
-                          aria-label="Next page"
+                          aria-label={t("nextPage")}
                         >
-                          <ChevronRight className="h-3.5 w-3.5" />
+                          <ChevronRight className="h-3.5 w-3.5 rtl:rotate-180" />
                         </Button>
                       </div>
                     </div>
@@ -925,6 +898,7 @@ export function FollowupsView({
 }
 
 function FollowupsPrintButton() {
+  const t = useTranslations("followups");
   return (
     <Button
       variant="outline"
@@ -933,8 +907,7 @@ function FollowupsPrintButton() {
       onClick={() => window.print()}
     >
       <Printer className="h-3.5 w-3.5" />
-      Print
-    </Button>
+      {t("print")}</Button>
   );
 }
 
@@ -970,6 +943,7 @@ function CompletedPager({
   total: number;
   onPage: (page: number) => void;
 }) {
+  const t = useTranslations("followups");
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   if (totalPages <= 1) return null;
 
@@ -980,14 +954,13 @@ function CompletedPager({
   return (
     <div className="flex items-center justify-between rounded-xl border border-border/50 bg-card px-4 py-2.5 text-xs text-muted-foreground print:hidden">
       <span>
-        Showing{" "}
+        {t("showing")}{" "}
         <span className="font-medium text-foreground tabular-nums">
           {start}–{end}
         </span>{" "}
-        of{" "}
+        {t("of")}{" "}
         <span className="font-medium text-foreground tabular-nums">{total}</span>{" "}
-        completed follow-ups
-      </span>
+        {t("completedFollowUps2")}</span>
       <div className="flex items-center gap-2">
         <Button
           variant="outline"
@@ -995,13 +968,13 @@ function CompletedPager({
           className="h-7 w-7 p-0"
           disabled={currentPage <= 1}
           onClick={() => onPage(currentPage - 1)}
-          aria-label="Previous completed follow-ups page"
+          aria-label={t("previousCompletedFollowUpsPage")}
         >
-          <ChevronLeft className="h-3.5 w-3.5" />
+          <ChevronLeft className="h-3.5 w-3.5 rtl:rotate-180" />
         </Button>
         <span className="tabular-nums">
-          Page{" "}
-          <span className="font-medium text-foreground">{currentPage}</span> of{" "}
+          {t("page")}{" "}
+          <span className="font-medium text-foreground">{currentPage}</span> {t("of")}{" "}
           <span className="font-medium text-foreground">{totalPages}</span>
         </span>
         <Button
@@ -1010,9 +983,9 @@ function CompletedPager({
           className="h-7 w-7 p-0"
           disabled={currentPage >= totalPages}
           onClick={() => onPage(currentPage + 1)}
-          aria-label="Next completed follow-ups page"
+          aria-label={t("nextCompletedFollowUpsPage")}
         >
-          <ChevronRight className="h-3.5 w-3.5" />
+          <ChevronRight className="h-3.5 w-3.5 rtl:rotate-180" />
         </Button>
       </div>
     </div>
@@ -1037,6 +1010,7 @@ function DayPicker({
   range: { start: string; end: string };
   onPickDay: (isoDay: string) => void;
 }) {
+  const { formatDate, formatNumber } = useClinicSettings();
   const start = new Date(range.start);
   const end = new Date(range.end);
   const days: Date[] = [];
@@ -1058,13 +1032,13 @@ function DayPicker({
             className="flex flex-col items-center gap-0.5 rounded-lg border border-border/60 bg-card px-2 py-2.5 text-xs transition hover:border-primary/40 hover:bg-primary/5"
           >
             <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-              {d.toLocaleDateString("en-GB", { weekday: "short" })}
+              {formatDate(d, { weekday: "short" })}
             </span>
             <span className="text-base font-semibold tabular-nums">
-              {d.getDate()}
+              {formatNumber(d.getDate())}
             </span>
             <span className="text-[10px] text-muted-foreground">
-              {d.toLocaleDateString("en-GB", { month: "short" })}
+              {formatDate(d, { month: "short" })}
             </span>
           </button>
         ))}
@@ -1079,7 +1053,9 @@ function DayPicker({
   if (!first) return null;
   const firstDow = first.getDay(); // 0 = Sun, 1 = Mon, ..., 6 = Sat
   const monFirstOffset = (firstDow + 6) % 7; // 0 if Mon, 6 if Sun
-  const weekdayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const weekdayLabels = Array.from({ length: 7 }, (_, index) =>
+    formatDate(new Date(Date.UTC(2024, 0, index + 1)), { weekday: "short", timeZone: "UTC" }),
+  );
 
   return (
     <div className="space-y-1.5 print:hidden">
@@ -1100,10 +1076,10 @@ function DayPicker({
             className="flex aspect-square flex-col items-center justify-center gap-0.5 rounded-md border border-border/50 bg-card text-sm font-medium tabular-nums transition hover:border-primary/40 hover:bg-primary/5"
           >
             <span className="text-base font-semibold leading-none">
-              {d.getDate()}
+              {formatNumber(d.getDate())}
             </span>
             <span className="text-[10px] font-normal uppercase tracking-wider text-muted-foreground">
-              {d.toLocaleDateString("en-GB", { month: "short" })}
+              {formatDate(d, { month: "short" })}
             </span>
           </button>
         ))}

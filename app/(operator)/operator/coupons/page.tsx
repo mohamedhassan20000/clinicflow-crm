@@ -5,8 +5,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { TableEmptyState } from "@/components/shared/data-table";
 import { listOperatorClinics } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { getTranslations } from "next-intl/server";
 
 export default async function OperatorCouponsPage() {
+  const t = await getTranslations("operator");
   const supabase = await createClient();
   const [coupons, clinics, invitations] = await Promise.all([
     supabase
@@ -27,32 +29,32 @@ export default async function OperatorCouponsPage() {
   return (
     <>
       <header>
-        <h1 className="text-3xl font-bold tracking-tight">Coupons</h1>
-        <p className="mt-1 text-muted-foreground">Lifetime free, X months free, and percentage promotions (§3.3).</p>
+        <h1 className="text-3xl font-bold tracking-tight">{t("coupons")}</h1>
+        <p className="mt-1 text-muted-foreground">{t("lifetimeFreeXMonthsFreeAnd")}</p>
       </header>
 
       <section className="rounded-xl border bg-card p-5">
-        <h2 className="font-semibold">Create coupon</h2>
-        <OperatorActionForm action={createCoupon} submitLabel="Create coupon">
+        <h2 className="font-semibold">{t("createCoupon")}</h2>
+        <OperatorActionForm action={createCoupon} submitLabel={t("createCoupon")}>
           <div className="grid gap-3 sm:grid-cols-3">
-            <input name="code" placeholder="CODE-2026" required className="rounded-md border bg-background px-2 py-1 text-sm uppercase" />
+            <input name="code" placeholder={t("code2026")} required className="rounded-md border bg-background px-2 py-1 text-sm uppercase" />
             <select name="kind" className="rounded-md border bg-background px-2 py-1 text-sm" defaultValue="months_free">
-              <option value="lifetime_free">lifetime free</option>
-              <option value="months_free">months free</option>
-              <option value="percent_discount">percent discount</option>
+              <option value="lifetime_free">{t("lifetimeFree")}</option>
+              <option value="months_free">{t("monthsFree")}</option>
+              <option value="percent_discount">{t("percentDiscount")}</option>
             </select>
-            <input name="months" type="number" min={1} max={120} placeholder="Months (months_free)" className="rounded-md border bg-background px-2 py-1 text-sm" />
-            <input name="percent" type="number" min={1} max={100} placeholder="Percent (discount)" className="rounded-md border bg-background px-2 py-1 text-sm" />
-            <input name="expiresAt" type="date" title="Expiry date (inclusive — redeemable through the end of this day, UTC)" className="rounded-md border bg-background px-2 py-1 text-sm" />
-            <input name="maxRedemptions" type="number" min={1} placeholder="Max redemptions" className="rounded-md border bg-background px-2 py-1 text-sm" />
+            <input name="months" type="number" min={1} max={120} placeholder={t("monthsMonthsFree")} className="rounded-md border bg-background px-2 py-1 text-sm" />
+            <input name="percent" type="number" min={1} max={100} placeholder={t("percentDiscount2")} className="rounded-md border bg-background px-2 py-1 text-sm" />
+            <input name="expiresAt" type="date" title={t("expiryDateInclusiveRedeemableThroughThe")} className="rounded-md border bg-background px-2 py-1 text-sm" />
+            <input name="maxRedemptions" type="number" min={1} placeholder={t("maxRedemptions")} className="rounded-md border bg-background px-2 py-1 text-sm" />
             <select name="clinicId" className="rounded-md border bg-background px-2 py-1 text-sm" defaultValue="">
-              <option value="">No clinic assignment</option>
+              <option value="">{t("noClinicAssignment")}</option>
               {(clinics.data ?? []).map((clinic) => (
                 <option key={clinic.id} value={clinic.id}>{clinic.name}</option>
               ))}
             </select>
             <select name="invitationId" className="rounded-md border bg-background px-2 py-1 text-sm" defaultValue="">
-              <option value="">No invitation assignment</option>
+              <option value="">{t("noInvitationAssignment")}</option>
               {(invitations.data ?? []).map((invitation) => (
                 <option key={invitation.id} value={invitation.id}>
                   {invitation.clinic_name} ({invitation.email})
@@ -61,8 +63,7 @@ export default async function OperatorCouponsPage() {
             </select>
           </div>
           <p className="text-xs text-muted-foreground">
-            Expiry dates are inclusive: the coupon stays redeemable through the end of the selected day (UTC).
-          </p>
+            {t("expiryDatesAreInclusiveTheCoupon")}</p>
         </OperatorActionForm>
       </section>
 
@@ -70,14 +71,14 @@ export default async function OperatorCouponsPage() {
         {(coupons.data ?? []).length === 0 ? (
           <TableEmptyState
             icon={Gift}
-            title="No coupons yet"
-            description="Coupons you create appear here with their redemption state."
+            title={t("noCouponsYet")}
+            description={t("couponsYouCreateAppearHereWith")}
           />
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
-                {["Code", "Kind", "Value", "Expires", "Redemptions", "Assignment", "Active", "Actions"].map((heading) => (
+                {[t("code"), t("kind"), t("value"), t("expires"), t("redemptions"), t("assignment"), t("active"), t("actions")].map((heading) => (
                   <TableHead key={heading}>{heading}</TableHead>
                 ))}
               </TableRow>
@@ -96,7 +97,7 @@ export default async function OperatorCouponsPage() {
                   </TableCell>
                   <TableCell className="text-muted-foreground">
                     {coupon.clinic_id
-                      ? `clinic: ${clinicNames.get(coupon.clinic_id) ?? coupon.clinic_id}`
+                      ? t("clinicNamed", { clinic: clinicNames.get(coupon.clinic_id) ?? coupon.clinic_id })
                       : coupon.invitation_id
                         ? "invitation"
                         : "global"}
@@ -105,7 +106,7 @@ export default async function OperatorCouponsPage() {
                   <TableCell>
                     <OperatorActionForm
                       action={setCouponActive}
-                      submitLabel={coupon.is_active ? "Deactivate" : "Activate"}
+                      submitLabel={coupon.is_active ? t("deactivate") : t("activate")}
                       submitVariant="outline"
                       className="space-y-1"
                     >

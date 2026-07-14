@@ -11,14 +11,19 @@ import { FollowupsOutcomeFilter } from "@/components/reports/followups-outcome-f
 import { FollowupsReport } from "@/components/reports/followups-report";
 import { ReportPageHeader } from "@/components/reports/report-page-header";
 import { ReportsDateFilter } from "@/components/reports/reports-date-filter";
+import { getTranslations } from "next-intl/server";
 
-export const metadata: Metadata = { title: "Follow-ups Report" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("protected");
+  return { title: t("metadataFollowUpsReport") };
+}
 
 type PageProps = {
   searchParams: Promise<ReportsSearchParams>;
 };
 
 export default async function FollowupsReportPage({ searchParams }: PageProps) {
+  const t = await getTranslations("protected");
   const user = await requireRole(["admin", "manager", "receptionist"]);
   const sp = await searchParams;
   const range = resolveReportsRange(sp);
@@ -31,7 +36,7 @@ export default async function FollowupsReportPage({ searchParams }: PageProps) {
 
   return (
     <div className="space-y-6">
-      <ReportPageHeader title="Follow-ups Report" description="Completed follow-up outcomes." />
+      <ReportPageHeader title={t("followUpsReport")} description={t("completedFollowUpOutcomes")} />
       <ReportsDateFilter range={range} />
       <FollowupsOutcomeFilter value={outcome ?? "all"} />
       <FollowupsReport data={data} range={range} clinic={clinic} />

@@ -12,6 +12,7 @@ import {
   normalizePhone,
 } from "@/lib/phone/registry";
 import { cn } from "@/lib/utils";
+import { useTranslations } from "next-intl";
 
 type Props = {
   value: string;
@@ -39,6 +40,7 @@ function CountryCombobox({
   onSelect: (code: CountryCode) => void;
   disabled?: boolean;
 }) {
+  const t = useTranslations("shared");
   return (
     <SearchableCombobox
       items={PHONE_COUNTRIES}
@@ -46,9 +48,9 @@ function CountryCombobox({
       onValueChange={(code) => onSelect(code as CountryCode)}
       getValue={(item) => item.code}
       getSearchValue={(item) => `${item.name}|${item.code}|${item.dialCode}`}
-      ariaLabel="Country calling code"
-      searchPlaceholder="Search country or code…"
-      emptyMessage="No country found."
+      ariaLabel={t("countryCallingCode")}
+      searchPlaceholder={t("searchCountryOrCode")}
+      emptyMessage={t("noCountryFound")}
       disabled={disabled}
       triggerClassName="w-[132px] shrink-0 gap-1 px-3"
       contentClassName="w-[min(280px,calc(100vw-2rem))]"
@@ -84,6 +86,7 @@ export function InternationalPhoneInput({
   required,
   "aria-invalid": ariaInvalid,
 }: Props) {
+  const t = useTranslations("shared");
   const [country, setCountry] = useState<CountryCode>(() => inferPhoneCountry(value, defaultCountry));
   const [local, setLocal] = useState(() => localPhoneValue(value, country));
   // Tracks what we last emitted so a controlled parent echoing our own value
@@ -126,6 +129,7 @@ export function InternationalPhoneInput({
       {name ? (
         <>
           <input type="hidden" name={name} value={normalized || local} />
+          {/* i18n-allow: form field identifier paired with the localized phone control */}
           <input type="hidden" name={`${name}Country`} value={country} />
         </>
       ) : null}
@@ -148,7 +152,7 @@ export function InternationalPhoneInput({
         required={required}
         aria-invalid={ariaInvalid}
         value={local}
-        placeholder="Local number"
+        placeholder={t("localNumber")}
         disabled={disabled}
         className={cn("min-w-0 flex-1")}
         onChange={(event) => emit(formatLocalPhone(event.target.value, country))}

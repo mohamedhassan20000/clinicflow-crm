@@ -1,5 +1,6 @@
 "use server";
 
+import { actionError } from "@/lib/i18n/action-errors";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireMutationRole } from "@/lib/rbac";
@@ -48,21 +49,21 @@ export async function uploadPatientAvatar(
 ): Promise<AvatarResult> {
   const user = await requireMutationRole(["admin", "receptionist"]);
   const result = await getPatientForAvatar(patientId, user.clinicId);
-  if (!result) return { error: "Patient not found." };
+  if (!result) return { error: await actionError("patient-avatar.patientNotFound") };
 
   const file = formData.get("avatar");
   if (!(file instanceof File) || file.size === 0) {
-    return { error: "Pick an image to upload." };
+    return { error: await actionError("patient-avatar.pickAnImageToUpload") };
   }
   if (!ALLOWED_AVATAR_MIME.has(file.type)) {
-    return { error: "Avatar must be JPEG, PNG, or WebP." };
+    return { error: await actionError("patient-avatar.avatarMustBeJpegPngOrWebp") };
   }
   if (file.size > MAX_AVATAR_BYTES) {
-    return { error: "Avatar must be under 2 MB." };
+    return { error: await actionError("patient-avatar.avatarMustBeUnder2Mb") };
   }
 
   const ext = extensionForMime(file.type);
-  if (!ext) return { error: "Unsupported avatar file type." };
+  if (!ext) return { error: await actionError("patient-avatar.unsupportedAvatarFileType") };
 
   const { patient, supabase } = result;
   const path = avatarPath(user.clinicId, patientId, ext);
@@ -75,7 +76,7 @@ export async function uploadPatientAvatar(
       upsert: true,
     });
   if (uploadError) {
-    return { error: uploadError.message || "Failed to upload avatar." };
+    return { error: await actionError("patient-avatar.failedToUploadAvatar") };
   }
 
   const { error: updateError } = await supabase
@@ -87,7 +88,7 @@ export async function uploadPatientAvatar(
 
   if (updateError) {
     await supabase.storage.from(BUCKET).remove([path]);
-    return { error: "Failed to update patient avatar." };
+    return { error: await actionError("patient-avatar.failedToUpdatePatientAvatar") };
   }
 
   const previousPath = patient.avatar_path;
@@ -109,14 +110,14 @@ export async function removePatientAvatar(
 ): Promise<AvatarResult> {
   const user = await requireMutationRole(["admin", "receptionist"]);
   const result = await getPatientForAvatar(patientId, user.clinicId);
-  if (!result) return { error: "Patient not found." };
+  if (!result) return { error: await actionError("patient-avatar.patientNotFound") };
 
   const { patient, supabase } = result;
   const existingPath = patient.avatar_path;
   if (!existingPath) return { ok: true };
 
   if (!existingPath.startsWith(avatarPrefix(user.clinicId, patientId))) {
-    return { error: "Stored avatar path is not valid for this patient." };
+    return { error: await actionError("patient-avatar.storedAvatarPathIsNotValidForThisPatient") };
   }
 
   const { error: updateError } = await supabase
@@ -127,7 +128,7 @@ export async function removePatientAvatar(
     .eq("is_deleted", false);
 
   if (updateError) {
-    return { error: "Failed to remove patient avatar." };
+    return { error: await actionError("patient-avatar.failedToRemovePatientAvatar") };
   }
 
   await supabase.storage.from(BUCKET).remove([existingPath]);

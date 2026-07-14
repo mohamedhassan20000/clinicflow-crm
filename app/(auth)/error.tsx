@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useTranslations } from "next-intl";
 
 export default function AuthError({
   error,
@@ -11,6 +12,7 @@ export default function AuthError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const t = useTranslations("auth");
   useEffect(() => {
     console.error(error);
   }, [error]);
@@ -21,19 +23,17 @@ export default function AuthError({
         <AlertTriangle className="h-6 w-6 text-destructive" />
       </div>
       <div>
-        <h2 className="text-lg font-semibold">Something went wrong</h2>
+        <h2 className="text-lg font-semibold">{t("somethingWentWrong")}</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          An unexpected error occurred. Please try again.
-        </p>
+          {t("anUnexpectedErrorOccurredPleaseTry")}</p>
         {error.digest && (
           <p className="mt-1 font-mono text-xs text-muted-foreground">
-            Error ID: {error.digest}
+            {t("errorId")}{error.digest}
           </p>
         )}
       </div>
       <Button onClick={reset} variant="outline" size="sm">
-        Try again
-      </Button>
+        {t("tryAgain")}</Button>
     </div>
   );
 }

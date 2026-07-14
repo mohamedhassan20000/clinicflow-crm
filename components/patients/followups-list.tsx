@@ -1,3 +1,9 @@
+
+"use client";
+
+import { useTranslations } from "next-intl";
+import { useClinicSettings } from "@/contexts/clinic-settings-context";
+
 export type FollowupItem = {
   id: string;
   recorded_at: string;
@@ -14,30 +20,31 @@ export type FollowupItem = {
 
 const FOLLOWUP_META: Record<
   "all_fine" | "has_problem" | "no_response",
-  { label: string; className: string }
+  { labelKey: string; className: string }
 > = {
   all_fine: {
-    label: "Everything is fine",
+    labelKey: "followupEverythingFine",
     className:
       "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
   },
   has_problem: {
-    label: "Reported a problem",
+    labelKey: "followupReportedProblem",
     className:
       "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400",
   },
   no_response: {
-    label: "No response",
+    labelKey: "followupNoResponse",
     className: "border-border bg-muted/40 text-muted-foreground",
   },
 };
 
 export function FollowupsList({ followups }: { followups: FollowupItem[] }) {
+  const t = useTranslations("patients");
+  const { formatDate, formatDateTime } = useClinicSettings();
   if (!followups || followups.length === 0) {
     return (
       <div className="px-5 py-6 text-center text-sm text-muted-foreground">
-        No follow-up notes yet.
-      </div>
+        {t("noFollowUpNotesYet")}</div>
     );
   }
 
@@ -52,25 +59,22 @@ export function FollowupsList({ followups }: { followups: FollowupItem[] }) {
               <span
                 className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium ${meta.className}`}
               >
-                {meta.label}
+                {t(meta.labelKey)}
               </span>
               <span className="text-xs text-muted-foreground">
-                {new Date(f.recorded_at).toLocaleString("en-GB", {
+                {formatDateTime(f.recorded_at, {
                   dateStyle: "medium",
                   timeStyle: "short",
                 })}
               </span>
               {f.appointment?.scheduled_at && (
                 <span className="text-[11px] text-muted-foreground">
-                  · session{" "}
-                  {new Date(f.appointment.scheduled_at).toLocaleDateString(
-                    "en-GB",
-                    {
+                  {t("session")}{" "}
+                  {formatDate(f.appointment.scheduled_at, {
                       day: "2-digit",
                       month: "short",
                       year: "numeric",
-                    },
-                  )}
+                    })}
                 </span>
               )}
               {dept?.name && (
@@ -90,7 +94,7 @@ export function FollowupsList({ followups }: { followups: FollowupItem[] }) {
             )}
             {f.recorded_by?.full_name && (
               <p className="text-[10px] text-muted-foreground">
-                Recorded by {f.recorded_by.full_name}
+                {t("recordedBy")}{f.recorded_by.full_name}
               </p>
             )}
           </li>

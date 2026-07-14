@@ -30,6 +30,7 @@ import type {
   PatientPackageItem,
   PatientPackageService,
 } from "./patient-packages-section";
+import { useTranslations } from "next-intl";
 
 interface EditPackageDialogProps {
   packageItem: PatientPackageItem;
@@ -49,6 +50,7 @@ export function EditPackageDialog({
   departments,
   services,
 }: EditPackageDialogProps) {
+  const t = useTranslations("patients");
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(packageItem.name);
@@ -101,7 +103,7 @@ export function EditPackageDialog({
       return;
     }
     if (state.success) {
-      toast.success("Package updated.");
+      toast.success(t("packageUpdated"));
       router.refresh();
       queueMicrotask(() => setOpen(false));
     }
@@ -124,8 +126,7 @@ export function EditPackageDialog({
         onClick={() => setOpen(true)}
       >
         <Pencil className="h-3 w-3" />
-        Edit
-      </Button>
+        {t("edit")}</Button>
 
       <Dialog
         open={open}
@@ -136,10 +137,9 @@ export function EditPackageDialog({
       >
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Edit package</DialogTitle>
+            <DialogTitle>{t("editPackage")}</DialogTitle>
             <DialogDescription>
-              Update package details without changing used sessions.
-            </DialogDescription>
+              {t("updatePackageDetailsWithoutChangingUsed")}</DialogDescription>
           </DialogHeader>
 
           <form action={formAction} className="space-y-4">
@@ -159,8 +159,7 @@ export function EditPackageDialog({
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5 sm:col-span-2">
                 <Label htmlFor={`package-name-${packageItem.id}`} className="text-xs">
-                  Package name
-                </Label>
+                  {t("packageName")}</Label>
                 <Input
                   id={`package-name-${packageItem.id}`}
                   name="name"
@@ -179,8 +178,7 @@ export function EditPackageDialog({
 
               <div className="space-y-1.5">
                 <Label htmlFor={`package-total-${packageItem.id}`} className="text-xs">
-                  Total sessions
-                </Label>
+                  {t("totalSessions")}</Label>
                 <Input
                   id={`package-total-${packageItem.id}`}
                   name="total_sessions"
@@ -197,8 +195,7 @@ export function EditPackageDialog({
                 />
                 {invalid && total < packageItem.used_sessions && (
                   <p className="text-xs text-destructive">
-                    Cannot be less than {packageItem.used_sessions} used.
-                  </p>
+                    {t("cannotBeLessThan")}{packageItem.used_sessions} {t("used")}</p>
                 )}
                 {fieldError(state?.fieldErrors, "total_sessions") && (
                   <p className="text-xs text-destructive">
@@ -209,8 +206,7 @@ export function EditPackageDialog({
 
               <div className="space-y-1.5">
                 <Label htmlFor={`package-price-${packageItem.id}`} className="text-xs">
-                  Price per session
-                </Label>
+                  {t("pricePerSession")}</Label>
                 <Input
                   id={`package-price-${packageItem.id}`}
                   name="price_per_session"
@@ -234,7 +230,7 @@ export function EditPackageDialog({
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-xs">Department</Label>
+                <Label className="text-xs">{t("department")}</Label>
                 <Select
                   value={departmentId}
                   onValueChange={(value) => {
@@ -244,10 +240,10 @@ export function EditPackageDialog({
                   disabled={isPending}
                 >
                   <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Optional" />
+                    <SelectValue placeholder={t("optional")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">No department</SelectItem>
+                    <SelectItem value="none">{t("noDepartment")}</SelectItem>
                     {departments.map((department) => (
                       <SelectItem key={department.id} value={department.id}>
                         {department.name}
@@ -258,17 +254,17 @@ export function EditPackageDialog({
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-xs">Service</Label>
+                <Label className="text-xs">{t("service")}</Label>
                 <Select
                   value={serviceId}
                   onValueChange={setServiceId}
                   disabled={isPending}
                 >
                   <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Optional" />
+                    <SelectValue placeholder={t("optional")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">No service</SelectItem>
+                    <SelectItem value="none">{t("noService")}</SelectItem>
                     {filteredServices.map((service) => (
                       <SelectItem key={service.id} value={service.id}>
                         {service.name}
@@ -281,8 +277,7 @@ export function EditPackageDialog({
 
             <div className="flex items-center justify-between rounded-lg border border-border/50 px-3 py-2">
               <Label htmlFor={`package-active-${packageItem.id}`} className="text-sm">
-                Active package
-              </Label>
+                {t("activePackage")}</Label>
               <Switch
                 id={`package-active-${packageItem.id}`}
                 checked={isActive}
@@ -293,8 +288,7 @@ export function EditPackageDialog({
 
             <div className="space-y-1.5">
               <Label htmlFor={`package-notes-${packageItem.id}`} className="text-xs">
-                Notes
-              </Label>
+                {t("notes")}</Label>
               <Textarea
                 id={`package-notes-${packageItem.id}`}
                 name="notes"
@@ -319,12 +313,10 @@ export function EditPackageDialog({
                 onClick={() => setOpen(false)}
                 disabled={isPending}
               >
-                Cancel
-              </Button>
+                {t("cancel")}</Button>
               <Button type="submit" disabled={isPending || invalid} className="gap-2">
                 {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-                Save changes
-              </Button>
+                {t("saveChanges")}</Button>
             </DialogFooter>
           </form>
         </DialogContent>

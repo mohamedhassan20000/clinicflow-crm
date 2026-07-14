@@ -35,9 +35,9 @@ describe("WS5 appointment calendar readability", () => {
     const bounds = getCalendarGridBounds(clinicHours);
     expect(bounds).toEqual({ startMin: 8 * 60, endMin: 18 * 60 });
     expect(getCalendarNonWorkingBands(clinicHours, 1, bounds)).toEqual([
-      { startMin: 8 * 60, endMin: 9 * 60, kind: "non-working", label: "Non-working" },
-      { startMin: 12 * 60, endMin: 13 * 60, kind: "break", label: "Break" },
-      { startMin: 17 * 60, endMin: 18 * 60, kind: "non-working", label: "Non-working" },
+      { startMin: 8 * 60, endMin: 9 * 60, kind: "non-working", label: "non-working" },
+      { startMin: 12 * 60, endMin: 13 * 60, kind: "break", label: "break" },
+      { startMin: 17 * 60, endMin: 18 * 60, kind: "non-working", label: "non-working" },
     ]);
   });
 
@@ -50,7 +50,7 @@ describe("WS5 appointment calendar readability", () => {
   it("marks configured closed days without touching booking logic", () => {
     const bounds = getCalendarGridBounds(clinicHours);
     expect(getCalendarNonWorkingBands(clinicHours, 3, bounds)).toEqual([
-      { startMin: 8 * 60, endMin: 18 * 60, kind: "closed", label: "Closed" },
+      { startMin: 8 * 60, endMin: 18 * 60, kind: "closed", label: "closed" },
     ]);
   });
 

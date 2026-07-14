@@ -238,7 +238,7 @@ describe("patient document actions", () => {
       documentForm(),
     );
 
-    expect(result).toEqual({ error: "storage failed" });
+    expect(result).toEqual({ error: "Failed to upload document." });
     expect(mocks.state.queryLog).toContainEqual(
       expect.objectContaining({
         table: "patient_documents",

@@ -9,6 +9,7 @@ import {
 } from "@/components/reports/report-formatters";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
+import { useTranslations } from "next-intl";
 
 export function DoctorPerformanceReport({
   data,
@@ -19,6 +20,7 @@ export function DoctorPerformanceReport({
   range: ReportDateRange;
   clinic: ClinicPrintMeta;
 }) {
+  const t = useTranslations("reports");
   const { locale, formatCurrency } = useClinicSettings();
   const totals = data.doctors.reduce(
     (acc, row) => ({
@@ -33,17 +35,17 @@ export function DoctorPerformanceReport({
   return (
     <ReportSectionShell
       section="doctor-performance"
-      title="Doctor Performance"
-      description="Doctor sessions, outcomes, revenue, and clinic share."
+      title={t("doctorPerformance")}
+      description={t("doctorSessionsOutcomesRevenueAndClinic")}
       rangeLabel={formatDateRangeLabel(range.from, range.to, locale)}
       clinic={clinic}
     >
       <MetricGrid
         items={[
-          { label: "Doctors", value: formatNumber(data.doctors.length, locale) },
-          { label: "Sessions", value: formatNumber(totals.sessions, locale) },
-          { label: "Completed", value: formatNumber(totals.completed, locale) },
-          { label: "Revenue", value: formatCurrency(totals.revenue) },
+          { label: t("doctors"), value: formatNumber(data.doctors.length, locale) },
+          { label: t("sessions2"), value: formatNumber(totals.sessions, locale) },
+          { label: t("completed2"), value: formatNumber(totals.completed, locale) },
+          { label: t("revenue2"), value: formatCurrency(totals.revenue) },
         ]}
       />
 
@@ -54,26 +56,26 @@ export function DoctorPerformanceReport({
           <Table dense className="min-w-[1120px] print:min-w-0">
             <TableHeader>
               <TableRow>
-                <TableHead>Doctor</TableHead>
-                <TableHead className="text-end">Sessions</TableHead>
-                <TableHead className="text-end">Completed</TableHead>
-                <TableHead className="text-end">Cancelled</TableHead>
-                <TableHead className="text-end">No-show</TableHead>
-                <TableHead className="text-end">Patients</TableHead>
-                <TableHead className="text-end">Revenue</TableHead>
-                <TableHead className="text-end">Complete</TableHead>
-                <TableHead className="text-end">Cancel</TableHead>
-                <TableHead className="text-end">No-show</TableHead>
-                <TableHead className="text-end">Dept patients</TableHead>
-                <TableHead className="text-end">Clinic patients</TableHead>
-                <TableHead className="text-end">Dept revenue</TableHead>
-                <TableHead className="text-end">Clinic revenue</TableHead>
+                <TableHead>{t("doctor")}</TableHead>
+                <TableHead className="text-end">{t("sessions")}</TableHead>
+                <TableHead className="text-end">{t("completed")}</TableHead>
+                <TableHead className="text-end">{t("cancelled")}</TableHead>
+                <TableHead className="text-end">{t("noShow")}</TableHead>
+                <TableHead className="text-end">{t("patients")}</TableHead>
+                <TableHead className="text-end">{t("revenue")}</TableHead>
+                <TableHead className="text-end">{t("complete")}</TableHead>
+                <TableHead className="text-end">{t("cancel")}</TableHead>
+                <TableHead className="text-end">{t("noShow")}</TableHead>
+                <TableHead className="text-end">{t("deptPatients")}</TableHead>
+                <TableHead className="text-end">{t("clinicPatients")}</TableHead>
+                <TableHead className="text-end">{t("deptRevenue")}</TableHead>
+                <TableHead className="text-end">{t("clinicRevenue")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {data.doctors.map((row) => (
                 <TableRow key={row.doctorId}>
-                  <TableCell className="font-medium">{row.doctorName || "Unknown doctor"}</TableCell>
+                  <TableCell className="font-medium">{row.doctorName || t("unknownDoctor")}</TableCell>
                   <TableCell className="text-end tabular-nums">{formatNumber(row.sessions, locale)}</TableCell>
                   <TableCell className="text-end tabular-nums">{formatNumber(row.completed, locale)}</TableCell>
                   <TableCell className="text-end tabular-nums">{formatNumber(row.cancelled, locale)}</TableCell>

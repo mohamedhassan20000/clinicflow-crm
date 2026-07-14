@@ -1,5 +1,7 @@
 "use server";
 
+import { actionError } from "@/lib/i18n/action-errors";
+import { localizeZodFieldErrors } from "@/lib/validations/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
@@ -17,15 +19,15 @@ const profileSchema = z.object({
   full_name: z
     .string()
     .trim()
-    .min(2, "Name must be at least 2 characters")
-    .max(100, "Name must be 100 characters or less"),
+    .min(2, "validation.nameMinLength")
+    .max(100, "validation.nameMaxLength"),
   phone: z
     .string()
     .trim()
-    .max(40, "Phone must be 40 characters or less")
+    .max(40, "validation.phoneMaxLength")
     .nullable()
     .optional()
-    .refine((value) => !value || normalizePhone(value), "Enter a valid phone number")
+    .refine((value) => !value || normalizePhone(value), "validation.validPhoneRequired")
     .transform((value) => value ? normalizePhone(value) : null),
 });
 
@@ -33,13 +35,13 @@ const passwordSchema = z
   .object({
     password: z
       .string()
-      .min(8, "Password must be at least 8 characters")
-      .regex(/[A-Z]/, "Must contain an uppercase letter")
-      .regex(/[0-9]/, "Must contain a number"),
+      .min(8, "validation.passwordMinLength")
+      .regex(/[A-Z]/, "validation.passwordUppercase")
+      .regex(/[0-9]/, "validation.passwordNumber"),
     confirmPassword: z.string(),
   })
   .refine((d) => d.password === d.confirmPassword, {
-    message: "Passwords do not match",
+    message: "validation.passwordsDoNotMatch",
     path: ["confirmPassword"],
   });
 
@@ -79,7 +81,7 @@ export async function updateProfile(
   };
   const parsed = profileSchema.safeParse(raw);
   if (!parsed.success) {
-    return { fieldErrors: parsed.error.flatten().fieldErrors };
+    return { fieldErrors: await localizeZodFieldErrors(parsed.error) };
   }
 
   const supabase = await createClient();
@@ -91,7 +93,7 @@ export async function updateProfile(
     })
     .eq("id", user.id);
 
-  if (error) return { error: error.message || "Failed to update profile." };
+  if (error) return { error: await actionError("profile.failedToUpdateProfile") };
 
   revalidatePath("/profile");
   revalidatePath("/dashboard");
@@ -100,10 +102,10 @@ export async function updateProfile(
 
 export async function updateDisplayCurrency(currency: string): Promise<ActionResult> {
   const user = await requireMutationUser();
-  if (!isSupportedCurrency(currency)) return { error: "Unsupported display currency." };
+  if (!isSupportedCurrency(currency)) return { error: await actionError("profile.unsupportedDisplayCurrency") };
   const supabase = await createClient();
   const { error } = await supabase.from("profiles").update({ display_currency: currency }).eq("id", user.id);
-  if (error) return { error: "Unable to save display currency." };
+  if (error) return { error: await actionError("profile.unableToSaveDisplayCurrency") };
   revalidatePath("/", "layout");
   return { ok: true };
 }
@@ -116,13 +118,13 @@ export async function uploadAvatar(
 
   const file = formData.get("avatar");
   if (!(file instanceof File) || file.size === 0) {
-    return { error: "Pick an image to upload." };
+    return { error: await actionError("profile.pickAnImageToUpload") };
   }
   if (!ALLOWED_AVATAR_MIME.has(file.type)) {
-    return { error: "Only JPEG, PNG, WebP or GIF images are allowed." };
+    return { error: await actionError("profile.onlyJpegPngWebpOrGifImagesAreAllowed") };
   }
   if (file.size > MAX_AVATAR_BYTES) {
-    return { error: "Image must be 5 MB or smaller." };
+    return { error: await actionError("profile.imageMustBe5MbOrSmaller") };
   }
 
   const supabase = await createClient();
@@ -140,7 +142,7 @@ export async function uploadAvatar(
       upsert: false,
     });
   if (upErr) {
-    return { error: upErr.message || "Failed to upload image." };
+    return { error: await actionError("profile.failedToUploadImage") };
   }
 
   const {
@@ -160,7 +162,7 @@ export async function uploadAvatar(
     .update({ avatar_url: publicUrl })
     .eq("id", user.id);
   if (profErr) {
-    return { error: profErr.message || "Failed to update profile photo." };
+    return { error: await actionError("profile.failedToUpdateProfilePhoto") };
   }
 
   if (prev?.avatar_url) {
@@ -197,7 +199,7 @@ export async function removeAvatar(
     .update({ avatar_url: null })
     .eq("id", user.id);
 
-  if (error) return { error: error.message || "Failed to remove profile photo." };
+  if (error) return { error: await actionError("profile.failedToRemoveProfilePhoto") };
 
   const previousKey = avatarObjectKey(prev?.avatar_url);
   if (previousKey) {
@@ -226,7 +228,7 @@ export async function changeMyPassword(
   };
   const parsed = passwordSchema.safeParse(raw);
   if (!parsed.success) {
-    return { fieldErrors: parsed.error.flatten().fieldErrors };
+    return { fieldErrors: await localizeZodFieldErrors(parsed.error) };
   }
 
   const supabase = await createClient();
@@ -234,7 +236,7 @@ export async function changeMyPassword(
     password: parsed.data.password,
   });
   if (error) {
-    return { error: error.message || "Failed to update password." };
+    return { error: await actionError("profile.failedToUpdatePassword") };
   }
 
   return { ok: true };

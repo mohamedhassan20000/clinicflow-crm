@@ -1,5 +1,6 @@
 "use server";
 
+import { actionError } from "@/lib/i18n/action-errors";
 import { createClient } from "@/lib/supabase/server";
 import {
   requireMutationRole as requireRole,
@@ -54,7 +55,7 @@ export async function listStaffFiles(
     .eq("id", staffId)
     .eq("clinic_id", user.clinicId)
     .single();
-  if (!profile) return { error: "Staff member not found." };
+  if (!profile) return { error: await actionError("staff-files.staffMemberNotFound") };
 
   const base = `staff/${user.clinicId}/${staffId}`;
 
@@ -156,11 +157,11 @@ export async function uploadStaffPhoto(
   const supabase = await createClient();
 
   const file = fd.get("file") as File | null;
-  if (!file || file.size === 0) return { error: "No file provided." };
+  if (!file || file.size === 0) return { error: await actionError("staff-files.noFileProvided") };
   if (!ALLOWED_PHOTO.includes(file.type))
-    return { error: "Photo must be JPEG, PNG, or WebP." };
+    return { error: await actionError("staff-files.photoMustBeJpegPngOrWebp") };
   if (file.size > MAX_PHOTO_BYTES)
-    return { error: "Photo must be under 2 MB." };
+    return { error: await actionError("staff-files.photoMustBeUnder2Mb") };
 
   const ext = file.name.split(".").pop() ?? "jpg";
   const path = staffPath(user.clinicId, staffId, `photo.${ext}`);
@@ -168,7 +169,7 @@ export async function uploadStaffPhoto(
   const { error } = await supabase.storage
     .from(BUCKET)
     .upload(path, file, { upsert: true, contentType: file.type });
-  if (error) return { error: error.message };
+  if (error) return { error: await actionError("staff-files.weCouldNotCompleteThisRequestPleaseTryAgain") };
 
   const { data: signed } = await supabase.storage
     .from(BUCKET)
@@ -192,11 +193,11 @@ export async function uploadStaffContract(
   const supabase = await createClient();
 
   const file = fd.get("file") as File | null;
-  if (!file || file.size === 0) return { error: "No file provided." };
+  if (!file || file.size === 0) return { error: await actionError("staff-files.noFileProvided") };
   if (!ALLOWED_DOCS.includes(file.type))
-    return { error: "Contract must be PDF, Word, JPEG, or PNG." };
+    return { error: await actionError("staff-files.contractMustBePdfWordJpegOrPng") };
   if (file.size > MAX_DOC_BYTES)
-    return { error: "Contract must be under 10 MB." };
+    return { error: await actionError("staff-files.contractMustBeUnder10Mb") };
 
   const ext = file.name.split(".").pop() ?? "pdf";
   const path = staffPath(user.clinicId, staffId, `contract.${ext}`);
@@ -204,7 +205,7 @@ export async function uploadStaffContract(
   const { error } = await supabase.storage
     .from(BUCKET)
     .upload(path, file, { upsert: true, contentType: file.type });
-  if (error) return { error: error.message };
+  if (error) return { error: await actionError("staff-files.weCouldNotCompleteThisRequestPleaseTryAgain") };
 
   return listStaffFiles(staffId);
 }
@@ -217,11 +218,11 @@ export async function uploadStaffCertificate(
   const supabase = await createClient();
 
   const file = fd.get("file") as File | null;
-  if (!file || file.size === 0) return { error: "No file provided." };
+  if (!file || file.size === 0) return { error: await actionError("staff-files.noFileProvided") };
   if (!ALLOWED_DOCS.includes(file.type))
-    return { error: "Certificate must be PDF, Word, JPEG, or PNG." };
+    return { error: await actionError("staff-files.certificateMustBePdfWordJpegOrPng") };
   if (file.size > MAX_DOC_BYTES)
-    return { error: "Certificate must be under 10 MB." };
+    return { error: await actionError("staff-files.certificateMustBeUnder10Mb") };
 
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
   const path = staffPath(
@@ -233,7 +234,7 @@ export async function uploadStaffCertificate(
   const { error } = await supabase.storage
     .from(BUCKET)
     .upload(path, file, { contentType: file.type });
-  if (error) return { error: error.message };
+  if (error) return { error: await actionError("staff-files.weCouldNotCompleteThisRequestPleaseTryAgain") };
 
   return listStaffFiles(staffId);
 }
@@ -246,11 +247,11 @@ export async function uploadStaffOtherDoc(
   const supabase = await createClient();
 
   const file = fd.get("file") as File | null;
-  if (!file || file.size === 0) return { error: "No file provided." };
+  if (!file || file.size === 0) return { error: await actionError("staff-files.noFileProvided") };
   if (!ALLOWED_DOCS.includes(file.type))
-    return { error: "Document must be PDF, Word, JPEG, or PNG." };
+    return { error: await actionError("staff-files.documentMustBePdfWordJpegOrPng") };
   if (file.size > MAX_DOC_BYTES)
-    return { error: "Document must be under 10 MB." };
+    return { error: await actionError("staff-files.documentMustBeUnder10Mb") };
 
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
   const path = staffPath(
@@ -262,7 +263,7 @@ export async function uploadStaffOtherDoc(
   const { error } = await supabase.storage
     .from(BUCKET)
     .upload(path, file, { contentType: file.type });
-  if (error) return { error: error.message };
+  if (error) return { error: await actionError("staff-files.weCouldNotCompleteThisRequestPleaseTryAgain") };
 
   return listStaffFiles(staffId);
 }
@@ -276,10 +277,10 @@ export async function deleteStaffFile(
 
   const expectedPrefix = `staff/${user.clinicId}/${staffId}/`;
   if (!filePath.startsWith(expectedPrefix))
-    return { error: "Unauthorized." };
+    return { error: await actionError("staff-files.unauthorized") };
 
   const { error } = await supabase.storage.from(BUCKET).remove([filePath]);
-  if (error) return { error: error.message };
+  if (error) return { error: await actionError("staff-files.weCouldNotCompleteThisRequestPleaseTryAgain") };
 
   if (filePath.includes("/photo.")) {
     await supabase

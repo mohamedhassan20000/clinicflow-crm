@@ -8,7 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { marketingCopy as copy } from "@/lib/marketing-copy";
+import { useTranslations } from "next-intl";
 import { usePublicTheme } from "@/components/marketing/public-theme";
 
 export function EarlyAccessDialog({
@@ -18,14 +18,15 @@ export function EarlyAccessDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const t = useTranslations("marketing.earlyAccess");
   const { theme } = usePublicTheme();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className={`${theme} forced-public-scope marketing-page max-h-[90dvh] overflow-y-auto sm:max-w-lg`}>
         <DialogHeader>
-          <DialogTitle className="text-2xl">{copy.earlyAccess.dialogTitle}</DialogTitle>
-          <DialogDescription>{copy.earlyAccess.dialogDescription}</DialogDescription>
+          <DialogTitle className="text-2xl">{t("dialogTitle")}</DialogTitle>
+          <DialogDescription>{t("dialogDescription")}</DialogDescription>
         </DialogHeader>
         <EarlyAccessForm mode="dialog" />
       </DialogContent>

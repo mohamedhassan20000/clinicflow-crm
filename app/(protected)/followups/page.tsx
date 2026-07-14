@@ -4,8 +4,12 @@ import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
 import { requireUser } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
 import { FollowupsView } from "@/components/followups/followups-view";
+import { getTranslations } from "next-intl/server";
 
-export const metadata: Metadata = { title: "Follow-ups" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("protected");
+  return { title: t("metadataFollowUps") };
+}
 
 type Scope = "day" | "yesterday" | "week" | "month";
 type FollowupOutcome = "all_fine" | "has_problem" | "no_response";

@@ -9,6 +9,7 @@ import { dismissDisplacedAppointment } from "@/actions/appointments";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
 import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
 import { withReturnTo } from "@/lib/navigation/return-url";
+import { useTranslations } from "next-intl";
 
 export type DisplacedAppointmentItem = {
   id: string;
@@ -31,6 +32,7 @@ interface DisplacedAppointmentsProps {
 }
 
 export function DisplacedAppointments({ items, returnHref = "/appointments" }: DisplacedAppointmentsProps) {
+  const t = useTranslations("appointments");
   const { formatTime } = useClinicSettings();
   const [collapsed, setCollapsed] = useState(false);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
@@ -56,13 +58,12 @@ export function DisplacedAppointments({ items, returnHref = "/appointments" }: D
       {/* Header */}
       <button
         onClick={() => setCollapsed((c) => !c)}
-        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-start"
       >
         <div className="flex items-center gap-2">
           <CalendarX2 className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
           <span className="text-sm font-medium">
-            Displaced appointments
-          </span>
+            {t("displacedAppointments")}</span>
           <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-300">
             {visible.length}
           </span>
@@ -77,9 +78,7 @@ export function DisplacedAppointments({ items, returnHref = "/appointments" }: D
       {!collapsed && (
         <div className="border-t border-amber-500/20 px-4 pb-4">
           <p className="py-2 text-xs text-muted-foreground">
-            These appointments were removed when a conflicting appointment was confirmed.
-            Rebook them or dismiss to remove from this list.
-          </p>
+            {t("theseAppointmentsWereRemovedWhenA")}</p>
           <div className="space-y-2">
             {visible.map((item) => {
               const date = new Date(item.scheduled_at).toLocaleDateString("en-GB", {
@@ -115,7 +114,7 @@ export function DisplacedAppointments({ items, returnHref = "/appointments" }: D
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium truncate">{item.patientName}</div>
                     <div className="text-xs text-muted-foreground">
-                      {date} · {time} · {item.duration_minutes} min
+                    {date} · {time} · {t("durationMinutes", { count: item.duration_minutes })}
                       {item.doctorName ? ` · ${item.doctorName}` : ""}
                       {item.departmentName ? ` · ${item.departmentName}` : ""}
                     </div>
@@ -130,8 +129,7 @@ export function DisplacedAppointments({ items, returnHref = "/appointments" }: D
                     >
                       <Link href={withReturnTo(`/appointments/new?${rebookParams.toString()}`, returnHref)}>
                         <RefreshCw className="h-3 w-3" />
-                        Rebook
-                      </Link>
+                        {t("rebook")}</Link>
                     </Button>
                     <Button
                       size="sm"
@@ -139,7 +137,7 @@ export function DisplacedAppointments({ items, returnHref = "/appointments" }: D
                       className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
                       disabled={isPending}
                       onClick={() => handleDismiss(item.id)}
-                      title="Dismiss"
+                      title={t("dismiss")}
                     >
                       <X className="h-3.5 w-3.5" />
                     </Button>

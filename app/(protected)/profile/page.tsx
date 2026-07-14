@@ -3,8 +3,12 @@ import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
 import { ProfilePage } from "@/components/profile/profile-page";
+import { getTranslations } from "next-intl/server";
 
-export const metadata: Metadata = { title: "My profile" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("protected");
+  return { title: t("metadataMyProfile") };
+}
 
 export default async function MyProfilePage() {
   const user = await requireUser();

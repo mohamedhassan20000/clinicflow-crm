@@ -11,8 +11,13 @@ import {
   FollowupsList,
   type FollowupItem,
 } from "@/components/patients/followups-list";
+import { getTranslations } from "next-intl/server";
+import { clinicLocaleFromRow, formatClinicDate } from "@/lib/datetime";
 
-export const metadata: Metadata = { title: "Follow-up Report" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("protected");
+  return { title: t("metadataFollowUpReport") };
+}
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -23,6 +28,7 @@ export default async function FollowupsReportPage({
   params,
   searchParams,
 }: PageProps) {
+  const t = await getTranslations("protected");
   const { id } = await params;
   const { from, to, returnTo } = await searchParams;
   const patientPath = `/patients/${id}`;
@@ -66,11 +72,12 @@ export default async function FollowupsReportPage({
 
   const { data: clinic } = await supabase
     .from("clinics")
-    .select("name, address, phone, logo_url")
+    .select("name, address, phone, logo_url, timezone, locale, digits")
     .eq("id", user.clinicId)
     .single();
+  const clinicLocale = clinicLocaleFromRow(clinic);
 
-  const generatedAt = new Date().toLocaleString("en-GB", {
+  const generatedAt = formatClinicDate(new Date(), clinicLocale, {
     dateStyle: "long",
     timeStyle: "short",
   });
@@ -82,7 +89,7 @@ export default async function FollowupsReportPage({
         clinicAddress={clinic?.address ?? null}
         clinicPhone={clinic?.phone ?? null}
         logoUrl={clinic?.logo_url ?? null}
-        documentName="Follow-up Report"
+        documentName={t("followUpReport")}
         generatedAt={generatedAt}
       />
       <PatientReportHeader
@@ -90,8 +97,8 @@ export default async function FollowupsReportPage({
         patientName={patient.full_name}
         fileNumber={patient.file_number}
         phone={patient.phone}
-        title="Follow-up Report"
-        countLabel={`${rows.length} follow-up${rows.length !== 1 ? "s" : ""}${from || to ? " (filtered)" : ""}`}
+        title={t("followUpReport")}
+        countLabel={`${rows.length} follow-up${rows.length !== 1 ? "s" : ""}${from || to ? t("filtered") : ""}`}
       />
 
       <ReportDateFilter from={from} to={to} />
@@ -104,40 +111,40 @@ export default async function FollowupsReportPage({
       {/* Print table — same black-border style as revenue */}
       <div className="hidden print:block">
         {rows.length === 0 ? (
-          <p className="text-sm">No follow-up notes.</p>
+          <p className="text-sm">{t("noFollowUpNotes")}</p>
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Date Recorded</TableHead>
-                <TableHead>Session Date</TableHead>
-                <TableHead>Department</TableHead>
-                <TableHead>Outcome</TableHead>
-                <TableHead>Notes</TableHead>
-                <TableHead>Recorded By</TableHead>
+                <TableHead>{t("dateRecorded")}</TableHead>
+                <TableHead>{t("sessionDate")}</TableHead>
+                <TableHead>{t("department")}</TableHead>
+                <TableHead>{t("outcome")}</TableHead>
+                <TableHead>{t("notes")}</TableHead>
+                <TableHead>{t("recordedBy")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {rows.map((f) => (
                 <TableRow key={f.id}>
                   <TableCell>
-                    {new Date(f.recorded_at).toLocaleString("en-GB", {
+                    {formatClinicDate(f.recorded_at, clinicLocale, {
                       dateStyle: "medium",
                       timeStyle: "short",
                     })}
                   </TableCell>
                   <TableCell>
                     {f.appointment?.scheduled_at
-                      ? new Date(f.appointment.scheduled_at).toLocaleDateString("en-GB", { dateStyle: "medium" })
+                      ? new Date(f.appointment.scheduled_at).toLocaleDateString(t("enGb"), { dateStyle: "medium" })
                       : "—"}
                   </TableCell>
                   <TableCell>{f.appointment?.departments?.name ?? "—"}</TableCell>
                   <TableCell>
                     {f.outcome === "all_fine"
-                      ? "Everything fine"
+                      ? t("everythingfine")
                       : f.outcome === "has_problem"
-                      ? "Reported problem"
-                      : "No response"}
+                      ? t("reportedproblem")
+                      : t("noresponse")}
                   </TableCell>
                   <TableCell>{f.notes ?? "—"}</TableCell>
                   <TableCell>{f.recorded_by?.full_name ?? "—"}</TableCell>

@@ -5,19 +5,22 @@ import { useRef } from "react";
 import { Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { usePublicTheme } from "@/components/marketing/public-theme";
-import { marketingCopy as copy } from "@/lib/marketing-copy";
-
-const mobileNavigation = [
-  ["#product", copy.nav.product],
-  ["#features", copy.nav.features],
-  ["#security", copy.nav.security],
-  ["#pricing", copy.nav.pricing],
-  ["#faq", copy.nav.faq],
-] as const;
+import { useTranslations } from "next-intl";
+import { getMarketingCopy } from "@/lib/marketing-copy";
+import type { MessageTranslator } from "@/lib/i18n/translator";
 
 export function MobileMarketingMenu() {
+  const copy = getMarketingCopy(useTranslations("marketing") as unknown as MessageTranslator);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const { theme } = usePublicTheme();
+
+  const mobileNavigation = [
+    ["#product", copy.nav.product],
+    ["#features", copy.nav.features],
+    ["#security", copy.nav.security],
+    ["#pricing", copy.nav.pricing],
+    ["#faq", copy.nav.faq],
+  ] as const;
 
   function closeMenu() {
     dialogRef.current?.close();
@@ -55,7 +58,7 @@ export function MobileMarketingMenu() {
               variant="ghost"
               size="icon"
               className="absolute inset-block-start-3 inset-inline-end-3 size-10 rounded-full"
-              aria-label="Close navigation menu"
+              aria-label={copy.nav.closeMenu}
               onClick={closeMenu}
             >
               <span className="text-2xl leading-none" aria-hidden="true">×</span>

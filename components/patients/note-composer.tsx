@@ -7,12 +7,14 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { addMedicalNote } from "@/actions/patients";
+import { useTranslations } from "next-intl";
 
 interface NoteComposerProps {
   patientId: string;
 }
 
 export function NoteComposer({ patientId }: NoteComposerProps) {
+  const t = useTranslations("patients");
   const [state, formAction, isPending] = useActionState(addMedicalNote, null);
   const formRef = useRef<HTMLFormElement>(null);
   const router = useRouter();
@@ -20,7 +22,7 @@ export function NoteComposer({ patientId }: NoteComposerProps) {
   useEffect(() => {
     if (state && !state.error && !state.fieldErrors) {
       formRef.current?.reset();
-      toast.success("Note saved.");
+      toast.success(t("noteSaved"));
       router.refresh();
     }
     if (state?.error) {
@@ -33,7 +35,7 @@ export function NoteComposer({ patientId }: NoteComposerProps) {
       <input type="hidden" name="patient_id" value={patientId} />
       <Textarea
         name="note"
-        placeholder="Write a medical note…"
+        placeholder={t("writeAMedicalNote")}
         rows={4}
         disabled={isPending}
         className="resize-none text-sm"
@@ -47,10 +49,9 @@ export function NoteComposer({ patientId }: NoteComposerProps) {
           {isPending ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
           ) : (
-            <Send className="h-3.5 w-3.5" />
+            <Send className="h-3.5 w-3.5 rtl:-scale-x-100" />
           )}
-          Add note
-        </Button>
+          {t("addNote")}</Button>
       </div>
     </form>
   );

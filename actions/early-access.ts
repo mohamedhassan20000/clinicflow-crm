@@ -1,5 +1,7 @@
 "use server";
 
+import { actionError } from "@/lib/i18n/action-errors";
+import { localizeZodFieldErrors } from "@/lib/validations/server";
 import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -39,16 +41,16 @@ export async function requestEarlyAccess(
     phone: formData.get("phone"), phoneCountry: formData.get("phoneCountry"),
     email: formData.get("email"),
   });
-  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  if (!parsed.success) return { fieldErrors: await localizeZodFieldErrors(parsed.error) };
   const normalizedPhone = normalizePhone(parsed.data.phone, parsed.data.phoneCountry);
-  if (!normalizedPhone) return { fieldErrors: { phone: ["Enter a valid international phone number"] } };
+  if (!normalizedPhone) return { fieldErrors: { phone: [await actionError("early-access.enterAValidInternationalPhoneNumber")] } };
 
   const limit = await checkRateLimit("early-access", await requestIp(), {
     limit: 5,
     windowSeconds: 60 * 60,
     failureMode: "closed",
   });
-  if (!limit.allowed) return { error: "Requests are temporarily unavailable. Please try again later." };
+  if (!limit.allowed) return { error: await actionError("early-access.requestsAreTemporarilyUnavailablePleaseTryAgainLater") };
 
   const { error } = await requestClinicInvitation({
     clinicName: parsed.data.clinicName,
@@ -56,7 +58,7 @@ export async function requestEarlyAccess(
     phone: normalizedPhone,
     email: normalizeEmail(parsed.data.email),
   });
-  if (error) return { error: "We could not save your request. Please try again." };
+  if (error) return { error: await actionError("early-access.weCouldNotSaveYourRequestPleaseTryAgain") };
   return { ok: true };
 }
 
@@ -100,7 +102,11 @@ export async function issueClinicInvitation(
     // stays redeemable. Issuance is a soft operator control — acceptance of an
     // already-issued invitation is never blocked (§3.2).
     return {
-      error: `Issuance blocked: ${quota.acceptedThisWeek} accepted this week plus ${quota.pendingIssued} open invitations (any issue week) meet the weekly limit of ${quota.weeklyLimit}. This is a soft issuance-time control — already-issued invitations stay redeemable. Re-submit with the override to issue anyway.`,
+      error: await actionError("early-access.issuanceQuotaBlocked", {
+        accepted: quota.acceptedThisWeek,
+        pending: quota.pendingIssued,
+        limit: quota.weeklyLimit,
+      }),
     };
   }
 
@@ -115,9 +121,9 @@ export async function issueClinicInvitation(
     token_hash: hashInvitationToken(rawToken), expires_at: expiresAt,
     invited_by: admin.id, revoked_at: null, updated_at: new Date().toISOString(),
   }).eq("id", invitationId).eq("status", "pending").select("id, email");
-  if (error) return { error: "Invitation could not be issued." };
+  if (error) return { error: await actionError("early-access.invitationCouldNotBeIssued") };
   if (!updated || updated.length === 0) {
-    return { error: "Invitation is no longer pending — it was accepted or revoked. Refresh the list." };
+    return { error: await actionError("early-access.invitationIsNoLongerPendingItWasAcceptedOrRevoked") };
   }
   await logOperatorAction({ action: "invitation.issued", targetType: "clinic_invitation", targetId: invitationId, payload: { force: options?.force === true, expiresAt } });
   revalidatePath("/operator/invitations");
@@ -133,9 +139,9 @@ export async function createClinicInvitation(
     clinicName: formData.get("clinicName"), ownerName: formData.get("ownerName"),
     phone: formData.get("phone"), phoneCountry: formData.get("phoneCountry"), email: formData.get("email"),
   });
-  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  if (!parsed.success) return { fieldErrors: await localizeZodFieldErrors(parsed.error) };
   const normalizedPhone = normalizePhone(parsed.data.phone, parsed.data.phoneCountry);
-  if (!normalizedPhone) return { fieldErrors: { phone: ["Enter a valid international phone number"] } };
+  if (!normalizedPhone) return { fieldErrors: { phone: [await actionError("early-access.enterAValidInternationalPhoneNumber")] } };
   const supabase = await createClient();
   const { data, error } = await supabase.from("clinic_invitations").insert({
     clinic_name: parsed.data.clinicName,
@@ -143,7 +149,7 @@ export async function createClinicInvitation(
     phone: normalizedPhone,
     email: normalizeEmail(parsed.data.email),
   }).select("id").single();
-  if (error || !data) return { error: "Invitation could not be created." };
+  if (error || !data) return { error: await actionError("early-access.invitationCouldNotBeCreated") };
   return issueClinicInvitation(data.id, { force: formData.get("force") === "true" });
 }
 
@@ -161,9 +167,9 @@ export async function revokeClinicInvitation(invitationId: string): Promise<Publ
     status: "revoked", token_hash: null, expires_at: null,
     revoked_at: now, updated_at: now,
   }).eq("id", invitationId).eq("status", "pending").select("id");
-  if (error) return { error: "Invitation could not be revoked." };
+  if (error) return { error: await actionError("early-access.invitationCouldNotBeRevoked") };
   if (!updated || updated.length === 0) {
-    return { error: "Invitation is no longer pending — nothing was revoked. Refresh the list." };
+    return { error: await actionError("early-access.invitationIsNoLongerPendingNothingWasRevokedRefreshThe") };
   }
   await logOperatorAction({ action: "invitation.revoked", targetType: "clinic_invitation", targetId: invitationId });
   revalidatePath("/operator/invitations");

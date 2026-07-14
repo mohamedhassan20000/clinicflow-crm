@@ -18,24 +18,26 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { changePassword } from "@/actions/auth";
+import { useTranslations } from "next-intl";
 
 const schema = z
   .object({
     password: z
       .string()
-      .min(8, "At least 8 characters")
-      .regex(/[A-Z]/, "Must include an uppercase letter")
-      .regex(/[0-9]/, "Must include a number"),
-    confirmPassword: z.string().min(1, "Please confirm your password"),
+      .min(8, "validation.passwordMinLength")
+      .regex(/[A-Z]/, "validation.passwordUppercase")
+      .regex(/[0-9]/, "validation.passwordNumber"),
+    confirmPassword: z.string().min(1, "validation.passwordConfirmationRequired"),
   })
   .refine((d) => d.password === d.confirmPassword, {
-    message: "Passwords do not match",
+    message: "validation.passwordsDoNotMatch",
     path: ["confirmPassword"],
   });
 
 type FormValues = z.infer<typeof schema>;
 
 export function ChangePasswordForm() {
+  const t = useTranslations("auth");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [actionState, formAction, isPending] = useActionState(
@@ -91,7 +93,7 @@ export function ChangePasswordForm() {
           name="password"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>New password</FormLabel>
+              <FormLabel>{t("newPassword")}</FormLabel>
               <FormControl>
                 <div className="relative">
                   <Input
@@ -100,14 +102,14 @@ export function ChangePasswordForm() {
                     autoComplete="new-password"
                     placeholder="••••••••"
                     disabled={isSubmitting}
-                    className="h-10 pr-10 transition-shadow focus-visible:shadow-[0_0_0_3px_oklch(0.6_0.14_208_/_0.15)]"
+                    className="h-10 pe-10 transition-shadow focus-visible:shadow-[0_0_0_3px_oklch(0.6_0.14_208_/_0.15)]"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword((v) => !v)}
                     disabled={isSubmitting}
-                    aria-label={showPassword ? "Hide password" : "Show password"}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer text-muted-foreground/60 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none"
+                    aria-label={showPassword ? t("hidepassword") : t("showpassword")}
+                    className="absolute end-3 top-1/2 -translate-y-1/2 cursor-pointer text-muted-foreground/60 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none"
                   >
                     {showPassword ? (
                       <EyeOff className="h-4 w-4" />
@@ -127,7 +129,7 @@ export function ChangePasswordForm() {
           name="confirmPassword"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Confirm new password</FormLabel>
+              <FormLabel>{t("confirmNewPassword")}</FormLabel>
               <FormControl>
                 <div className="relative">
                   <Input
@@ -136,14 +138,14 @@ export function ChangePasswordForm() {
                     autoComplete="new-password"
                     placeholder="••••••••"
                     disabled={isSubmitting}
-                    className="h-10 pr-10 transition-shadow focus-visible:shadow-[0_0_0_3px_oklch(0.6_0.14_208_/_0.15)]"
+                    className="h-10 pe-10 transition-shadow focus-visible:shadow-[0_0_0_3px_oklch(0.6_0.14_208_/_0.15)]"
                   />
                   <button
                     type="button"
                     onClick={() => setShowConfirm((v) => !v)}
                     disabled={isSubmitting}
-                    aria-label={showConfirm ? "Hide password" : "Show password"}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer text-muted-foreground/60 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none"
+                    aria-label={showConfirm ? t("hidepassword") : t("showpassword")}
+                    className="absolute end-3 top-1/2 -translate-y-1/2 cursor-pointer text-muted-foreground/60 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none"
                   >
                     {showConfirm ? (
                       <EyeOff className="h-4 w-4" />
@@ -166,13 +168,11 @@ export function ChangePasswordForm() {
           {isSubmitting ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" />
-              Updating…
-            </>
+              {t("updating")}</>
           ) : (
             <>
               <KeyRound className="h-4 w-4" />
-              Set new password
-            </>
+              {t("setNewPassword")}</>
           )}
         </Button>
       </form>

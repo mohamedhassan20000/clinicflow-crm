@@ -1,4 +1,5 @@
 import { MapPin, Phone } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 interface PrintHeaderProps {
   clinicName: string;
@@ -17,6 +18,7 @@ export function PrintHeader({
   documentName,
   generatedAt,
 }: PrintHeaderProps) {
+  const t = useTranslations("shared");
   return (
     <>
       {/* Compact header — fixed, repeats on every printed page (page 2+) */}
@@ -92,7 +94,7 @@ export function PrintHeader({
             </div>
           </div>
           <div style={{ textAlign: "right", fontSize: "10px", color: "#64748b" }}>
-            <p>Generated {generatedAt}</p>
+            <p>{t("generatedAt", { date: generatedAt })}</p>
           </div>
         </div>
       </div>

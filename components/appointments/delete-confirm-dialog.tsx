@@ -10,6 +10,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { useTranslations } from "next-intl";
 
 interface Props {
   open: boolean;
@@ -19,17 +20,17 @@ interface Props {
 }
 
 export function DeleteConfirmDialog({ open, onOpenChange, onConfirm, disabled }: Props) {
+  const t = useTranslations("appointments");
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete appointment?</AlertDialogTitle>
+          <AlertDialogTitle>{t("deleteAppointment")}</AlertDialogTitle>
           <AlertDialogDescription>
-            This will move the appointment to trash. You can restore it within 30 days.
-          </AlertDialogDescription>
+            {t("thisWillMoveTheAppointmentTo")}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={disabled}>Cancel</AlertDialogCancel>
+          <AlertDialogCancel disabled={disabled}>{t("cancel")}</AlertDialogCancel>
           <AlertDialogAction
             disabled={disabled}
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
@@ -39,8 +40,7 @@ export function DeleteConfirmDialog({ open, onOpenChange, onConfirm, disabled }:
               onConfirm();
             }}
           >
-            Delete
-          </AlertDialogAction>
+            {t("delete")}</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

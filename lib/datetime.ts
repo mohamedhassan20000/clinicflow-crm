@@ -113,6 +113,26 @@ export function formatClinicPercent(
   })}%`;
 }
 
+export function formatClinicDate(
+  value: Date | string | number,
+  locale?: Partial<ClinicLocale>,
+  options: Intl.DateTimeFormatOptions = { dateStyle: "medium" },
+): string {
+  const resolved = resolveLocale(locale);
+  return new Intl.DateTimeFormat(toNumberingLocale(resolved), {
+    timeZone: resolved.timeZone,
+    ...options,
+  }).format(new Date(value));
+}
+
+export function formatClinicDateTime(
+  value: Date | string | number,
+  locale?: Partial<ClinicLocale>,
+  options: Intl.DateTimeFormatOptions = { dateStyle: "medium", timeStyle: "short" },
+): string {
+  return formatClinicDate(value, locale, options);
+}
+
 export function toClinicTime(
   date: Date | string | number,
   locale?: Partial<ClinicLocale>,

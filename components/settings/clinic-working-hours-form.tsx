@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { upsertClinicWorkingHours } from "@/actions/settings";
 import type { ActionResult } from "@/actions/settings";
 import type { ClinicWorkingHoursValues } from "@/lib/validations/settings";
+import { useTranslations } from "next-intl";
 
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -21,6 +22,7 @@ interface Props {
 }
 
 export function ClinicWorkingHoursForm({ defaultValues, readOnly = false }: Props) {
+  const t = useTranslations("settings");
   const [state, formAction, isPending] = useActionState(
     upsertClinicWorkingHours as (prev: ActionResult | null, fd: FormData) => Promise<ActionResult>,
     null,
@@ -29,7 +31,7 @@ export function ClinicWorkingHoursForm({ defaultValues, readOnly = false }: Prop
   const [schedule, setSchedule] = useState<ClinicWorkingHoursValues>(defaultValues);
 
   useEffect(() => {
-    if (state?.success) toast.success("Working hours saved.");
+    if (state?.success) toast.success(t("workingHoursSaved"));
   }, [state]);
 
   function toggleDay(dow: number, open: boolean) {
@@ -83,9 +85,9 @@ export function ClinicWorkingHoursForm({ defaultValues, readOnly = false }: Prop
 
   return (
     <div className="rounded-xl border border-border/50 bg-card p-6">
-      <h3 className="mb-1 text-sm font-semibold">Working hours</h3>
+      <h3 className="mb-1 text-sm font-semibold">{t("workingHours")}</h3>
       <p className="mb-5 text-xs text-muted-foreground">
-        Set which days the clinic is open and configure up to 2 shifts per day.
+        {t("setWhichDaysTheClinicIs")}
       </p>
 
       {state?.error && (
@@ -117,13 +119,13 @@ export function ClinicWorkingHoursForm({ defaultValues, readOnly = false }: Prop
                 </Label>
 
                 {!day.open && (
-                  <span className="text-xs text-muted-foreground">Closed</span>
+                  <span className="text-xs text-muted-foreground">{t("closed")}</span>
                 )}
               </div>
 
               {/* Shifts */}
               {day.open && (
-                <div className="mt-3 space-y-2 pl-7">
+                <div className="mt-3 space-y-2 ps-7">
                   {day.shifts.map((shift, idx) => (
                     <div key={idx} className="flex items-center gap-2">
                       <span className="w-5 text-center text-xs text-muted-foreground">
@@ -136,7 +138,7 @@ export function ClinicWorkingHoursForm({ defaultValues, readOnly = false }: Prop
                         onChange={(e) => updateShift(dow, idx, "shift_start", e.target.value)}
                         className="h-8 w-32 rounded-md border border-input bg-background px-2 text-sm text-foreground [color-scheme:light] dark:[color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
                       />
-                      <span className="text-xs text-muted-foreground">to</span>
+                      <span className="text-xs text-muted-foreground">{t("to")}</span>
                       <input
                         type="time"
                         value={shift.shift_end}
@@ -150,7 +152,7 @@ export function ClinicWorkingHoursForm({ defaultValues, readOnly = false }: Prop
                           onClick={() => removeShift(dow, idx)}
                           disabled={isPending}
                           className="text-muted-foreground/40 hover:text-destructive transition-colors disabled:opacity-50"
-                          aria-label="Remove shift"
+                          aria-label={t("removeShift")}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
@@ -166,7 +168,7 @@ export function ClinicWorkingHoursForm({ defaultValues, readOnly = false }: Prop
                       className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
                     >
                       <Plus className="h-3 w-3" />
-                      Add shift
+                      {t("addShift")}
                     </button>
                   )}
                 </div>
@@ -184,7 +186,7 @@ export function ClinicWorkingHoursForm({ defaultValues, readOnly = false }: Prop
             ) : (
               <Save className="h-4 w-4" />
             )}
-            Save working hours
+            {t("saveWorkingHours")}
           </Button>
         </div>
       )}

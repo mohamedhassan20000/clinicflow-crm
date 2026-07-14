@@ -5,6 +5,7 @@ import { Check } from "lucide-react";
 import { SearchableCombobox } from "@/components/shared/searchable-combobox";
 import type { ReportFilterOption } from "@/lib/operator-reports/types";
 import { cn } from "@/lib/utils";
+import { useTranslations } from "next-intl";
 
 /** Searchable, form-compatible WS7 filter using the shared WS3/WS4 cmdk pattern. */
 export function ReportFilterCombobox({
@@ -20,6 +21,7 @@ export function ReportFilterCombobox({
   label: string;
   placeholder: string;
 }) {
+  const t = useTranslations("operator");
   const [selected, setSelected] = useState(value);
 
   return (
@@ -32,8 +34,8 @@ export function ReportFilterCombobox({
         getValue={(option) => option.value}
         getSearchValue={(option) => `${option.label}|${option.value}`}
         ariaLabel={label}
-        searchPlaceholder={`Search ${label.toLowerCase()}…`}
-        emptyMessage="No option found."
+        searchPlaceholder={t("searchNamed", { label: label.toLocaleLowerCase() })}
+        emptyMessage={t("noOptionFound")}
         triggerClassName="w-full min-w-44 gap-2"
         contentClassName="w-[min(22rem,90vw)]"
         showSelectedCheck={false}

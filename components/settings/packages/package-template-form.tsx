@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { PackageTemplateActionResult } from "@/actions/package-templates";
+import { useTranslations } from "next-intl";
 
 export interface PackageTemplateFormDefaults {
   id?: string;
@@ -44,6 +45,7 @@ export function PackageTemplateForm({
   submitLabel,
   onSuccess,
 }: Props) {
+  const t = useTranslations("settings");
   const [state, formAction, isPending] = useActionState(action, null);
 
   useEffect(() => {
@@ -53,7 +55,7 @@ export function PackageTemplateForm({
       const first = Object.values(state.fieldErrors).flat()[0];
       if (first) toast.error(first);
     } else if (state.success) {
-      toast.success("Saved.");
+      toast.success(t("saved"));
       onSuccess?.();
     }
   }, [state, onSuccess]);
@@ -66,8 +68,7 @@ export function PackageTemplateForm({
 
       <div className="space-y-1.5">
         <Label htmlFor="pkg-tpl-department" className="text-xs">
-          Department
-        </Label>
+          {t("department")}</Label>
         <Select
           name="department_id"
           defaultValue={defaults?.department_id}
@@ -75,7 +76,7 @@ export function PackageTemplateForm({
           required
         >
           <SelectTrigger id="pkg-tpl-department">
-            <SelectValue placeholder="Select department" />
+            <SelectValue placeholder={t("selectDepartment")} />
           </SelectTrigger>
           <SelectContent>
             {departments.map((d) => (
@@ -96,12 +97,11 @@ export function PackageTemplateForm({
 
       <div className="space-y-1.5">
         <Label htmlFor="pkg-tpl-name" className="text-xs">
-          Template name
-        </Label>
+          {t("templateName")}</Label>
         <Input
           id="pkg-tpl-name"
           name="name"
-          placeholder="e.g. 10-session physio package"
+          placeholder={t("eG10SessionPhysioPackage")}
           defaultValue={defaults?.name}
           required
           minLength={1}
@@ -113,8 +113,7 @@ export function PackageTemplateForm({
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div className="space-y-1.5">
           <Label htmlFor="pkg-tpl-sessions" className="text-xs">
-            Total sessions
-          </Label>
+            {t("totalSessions")}</Label>
           <Input
             id="pkg-tpl-sessions"
             name="total_sessions"
@@ -130,8 +129,7 @@ export function PackageTemplateForm({
 
         <div className="space-y-1.5">
           <Label htmlFor="pkg-tpl-price-each" className="text-xs">
-            Price / session
-          </Label>
+            {t("priceSession")}</Label>
           <Input
             id="pkg-tpl-price-each"
             name="price_per_session"
@@ -146,8 +144,7 @@ export function PackageTemplateForm({
 
         <div className="space-y-1.5">
           <Label htmlFor="pkg-tpl-price-total" className="text-xs">
-            Total price
-          </Label>
+            {t("totalPrice")}</Label>
           <Input
             id="pkg-tpl-price-total"
             name="total_price"
@@ -163,14 +160,13 @@ export function PackageTemplateForm({
 
       <div className="space-y-1.5">
         <Label htmlFor="pkg-tpl-notes" className="text-xs">
-          Notes
-        </Label>
+          {t("notes")}</Label>
         <Textarea
           id="pkg-tpl-notes"
           name="notes"
           maxLength={500}
           rows={3}
-          placeholder="Optional internal notes"
+          placeholder={t("optionalInternalNotes")}
           defaultValue={defaults?.notes ?? ""}
           disabled={isPending}
         />
@@ -179,7 +175,7 @@ export function PackageTemplateForm({
       <div className="flex justify-end">
         <Button type="submit" disabled={isPending} className="gap-2">
           {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-          {isPending ? "Saving…" : submitLabel}
+          {isPending ? t("saving") : submitLabel}
         </Button>
       </div>
     </form>

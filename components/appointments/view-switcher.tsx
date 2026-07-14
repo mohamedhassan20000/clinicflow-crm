@@ -2,16 +2,18 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { useTranslations } from "next-intl";
 
 const VIEWS = [
-  { value: "day", label: "Day" },
-  { value: "week", label: "Week" },
-  { value: "month", label: "Month" },
+  { value: "day", labelKey: "viewDay" },
+  { value: "week", labelKey: "viewWeek" },
+  { value: "month", labelKey: "viewMonth" },
 ] as const;
 
 export type CalendarView = (typeof VIEWS)[number]["value"];
 
 export function ViewSwitcher({ current }: { current: CalendarView }) {
+  const t = useTranslations("appointments");
   const router = useRouter();
   const params = useSearchParams();
 
@@ -41,7 +43,7 @@ export function ViewSwitcher({ current }: { current: CalendarView }) {
                 : "text-muted-foreground hover:text-foreground",
             )}
           >
-            {v.label}
+            {t(v.labelKey)}
           </button>
         );
       })}

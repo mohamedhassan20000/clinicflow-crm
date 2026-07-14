@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { Users } from "lucide-react";
 import { StaffTable, type StaffMember } from "@/components/settings/staff-table";
 import type { Tables } from "@/types/database";
+import { useTranslations } from "next-intl";
 
 type DepartmentLite = Pick<Tables<"departments">, "id" | "name"> & {
   color?: string | null;
@@ -31,6 +32,7 @@ export function StaffByDepartment({
   lastSeenMap,
   isAdmin,
 }: Props) {
+  const t = useTranslations("settings");
   const groups = useMemo(() => {
     const byDept = new Map<string, StaffMember[]>();
     for (const dept of departments) byDept.set(dept.id, []);
@@ -58,10 +60,10 @@ export function StaffByDepartment({
     <div className="space-y-6">
       {groups.management.length > 0 && (
         <DepartmentSection
-          name="Management / Administration"
+          name={t("managementAdministration")}
           color={MANAGEMENT_COLOR}
           count={groups.management.length}
-          subtitle="Admin and manager accounts"
+          subtitle={t("adminAndManagerAccounts")}
         >
           <StaffTable
             staff={groups.management}
@@ -86,7 +88,7 @@ export function StaffByDepartment({
             {members.length === 0 ? (
               <EmptyState
                 color={color}
-                message={`No staff assigned to ${dept.name} yet.`}
+                message={t("noStaffAssignedToDepartment", { department: dept.name })}
               />
             ) : (
               <StaffTable
@@ -103,10 +105,10 @@ export function StaffByDepartment({
 
       {groups.unassigned.length > 0 && (
         <DepartmentSection
-          name="Unassigned"
+          name={t("unassigned")}
           color={UNASSIGNED_COLOR}
           count={groups.unassigned.length}
-          subtitle="Members not currently linked to a department"
+          subtitle={t("membersNotCurrentlyLinkedToA")}
         >
           <StaffTable
             staff={groups.unassigned}
@@ -122,9 +124,8 @@ export function StaffByDepartment({
         groups.management.length === 0 &&
         groups.unassigned.length === 0 && (
         <div className="rounded-xl border border-dashed border-border/60 p-10 text-center text-sm text-muted-foreground">
-          No staff members yet. Add a department first, then create staff
-          accounts.
-        </div>
+          {t("noStaffMembersYetAddA")}
+          {t("accounts")}</div>
       )}
     </div>
   );
@@ -143,6 +144,7 @@ function DepartmentSection({
   subtitle?: string;
   children: React.ReactNode;
 }) {
+  const t = useTranslations("settings");
   return (
     <section
       className="overflow-hidden rounded-xl border bg-card shadow-sm"
@@ -181,7 +183,7 @@ function DepartmentSection({
           }}
         >
           <Users className="h-3 w-3" />
-          {count} member{count !== 1 ? "s" : ""}
+          {t("memberCount", { count })}
         </span>
       </header>
       <div className="p-3 sm:p-4">{children}</div>

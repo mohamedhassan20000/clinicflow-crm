@@ -8,46 +8,47 @@ import {
   Wallet,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useTranslations } from "next-intl";
 
 const REPORT_CARDS = [
   {
-    title: "Cancellation Report",
-    description: "Cancelled appointments by doctor and reason.",
+    titleKey: "cancellationReport",
+    descriptionKey: "cancelledAppointmentsByDoctorAndReason",
     href: "/reports/cancellations",
     icon: Ban,
     performance: false,
   },
   {
-    title: "No-show Report",
-    description: "No-show appointment rates by doctor.",
+    titleKey: "noShowReport",
+    descriptionKey: "noShowAppointmentRatesByDoctor",
     href: "/reports/no-shows",
     icon: CalendarX2,
     performance: false,
   },
   {
-    title: "Revenue / Sales Report",
-    description: "Collected payments, settlements, and balances.",
+    titleKey: "revenueSalesReport",
+    descriptionKey: "collectedPaymentsSettlementsAndBalances",
     href: "/reports/revenue",
     icon: Wallet,
     performance: false,
   },
   {
-    title: "Follow-ups Report",
-    description: "Completed follow-up outcomes.",
+    titleKey: "followUpsReport",
+    descriptionKey: "completedFollowUpOutcomes",
     href: "/reports/follow-ups",
     icon: PhoneCall,
     performance: false,
   },
   {
-    title: "Doctor Performance Report",
-    description: "Doctor sessions, outcomes, revenue, and share.",
+    titleKey: "doctorPerformanceReport",
+    descriptionKey: "doctorSessionsOutcomesRevenueAndShare",
     href: "/reports/doctors",
     icon: Stethoscope,
     performance: true,
   },
   {
-    title: "Receptionist Performance Report",
-    description: "Bookings and follow-ups handled by receptionist.",
+    titleKey: "receptionistPerformanceReport",
+    descriptionKey: "bookingsAndFollowUpsHandledByReceptionist",
     href: "/reports/receptionists",
     icon: UserRoundCog,
     performance: true,
@@ -55,15 +56,15 @@ const REPORT_CARDS = [
 ];
 
 export function ReportsIndex({ canSeePerformanceReports }: { canSeePerformanceReports: boolean }) {
+  const t = useTranslations("reports");
   const cards = REPORT_CARDS.filter((card) => canSeePerformanceReports || !card.performance);
 
   return (
     <div className="space-y-6 print:hidden">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Reports</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">{t("reports")}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Choose a report to open its dedicated filters, print layout, and summary.
-        </p>
+          {t("chooseAReportToOpenIts")}</p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -77,13 +78,12 @@ export function ReportsIndex({ canSeePerformanceReports }: { canSeePerformanceRe
                     <Icon className="h-5 w-5" aria-hidden />
                   </span>
                   <div className="min-w-0">
-                    <CardTitle className="text-base">{card.title}</CardTitle>
-                    <CardDescription className="mt-1">{card.description}</CardDescription>
+                    <CardTitle className="text-base">{t(card.titleKey)}</CardTitle>
+                    <CardDescription className="mt-1">{t(card.descriptionKey)}</CardDescription>
                   </div>
                 </CardHeader>
                 <CardContent className="text-sm font-medium text-primary">
-                  Open report
-                </CardContent>
+                  {t("openReport")}</CardContent>
               </Card>
             </Link>
           );

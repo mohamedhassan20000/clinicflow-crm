@@ -12,6 +12,7 @@ import { TableEmptyState } from "@/components/shared/data-table";
 import { restoreArchivedPatient } from "@/actions/patients";
 import type { PatientStub } from "@/actions/patients";
 import { withReturnTo } from "@/lib/navigation/return-url";
+import { useTranslations } from "next-intl";
 
 function fmtDate(iso: string | null): string {
   if (!iso) return "—";
@@ -53,6 +54,7 @@ interface ArchiveTableProps {
 }
 
 export function ArchiveTable({ patients, isAdmin }: ArchiveTableProps) {
+  const t = useTranslations("patients");
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [pendingId, setPendingId] = useState<string | null>(null);
@@ -63,14 +65,14 @@ export function ArchiveTable({ patients, isAdmin }: ArchiveTableProps) {
       const res = await restoreArchivedPatient(id);
       setPendingId(null);
       if (res.error) toast.error(res.error);
-      else { toast.success("Patient restored to active list."); router.refresh(); }
+      else { toast.success(t("patientRestoredToActiveList")); router.refresh(); }
     });
   }
 
   if (patients.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-border/60">
-        <TableEmptyState icon={User} title="Archive is empty" description="Archived patients appear here." />
+        <TableEmptyState icon={User} title={t("archiveIsEmpty")} description={t("archivedPatientsAppearHere")} />
       </div>
     );
   }
@@ -93,10 +95,10 @@ export function ArchiveTable({ patients, isAdmin }: ArchiveTableProps) {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Patient</TableHead>
-                  <TableHead className="hidden sm:table-cell">File #</TableHead>
-                  <TableHead>Archived</TableHead>
-                  {isAdmin && <TableHead className="text-end">Actions</TableHead>}
+                  <TableHead>{t("patient")}</TableHead>
+                  <TableHead className="hidden sm:table-cell">{t("file")}</TableHead>
+                  <TableHead>{t("archived")}</TableHead>
+                  {isAdmin && <TableHead className="text-end">{t("actions")}</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -132,7 +134,7 @@ export function ArchiveTable({ patients, isAdmin }: ArchiveTableProps) {
                       {isAdmin && (
                         <TableCell className="text-end">
                           {busy ? (
-                            <Loader2 className="ml-auto h-4 w-4 animate-spin text-muted-foreground" />
+                            <Loader2 className="ms-auto h-4 w-4 animate-spin text-muted-foreground" />
                           ) : (
                             <Button
                               variant="outline"
@@ -142,8 +144,7 @@ export function ArchiveTable({ patients, isAdmin }: ArchiveTableProps) {
                               disabled={isPending}
                             >
                               <RotateCcw className="h-3 w-3" />
-                              Restore
-                            </Button>
+                              {t("restore")}</Button>
                           )}
                         </TableCell>
                       )}

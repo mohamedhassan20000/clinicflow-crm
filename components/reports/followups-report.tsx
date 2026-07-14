@@ -5,6 +5,7 @@ import { EmptyReportState, MetricGrid, ReportSectionShell } from "@/components/r
 import { formatDateRangeLabel, formatNumber, formatPercent } from "@/components/reports/report-formatters";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
+import { useTranslations } from "next-intl";
 
 export function FollowupsReport({
   data,
@@ -15,31 +16,32 @@ export function FollowupsReport({
   range: ReportDateRange;
   clinic: ClinicPrintMeta;
 }) {
+  const t = useTranslations("reports");
   const { locale } = useClinicSettings();
   const total = data.completedCount;
   const allFineRate = total === 0 ? 0 : (data.allFineCount / total) * 100;
   const hasProblemRate = total === 0 ? 0 : (data.hasProblemCount / total) * 100;
   const noResponseRate = total === 0 ? 0 : Math.max(0, 100 - allFineRate - hasProblemRate);
   const rows = [
-    { label: "All fine", count: data.allFineCount, rate: allFineRate },
-    { label: "Has problem", count: data.hasProblemCount, rate: hasProblemRate },
-    { label: "No response", count: data.noResponseCount, rate: noResponseRate },
+    { label: t("allFine"), count: data.allFineCount, rate: allFineRate },
+    { label: t("hasProblem"), count: data.hasProblemCount, rate: hasProblemRate },
+    { label: t("noResponse"), count: data.noResponseCount, rate: noResponseRate },
   ];
 
   return (
     <ReportSectionShell
       section="followups"
-      title="Follow-ups Report"
-      description="Completed follow-up outcomes."
+      title={t("followUpsReport")}
+      description={t("completedFollowUpOutcomes")}
       rangeLabel={formatDateRangeLabel(range.from, range.to, locale)}
       clinic={clinic}
     >
       <MetricGrid
         items={[
-          { label: "Completed follow-ups", value: formatNumber(data.completedCount, locale) },
-          { label: "All fine", value: formatNumber(data.allFineCount, locale) },
-          { label: "Has problem", value: formatNumber(data.hasProblemCount, locale) },
-          { label: "No response", value: formatNumber(data.noResponseCount, locale) },
+          { label: t("completedFollowUps"), value: formatNumber(data.completedCount, locale) },
+          { label: t("allFine"), value: formatNumber(data.allFineCount, locale) },
+          { label: t("hasProblem"), value: formatNumber(data.hasProblemCount, locale) },
+          { label: t("noResponse"), value: formatNumber(data.noResponseCount, locale) },
         ]}
       />
 
@@ -50,10 +52,10 @@ export function FollowupsReport({
           <Table dense>
             <TableHeader>
               <TableRow>
-                <TableHead>Outcome</TableHead>
-                <TableHead className="text-end">Count</TableHead>
-                <TableHead className="text-end">Rate</TableHead>
-                <TableHead className="print:hidden">Share</TableHead>
+                <TableHead>{t("outcome")}</TableHead>
+                <TableHead className="text-end">{t("count")}</TableHead>
+                <TableHead className="text-end">{t("rate")}</TableHead>
+                <TableHead className="print:hidden">{t("share")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

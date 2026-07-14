@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useTranslations } from "next-intl";
 
 export type PageHeaderBreadcrumb = {
   label: string;
@@ -24,20 +25,21 @@ export function PageHeader({
   actions?: React.ReactNode;
   className?: string;
 }) {
+  const t = useTranslations("shared");
   return (
     <header className={cn("space-y-3", className)}>
       <Link
         href={back.href}
-        aria-label={`Back to ${back.label}`}
+        aria-label={t("backToNamed", { label: back.label })}
         className="inline-flex min-h-11 items-center gap-1 rounded-md pe-3 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring print:hidden"
       >
         <ChevronLeft className="size-4 rtl:hidden" aria-hidden="true" />
         <ChevronRight className="hidden size-4 rtl:block" aria-hidden="true" />
-        <span>Back to {back.label}</span>
+        <span>{t("backToNamed", { label: back.label })}</span>
       </Link>
 
       {breadcrumbs.length > 0 ? (
-        <nav aria-label="Breadcrumb" className="print:hidden">
+        <nav aria-label={t("breadcrumb")} className="print:hidden">
           <ol className="flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
             {breadcrumbs.map((item, index) => {
               const current = index === breadcrumbs.length - 1;

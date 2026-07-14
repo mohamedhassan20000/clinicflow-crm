@@ -1,16 +1,17 @@
+import "@/lib/validations/error-map";
 import { z } from "zod";
 
 export const appointmentSchema = z.object({
-  patient_id: z.string().uuid("Select a patient"),
-  doctor_id: z.string().uuid("Select a doctor"),
+  patient_id: z.string().uuid("validation.invalidFormat"),
+  doctor_id: z.string().uuid("validation.invalidFormat"),
   department_id: z.string().uuid().optional().nullable(),
   scheduled_at: z
     .string()
-    .min(1, "Select a date and time")
-    .refine((v) => !isNaN(Date.parse(v)), "Invalid date/time"),
+    .min(1, "validation.tooSmall")
+    .refine((v) => !isNaN(Date.parse(v)), "validation.invalidFormat"),
   duration_minutes: z.number().int().min(15).max(240).default(30),
   insurance_provider_id: z.string().uuid().optional().nullable(),
-  package_id: z.string().uuid("Select a valid package").optional().nullable(),
+  package_id: z.string().uuid("validation.invalidFormat").optional().nullable(),
   notes: z.string().max(1000).optional().nullable(),
 });
 
@@ -28,9 +29,9 @@ export const paymentMethodSchema = z.enum(PAYMENT_METHODS);
 
 export const lineItemSchema = z.object({
   service_id: z.string().uuid().optional().nullable(),
-  name: z.string().min(1, "Service name is required").max(120),
-  price: z.number().nonnegative("Price cannot be negative"),
-  quantity: z.number().int().min(1, "Quantity must be at least 1").max(99),
+  name: z.string().min(1, "validation.tooSmall").max(120),
+  price: z.number().nonnegative("validation.tooSmall"),
+  quantity: z.number().int().min(1, "validation.tooSmall").max(99),
 });
 
 export type LineItemValues = z.infer<typeof lineItemSchema>;
@@ -39,7 +40,7 @@ export const billingSchema = z
   .object({
     line_items: z
       .array(lineItemSchema)
-      .min(1, "Add at least one service to the invoice"),
+      .min(1, "validation.tooSmall"),
     paid_amount: z.number().nonnegative(),
     payment_method: paymentMethodSchema,
     insurance_amount: z.number().nonnegative().default(0),
@@ -51,7 +52,7 @@ export const billingSchema = z
     previous_payment_method: paymentMethodSchema.nullable().optional(),
     previous_note: z
       .string()
-      .max(500, "Previous note must be 500 characters or less.")
+      .max(500, "validation.previousNoteTooLong")
       .nullable()
       .optional(),
   })
@@ -62,7 +63,7 @@ export const billingSchema = z
     },
     {
       path: ["secondary_payment_method"],
-      message: "Secondary method must differ from primary.",
+      message: "validation.invalidFormat",
     },
   )
   .superRefine((v, ctx) => {
@@ -70,14 +71,14 @@ export const billingSchema = z
       ctx.addIssue({
         code: "custom",
         path: ["previous_settlement_amount"],
-        message: "Previous settlement amount cannot be negative.",
+        message: "validation.previousSettlementNegative",
       });
     }
     if (v.previous_settlement_amount > 0 && !v.previous_payment_method) {
       ctx.addIssue({
         code: "custom",
         path: ["previous_payment_method"],
-        message: "Select a payment method for previous balance.",
+        message: "validation.previousPaymentMethodRequired",
       });
     }
   })
@@ -94,7 +95,7 @@ export const billingSchema = z
     (v) => v.previous_settlement_amount <= 0 || !!v.previous_payment_method,
     {
       path: ["previous_payment_method"],
-      message: "Select a payment method for previous balance.",
+      message: "validation.previousPaymentMethodRequired",
     },
   );
 
@@ -102,7 +103,7 @@ export type BillingValues = z.input<typeof billingSchema>;
 
 export const depositSchema = z.object({
   patient_id: z.string().uuid(),
-  amount: z.number().positive("Amount must be greater than zero"),
+  amount: z.number().positive("validation.tooSmall"),
   payment_method: paymentMethodSchema,
   note: z.string().max(500).optional().nullable(),
 });

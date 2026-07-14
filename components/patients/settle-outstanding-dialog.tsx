@@ -28,6 +28,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { settleOutstanding } from "@/actions/patients";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
+import { useTranslations } from "next-intl";
 
 type PaymentMethod =
   | "cash"
@@ -38,14 +39,14 @@ type PaymentMethod =
 
 const METHODS: {
   value: PaymentMethod;
-  label: string;
+  labelKey: string;
   icon: React.ComponentType<{ className?: string }>;
 }[] = [
-  { value: "cash", label: "Cash", icon: Banknote },
-  { value: "credit_card", label: "Credit card", icon: CreditCard },
-  { value: "paypal", label: "PayPal", icon: Wallet },
-  { value: "bank_transfer", label: "Bank transfer", icon: Landmark },
-  { value: "insurance", label: "Insurance", icon: ShieldCheck },
+  { value: "cash", labelKey: "paymentCash", icon: Banknote },
+  { value: "credit_card", labelKey: "paymentCreditCard", icon: CreditCard },
+  { value: "paypal", labelKey: "paymentPaypal", icon: Wallet },
+  { value: "bank_transfer", labelKey: "paymentBankTransfer", icon: Landmark },
+  { value: "insurance", labelKey: "paymentInsurance", icon: ShieldCheck },
 ];
 
 interface Props {
@@ -61,6 +62,7 @@ export function SettleOutstandingDialog({
   patientName,
   triggerLabel = "Settle outstanding",
 }: Props) {
+  const t = useTranslations("patients");
   const { formatCurrency } = useClinicSettings();
   const fmtMoney = (n: number) => formatCurrency(n);
   const [open, setOpen] = useState(false);
@@ -83,7 +85,7 @@ export function SettleOutstandingDialog({
     if (state.error) {
       toast.error(state.error);
     } else {
-      toast.success("Outstanding balance settled.");
+      toast.success(t("outstandingBalanceSettled"));
       router.refresh();
       // Defer state resets so we don't trigger cascading renders within the effect.
       queueMicrotask(() => {
@@ -131,14 +133,12 @@ export function SettleOutstandingDialog({
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Settle outstanding balance</DialogTitle>
+            <DialogTitle>{t("settleOutstandingBalance")}</DialogTitle>
             <DialogDescription>
-              Record a partial or full payment against {patientName}&apos;s
-              outstanding balance of{" "}
-              <span className="font-semibold tabular-nums text-foreground">
-                {fmtMoney(outstanding)}
-              </span>
-              .
+              {t("recordOutstandingPayment", {
+                patient: patientName,
+                amount: fmtMoney(outstanding),
+              })}
             </DialogDescription>
           </DialogHeader>
 
@@ -162,8 +162,7 @@ export function SettleOutstandingDialog({
 
             <div className="space-y-1.5">
               <Label htmlFor="settle-amount" className="text-xs">
-                Amount
-              </Label>
+                {t("amount")}</Label>
               <Input
                 id="settle-amount"
                 name="amount"
@@ -179,19 +178,18 @@ export function SettleOutstandingDialog({
                 autoFocus
               />
               <p className="text-[11px] text-muted-foreground">
-                Max {fmtMoney(outstanding)}
+                {t("max")}{fmtMoney(outstanding)}
                 {showSplit && totalN > outstanding + 0.001 && (
-                  <span className="ml-2 text-destructive">
-                    Combined total exceeds outstanding.
-                  </span>
+                  <span className="ms-2 text-destructive">
+                    {t("combinedTotalExceedsOutstanding")}</span>
                 )}
               </p>
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs">Payment method</Label>
+              <Label className="text-xs">{t("paymentMethod")}</Label>
               <div className="grid grid-cols-5 gap-1.5">
-                {METHODS.map(({ value, label, icon: Icon }) => {
+                {METHODS.map(({ value, labelKey, icon: Icon }) => {
                   const active = method === value;
                   return (
                     <button
@@ -209,7 +207,7 @@ export function SettleOutstandingDialog({
                       <Icon
                         className={cn("h-4 w-4", active ? "text-primary" : "")}
                       />
-                      {label}
+                      {t(labelKey)}
                     </button>
                   );
                 })}
@@ -229,19 +227,17 @@ export function SettleOutstandingDialog({
                   "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition",
                   showSplit
                     ? "border-primary/40 bg-primary/5 text-primary hover:bg-primary/10"
-                    : "border-dashed border-border/70 text-muted-foreground hover:border-primary/50 hover:text-foreground",
+                    : "border-dashed border-border/70 text-muted-foreground hover:border-amber-500/40 hover:text-foreground",
                 )}
               >
                 {showSplit ? (
                   <>
                     <X className="h-3.5 w-3.5" />
-                    Remove split payment
-                  </>
+                    {t("removeSplitPayment")}</>
                 ) : (
                   <>
                     <Plus className="h-3.5 w-3.5" />
-                    Add split payment
-                  </>
+                    {t("addSplitPayment")}</>
                 )}
               </button>
             </div>
@@ -250,8 +246,7 @@ export function SettleOutstandingDialog({
               <>
                 <div className="space-y-1.5">
                   <Label htmlFor="settle-secondary" className="text-xs">
-                    Second amount
-                  </Label>
+                    {t("secondAmount")}</Label>
                   <Input
                     id="settle-secondary"
                     type="number"
@@ -264,7 +259,7 @@ export function SettleOutstandingDialog({
                     onChange={(e) => setSecondaryAmount(e.target.value)}
                   />
                   <p className="text-[11px] text-muted-foreground">
-                    Total against outstanding:{" "}
+                    {t("totalAgainstOutstanding")}{" "}
                     <span className="tabular-nums font-medium text-foreground">
                       {fmtMoney(totalN)}
                     </span>{" "}
@@ -273,9 +268,9 @@ export function SettleOutstandingDialog({
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Second payment method</Label>
+                  <Label className="text-xs">{t("secondPaymentMethod")}</Label>
                   <div className="grid grid-cols-5 gap-1.5">
-                    {METHODS.map(({ value, label, icon: Icon }) => {
+                    {METHODS.map(({ value, labelKey, icon: Icon }) => {
                       const active = secondaryMethod === value;
                       const disabled = value === method;
                       return (
@@ -298,7 +293,7 @@ export function SettleOutstandingDialog({
                               active ? "text-primary" : "",
                             )}
                           />
-                          {label}
+                          {t(labelKey)}
                         </button>
                       );
                     })}
@@ -309,13 +304,12 @@ export function SettleOutstandingDialog({
 
             <div className="space-y-1.5">
               <Label htmlFor="settle-note" className="text-xs">
-                Note (optional)
-              </Label>
+                {t("noteOptional")}</Label>
               <Textarea
                 id="settle-note"
                 name="note"
                 rows={2}
-                placeholder="Receipt number, context, etc."
+                placeholder={t("receiptNumberContextEtc")}
                 value={note}
                 disabled={isPending}
                 onChange={(e) => setNote(e.target.value)}
@@ -330,16 +324,14 @@ export function SettleOutstandingDialog({
                 onClick={() => setOpen(false)}
                 disabled={isPending}
               >
-                Cancel
-              </Button>
+                {t("cancel")}</Button>
               <Button
                 type="submit"
                 disabled={isPending || invalid}
                 className="gap-2"
               >
                 {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-                Record payment
-              </Button>
+                {t("recordPayment")}</Button>
             </DialogFooter>
           </form>
         </DialogContent>

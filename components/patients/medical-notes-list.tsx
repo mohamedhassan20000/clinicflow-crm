@@ -24,6 +24,8 @@ import {
 } from "@/actions/patients";
 import { MedicalNoteAttachments } from "@/components/patients/medical-note-attachments";
 import type { MedicalNoteAttachmentItem } from "@/actions/medical-note-attachments";
+import { useTranslations } from "next-intl";
+import { useClinicSettings } from "@/contexts/clinic-settings-context";
 
 export type MedicalNoteWithAttachments = Tables<"medical_notes"> & {
   profiles: { full_name: string } | null;
@@ -47,6 +49,8 @@ export function MedicalNotesList({
   canMutateNotes = true,
   canUploadAttachments = true,
 }: MedicalNotesListProps) {
+  const t = useTranslations("patients");
+  const { formatDateTime } = useClinicSettings();
   const router = useRouter();
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -58,7 +62,7 @@ export function MedicalNotesList({
     return (
       <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border py-12 text-center">
         <FileText className="mb-2 h-8 w-8 text-muted-foreground/40" />
-        <p className="text-sm text-muted-foreground">No medical notes yet.</p>
+        <p className="text-sm text-muted-foreground">{t("noMedicalNotesYet")}</p>
       </div>
     );
   }
@@ -73,10 +77,10 @@ export function MedicalNotesList({
           <div className="flex items-start justify-between gap-2 text-xs text-muted-foreground">
             <div>
               <span className="font-medium text-foreground/80">
-                {note.profiles?.full_name ?? "Unknown doctor"}
+                {note.profiles?.full_name ?? t("unknownDoctor")}
               </span>
-              <time className="ml-2" dateTime={note.created_at}>
-                {new Date(note.created_at).toLocaleString("en-GB", {
+              <time className="ms-2" dateTime={note.created_at}>
+                {formatDateTime(note.created_at, {
                   dateStyle: "medium",
                   timeStyle: "short",
                 })}
@@ -96,8 +100,7 @@ export function MedicalNotesList({
                   }}
                 >
                   <Pencil className="h-3.5 w-3.5" />
-                  Edit
-                </Button>
+                  {t("edit")}</Button>
                 <Button
                   type="button"
                   variant="ghost"
@@ -107,8 +110,7 @@ export function MedicalNotesList({
                   onClick={() => setConfirmDeleteId(note.id)}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
-                  Delete
-                </Button>
+                  {t("delete")}</Button>
               </div>
             )}
           </div>
@@ -129,8 +131,7 @@ export function MedicalNotesList({
                   disabled={isPending}
                   onClick={() => setEditingId(null)}
                 >
-                  Cancel
-                </Button>
+                  {t("cancel")}</Button>
                 <Button
                   type="button"
                   size="sm"
@@ -140,15 +141,14 @@ export function MedicalNotesList({
                       const res = await updateMedicalNote(note.id, draft);
                       if (res.error) toast.error(res.error);
                       else {
-                        toast.success("Medical note updated.");
+                        toast.success(t("medicalNoteUpdated"));
                         setEditingId(null);
                         router.refresh();
                       }
                     })
                   }
                 >
-                  Save
-                </Button>
+                  {t("save")}</Button>
               </div>
             </div>
           ) : (
@@ -174,14 +174,12 @@ export function MedicalNotesList({
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Move note to trash?</AlertDialogTitle>
+            <AlertDialogTitle>{t("moveNoteToTrash")}</AlertDialogTitle>
             <AlertDialogDescription>
-              This medical note will be moved to trash. You can restore it using
-              the undo action that appears immediately after deletion.
-            </AlertDialogDescription>
+              {t("thisMedicalNoteWillBeMoved")}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={isPending}>{t("cancel")}</AlertDialogCancel>
             <AlertDialogAction
               disabled={isPending}
               onClick={(e) => {
@@ -192,14 +190,14 @@ export function MedicalNotesList({
                 startTransition(async () => {
                   const res = await deleteMedicalNote(id);
                   if (res.error) {
-                    toast.error(res.error ?? "Failed to delete note.");
+                    toast.error(res.error ?? t("failedToDeleteNote"));
                     return;
                   }
                   setHiddenIds((prev) => new Set(prev).add(id));
-                  toast.success("Medical note moved to trash.", {
+                  toast.success(t("medicalNoteMovedToTrash"), {
                     duration: 15000,
                     action: {
-                      label: "Undo",
+                      label: t("undo"),
                       onClick: async () => {
                         const restore = await restoreMedicalNote(id);
                         if (restore.error) {
@@ -211,7 +209,7 @@ export function MedicalNotesList({
                           next.delete(id);
                           return next;
                         });
-                        toast.success("Medical note restored.");
+                        toast.success(t("medicalNoteRestored"));
                         router.refresh();
                       },
                     },
@@ -220,8 +218,7 @@ export function MedicalNotesList({
                 });
               }}
             >
-              Move to trash
-            </AlertDialogAction>
+              {t("moveToTrash")}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

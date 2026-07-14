@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { marketingCopy as copy } from "@/lib/marketing-copy";
+import { useTranslations } from "next-intl";
 
 export function MarketingLogo({
   className,
@@ -10,10 +10,12 @@ export function MarketingLogo({
   className?: string;
   inverse?: boolean;
 }) {
+  const t = useTranslations("marketing");
+
   return (
     <Link
       href="/"
-      aria-label="ClinicFlow home"
+      aria-label={t("nav.home")}
       className={cn(
         "inline-flex min-h-11 items-center gap-2.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-4",
         inverse ? "text-white focus-visible:ring-offset-[#073846]" : "text-[#082f3c] focus-visible:ring-offset-[#f5fbfb]",
@@ -28,7 +30,7 @@ export function MarketingLogo({
         className="h-8 w-auto shrink-0 object-contain"
         sizes="34px"
       />
-      <span className="text-[1.05rem] font-bold tracking-[-0.035em]">{copy.brand}</span>
+      <span className="text-[1.05rem] font-bold tracking-[-0.035em]">{t("brand")}</span>
     </Link>
   );
 }

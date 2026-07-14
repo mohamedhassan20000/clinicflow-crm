@@ -15,10 +15,15 @@ import {
 } from "@/actions/settings";
 import { SettingsTrashSection, type TrashItem } from "@/components/settings/settings-trash-section";
 import { THIRTY_DAYS_MS } from "@/lib/constants";
+import { getTranslations } from "next-intl/server";
 
-export const metadata: Metadata = { title: "Insurance" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("protected");
+  return { title: t("metadataInsurance") };
+}
 
 export default async function InsuranceSettingsPage() {
+  const t = await getTranslations("protected");
   const user = await requireRole(["admin", "manager"]);
 
   const allProviders = await getCachedInsuranceProviders(user.clinicId);
@@ -39,9 +44,9 @@ export default async function InsuranceSettingsPage() {
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="font-semibold">Insurance providers</h2>
+          <h2 className="font-semibold">{t("insuranceProviders")}</h2>
           <p className="text-sm text-muted-foreground">
-            {providers?.length ?? 0} provider{(providers?.length ?? 0) !== 1 ? "s" : ""}
+            {t("providerCount", { count: providers?.length ?? 0 })}
           </p>
         </div>
         <AddInsuranceDialog />
@@ -57,11 +62,11 @@ export default async function InsuranceSettingsPage() {
           </colgroup>
           <TableHeader>
             <TableRow>
-              <TableHead>Provider</TableHead>
-              <TableHead className="hidden sm:table-cell">Code</TableHead>
-              <TableHead>Status</TableHead>
+              <TableHead>{t("provider")}</TableHead>
+              <TableHead className="hidden sm:table-cell">{t("code")}</TableHead>
+              <TableHead>{t("status")}</TableHead>
               <TableHead className="text-end">
-                <span className="sr-only">Actions</span>
+                <span className="sr-only">{t("actions")}</span>
               </TableHead>
             </TableRow>
           </TableHeader>
@@ -69,8 +74,7 @@ export default async function InsuranceSettingsPage() {
             {providers.length === 0 && (
               <TableRow>
                 <TableCell colSpan={4} className="py-10 text-center text-sm text-muted-foreground">
-                  No insurance providers yet.
-                </TableCell>
+                  {t("noInsuranceProvidersYet")}</TableCell>
               </TableRow>
             )}
             {providers.map((provider) => (
@@ -82,9 +86,9 @@ export default async function InsuranceSettingsPage() {
                 <TableCell>
                   <Badge
                     variant={provider.is_active ? "default" : "secondary"}
-                    className={`text-xs ${provider.is_active ? "bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/10 border-emerald-500/20" : ""}`}
+                    className={`text-xs ${provider.is_active ? "bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-400" : ""}`}
                   >
-                    {provider.is_active ? "Active" : "Inactive"}
+                    {provider.is_active ? t("active") : t("inactive")}
                   </Badge>
                 </TableCell>
                 <TableCell className="text-end">

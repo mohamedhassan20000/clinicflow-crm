@@ -3,15 +3,16 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { useTranslations } from "next-intl";
 
 const NAV = [
-  { href: "/settings/staff", label: "Staff" },
-  { href: "/settings/departments", label: "Departments" },
-  { href: "/settings/services", label: "Services" },
-  { href: "/settings/packages", label: "Packages" },
-  { href: "/settings/insurance", label: "Insurance" },
-  { href: "/settings/clinic", label: "Clinic" },
-  { href: "/settings/customize", label: "Customize", adminOnly: true },
+  { href: "/settings/staff", labelKey: "navStaff" },
+  { href: "/settings/departments", labelKey: "navDepartments" },
+  { href: "/settings/services", labelKey: "navServices" },
+  { href: "/settings/packages", labelKey: "navPackages" },
+  { href: "/settings/insurance", labelKey: "navInsurance" },
+  { href: "/settings/clinic", labelKey: "navClinic" },
+  { href: "/settings/customize", labelKey: "navCustomize", adminOnly: true },
 ] as const;
 
 export function SettingsNav({
@@ -19,6 +20,7 @@ export function SettingsNav({
 }: {
   canCustomize: boolean;
 }) {
+  const t = useTranslations("settings");
   const pathname = usePathname();
   const nav = NAV.filter(
     (item) => !("adminOnly" in item) || canCustomize,
@@ -37,7 +39,7 @@ export function SettingsNav({
               : "text-muted-foreground hover:text-foreground",
           )}
         >
-          {n.label}
+          {t(n.labelKey)}
         </Link>
       ))}
     </nav>

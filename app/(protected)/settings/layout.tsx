@@ -3,8 +3,12 @@ import { requireRole } from "@/lib/rbac";
 import { SettingsNav } from "@/components/settings/settings-nav";
 import { SettingsPageHeader } from "@/components/settings/settings-page-header";
 import { isPrimaryClinicAdmin } from "@/lib/primary-admin";
+import { getTranslations } from "next-intl/server";
 
-export const metadata: Metadata = { title: "Settings" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("protected");
+  return { title: t("metadataSettings") };
+}
 
 export default async function SettingsLayout({
   children,

@@ -108,7 +108,14 @@ test("expired-subscription user can submit the public root dialog", async ({ pag
   if (expired.error) throw expired.error;
 
   await page.goto("/");
-  await page.getByRole("button", { name: "Request an invitation" }).click();
+  await page.waitForLoadState("networkidle");
+  const requestInvitation = page.getByRole("button", {
+    name: "Request an invitation",
+  });
+  await expect(requestInvitation).toBeEnabled();
+  await requestInvitation.click();
+  await expect(requestInvitation).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByRole("dialog")).toBeVisible();
   await page.getByLabel("Clinic name").fill(`Expired Session Clinic ${suffix}`);
   await page.getByLabel("Owner name").fill("Expired Session Owner");
   await page.getByLabel("Phone").fill("50004000");

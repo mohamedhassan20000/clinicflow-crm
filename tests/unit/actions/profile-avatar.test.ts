@@ -93,7 +93,7 @@ describe("profile avatar removal", () => {
 
     const result = await removeAvatar(null);
 
-    expect(result).toEqual({ error: "update failed" });
+    expect(result).toEqual({ error: "Failed to remove profile photo." });
     expect(mocks.state.storageRemove).not.toHaveBeenCalled();
   });
 });

@@ -15,16 +15,17 @@ import {
 import { cn } from "@/lib/utils";
 import { formatDoctorName } from "@/lib/format-doctor";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
+import { useTranslations } from "next-intl";
 
 const PAYMENT_META: Record<
   string,
-  { label: string; icon: React.ComponentType<{ className?: string }> }
+  { labelKey: string; icon: React.ComponentType<{ className?: string }> }
 > = {
-  cash: { label: "Cash", icon: Banknote },
-  credit_card: { label: "Credit card", icon: CreditCard },
-  paypal: { label: "PayPal", icon: Wallet },
-  bank_transfer: { label: "Bank transfer", icon: Landmark },
-  insurance: { label: "Insurance", icon: ShieldCheck },
+  cash: { labelKey: "paymentCash", icon: Banknote },
+  credit_card: { labelKey: "paymentCreditCard", icon: CreditCard },
+  paypal: { labelKey: "paymentPaypal", icon: Wallet },
+  bank_transfer: { labelKey: "paymentBankTransfer", icon: Landmark },
+  insurance: { labelKey: "paymentInsurance", icon: ShieldCheck },
 };
 
 const STATUS_BADGE: Record<string, string> = {
@@ -90,7 +91,8 @@ export function AppointmentPaymentRow({
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 }) {
-  const { formatCurrency, formatTime } = useClinicSettings();
+  const t = useTranslations("patients");
+  const { formatCurrency, formatDate, formatDateTime, formatTime } = useClinicSettings();
   const fmtMoney = (n: number) => formatCurrency(n);
   const [internalOpen, setInternalOpen] = useState(false);
   const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
@@ -128,17 +130,13 @@ export function AppointmentPaymentRow({
         onClick={handleToggle}
         disabled={!isCompleted}
         className={cn(
-          "flex w-full items-center justify-between gap-4 px-5 py-3.5 text-left transition-colors",
+          "flex w-full items-center justify-between gap-4 px-5 py-3.5 text-start transition-colors",
           isCompleted ? "hover:bg-muted/30 cursor-pointer" : "cursor-default",
         )}
       >
         <div className="min-w-0 space-y-0.5">
           <div className="text-sm font-medium">
-            {dt.toLocaleDateString("en-GB", {
-              day: "2-digit",
-              month: "short",
-              year: "numeric",
-            })}
+            {formatDate(dt, { day: "2-digit", month: "short", year: "numeric" })}
             <span className="text-muted-foreground font-normal">
               {" · "}
               {formatTime(dt.toISOString())}
@@ -148,7 +146,7 @@ export function AppointmentPaymentRow({
             <span className="truncate">
               {a.profiles?.full_name
                 ? formatDoctorName(a.profiles.full_name)
-                : "Unassigned"}
+                : t("unassigned")}
             </span>
             {a.departments?.name && (
               <span
@@ -207,16 +205,13 @@ export function AppointmentPaymentRow({
           <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <div className="space-y-0.5">
             <p>
-              <span className="font-semibold">Cancellation reason:</span>{" "}
+              <span className="font-semibold">{t("cancellationReason")}</span>{" "}
               <span className="text-foreground/80">{a.cancellation_reason}</span>
             </p>
             {a.cancelled_at && (
               <p className="text-[10px] text-muted-foreground">
-                Cancelled on{" "}
-                {new Date(a.cancelled_at).toLocaleString("en-GB", {
-                  dateStyle: "medium",
-                  timeStyle: "short",
-                })}
+                {t("cancelledOn")}{" "}
+                {formatDateTime(a.cancelled_at)}
               </p>
             )}
           </div>
@@ -229,8 +224,7 @@ export function AppointmentPaymentRow({
           {a.appointment_services && a.appointment_services.length > 0 && (
             <div className="rounded-lg border border-border/50 bg-card overflow-hidden">
               <div className="px-3 py-2 border-b border-border/40 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Invoice
-              </div>
+                {t("invoice")}</div>
               <ul className="divide-y divide-border/30 text-sm">
                 {a.appointment_services.map((li) => (
                   <li
@@ -240,7 +234,7 @@ export function AppointmentPaymentRow({
                     <span className="truncate">
                       {li.name}
                       {li.quantity > 1 && (
-                        <span className="ml-1 text-xs text-muted-foreground">
+                        <span className="ms-1 text-xs text-muted-foreground">
                           × {li.quantity}
                         </span>
                       )}
@@ -257,18 +251,18 @@ export function AppointmentPaymentRow({
           {/* Summary strip */}
           <div className="grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-border/50 bg-border/40">
             <SummaryCell
-              label="Total"
+              label={t("total")}
               amount={a.total_amount ?? 0}
               formatAmount={fmtMoney}
             />
             <SummaryCell
-              label="Collected"
+              label={t("collected")}
               amount={collected}
               formatAmount={fmtMoney}
               accent="text-emerald-600 dark:text-emerald-400"
             />
             <SummaryCell
-              label="Outstanding"
+              label={t("outstanding")}
               amount={outstanding}
               formatAmount={fmtMoney}
               accent={
@@ -284,8 +278,7 @@ export function AppointmentPaymentRow({
             {deposit > 0 && (
               <Pill className="border-violet-500/30 bg-violet-500/5 text-violet-700 dark:text-violet-400">
                 <Wallet className="h-3 w-3" />
-                Deposit
-                <span className="tabular-nums font-medium">
+                {t("deposit")}<span className="tabular-nums font-medium">
                   {fmtMoney(deposit)}
                 </span>
               </Pill>
@@ -293,14 +286,14 @@ export function AppointmentPaymentRow({
             {primary && PrimaryIcon && paid > 0 && (
               <Pill>
                 <PrimaryIcon className="h-3 w-3" />
-                {primary.label}
+                {t(primary.labelKey)}
                 <span className="tabular-nums font-medium">{fmtMoney(paid)}</span>
               </Pill>
             )}
             {secondary && SecondaryIcon && secondaryAmt > 0 && (
               <Pill className="border-cyan-500/30 bg-cyan-500/5 text-cyan-700 dark:text-cyan-400">
                 <SecondaryIcon className="h-3 w-3" />
-                {secondary.label}
+                {t(secondary.labelKey)}
                 <span className="tabular-nums font-medium">
                   {fmtMoney(secondaryAmt)}
                 </span>
@@ -309,7 +302,7 @@ export function AppointmentPaymentRow({
             {insurance > 0 && (
               <Pill className="border-sky-500/30 bg-sky-500/5 text-sky-700 dark:text-sky-400">
                 <ShieldCheck className="h-3 w-3" />
-                {a.insurance_providers?.name ?? "Insurance"}
+                {a.insurance_providers?.name ?? t("insurance")}
                 <span className="tabular-nums font-medium">
                   {fmtMoney(insurance)}
                 </span>
@@ -318,8 +311,7 @@ export function AppointmentPaymentRow({
             {outstanding > 0 && (
               <Pill className="border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400">
                 <AlertCircle className="h-3 w-3" />
-                Outstanding
-                <span className="tabular-nums font-semibold">
+                {t("outstanding2")}<span className="tabular-nums font-semibold">
                   {fmtMoney(outstanding)}
                 </span>
               </Pill>
@@ -329,8 +321,7 @@ export function AppointmentPaymentRow({
           {settlements.length > 0 && (
             <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5">
               <div className="border-b border-emerald-500/20 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
-                Outstanding settled later
-              </div>
+                {t("outstandingSettledLater")}</div>
               <ul className="divide-y divide-emerald-500/15 text-xs">
                 {settlements.map((s) => {
                   const meta = PAYMENT_META[s.payment_method];
@@ -345,13 +336,10 @@ export function AppointmentPaymentRow({
                           <Icon className="h-3.5 w-3.5 text-emerald-700 dark:text-emerald-400" />
                         )}
                         <span className="font-medium">
-                          {meta?.label ?? s.payment_method}
+                          {meta ? t(meta.labelKey) : s.payment_method}
                         </span>
                         <span className="text-muted-foreground">
-                          {new Date(s.settled_at).toLocaleString("en-GB", {
-                            dateStyle: "medium",
-                            timeStyle: "short",
-                          })}
+                          {formatDateTime(s.settled_at)}
                         </span>
                       </div>
                       <span className="tabular-nums font-semibold text-emerald-700 dark:text-emerald-400">
@@ -371,11 +359,8 @@ export function AppointmentPaymentRow({
           )}
           {a.paid_at && (
             <p className="text-[11px] text-muted-foreground">
-              Paid on{" "}
-              {new Date(a.paid_at).toLocaleString("en-GB", {
-                dateStyle: "medium",
-                timeStyle: "short",
-              })}
+              {t("paidOn")}{" "}
+              {formatDateTime(a.paid_at)}
             </p>
           )}
         </div>

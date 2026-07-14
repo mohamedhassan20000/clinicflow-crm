@@ -10,10 +10,15 @@ import {
 import { clinicLocaleFromRow } from "@/lib/datetime";
 import { getServerMoneyFormatter } from "@/lib/currency/server";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { getTranslations } from "next-intl/server";
 
-export const metadata: Metadata = { title: "Package templates" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("protected");
+  return { title: t("metadataPackageTemplates") };
+}
 
 export default async function PackagesSettingsPage() {
+  const t = await getTranslations("protected");
   const user = await requireRole(["admin", "manager"]);
   const canMutate = user.role === "admin";
 
@@ -66,11 +71,9 @@ export default async function PackagesSettingsPage() {
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="font-semibold">Package templates</h2>
+          <h2 className="font-semibold">{t("packageTemplates")}</h2>
           <p className="text-sm text-muted-foreground">
-            {activeRows.length} active template
-            {activeRows.length !== 1 ? "s" : ""} across {groups.length}{" "}
-            department{groups.length !== 1 ? "s" : ""}.
+            {t("activeTemplatesAcrossDepartments", { templates: activeRows.length, departments: groups.length })}
           </p>
         </div>
         {canMutate ? <AddPackageTemplateDialog departments={deptList} /> : null}
@@ -78,23 +81,18 @@ export default async function PackagesSettingsPage() {
 
       {!canMutate ? (
         <div className="rounded-md border border-border/50 bg-muted/20 px-4 py-2 text-xs text-muted-foreground">
-          Read-only view. Only admins can manage package templates.
-        </div>
+          {t("readOnlyViewOnlyAdminsCan")}</div>
       ) : null}
 
       {deptList.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border/60 bg-muted/20 px-6 py-10 text-center text-sm text-muted-foreground">
-          Add at least one department in{" "}
+          {t("addAtLeastOneDepartmentIn")}{" "}
           <a href="/settings/departments" className="underline">
-            Departments
-          </a>{" "}
-          before creating package templates.
-        </div>
+            {t("departments")}</a>{" "}
+          {t("beforeCreatingPackageTemplates")}</div>
       ) : activeRows.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border/60 bg-muted/20 px-6 py-10 text-center text-sm text-muted-foreground">
-          No package templates yet. Click &ldquo;Add template&rdquo; to create
-          one.
-        </div>
+          {t("noPackageTemplatesYetClickAdd")}</div>
       ) : (
         <div className="space-y-6">
           {groups.map(({ dept, rows: deptRows }) => (
@@ -115,8 +113,8 @@ export default async function PackagesSettingsPage() {
                   style={{ backgroundColor: dept.color }}
                 />
                 {dept.name}
-                <span className="ml-auto text-[11px] font-normal opacity-80">
-                  {deptRows.length} template{deptRows.length !== 1 ? "s" : ""}
+                <span className="ms-auto text-[11px] font-normal opacity-80">
+                  {t("templateCount", { count: deptRows.length })}
                 </span>
               </div>
               <Table dense className="table-fixed">
@@ -129,12 +127,12 @@ export default async function PackagesSettingsPage() {
                 </colgroup>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Template</TableHead>
-                    <TableHead className="text-end">Sessions</TableHead>
-                    <TableHead className="text-end">Price / session</TableHead>
-                    <TableHead className="text-end">Total price</TableHead>
+                    <TableHead>{t("template")}</TableHead>
+                    <TableHead className="text-end">{t("sessions")}</TableHead>
+                    <TableHead className="text-end">{t("priceSession")}</TableHead>
+                    <TableHead className="text-end">{t("totalPrice")}</TableHead>
                     <TableHead className="text-end">
-                      <span className="sr-only">Actions</span>
+                      <span className="sr-only">{t("actions")}</span>
                     </TableHead>
                   </TableRow>
                 </TableHeader>
@@ -183,8 +181,7 @@ export default async function PackagesSettingsPage() {
       {inactiveRows.length > 0 ? (
         <div className="space-y-2">
           <div className="text-sm font-semibold text-muted-foreground">
-            Deactivated templates
-          </div>
+            {t("deactivatedTemplates")}</div>
           <div className="overflow-hidden rounded-xl border border-border/50 bg-muted/10">
             <Table dense className="table-fixed">
               <colgroup>
@@ -193,27 +190,26 @@ export default async function PackagesSettingsPage() {
                 <col className="w-44" />
               </colgroup>
               <TableBody>
-                {inactiveRows.map((t) => {
-                  const d = deptById.get(t.department_id);
+                {inactiveRows.map((template) => {
+                  const d = deptById.get(template.department_id);
                   return (
-                    <TableRow key={t.id}>
+                    <TableRow key={template.id}>
                       <TableCell>
-                        <div className="font-medium">{t.name}</div>
+                        <div className="font-medium">{template.name}</div>
                         <div className="text-xs text-muted-foreground">
-                          {d?.name ?? "Unknown department"} · {t.total_sessions}{" "}
-                          sessions
+                          {d?.name ?? t("unknownDepartment")} · {t("sessionCount", { count: template.total_sessions })}
                         </div>
                       </TableCell>
                       <TableCell className="text-end text-xs text-muted-foreground tabular-nums">
                         {fmtMoney(
-                          t.price_per_session !== null
-                            ? Number(t.price_per_session)
+                          template.price_per_session !== null
+                            ? Number(template.price_per_session)
                             : null,
                         )}
                       </TableCell>
                       <TableCell className="text-end">
                         <PackageTemplateRowActions
-                          template={t}
+                        template={template}
                           departments={deptList}
                           canMutate={canMutate}
                         />

@@ -20,6 +20,7 @@ import { DeleteConfirmDialog } from "@/components/appointments/delete-confirm-di
 import { softDeleteAppointment, restoreAppointment } from "@/actions/appointments";
 import { formatDoctorName } from "@/lib/format-doctor";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
+import { useTranslations } from "next-intl";
 
 // ── Single appointment row inside the popup ───────────────────────────────────
 
@@ -36,6 +37,7 @@ function PopupAppointmentRow({
   currentUserRole?: "admin" | "receptionist" | "manager" | "doctor";
   onDeleted: (id: string) => void;
 }) {
+  const t = useTranslations("appointments");
   const { formatTime } = useClinicSettings();
   const [detailOpen, setDetailOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -43,8 +45,8 @@ function PopupAppointmentRow({
 
   const time = formatTime(appt.scheduled_at);
   const deptColor = appt.departments?.color ?? "#64748b";
-  const deptName = appt.departments?.name ?? "General";
-  const patientName = appt.patients?.full_name ?? "Unknown";
+  const deptName = appt.departments?.name ?? t("general");
+  const patientName = appt.patients?.full_name ?? t("unknown");
 
   function handleDelete() {
     startDelete(async () => {
@@ -52,10 +54,10 @@ function PopupAppointmentRow({
       if (res.error) {
         toast.error(res.error);
       } else {
-        toast.success(`${patientName} moved to trash.`, {
+        toast.success(t("appointmentMovedToTrashForPatient", { patient: patientName }), {
           duration: 10000,
           action: {
-            label: "Undo",
+            label: t("undo"),
             onClick: () => {
               restoreAppointment(appt.id).then((r) => {
                 if (r.error) toast.error(r.error);
@@ -113,7 +115,7 @@ function PopupAppointmentRow({
           <div className="text-xs text-muted-foreground">
             {appt.profiles?.full_name
               ? formatDoctorName(appt.profiles.full_name)
-              : "Unassigned"}
+              : t("unassigned")}
           </div>
           <StatusBadge status={appt.status} />
           {(canEdit || currentUserRole === "doctor") && (
@@ -142,7 +144,7 @@ function PopupAppointmentRow({
               setConfirmOpen(true);
             }}
             disabled={isDeleting}
-            title="Move to trash"
+            title={t("moveToTrash")}
           >
             <Trash2 className="h-4 w-4" />
           </Button>
@@ -187,6 +189,7 @@ export function HourAppointmentsDialog({
   currentUserId?: string;
   currentUserRole?: "admin" | "receptionist" | "manager" | "doctor";
 }) {
+  const t = useTranslations("appointments");
   const { formatSlotTime } = useClinicSettings();
   const [appointments, setAppointments] = useState(initialAppointments);
 
@@ -209,15 +212,13 @@ export function HourAppointmentsDialog({
       <DialogContent className="w-[50vw] min-w-[600px] h-[70vh] flex flex-col overflow-hidden p-0">
         <DialogHeader className="shrink-0 border-b border-border/40 px-4 pb-3 pt-4">
           <DialogTitle>
-            {appointments.length} appointment
-            {appointments.length !== 1 ? "s" : ""} at {hourLabel}
+              {t("appointmentsAtHour", { count: appointments.length, hour: hourLabel })}
           </DialogTitle>
         </DialogHeader>
         <div className="flex-1 divide-y divide-border/20 overflow-y-auto">
           {sorted.length === 0 ? (
             <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-              All appointments have been removed.
-            </div>
+              {t("allAppointmentsHaveBeenRemoved")}</div>
           ) : (
             sorted.map((appt) => (
               <PopupAppointmentRow

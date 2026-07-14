@@ -28,6 +28,7 @@ import {
 import { clinicSchema, type ClinicValues } from "@/lib/validations/settings";
 import { updateClinic, uploadClinicLogo } from "@/actions/settings";
 import type { ActionResult } from "@/actions/settings";
+import { useTranslations } from "next-intl";
 
 interface ClinicFormProps {
   defaultValues: ClinicValues;
@@ -36,6 +37,7 @@ interface ClinicFormProps {
 }
 
 export function ClinicForm({ defaultValues, logoUrl: initialLogoUrl, readOnly = false }: ClinicFormProps) {
+  const t = useTranslations("settings");
   const [state, formAction, isPending] = useActionState(
     updateClinic as (prev: ActionResult | null, fd: FormData) => Promise<ActionResult>,
     null,
@@ -56,7 +58,7 @@ export function ClinicForm({ defaultValues, logoUrl: initialLogoUrl, readOnly = 
 
   useEffect(() => {
     if (state?.success) {
-      toast.success("Clinic settings saved.");
+      toast.success(t("clinicSettingsSaved"));
       const tf = form.getValues("time_format");
       if (tf) setTimeFormat(tf);
     }
@@ -84,7 +86,7 @@ export function ClinicForm({ defaultValues, logoUrl: initialLogoUrl, readOnly = 
       } else if (result.url) {
         setLogoLoadError(false);
         setLogoUrl(result.url);
-        toast.success("Logo updated.");
+        toast.success(t("logoUpdated"));
       }
     });
   }
@@ -93,19 +95,19 @@ export function ClinicForm({ defaultValues, logoUrl: initialLogoUrl, readOnly = 
     <div className="space-y-8">
       {/* Logo upload */}
       <div className="rounded-xl border border-border/50 bg-card p-6">
-        <h3 className="mb-4 text-sm font-semibold">Clinic logo</h3>
+        <h3 className="mb-4 text-sm font-semibold">{t("clinicLogo")}</h3>
         <div className="flex items-center gap-5">
           {logoUrl && !logoLoadError ? (
             <>
               <button
                 type="button"
-                aria-label="Preview clinic logo"
+                aria-label={t("previewClinicLogo")}
                 onClick={() => setLogoDialogOpen(true)}
                 className="group relative h-20 w-20 shrink-0 overflow-hidden rounded-xl border border-border bg-muted outline-none transition focus-visible:ring-2 focus-visible:ring-ring/50"
               >
                 <Image
                   src={logoUrl}
-                  alt="Clinic logo"
+                  alt={t("clinicLogo")}
                   fill
                   onError={() => setLogoLoadError(true)}
                   className="object-contain p-1"
@@ -117,13 +119,13 @@ export function ClinicForm({ defaultValues, logoUrl: initialLogoUrl, readOnly = 
 
               <Dialog open={logoDialogOpen} onOpenChange={setLogoDialogOpen}>
                 <DialogContent className="max-w-[calc(100%-2rem)] p-4 sm:max-w-lg">
-                  <DialogTitle>Clinic logo</DialogTitle>
+                  <DialogTitle>{t("clinicLogo")}</DialogTitle>
                   <DialogDescription className="sr-only">
-                    Full-size preview of the clinic logo
+                    {t("fullSizePreviewOfTheClinic")}
                   </DialogDescription>
                   <Image
                     src={logoUrl}
-                    alt="Clinic logo full size"
+                    alt={t("clinicLogoFullSize")}
                     width={800}
                     height={800}
                     className="max-h-[70vh] w-full rounded-lg object-contain"
@@ -133,13 +135,12 @@ export function ClinicForm({ defaultValues, logoUrl: initialLogoUrl, readOnly = 
             </>
           ) : (
             <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl border border-border bg-muted text-xs text-muted-foreground">
-              No logo
+              {t("noLogo")}
             </div>
           )}
           <div className="space-y-1.5">
             <p className="text-sm text-muted-foreground">
-              PNG, JPEG, or SVG · max 5 MB
-            </p>
+              {t("pngJpegOrSvgMax5")}</p>
             <div className="flex items-center gap-2">
               <Button
                 type="button"
@@ -154,7 +155,7 @@ export function ClinicForm({ defaultValues, logoUrl: initialLogoUrl, readOnly = 
                 ) : (
                   <Upload className="h-4 w-4" />
                 )}
-                {logoUploading ? "Uploading…" : "Upload logo"}
+                {logoUploading ? t("uploading") : t("uploadLogo")}
               </Button>
               {logoUrl && (
                 <Button
@@ -166,7 +167,7 @@ export function ClinicForm({ defaultValues, logoUrl: initialLogoUrl, readOnly = 
                   onClick={() => { setLogoUrl(null); setLogoLoadError(false); }}
                 >
                   <X className="h-4 w-4" />
-                  Remove
+                  {t("remove")}
                 </Button>
               )}
             </div>
@@ -183,7 +184,7 @@ export function ClinicForm({ defaultValues, logoUrl: initialLogoUrl, readOnly = 
 
       {/* Clinic info form */}
       <div className="rounded-xl border border-border/50 bg-card p-6">
-        <h3 className="mb-4 text-sm font-semibold">Clinic information</h3>
+        <h3 className="mb-4 text-sm font-semibold">{t("clinicInformation")}</h3>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             {state?.error && (
@@ -197,7 +198,7 @@ export function ClinicForm({ defaultValues, logoUrl: initialLogoUrl, readOnly = 
               name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Clinic name</FormLabel>
+                  <FormLabel>{t("clinicName")}</FormLabel>
                   <FormControl>
                     <Input {...field} disabled={isPending || readOnly} />
                   </FormControl>
@@ -210,7 +211,7 @@ export function ClinicForm({ defaultValues, logoUrl: initialLogoUrl, readOnly = 
               name="phone"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Phone</FormLabel>
+                  <FormLabel>{t("phone")}</FormLabel>
                   <FormControl>
                     <InternationalPhoneInput
                       {...field}
@@ -228,7 +229,7 @@ export function ClinicForm({ defaultValues, logoUrl: initialLogoUrl, readOnly = 
               name="address"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Address</FormLabel>
+                  <FormLabel>{t("address")}</FormLabel>
                   <FormControl>
                     <Textarea
                       {...field}
@@ -236,7 +237,7 @@ export function ClinicForm({ defaultValues, logoUrl: initialLogoUrl, readOnly = 
                       disabled={isPending || readOnly}
                       rows={3}
                       className="resize-none text-sm"
-                      placeholder="Full address…"
+                      placeholder={t("fullAddress")}
                     />
                   </FormControl>
                   <FormMessage />
@@ -250,7 +251,7 @@ export function ClinicForm({ defaultValues, logoUrl: initialLogoUrl, readOnly = 
               name="time_format"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Time format</FormLabel>
+                  <FormLabel>{t("timeFormat")}</FormLabel>
                   <FormControl>
                     <div className="flex gap-2">
                       {(["24h", "12h"] as const).map((fmt) => (
@@ -263,10 +264,10 @@ export function ClinicForm({ defaultValues, logoUrl: initialLogoUrl, readOnly = 
                             "rounded-lg border px-4 py-1.5 text-sm font-medium transition",
                             field.value === fmt
                               ? "border-primary bg-primary text-primary-foreground"
-                              : "border-border bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground",
+                              : "border-border bg-background text-muted-foreground hover:text-foreground",
                           ].join(" ")}
                         >
-                          {fmt === "24h" ? "24h (14:30)" : "12h (2:30 PM)"}
+                          {fmt === "24h" ? "24h (14:30)" : t("12h230Pm")}
                         </button>
                       ))}
                     </div>
@@ -283,7 +284,7 @@ export function ClinicForm({ defaultValues, logoUrl: initialLogoUrl, readOnly = 
                 ) : (
                   <Save className="h-4 w-4" />
                 )}
-                Save settings
+                {t("saveSettings")}
               </Button>
             </div>
           </form>

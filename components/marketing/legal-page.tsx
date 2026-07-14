@@ -1,23 +1,27 @@
 import Link from "next/link";
 import { AlertCircle, ArrowUpRight } from "lucide-react";
 import { MarketingLogo } from "@/components/marketing/marketing-logo";
+import { PublicThemeShell, PublicThemeToggle } from "@/components/marketing/public-theme";
 import { marketingCopy as copy } from "@/lib/marketing-copy";
 
 type LegalContent = typeof copy.legal.privacy | typeof copy.legal.terms;
 
 export function LegalPage({ content }: { content: LegalContent }) {
   return (
-    <main className="light forced-light-scope marketing-page min-h-dvh bg-[var(--m-paper)] text-[var(--m-ink)]">
+    <PublicThemeShell className="min-h-dvh bg-[var(--m-paper)] text-[var(--m-ink)]">
       <header className="border-b border-[var(--m-line)]">
         <div className="mx-auto flex h-[4.5rem] max-w-5xl items-center justify-between px-5">
-          <MarketingLogo />
-          <Link
-            href="/"
-            className="inline-flex min-h-11 items-center gap-2 rounded-full border border-[var(--m-line-strong)] bg-[var(--m-panel)] px-4 text-sm font-semibold hover:bg-[var(--m-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0d9488]"
-          >
-            {copy.legal.back}
-            <ArrowUpRight className="size-4" aria-hidden="true" />
-          </Link>
+          <MarketingLogo className="text-[var(--m-ink)] focus-visible:ring-offset-[var(--m-paper)]" />
+          <div className="flex items-center gap-2">
+            <PublicThemeToggle />
+            <Link
+              href="/"
+              className="inline-flex min-h-11 items-center gap-2 rounded-full border border-[var(--m-line-strong)] bg-[var(--m-panel)] px-4 text-sm font-semibold hover:bg-[var(--m-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0d9488]"
+            >
+              {copy.legal.back}
+              <ArrowUpRight className="size-4" aria-hidden="true" />
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -31,7 +35,7 @@ export function LegalPage({ content }: { content: LegalContent }) {
         </header>
 
         <aside
-          className="mt-12 flex items-start gap-4 rounded-2xl border border-[#ce8b34]/30 bg-[#fff3d9] p-5 text-[#5d3a0b]"
+          className="mt-12 flex items-start gap-4 rounded-2xl border border-[#ce8b34]/30 bg-[#fff3d9] p-5 text-[#5d3a0b] dark:border-[#f4bd67]/20 dark:bg-[#4a3518] dark:text-[#ffe5b2]"
           aria-labelledby="legal-review-notice"
         >
           <AlertCircle className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
@@ -44,7 +48,7 @@ export function LegalPage({ content }: { content: LegalContent }) {
         <div className="mt-14 divide-y divide-[var(--m-line)] border-y border-[var(--m-line)]">
           {content.sections.map((section, index) => (
             <section key={section.title} className="grid gap-4 py-8 sm:grid-cols-[3rem_1fr] sm:gap-7" aria-labelledby={`legal-section-${index}`}>
-              <span className="font-mono text-xs font-semibold text-[#087f7b]" aria-hidden="true">
+              <span className="font-mono text-xs font-semibold text-[var(--m-accent-text)]" aria-hidden="true">
                 {String(index + 1).padStart(2, "0")}
               </span>
               <div>
@@ -65,6 +69,6 @@ export function LegalPage({ content }: { content: LegalContent }) {
           </div>
         </div>
       </footer>
-    </main>
+    </PublicThemeShell>
   );
 }

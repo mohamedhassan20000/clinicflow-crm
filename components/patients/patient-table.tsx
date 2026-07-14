@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo } from "react";
-import { UserPlus, ChevronLeft, ChevronRight, Users } from "lucide-react";
+import { UserPlus, ChevronLeft, ChevronRight, UserRound, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -37,15 +37,6 @@ interface PatientTableProps {
 
 const UNASSIGNED_COLOR = "#94a3b8"; // slate-400
 const UNASSIGNED_KEY = "__unassigned__";
-
-function initials(name: string) {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join("");
-}
 
 export function PatientTable({
   data,
@@ -270,21 +261,21 @@ function PatientGroupTable({
         <colgroup>
           <col className="w-24" />
           <col />
-          <col className={showDepartmentBadge ? "w-28" : "w-32"} />
-          {showDepartmentBadge && <col className="w-32" />}
-          <col className={showDepartmentBadge ? "w-36" : "w-40"} />
-          <col className={showDepartmentBadge ? "w-28" : "w-32"} />
-          <col className="w-16" />
+          <col className={cn("hidden md:table-column", showDepartmentBadge ? "w-28" : "w-32")} />
+          {showDepartmentBadge && <col className="hidden w-32 xl:table-column" />}
+          <col className={cn("hidden sm:table-column", showDepartmentBadge ? "w-36" : "w-40")} />
+          <col className={cn("hidden lg:table-column", showDepartmentBadge ? "w-28" : "w-32")} />
+          <col className="hidden w-16 sm:table-column" />
         </colgroup>
         <TableHeader sticky>
           <TableRow>
             <TableHead>File #</TableHead>
             <TableHead>Patient</TableHead>
-            <TableHead>National ID</TableHead>
-            {showDepartmentBadge && <TableHead>Department</TableHead>}
-            <TableHead>Doctor</TableHead>
-            <TableHead>Phone</TableHead>
-            <TableHead>Blood</TableHead>
+            <TableHead className="hidden md:table-cell">National ID</TableHead>
+            {showDepartmentBadge && <TableHead className="hidden xl:table-cell">Department</TableHead>}
+            <TableHead className="hidden sm:table-cell">Doctor</TableHead>
+            <TableHead className="hidden lg:table-cell">Phone</TableHead>
+            <TableHead className="hidden sm:table-cell">Blood</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -292,7 +283,6 @@ function PatientGroupTable({
             <PatientRow
               key={p.id}
               patient={p}
-              accentColor={color}
               showDepartmentBadge={showDepartmentBadge}
               highlight={isSearch}
               returnHref={returnHref}
@@ -306,13 +296,11 @@ function PatientGroupTable({
 
 function PatientRow({
   patient,
-  accentColor,
   showDepartmentBadge,
   highlight,
   returnHref,
 }: {
   patient: Patient;
-  accentColor: string;
   showDepartmentBadge: boolean;
   highlight: boolean;
   returnHref: string;
@@ -359,11 +347,8 @@ function PatientRow({
                 alt={`${patient.full_name} avatar`}
               />
             )}
-            <AvatarFallback
-              className="text-[11px] font-semibold text-white"
-              style={{ backgroundColor: accentColor }}
-            >
-              {initials(patient.full_name) || "?"}
+            <AvatarFallback className="border border-border/80 bg-muted text-muted-foreground">
+              <UserRound className="size-4" aria-hidden="true" />
             </AvatarFallback>
           </Avatar>
           <span className="truncate font-medium text-foreground">
@@ -379,13 +364,13 @@ function PatientRow({
           )}
         </div>
       </TableCell>
-      <TableCell>
+      <TableCell className="hidden md:table-cell">
         <span className="font-mono text-xs text-muted-foreground">
           {patient.national_id ?? "—"}
         </span>
       </TableCell>
       {showDepartmentBadge && (
-        <TableCell>
+        <TableCell className="hidden xl:table-cell">
           {dept ? (
             <Badge
               variant="outline"
@@ -403,7 +388,7 @@ function PatientRow({
           )}
         </TableCell>
       )}
-      <TableCell>
+      <TableCell className="hidden sm:table-cell">
         {doc ? (
           <span className="text-xs text-muted-foreground">
             {formatDoctorName(doc.full_name)}
@@ -412,12 +397,12 @@ function PatientRow({
           <span className="text-muted-foreground/40">—</span>
         )}
       </TableCell>
-      <TableCell>
+      <TableCell className="hidden lg:table-cell">
         <span className="whitespace-nowrap text-muted-foreground">
           {patient.phone ?? "—"}
         </span>
       </TableCell>
-      <TableCell>
+      <TableCell className="hidden sm:table-cell">
         {blood ? (
           <Badge variant="secondary" className="font-mono text-xs">
             {blood}

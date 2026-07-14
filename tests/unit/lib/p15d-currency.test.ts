@@ -54,13 +54,15 @@ describe("P1.5D currency conversion", () => {
     expect(getCurrency("KWD")?.minorUnits).toBe(3);
     // WS4: registry expanded well beyond the original 12, still FX-covered
     expect(CURRENCIES.length).toBeGreaterThanOrEqual(30);
-    // Every entry has a derived country name, currency name, and flag
+    // Every entry has derived display metadata, including the aligned picker symbol.
     for (const c of CURRENCIES) {
       expect(c.countryName.length).toBeGreaterThan(0);
       expect(c.currencyName.length).toBeGreaterThan(0);
       expect(c.flag.length).toBeGreaterThan(0);
+      expect(c.symbol.length).toBeGreaterThan(0);
       expect([0, 2, 3]).toContain(c.minorUnits);
     }
+    expect(getCurrency("USD")?.symbol).toBe("$");
     // Money-critical minor units are correct for zero- and three-decimal cases
     expect(getCurrency("JPY")?.minorUnits).toBe(0);
     expect(getCurrency("KRW")?.minorUnits).toBe(0);
@@ -84,4 +86,3 @@ describe("Open Exchange Rates provider", () => {
     await expect(new OpenExchangeRatesProvider("secret", fetcher as typeof fetch).fetchLatest()).rejects.toThrow("FX provider request failed (503)");
   });
 });
-

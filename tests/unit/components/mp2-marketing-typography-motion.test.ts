@@ -9,19 +9,17 @@ const marketingPage = readFileSync(
 );
 
 describe("Post-Pre-P2 MP2 marketing typography and motion", () => {
-  it("uses the selected self-hosted IBM Plex stack through shared variables", () => {
-    expect(layout).toContain("IBM_Plex_Sans");
-    expect(layout).toContain("IBM_Plex_Serif");
-    expect(layout).toContain('variable: "--font-plex-sans"');
-    expect(layout).toContain('variable: "--font-plex-serif"');
-    expect(layout).not.toMatch(/DM_Sans|Instrument_Serif/);
+  it("uses Manrope as the primary English font through shared variables", () => {
+    expect(layout).toContain("Manrope");
+    expect(layout).toContain('variable: "--font-manrope"');
+    expect(layout).not.toMatch(/IBM_Plex|Geist_Mono|DM_Sans|Instrument_Serif/);
 
-    expect(css).toContain(
-      '--font-sans: var(--font-plex-sans), "Segoe UI", system-ui',
-    );
-    expect(css).toContain(
-      '--font-display: var(--font-plex-serif), Georgia, "Times New Roman", serif',
-    );
+    for (const role of ["sans", "heading", "display", "mono"]) {
+      expect(css).toContain(
+        `--font-${role}: var(--font-manrope), "Segoe UI", system-ui`,
+      );
+    }
+    expect(css).not.toMatch(/font-(?:plex|geist|instrument)|Georgia|Times New Roman/);
   });
 
   it("keeps marketing motion CSS-first, transform-based, and centrally timed", () => {

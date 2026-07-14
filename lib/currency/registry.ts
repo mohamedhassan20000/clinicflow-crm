@@ -4,6 +4,7 @@ export type CurrencyDefinition = {
   countryName: string;
   currencyName: string;
   flag: string;
+  symbol: string;
   minorUnits: number;
 };
 
@@ -11,7 +12,7 @@ export type CurrencyDefinition = {
  * Curated seed: currency code → primary country + ISO 4217 minor units. Each
  * entry is hand-verified and covered by the configured live FX provider
  * (Open Exchange Rates) AND the tested formatting/conversion path (Pre-P2 WS4,
- * resolves former Q5). `countryName`, `currencyName`, and `flag` are DERIVED
+ * resolves former Q5). `countryName`, `currencyName`, `flag`, and `symbol` are DERIVED
  * from `Intl`/regional-indicator arithmetic so only the money-critical fields
  * (code, country, minorUnits) are maintained by hand. Adding a currency is one
  * validated line here — the conversion path is never touched.
@@ -73,6 +74,14 @@ function flagEmoji(code: string): string {
   return String.fromCodePoint(A + (code.charCodeAt(0) - 65), A + (code.charCodeAt(1) - 65));
 }
 
+function currencySymbol(code: string): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: code,
+    currencyDisplay: "narrowSymbol",
+  }).formatToParts(0).find((part) => part.type === "currency")?.value ?? code;
+}
+
 export const CURRENCIES: readonly CurrencyDefinition[] = CURRENCY_SEED.map((entry) => ({
   code: entry.code,
   countryCode: entry.countryCode,
@@ -80,6 +89,7 @@ export const CURRENCIES: readonly CurrencyDefinition[] = CURRENCY_SEED.map((entr
   countryName: regionNames.of(entry.countryCode) ?? entry.countryCode,
   currencyName: currencyNames.of(entry.code) ?? entry.code,
   flag: flagEmoji(entry.countryCode),
+  symbol: currencySymbol(entry.code),
 }));
 
 /** Symbols requested from the FX provider — the registry IS the coverage list. */

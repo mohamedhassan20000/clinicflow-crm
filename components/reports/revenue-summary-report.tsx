@@ -35,6 +35,7 @@ export function RevenueSummaryReport({
       clinic={clinic}
     >
       <MetricGrid
+        mobileColumns={2}
         items={[
           { label: "Gross total", value: formatCurrency(data.grossTotal) },
           { label: "Service total", value: formatCurrency(data.totalAmount) },

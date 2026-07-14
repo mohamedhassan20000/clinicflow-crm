@@ -205,10 +205,7 @@ export default function AuthLayout({
                   }}
                 />
                 Smart clinic management{" "}
-                <span
-                  className="block mt-1.5 font-display italic font-normal text-cyan-200"
-                  style={{ fontFamily: "var(--font-instrument)" }}
-                >
+                <span className="block mt-1.5 font-display italic font-normal text-cyan-200">
                   for modern medical teams
                 </span>
               </h1>

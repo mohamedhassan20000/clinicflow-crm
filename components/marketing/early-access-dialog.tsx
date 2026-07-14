@@ -9,6 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { marketingCopy as copy } from "@/lib/marketing-copy";
+import { usePublicTheme } from "@/components/marketing/public-theme";
 
 export function EarlyAccessDialog({
   open,
@@ -17,9 +18,11 @@ export function EarlyAccessDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { theme } = usePublicTheme();
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="light forced-light-scope marketing-page max-h-[90dvh] overflow-y-auto sm:max-w-lg">
+      <DialogContent className={`${theme} forced-public-scope marketing-page max-h-[90dvh] overflow-y-auto sm:max-w-lg`}>
         <DialogHeader>
           <DialogTitle className="text-2xl">{copy.earlyAccess.dialogTitle}</DialogTitle>
           <DialogDescription>{copy.earlyAccess.dialogDescription}</DialogDescription>

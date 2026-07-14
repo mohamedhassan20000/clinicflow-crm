@@ -74,7 +74,7 @@ export function DashboardShell({ children, navItems, user, theme, surface, brand
     <div className="flex min-h-dvh bg-background">
       <Sidebar items={navItems} collapsed={collapsed} onCollapsedChange={updateCollapsed} brandLabel={brandLabel} />
       <div className="flex min-w-0 flex-1 flex-col">
-        <header data-testid="dashboard-header" className="sticky top-0 z-30 flex h-[var(--shell-header-h)] shrink-0 items-center gap-3 border-b bg-card/95 px-4 backdrop-blur md:px-6">
+        <header data-testid="dashboard-header" className="flex h-[var(--shell-header-h)] shrink-0 items-center gap-3 border-b bg-card/95 px-4 backdrop-blur md:px-6">
           <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setMobileOpen(true)} aria-label="Open navigation"><Menu className="size-5" /></Button>
           <span className="flex items-center gap-2 md:hidden"><Image src="/brand/clinicflow-mark.png" alt="ClinicFlow" width={28} height={24} className="h-6 w-auto" /><span className="text-sm font-semibold">{brandLabel ?? "ClinicFlow"}</span></span>
           <div className="flex-1" />

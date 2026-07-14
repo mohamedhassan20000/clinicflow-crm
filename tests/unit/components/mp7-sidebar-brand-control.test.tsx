@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { Sidebar } from "@/components/layout/sidebar";
 
@@ -13,7 +14,10 @@ vi.mock("next/image", () => ({
   },
 }));
 
-const items = [{ href: "/dashboard", label: "Dashboard", icon: "dashboard" }] as const;
+const items = [
+  { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
+  { href: "/patients", label: "Patients", icon: "patients" },
+] as const;
 
 function CollapsibleSidebar() {
   const [collapsed, setCollapsed] = useState(false);
@@ -21,6 +25,11 @@ function CollapsibleSidebar() {
 }
 
 describe("MP7 sidebar brand control", () => {
+  it("keeps the sidebar and navbar on the same comfortable 72px shell token", () => {
+    const styles = readFileSync("app/globals.css", "utf8");
+    expect(styles).toContain("--shell-header-h: 4.5rem");
+  });
+
   it("uses the full desktop brand row as the only native collapse control", async () => {
     const user = userEvent.setup();
     render(<CollapsibleSidebar />);
@@ -33,6 +42,9 @@ describe("MP7 sidebar brand control", () => {
     expect(collapse.closest("[data-testid='sidebar-brand-row']")).not.toBeNull();
     expect(screen.getAllByRole("button")).toHaveLength(1);
     expect(screen.queryByRole("link", { name: /ClinicFlow/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Patients" })).toHaveClass(
+      "text-sidebar-foreground/80",
+    );
 
     collapse.focus();
     await user.keyboard("{Enter}");

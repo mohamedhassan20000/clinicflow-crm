@@ -41,7 +41,7 @@ export function CurrencyCombobox({ value }: { value: string }) {
       emptyMessage="No currency found."
       disabled={pending}
       triggerClassName="w-full max-w-xs gap-2 sm:w-80"
-      contentClassName="w-[min(20rem,90vw)]"
+      contentClassName="w-[min(22rem,calc(100vw-2rem))]"
       filter={(value, search) =>
         value.toLowerCase().includes(search.toLowerCase()) ? 1 : 0
       }
@@ -54,13 +54,18 @@ export function CurrencyCombobox({ value }: { value: string }) {
         </span>
       )}
       renderItem={(item) => (
-        <>
-          <span aria-hidden>{item.flag}</span>
-          <span className="truncate">{item.currencyName}</span>
-          <span className="ms-auto text-xs font-medium tabular-nums text-muted-foreground">
+        <span className="currency-option-grid grid min-w-0 flex-1 grid-cols-[2.75rem_minmax(0,1fr)_2.5rem_3.25rem] items-center gap-1.5">
+          <span className="truncate text-center font-medium text-foreground">
+            {item.symbol}
+          </span>
+          <span className="min-w-0 truncate">{item.currencyName}</span>
+          <span className="text-center font-mono text-xs uppercase text-muted-foreground">
+            {item.countryCode}
+          </span>
+          <span className="text-end font-mono text-xs font-medium tabular-nums text-muted-foreground">
             {item.code}
           </span>
-        </>
+        </span>
       )}
     />
   );

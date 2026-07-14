@@ -1,4 +1,5 @@
-import { render } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import AuthLayout from "@/app/(auth)/layout";
 import SignupLayout from "@/app/(public)/signup/layout";
@@ -19,6 +20,11 @@ function expectForcedScope(
   expect(element).toHaveClass(`forced-${theme}-scope`);
 }
 
+function expectPublicScope(element: Element | null, theme: "light" | "dark") {
+  expect(element).not.toBeNull();
+  expect(element).toHaveClass(theme, "forced-public-scope");
+}
+
 function surfaceOwnedClasses(container: HTMLElement) {
   return Array.from(container.querySelectorAll("[class]:not([data-slot])"))
     .map((element) => element.getAttribute("class"))
@@ -26,7 +32,8 @@ function surfaceOwnedClasses(container: HTMLElement) {
 }
 
 describe("Post-Pre-P2 MP1 theme scoping", () => {
-  it("renders marketing and legal surfaces as light-only class trees", () => {
+  it("defaults marketing and legal surfaces to light with a local theme control", async () => {
+    const user = userEvent.setup();
     const marketing = render(
       <MarketingPage
         registrationMode="invite_only"
@@ -34,13 +41,14 @@ describe("Post-Pre-P2 MP1 theme scoping", () => {
         acceptedThisWeek={0}
       />,
     );
-    expectForcedScope(marketing.container.firstElementChild, "light");
-    expect(surfaceOwnedClasses(marketing.container)).not.toMatch(/\bdark:/);
+    expectPublicScope(marketing.container.firstElementChild, "light");
+    await user.click(screen.getByRole("button", { name: "Switch marketing pages to dark mode" }));
+    expectPublicScope(marketing.container.firstElementChild, "dark");
     marketing.unmount();
 
     const legal = render(<LegalPage content={marketingCopy.legal.privacy} />);
-    expectForcedScope(legal.container.firstElementChild, "light");
-    expect(surfaceOwnedClasses(legal.container)).not.toMatch(/\bdark:/);
+    expectPublicScope(legal.container.firstElementChild, "light");
+    expect(surfaceOwnedClasses(legal.container)).toContain("dark:");
   });
 
   it("keeps the marketing section rhythm in one exported tone map", () => {

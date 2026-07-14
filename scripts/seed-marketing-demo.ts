@@ -1,4 +1,5 @@
 import { pathToFileURL } from "node:url";
+import { readFile } from "node:fs/promises";
 import { createClient } from "@supabase/supabase-js";
 import type { Database, TablesInsert } from "../types/database";
 
@@ -89,7 +90,14 @@ async function createDemoUser(
   const existing = await service.auth.admin.listUsers({ page: 1, perPage: 1000 });
   if (existing.error) throw new Error(`List demo users: ${existing.error.message}`);
   const existingUser = existing.data.users.find((user) => user.email === email);
-  if (existingUser) return existingUser.id;
+  if (existingUser) {
+    const refreshed = await service.auth.admin.updateUserById(existingUser.id, {
+      password: MARKETING_DEMO.password,
+      email_confirm: true,
+    });
+    if (refreshed.error) throw new Error(`Refresh ${email}: ${refreshed.error.message}`);
+    return existingUser.id;
+  }
 
   const { data, error } = await service.auth.admin.createUser({
     email,
@@ -98,6 +106,37 @@ async function createDemoUser(
   });
   if (error || !data.user) throw new Error(error?.message ?? `Create ${email}`);
   return data.user.id;
+}
+
+async function uploadDemoAvatars(
+  service: ReturnType<typeof requireLocalService>,
+  adminId: string,
+) {
+  const adminObjectKey = `${adminId}/marketing-demo-avatar.webp`;
+  const adminAvatar = await readFile("public/marketing/demo-avatars/user-admin.webp");
+  const adminUpload = await service.storage.from("avatars").upload(adminObjectKey, adminAvatar, {
+    contentType: "image/webp",
+    upsert: true,
+  });
+  if (adminUpload.error) throw new Error(`Upload demo admin avatar: ${adminUpload.error.message}`);
+
+  const patientAvatarPaths = await Promise.all(
+    MARKETING_DEMO.patientIds.map(async (patientId, index) => {
+      const objectKey = `avatars/${MARKETING_DEMO.clinicId}/${patientId}/avatar.webp`;
+      const bytes = await readFile(
+        `public/marketing/demo-avatars/patient-${String(index + 1).padStart(2, "0")}.webp`,
+      );
+      const upload = await service.storage.from("patient-assets").upload(objectKey, bytes, {
+        contentType: "image/webp",
+        upsert: true,
+      });
+      if (upload.error) throw new Error(`Upload demo patient avatar ${index + 1}: ${upload.error.message}`);
+      return objectKey;
+    }),
+  );
+
+  const { data: adminPublicAvatar } = service.storage.from("avatars").getPublicUrl(adminObjectKey);
+  return { adminAvatarUrl: adminPublicAvatar.publicUrl, patientAvatarPaths };
 }
 
 export async function seedMarketingDemo() {
@@ -113,6 +152,7 @@ export async function seedMarketingDemo() {
     createDemoUser(service, MARKETING_DEMO.doctorEmails[1]),
     createDemoUser(service, MARKETING_DEMO.receptionistEmail),
   ]);
+  const { adminAvatarUrl, patientAvatarPaths } = await uploadDemoAvatars(service, adminId);
 
   await assertResult(
     "Insert clinic",
@@ -158,7 +198,7 @@ export async function seedMarketingDemo() {
   await assertResult(
     "Insert profiles",
     service.from("profiles").upsert([
-      { id: adminId, clinic_id: MARKETING_DEMO.clinicId, full_name: "Nadia Faris", role: "admin", must_change_password: false, display_currency: "KWD" },
+      { id: adminId, clinic_id: MARKETING_DEMO.clinicId, full_name: "Nadia Faris", role: "admin", must_change_password: false, display_currency: "KWD", avatar_url: adminAvatarUrl },
       { id: doctorOneId, clinic_id: MARKETING_DEMO.clinicId, department_id: MARKETING_DEMO.departmentIds[0], full_name: "Dr. Sami Nasser", role: "doctor", must_change_password: false },
       { id: doctorTwoId, clinic_id: MARKETING_DEMO.clinicId, department_id: MARKETING_DEMO.departmentIds[1], full_name: "Dr. Leila Haddad", role: "doctor", must_change_password: false },
       { id: receptionistId, clinic_id: MARKETING_DEMO.clinicId, full_name: "Rana Saleh", role: "receptionist", must_change_password: false },
@@ -168,17 +208,17 @@ export async function seedMarketingDemo() {
   await assertResult(
     "Insert working hours",
     service.from("clinic_working_hours").insert(
-      Array.from({ length: 7 }, (_, dayOfWeek) => [
+      [1, 2, 3, 4, 5].flatMap((dayOfWeek) => [
         { clinic_id: MARKETING_DEMO.clinicId, day_of_week: dayOfWeek, shift_start: "08:00", shift_end: "12:30" },
         { clinic_id: MARKETING_DEMO.clinicId, day_of_week: dayOfWeek, shift_start: "13:30", shift_end: "18:00" },
-      ]).flat(),
+      ]),
     ),
   );
   await assertResult(
     "Insert doctor schedules",
     service.from("doctor_schedules").insert(
       [doctorOneId, doctorTwoId].flatMap((doctorId) =>
-        Array.from({ length: 7 }, (_, dayOfWeek) => ({
+        [1, 2, 3, 4, 5].map((dayOfWeek) => ({
           clinic_id: MARKETING_DEMO.clinicId,
           doctor_id: doctorId,
           day_of_week: dayOfWeek,
@@ -221,6 +261,7 @@ export async function seedMarketingDemo() {
     blood_type: (["A+", "O+", "B+", "AB+"] as const)[index % 4],
     department_id: MARKETING_DEMO.departmentIds[index % 2],
     assigned_doctor_id: index % 2 === 0 ? doctorOneId : doctorTwoId,
+    avatar_path: patientAvatarPaths[index],
   }));
   await assertResult("Insert patients", service.from("patients").upsert(patients));
 
@@ -230,14 +271,14 @@ export async function seedMarketingDemo() {
     [1, 0, "09:15", "arrived", doctorTwoId, 32],
     [2, 0, "10:00", "in_session", doctorOneId, 24],
     [3, 0, "11:00", "pending", doctorTwoId, 32],
-    [4, 0, "13:30", "completed", doctorOneId, 24],
+    [4, 0, "13:30", "completed", doctorOneId, 2865.75],
     [5, 0, "14:30", "no_show", doctorTwoId, 32],
     [6, 0, "15:30", "cancelled", doctorOneId, 24],
     [7, 0, "16:30", "confirmed", doctorTwoId, 32],
-    [0, -1, "10:00", "completed", doctorOneId, 38],
-    [1, -2, "11:30", "completed", doctorTwoId, 46],
-    [2, -4, "09:30", "completed", doctorOneId, 24],
-    [3, -7, "15:00", "completed", doctorTwoId, 58],
+    [0, -1, "10:00", "completed", doctorOneId, 3240.5],
+    [1, -2, "11:30", "completed", doctorTwoId, 2785.25],
+    [2, -4, "09:30", "completed", doctorOneId, 3615],
+    [3, -7, "15:00", "completed", doctorTwoId, 2940.75],
   ].map(([patientIndex, offset, time, status, doctorId, amount], index) => {
     const completed = status === "completed";
     const numericPatientIndex = Number(patientIndex);

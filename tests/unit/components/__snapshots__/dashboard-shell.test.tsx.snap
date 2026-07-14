@@ -103,7 +103,7 @@ exports[`DashboardShell > persists, snapshots, and restores collapsed state 1`] 
           </svg>
         </a>
         <a
-          class="flex min-h-11 items-center rounded-xl text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sidebar-ring justify-center px-3 text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          class="flex min-h-11 items-center rounded-xl text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sidebar-ring justify-center px-3 text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
           href="/patients"
           title="Patients"
         >
@@ -142,7 +142,7 @@ exports[`DashboardShell > persists, snapshots, and restores collapsed state 1`] 
       class="flex min-w-0 flex-1 flex-col"
     >
       <header
-        class="sticky top-0 z-30 flex h-[var(--shell-header-h)] shrink-0 items-center gap-3 border-b bg-card/95 px-4 backdrop-blur md:px-6"
+        class="flex h-[var(--shell-header-h)] shrink-0 items-center gap-3 border-b bg-card/95 px-4 backdrop-blur md:px-6"
         data-testid="dashboard-header"
       >
         <button
@@ -381,7 +381,7 @@ exports[`DashboardShell > renders the header utilities and expanded navigation 1
           </span>
         </a>
         <a
-          class="flex min-h-11 items-center rounded-xl text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sidebar-ring gap-3 px-3.5 text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          class="flex min-h-11 items-center rounded-xl text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sidebar-ring gap-3 px-3.5 text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
           href="/patients"
         >
           <svg
@@ -422,7 +422,7 @@ exports[`DashboardShell > renders the header utilities and expanded navigation 1
       class="flex min-w-0 flex-1 flex-col"
     >
       <header
-        class="sticky top-0 z-30 flex h-[var(--shell-header-h)] shrink-0 items-center gap-3 border-b bg-card/95 px-4 backdrop-blur md:px-6"
+        class="flex h-[var(--shell-header-h)] shrink-0 items-center gap-3 border-b bg-card/95 px-4 backdrop-blur md:px-6"
         data-testid="dashboard-header"
       >
         <button

@@ -1,30 +1,16 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
-import { Geist_Mono, IBM_Plex_Sans, IBM_Plex_Serif } from "next/font/google";
+import { Manrope } from "next/font/google";
 import { NuqsAdapter } from "nuqs/adapters/next/app";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
-const ibmPlexSans = IBM_Plex_Sans({
-  variable: "--font-plex-sans",
+const manrope = Manrope({
+  variable: "--font-manrope",
   subsets: ["latin"],
   display: "swap",
   weight: "variable",
   style: "normal",
-});
-
-const ibmPlexSerif = IBM_Plex_Serif({
-  variable: "--font-plex-serif",
-  subsets: ["latin"],
-  display: "swap",
-  weight: "400",
-  style: "normal",
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -42,7 +28,7 @@ export default async function RootLayout({
   return (
     <html
       lang="en"
-      className={`${ibmPlexSans.variable} ${ibmPlexSerif.variable} ${geistMono.variable} h-full${theme === "dark" ? " dark" : ""}`}
+      className={`${manrope.variable} h-full${theme === "dark" ? " dark" : ""}`}
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col bg-background text-foreground antialiased">

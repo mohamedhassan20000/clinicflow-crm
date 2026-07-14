@@ -36,29 +36,33 @@ export default async function RevenueReportPage({ searchParams }: PageProps) {
   ]);
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       <ReportPageHeader
         title="Revenue / Sales Report"
         description="Collected payments, deposits, settlements, and outstanding balances."
       />
-      <ReportsDateFilter range={range} />
-      <div className="grid gap-4 lg:grid-cols-2">
-        <ReportSelectFilter
-          name="doctor"
-          label="Doctor"
-          value={doctorId ?? ALL_FILTER_VALUE}
-          allLabel="All doctors"
-          options={doctors}
-        />
-        <ReportSelectFilter
-          name="department"
-          label="Department"
-          value={departmentId ?? ALL_FILTER_VALUE}
-          allLabel="All departments"
-          options={departments}
-        />
+      <div className="order-2 space-y-6 md:order-1" data-testid="revenue-report-filters">
+        <ReportsDateFilter range={range} />
+        <div className="grid gap-4 lg:grid-cols-2">
+          <ReportSelectFilter
+            name="doctor"
+            label="Doctor"
+            value={doctorId ?? ALL_FILTER_VALUE}
+            allLabel="All doctors"
+            options={doctors}
+          />
+          <ReportSelectFilter
+            name="department"
+            label="Department"
+            value={departmentId ?? ALL_FILTER_VALUE}
+            allLabel="All departments"
+            options={departments}
+          />
+        </div>
       </div>
-      <RevenueSummaryReport data={data} range={range} clinic={clinic} />
+      <div className="order-1 md:order-2" data-testid="revenue-report-results">
+        <RevenueSummaryReport data={data} range={range} clinic={clinic} />
+      </div>
     </div>
   );
 }

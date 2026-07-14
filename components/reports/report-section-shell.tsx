@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/card";
 import { PrintSectionButton, type ReportPrintSection } from "@/components/reports/print-all-button";
 import type { ClinicPrintMeta } from "@/types/reports";
+import { cn } from "@/lib/utils";
 
 export function ReportSectionShell({
   section,
@@ -64,18 +65,36 @@ export function EmptyReportState({ message }: { message?: string }) {
 
 export function MetricGrid({
   items,
+  mobileColumns = 1,
 }: {
   items: { label: string; value: string; hint?: string }[];
+  mobileColumns?: 1 | 2;
 }) {
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <div
+      className={cn(
+        "grid gap-3 sm:grid-cols-2 lg:grid-cols-4",
+        mobileColumns === 2 && "grid-cols-1 min-[360px]:grid-cols-2 max-[389px]:gap-2",
+      )}
+      data-testid="report-metric-grid"
+    >
       {items.map((item) => (
         <div
           key={item.label}
-          className="rounded-lg border border-border/50 bg-muted/20 p-3 print:border-black print:bg-white"
+          className={cn(
+            "min-w-0 rounded-lg border border-border/50 bg-muted/20 p-3 print:border-black print:bg-white",
+            mobileColumns === 2 && "max-[359px]:flex max-[359px]:items-center max-[359px]:justify-between max-[359px]:gap-3 max-[389px]:p-2",
+          )}
+          data-testid="report-metric"
         >
           <p className="text-xs text-muted-foreground print:text-black">{item.label}</p>
-          <p className="mt-1 text-xl font-semibold tabular-nums print:text-base">
+          <p
+            className={cn(
+              "mt-1 whitespace-nowrap text-xl font-semibold tabular-nums print:text-base",
+              mobileColumns === 2 && "tracking-[-.02em] max-[359px]:mt-0 max-[429px]:text-sm min-[430px]:text-base sm:text-xl",
+            )}
+            data-testid="report-metric-value"
+          >
             {item.value}
           </p>
           {item.hint && (

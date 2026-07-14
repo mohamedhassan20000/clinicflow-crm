@@ -67,35 +67,50 @@ export function RevenueWidget({
       </div>
 
       {/* Buckets */}
-      <div className="grid grid-cols-3 gap-px bg-border/40 border-b border-border/50">
-        {buckets.map(({ label, amount, sub, icon: Icon, accent }) => (
-          <div key={label} className="bg-card px-4 py-4">
+      <div
+        className="grid grid-cols-1 gap-px border-b border-border/50 bg-border/40 min-[360px]:grid-cols-2 sm:grid-cols-3"
+        data-testid="dashboard-revenue-buckets"
+      >
+        {buckets.map(({ label, amount, sub, icon: Icon, accent }, index) => (
+          <div
+            key={label}
+            data-testid="dashboard-revenue-bucket"
+            className={cn(
+              "flex min-w-0 items-center justify-between gap-3 bg-card px-3 py-3 min-[360px]:block min-[360px]:px-4 min-[360px]:py-4",
+              index === 2 && "min-[360px]:col-span-2 sm:col-span-1",
+            )}
+          >
             <div className="flex items-center gap-1.5">
               <Icon className={cn("h-3 w-3", accent)} />
               <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
                 {label}
               </p>
             </div>
-            <p className="mt-1 text-lg font-semibold tabular-nums">
-              {fmtMoney(amount)}
-            </p>
-            {sub && (
+            <div className="shrink-0 text-end min-[360px]:text-start">
               <p
-                className={cn(
-                  "mt-0.5 flex items-center gap-0.5 text-[10px] font-medium",
-                  sub.startsWith("+")
-                    ? "text-emerald-600 dark:text-emerald-400"
-                    : "text-rose-600 dark:text-rose-400",
-                )}
+                className="whitespace-nowrap text-base font-semibold tabular-nums min-[360px]:mt-1 min-[390px]:text-lg"
+                data-testid="dashboard-revenue-value"
               >
-                {sub.startsWith("+") ? (
-                  <ArrowUpRight className="h-3 w-3" />
-                ) : (
-                  <ArrowDownRight className="h-3 w-3" />
-                )}
-                {sub}
+                {fmtMoney(amount)}
               </p>
-            )}
+              {sub && (
+                <p
+                  className={cn(
+                    "mt-0.5 flex items-center justify-end gap-0.5 text-[10px] font-medium min-[360px]:justify-start",
+                    sub.startsWith("+")
+                      ? "text-emerald-600 dark:text-emerald-400"
+                      : "text-rose-600 dark:text-rose-400",
+                  )}
+                >
+                  {sub.startsWith("+") ? (
+                    <ArrowUpRight className="h-3 w-3" />
+                  ) : (
+                    <ArrowDownRight className="h-3 w-3" />
+                  )}
+                  {sub}
+                </p>
+              )}
+            </div>
           </div>
         ))}
       </div>

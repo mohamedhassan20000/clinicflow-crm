@@ -7,6 +7,7 @@
 **Single source of truth:** this file is the only planning document for this sprint. §10 *is* the implementation order; no separate implementation-order document may be created.
 **Review contract:** every workstream follows the established review-file workflow — implementation → `docs/reviews/<WORKSTREAM>_REVIEW.md` with stable finding IDs → fix cycle → merge.
 **Base of audit:** `main` at `cf139cb` (clean tree). Every file reference below was read at that commit.
+**Quick-polish addendum (2026-07-14):** implemented after MP0–MP7 without changing their scope: centered Preferences content, a four-column currency picker, lighter sidebar labels, restored shell alignment, refreshed marketing captures/window chrome/fictional portraits, a public-only Light/Dark control, a hero-only subtle hexagon texture, increased Early Access spacing, and Manrope as the single English font family. See §24.
 
 ---
 
@@ -751,6 +752,106 @@ The sprint is done when:
 - **P2 is untouched:** no `next-intl`, no Arabic copy, no Thmanyah files, no RTL, no language switcher (grep-verified, as in the Pre-P2 contract).
 - **The sprint remained documentation and UI work only:** `supabase/migrations/` and `types/database.ts` are **untouched** (grep/status-verified on every branch), and `actions/theme.ts` is unchanged.
 - All seven review files are APPROVED under the standard workflow; the full validation suite is green on the integrated tree (`supabase db reset` clean, `pnpm typecheck`, `pnpm lint`, full unit + integration, serial production Playwright 100 %); no new physical-direction CSS classes (grep-verified); no RLS/middleware/monetary-column change; and the §6.D (`user_ui_preferences`), §7 (billing), and §8 (legal-acceptance) decisions are recorded in `docs/AI_AGENT_PLAN.md` **without any implementation**.
+
+---
+
+## 24. Post-implementation quick UI polish — completed 2026-07-14
+
+This addendum records finish-level presentation work completed inside the existing Post-Pre-P2
+polish sprint. It is **not P2**, does not alter MP0–MP7, and introduces no migration, language or
+locale persistence, dashboard-theme architecture, settings architecture, roadmap, routing, pricing,
+or business-logic change.
+
+- **Preferences balance — complete.** The existing `max-w-2xl` content column is now horizontally
+  centered with `mx-auto`; its cards, copy, width, and responsive behavior are unchanged.
+- **Currency option alignment — complete.** Every option uses four fixed grid columns: derived
+  currency symbol, currency name, two-letter country ISO code, and three-letter currency code.
+  The registry remains the single source of truth, and search, selection, persistence, keyboard
+  behavior, and the shared combobox shell are unchanged.
+- **Sidebar readability and alignment — complete.** Inactive navigation labels use a slightly
+  brighter `text-sidebar-foreground/80`; the single shared shell-height token is restored to
+  `4.5rem` (72 px), so the sidebar brand row and dashboard navbar again share one comfortable,
+  continuous baseline. Active, hover, focus, spacing, weight, and brand-as-collapse behavior are
+  unchanged.
+- **Public theme control — complete.** Landing, Privacy, and Terms default to Light and expose a
+  small local Light/Dark toggle in their headers. The state is scoped to the public marketing/legal
+  subtree, including its mobile menu and Early Access dialog; it neither reads nor writes the
+  dashboard theme cookie. Dashboard behavior is unchanged and authentication remains forced Dark.
+- **English type consistency — complete.** Manrope is the single English family behind
+  `--font-sans`, `--font-heading`, `--font-display`, and `--font-mono`, covering marketing,
+  authentication, dashboard, tables, and captured product views. Display and data roles retain
+  their existing weights/tracking, but no alternate English family remains. This does not change
+  the separate Arabic-font work reserved for P2.
+- **Marketing window chrome — complete.** The macOS traffic lights have more space below them; the
+  unwanted gray decorative line beside them and the cramped divider treatment are removed.
+- **Marketing captures — complete.** All ten affected AVIF assets were replaced through the
+  deterministic local seed/capture pipeline. The calendar demo uses a focused Monday–Friday clinic
+  schedule, so appointment cards render wider. Nine generated, photorealistic fictional portraits
+  now cover every visible patient plus the logged-in administrator; patient-list and patient-record
+  mobile layouts keep the existing structure while hiding secondary columns before they can crowd
+  the portraits. The capture now waits for every intended local portrait and verifies photographic
+  detail in each visible avatar region of the final AVIF, preventing fallback or stale captures.
+  The source portraits live in `public/marketing/demo-avatars/`; no initials or cartoon treatments
+  appear. Landing asset paths, capture dimensions, and the 300 KB ceiling are unchanged.
+- **Kuwaiti revenue composition — complete.** The fictional completed-payment seed now produces
+  naturally varied KWD figures, with the captured major totals above KWD 2,500 (for example the
+  monthly revenue summary renders KWD 15,447.250 and the patient record KWD 3,240.500).
+- **Hero texture — complete.** A static CSS-only honeycomb pattern is scoped to
+  `.marketing-hero::before`, spans the full viewport width behind the hero content, and renders at
+  `opacity: .07` (7%), with no animation and no spill into later landing sections.
+- **Responsive landing composition — complete.** The Hero is a true full-width section while its
+  content remains centered inside a readable `max-w-[120rem]` container; the copy keeps its
+  existing narrower measure and the screenshot column expands on wide/27-inch displays. Product
+  workflows use the same 120rem ceiling with screenshot-weighted columns from `xl` upward. The
+  desktop navigation and header CTA now wait until `xl` (1280 px), leaving the logo, 44 px theme
+  control, and 44 px menu control collision-free below that breakpoint. At widths below 768 px,
+  every product frame uses the complete 390×844 mobile AVIF with `object-contain` and its native
+  portrait ratio; the already-optimized AVIF is served directly to avoid a second lossy transform.
+  No screenshot asset, copy, color, animation, theme behavior, or route changed in this correction.
+- **Early Access spacing — complete.** The section keeps its layout and responsive structure while
+  using a vertically centered `min-h-[78dvh]`, `py-48` / `lg:py-60`, a larger heading and body,
+  and wider internal rhythm. The cohort proof band and progress card also gain more vertical space,
+  larger progress text, and a slightly taller bar. Its responsive minimum height now steps from
+  32rem on phones through 36rem / 40rem / 44rem to 48rem on large desktops, keeping the whole band
+  vertically balanced rather than enlarging only the card. The form/dialog itself is not enlarged.
+- **Authenticated navbar flow — complete.** The clinic/operator dashboard top header keeps its
+  original height, layout, controls, permissions, and mobile treatment, but no longer uses
+  sticky/fixed positioning. It scrolls away naturally with the document and returns only at the
+  page top; the public marketing header is unchanged.
+- **Mobile dashboard and revenue captures — complete.** The dashboard revenue summary stacks as
+  compact rows at 320 px, reflows into two columns plus a full-width month card from 360 px, and
+  returns to its original three-column desktop layout at `sm`. The mobile Revenue / Sales Report
+  now places its results before its still-available filters, showing complete KWD totals and table
+  data immediately; its metrics use one compact row at 320 px and two columns from 360 px while the
+  desktop filter-first order remains unchanged. The capture pipeline can select names and variants,
+  so only `dashboard-mobile.avif` and `reports-mobile.avif` were regenerated. It now rejects bucket
+  overlap, clipped figures, horizontal overflow, or filter-first report composition at 320×568,
+  360×800, 390×844, and 430×932 before writing an asset.
+- **Landing Back to Top — complete.** The public landing page alone now exposes a fixed circular
+  primary-color Back-to-Top control after a meaningful scroll distance. It has a 48 px target,
+  screen-reader label, keyboard focus ring, safe-area-aware mobile/desktop offsets, a fade/slide
+  transition, and `z-30` placement below the `z-40` marketing header and dialog/top-layer overlays.
+  It hides and leaves the tab order near the top, scrolls smoothly when motion is allowed, and
+  switches to an instant return with all transitions disabled under reduced motion. Authenticated,
+  operator, authentication, and legal pages do not render it.
+
+`docs/AI_AGENT_PLAN.md` required no update: these are completed presentation details in the
+existing Post-Pre-P2 sprint and do not change the roadmap or any future-phase contract.
+
+**Validation:** `pnpm marketing:capture` passed and replaced all 10 affected fictional-demo assets,
+including final-AVIF avatar-region checks; direct desktop/mobile visual review confirmed the
+portraits. The production build inside that pipeline passed (52/52 static pages); `pnpm typecheck`
+passed; `pnpm lint` passed with 0 errors and the same 4 pre-existing warnings; the full non-DB
+Vitest suite passed (105 files, 539 tests); and the targeted authenticated-header Playwright test
+passed. The final responsive correction additionally passed 16 targeted unit tests and production
+Playwright checks at 320, 360, 390, 430, 768, 1024, 1440, 1920, and 2560 px, including exact
+document-width, header-overlap, touch-target, full-bleed pattern, image-ratio, containment, and
+wide-screen screenshot-size assertions. Final production-build and diff/status gates are recorded
+in the implementation handoff. The final phone-capture correction additionally passed capture-time
+layout assertions at all four requested phone sizes; visual review confirmed the three dashboard
+revenue cards and the report's KWD totals/results in the final AVIFs. Targeted production Playwright
+checks passed the four-size landing asset contract plus Back-to-Top visibility, edge spacing,
+keyboard activation, return-to-top behavior, and reduced-motion handling.
 
 ---
 

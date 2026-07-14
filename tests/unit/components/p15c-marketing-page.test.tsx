@@ -17,6 +17,29 @@ describe("WS9 marketing page", () => {
     expect(screen.getAllByText("Product screens show fictional demo data only.")).toHaveLength(1);
     expect(screen.getByAltText(/administrator dashboard showing daily appointments/i)).toBeInTheDocument();
     expect(screen.getByAltText(/week calendar showing fictional appointments/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1 }).closest("section")).toHaveClass(
+      "marketing-hero",
+      "w-full",
+    );
+    const cohort = screen.getByRole("heading", { name: /limited clinic cohort/i }).closest("section");
+    expect(cohort).toHaveClass(
+      "min-h-[32rem]",
+      "md:min-h-[40rem]",
+      "lg:min-h-[44rem]",
+      "2xl:min-h-[48rem]",
+    );
+    expect(document.getElementById("early-access")).toHaveClass(
+      "min-h-[78dvh]",
+      "py-48",
+      "lg:py-60",
+    );
+    const progressbar = screen.getByRole("progressbar", { name: "Weekly early-access cohort progress" });
+    expect(progressbar).toHaveClass("mt-5", "h-3");
+    expect(progressbar.parentElement).toHaveClass("min-h-40", "p-7", "sm:p-8");
+    for (const chrome of screen.getAllByTestId("marketing-window-chrome")) {
+      expect(chrome).toHaveClass("h-10", "pt-3");
+      expect(chrome.children).toHaveLength(3);
+    }
   });
 
   it("keeps login available while making early access the primary conversion", () => {
@@ -34,6 +57,20 @@ describe("WS9 marketing page", () => {
   it("renders an accessible mobile navigation trigger", () => {
     render(<MarketingPage registrationMode="invite_only" weeklyLimit={20} acceptedThisWeek={0} />);
     expect(screen.getByRole("button", { name: "Open navigation menu" })).toBeInTheDocument();
+  });
+
+  it("defaults the public surface to light and toggles only its local theme scope", async () => {
+    const user = userEvent.setup();
+    const { container } = render(
+      <MarketingPage registrationMode="invite_only" weeklyLimit={20} acceptedThisWeek={0} />,
+    );
+    const root = container.querySelector("main.marketing-page");
+    expect(root).toHaveClass("light", "forced-public-scope");
+
+    await user.click(screen.getByRole("button", { name: "Switch marketing pages to dark mode" }));
+    expect(root).toHaveClass("dark", "forced-public-scope");
+    expect(screen.getByRole("button", { name: "Switch marketing pages to light mode" })).toBeInTheDocument();
+    expect(document.documentElement).not.toHaveClass("dark");
   });
 
   it("loads the existing early-access form only when its dialog opens", async () => {

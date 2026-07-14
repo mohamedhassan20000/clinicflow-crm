@@ -526,6 +526,17 @@ test("dashboard shell renders on a deep protected page and signs out", async ({ 
   await sidebar.getByRole("button", { name: "Expand navigation" }).click();
   await expect(sidebar).toHaveAttribute("data-collapsed", "false");
 
+  // The authenticated header belongs to document flow: scrolling moves it out
+  // of view, and returning to the top restores its original aligned position.
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "instant" }));
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+  await expect.poll(async () => (await header.boundingBox())?.y ?? 0).toBeLessThan(-1);
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+  await expect.poll(async () => (await header.boundingBox())?.y ?? -1).toBe(0);
+  await assertDividerBaseline();
+
   // Tablet, dark theme, and fractional zoom all use the same top-band token.
   await page.setViewportSize({ width: 768, height: 720 });
   await assertDividerBaseline();

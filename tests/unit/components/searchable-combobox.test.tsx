@@ -39,7 +39,20 @@ describe("shared searchable combobox consumers", () => {
 
     await user.click(screen.getByRole("combobox", { name: "Display currency" }));
     await user.type(screen.getByPlaceholderText("Search currency or code…"), "US Dollar");
-    await user.click(screen.getByRole("option", { name: /US Dollar/ }));
+    const option = screen.getByRole("option", { name: /US Dollar/ });
+    const grid = option.querySelector(".currency-option-grid");
+    const [symbol, name, countryCode, currencyCode] = Array.from(grid?.children ?? []);
+
+    expect(grid).toHaveClass(
+      "grid-cols-[2.75rem_minmax(0,1fr)_2.5rem_3.25rem]",
+    );
+    expect(symbol).toHaveTextContent("$");
+    expect(name).toHaveTextContent("US Dollar");
+    expect(countryCode).toHaveTextContent("US");
+    expect(currencyCode).toHaveTextContent("USD");
+    expect(currencyCode).toHaveClass("tabular-nums", "text-end");
+
+    await user.click(option);
 
     await waitFor(() => expect(updateDisplayCurrency).toHaveBeenCalledWith("USD"));
     await waitFor(() => expect(refresh).toHaveBeenCalledOnce());

@@ -3,6 +3,7 @@
 **Status:** Approved plan — P0–P1 implemented; later phases not started
 **Date:** 2026-07-09
 **Revised:** 2026-07-11 — incorporates the approved product & UX revisions (official roadmap changes, not feature creep): dashboard shell redesign, operator executive analytics + extensible Reports module, marketing website at `/`, popup-based UX, runtime language & display-currency switching, country-aware currency selector, international E.164 phone input, and one-click invitation email. These land as the new **P1.5** phase (§8) plus amendments to P2/P3. Engineering philosophy, architecture, security model, multi-tenancy, and the RLS-first approach are unchanged.
+**Revised:** 2026-07-14 — records four approved decisions taken after the Pre-P2 polish sprint merged (`cf139cb`). **Nothing is implemented by this revision; it is a planning update only.** (1) **Thmanyah** — a licensed Arabic font purchased by the founder — becomes the primary Arabic UI face in P2 (§4.3). (2) The P2 **language switchers** are specified for three independent surfaces — the marketing site, the **clinic user's Preferences page**, and a dedicated **Operator-header switcher for the Platform Admin (SaaS Owner)** — with **English as the default language** and **no clinic language at all**: dashboard language is always a per-user preference (§4, §4.1, §4.3, P2/P2A/P2C in §8). (3) The product's commercial model is now **per active staff user, with the clinic owner/primary admin seat free**, provisionally **USD 9/month** per additional active staff user (§3.3, §13-Q1) — recorded for the future billing phase, not built. (4) A future **legal-acceptance & agreement-history** capability is defined prospectively (new §3.7) — the data does not exist today and must never be synthesized. (5) Per-user UI preferences (theme + locale, for clinic users **and** the Platform Admin) get one approved auth-user-keyed store, **`user_ui_preferences`** (new §4.5) — architecture approved now, **implemented in P2A**, including its RLS, profile-migration strategy, and backfill. Sub-phase numbering, completed phases, and all other scope are unchanged. Immediate post-Pre-P2 UX work lives in `docs/POST_PRE_P2_MANUAL_POLISH.md`, which is **documentation and UI work only and introduces no migration**.
 **Scope of this document:** Planning only. No code changes accompany this document.
 **Supersedes:** The earlier single-clinic AI-agent plan direction. In particular, the previously proposed "patient portal prerequisite" phase is **explicitly retired** — WhatsApp is now the patient channel (see §5, §6).
 
@@ -15,7 +16,7 @@
 | **P0 — Tenant hardening & per-clinic config** | 8–12 | ⛔ BLOCKING security fixes (clinics RLS policies, admin-client wrapper), per-clinic timezone/currency/locale columns and threading | — |
 | **P1 — SaaS foundation** | 15–20 | Invite-only early-access registration (operator-switchable to open) + setup wizard, provider-agnostic billing architecture (`plans`/`subscriptions`/`usage_counters`/trials — **no payment gateway yet**), coupons/promotions, invitation management, entitlements + per-clinic feature flags, operator Mission Control panel, rate limiting, data export | P0 |
 | **P1.5 — Premium UX, marketing site & platform analytics** | 18–26 | Dashboard shell redesign (collapsible sidebar, modern header, global theme/user/logout utilities — UI-only), operator executive analytics dashboard + extensible Reports module, one-click invitation email, marketing website at `/` with integrated early access + popup UX + premium motion, display-currency preference (9 currencies) + country-aware currency selector + international E.164 phone input | P1 stabilized |
-| **P2 — Arabic-first i18n & RTL** | 12–18 | `next-intl` (Arabic default), **runtime language switching without sign-out**, full RTL retrofit (file/occurrence inventory re-measured after P1.5A), Arabic typography, localized zod errors — staff UI fully Arabic | P0 (P2A parallelizable with P1/P1.5); P2B requires P1.5A |
+| **P2 — Arabic i18n & RTL** | 12–18 | `next-intl` (**English default** — amended 2026-07-14), **real language switcher on the marketing site + authenticated header, runtime switching without sign-out**, full RTL retrofit (file/occurrence inventory re-measured after P1.5A), **Thmanyah** Arabic typography (licensed; §4.3), localized zod errors — staff UI fully Arabic-capable | P0 (P2A parallelizable with P1/P1.5); P2B requires P1.5A; **licensed font files required from the founder before P2 starts** |
 | **P3 — Messaging layer + manual WhatsApp inbox + notifications** | 15–20 | Channel-abstracted `outbound_messages` (WhatsApp via BSP, SMS, email), inbound webhook, **staff manual WhatsApp inbox**, appointment reminders, invoice follow-up sequences, in-app notification center, template management | P0, P1 (usage counters) |
 | **P4 — Doctor AI assistant (read-only)** | 10–14 | Staff chat UI, patient-summary/search tools, audit logging, AI entitlement gating | P0, P1; P2 for Arabic answers |
 | **P5 — Patient WhatsApp AI + preliminary booking** | 12–16 | AI auto/suggested replies in the P3 inbox, availability checks, pending-slot booking with caps, cancellation | P3, P4 |
@@ -247,6 +248,21 @@ All RLS'd: clinics read their own `subscriptions`/`usage_counters` (and any coup
 
 Webhook routes for the eventual provider are explicitly **out of P1**; when the provider is chosen, its adapter adds `app/api/webhooks/<provider>/route.ts` (signature-verified), following the route-handler precedent of `appointments/export`.
 
+#### Pricing model — approved 2026-07-14 (recorded for the future billing phase; **not implemented**)
+
+The founder's product-pricing decision, superseding the flat per-plan anchors previously listed as open (§13-Q1):
+
+- **Pricing model: per active staff user (per seat).**
+- The **clinic owner / primary admin seat is free** — a solo practitioner pays nothing for their own seat.
+- Each **additional active staff user** is initially **USD 9 per month**.
+- **Pending invitations do not count** toward billable seats (an issued `staff_invitations` row that has not been accepted is not a seat).
+- **Disabled / inactive users do not count** toward billable seats.
+- The **USD 9 amount is provisional** and may change before GA.
+- Billing must count seats **deterministically and auditably**: a seat count must be reproducible from the data as of a point in time, and every increase/decrease must be attributable to an event in the audit trail. Seat counting is a **billing-phase deliverable** — the current schema has no `is_active`/`disabled_at` flag on `profiles`, so the billing phase must add one (or an equivalent derivation) and define "active" precisely (§13-Q13).
+- **Do not implement billing in this sprint or in any phase before the billing phase, and do not change current subscription behavior now.** The `plans`/`subscriptions` domain model shipped in P1 already denominates prices in USD (`plans.monthly_price_usd`) and is provider-agnostic (§3.3/HP4), so per-seat pricing is an additive quantity/metering concern on top of it — no domain-model rewrite is implied.
+
+**This is not the display-currency feature, and the two must never be conflated.** `profiles.display_currency` + `fx_rates` (P1.5D, refined by the Pre-P2 Preferences work) is a **per-user presentation preference** for how the *clinic's own* money is displayed to that user; it never rewrites canonical amounts. Per-seat pricing is the **platform's commercial model** for what a clinic pays ClinicFlow, denominated in USD.
+
 ### 3.4 Entitlements & per-clinic feature flags (P1 — approved mechanism for selling AI as an add-on)
 
 No third-party flag service. **Feature flags are a P1 deliverable: per-clinic flags exist from the SaaS foundation onward**, so every later phase (AI, WhatsApp, SMS, beta features, future modules) gates on infrastructure that already exists rather than retrofitting it.
@@ -274,16 +290,65 @@ No third-party flag service. **Feature flags are a P1 deliverable: per-clinic fl
 - **Operator (super-admin) panel — a Mission Control dashboard.** Its purpose is to **detect platform issues before customers discover them**, not merely to list tenants. A **new `platform_admins` table** (`user_id` FK) — deliberately *not* a new value in the clinic `user_role` enum, keeping tenant RBAC untouched. New route group `app/(operator)/` with its own guard (`requirePlatformAdmin()` added to [lib/rbac.ts](../lib/rbac.ts)) and layout. It **monitors**: clinics, trials (starting/expiring), subscriptions, usage vs. limits, invitations (pending/accepted, weekly early-access progress), coupons and redemptions, feature flags in effect, health indicators (delivery rates, job failures, webhook errors once P3 lands), error summaries (Sentry-fed), recent platform activity, and — as an operational backstop for the P1C signup compensation path — **Auth users marked as clinic-owner signup attempts that still have no profile** (orphaned signups awaiting resume or cleanup). It **manages**: the global Registration Mode setting and `weekly_invite_limit` (§3.2 — effective immediately, no deploy), invitation create/resend/revoke, coupon CRUD and assignment (§3.3), per-clinic feature-flag overrides (§3.4), and manual subscription grants/extensions (the P1 `manual` billing provider, §3.3). RLS: `platform_admins`-only policies on the SaaS tables; **the operator panel must never expose patient PHI** — tenant clinical data stays invisible except aggregate counts.
 - **Backups/monitoring posture:** Supabase PITR add-on (paid tier) before first paying customer; Sentry env separation (staging/prod DSNs); uptime check on `/api/health` (new trivial route); weekly `pg_dump` to founder-controlled storage as belt-and-braces. Documented as an ops runbook item, not code.
 
+### 3.7 Legal acceptance & agreement history — future phase (recorded 2026-07-14; **not implemented, no schema today**)
+
+**Approved future requirement:** the operator clinic-history page must eventually show the clinic's signed agreements, accepted policies, privacy terms, and related acceptance evidence.
+
+**Honest status — this must never be softened in the product:**
+
+- **None of this data exists today.** There is no acceptance table, no versioned legal-document store, and no acceptance capture in the signup or onboarding flow. The `/privacy` and `/terms` pages shipped in the Pre-P2 sprint are **placeholders carrying a pending-legal-review notice** and bind nothing.
+- **Historical agreements cannot be reconstructed if they were never stored.** Clinics onboarded before this feature exists will legitimately have *no* acceptance history, and the operator surface must say exactly that.
+- **The operator clinic history must show only real, available data.** The existing "Payments & contracts — available after billing integration" honest placeholder is the correct pattern; a legal-acceptance section may be added the same way. **Acceptance rows must never be synthesized, inferred, or backfilled.**
+- **Implementation belongs to a later legal/compliance or billing/onboarding phase** — not to P2, and not to any UX-polish sprint.
+
+**Prospective record shape (to be designed in that later phase):** an append-only, immutable acceptance record capturing, per acceptance — the **legal document type** (terms of service / privacy policy / DPA / clinic agreement), the **document version**, an **immutable document snapshot or content hash** (so the exact text accepted can be proved later), the **accepted timestamp**, the **accepting user**, the **clinic**, the **acceptance mechanism** (signup checkbox, onboarding step, re-consent prompt, operator-recorded countersignature), the **source IP** *where legally and operationally appropriate*, the **user agent or other evidence** *where appropriate* (both subject to PDPL/GDPR data-minimization — see §9.5), the **revocation/supersession state** (superseded-by pointer, withdrawn-at), and an **audit trail** (corrections are new rows, never edits).
+
+**Guardrails for that phase:** acceptance records are platform-admin-readable and clinic-readable for their own rows; they are **never patient data**; the document-snapshot store is versioned and immutable; the operator surface stays read-only. Placement in the roadmap is §13-Q12.
+
 ---
 
 ## 4. Arabic-First / i18n & RTL Plan (Requirement 2)
 
-**Founder decision baked in:** the staff dashboard itself ships fully Arabic (RTL, Arabic default) in v1 — not just patient-facing surfaces.
+**Founder decision baked in:** the staff dashboard itself ships **fully Arabic-capable** (complete RTL, complete Arabic translation, Arabic-quality typography) in v1 — not just patient-facing surfaces. Arabic is a first-class locale, not an afterthought.
+
+**Default-language & language-ownership decision — amended 2026-07-14 (approved, final).** The *default* language is now **English**, not Arabic, and **language is owned by the individual user, never by a clinic**. This changes the resolution model and the marketing/login defaults; it does **not** reduce Arabic scope, weaken the RTL retrofit, or move any Arabic work out of P2.
+
+**Terminology, fixed:** "**Owner**" in this document means the **Platform Owner / SaaS Operator** — the `platform_admins` account behind `requirePlatformAdmin()` (§3.6). The owner of a *clinic* is the **Clinic Owner**, an ordinary authenticated clinic user with the same preference model as any other staff role.
+
+> ### Dashboard language model (authoritative)
+>
+> **There is no clinic language.** Dashboard language is **always a per-user preference**. The only
+> exception is the **Platform Admin dashboard**, whose language is controlled from the dedicated
+> **Language Switcher in the Operator header** — and that setting affects the operator dashboard
+> alone, never a clinic and never a clinic user.
+
+- **Marketing default = English.** The anonymous marketing locale persists **independently** of any authenticated preference (cookie-scoped; no account required).
+- **Login default = English.**
+- **Clinic-user locale = per user**, set in **Preferences** (`/preferences`) — available to **every** clinic role: Clinic Owner, Clinic Admin, Doctor, Receptionist, Accountant, and future staff roles. A Doctor on Arabic, a Receptionist on English, and the Clinic Owner on Arabic may use **the same clinic simultaneously**, each seeing their own language and theme. **No clinic-wide language setting may ever be introduced.**
+- **Platform-Admin locale = per user**, set from the **Operator header switcher**. It has **absolutely no effect on clinics or clinic users**, and no clinic user's language has any effect on the operator dashboard.
+- **Locale resolution: user → `en`.** There is **no clinic tier** — `clinics.locale` must never resolve a user's UI language again (§13-Q11 decides whether the column survives as clinic *formatting* metadata or is retired).
+- **Arabic and RTL arrive only through P2.** Nothing before P2 may ship a language control — and specifically, **no non-functional placeholder language button may be shown before P2**. The operator header slot is reserved and left **empty** until then.
+- **Theme model (also final):** theme is stored **per authenticated user** — not per device and not per clinic — and is **independent for every authenticated account, including the Platform Admin**. The **landing page is always Light**, **all authentication pages are always Dark**, and the dashboard theme is each account's own choice. Theme is **independent of locale**.
+- **Persistence — approved architecture, implemented in P2 (see §4.5).** Both per-user preferences (theme **and** locale) live in one auth-user-keyed **`user_ui_preferences`** store. The post-Pre-P2 polish sprint is **documentation and UI work only and introduces no migration**: it forces the marketing site light and the auth pages dark (pure CSS) and documents the current device-cookie theme persistence honestly. The store's **migration, RLS, profile-migration strategy, and data backfill are P2A deliverables**.
 
 ### 4.1 i18n architecture
 
-- **Library: `next-intl`** — the de-facto App Router standard; first-class Server Component and server-action support; message catalogs `messages/ar.json` (default) + `messages/en.json`.
-- **Routing strategy: no URL locale prefix.** The app is authenticated-only (public surface = login + early-access request + invited signup); locale is per-clinic (`clinics.locale`, §3.5) with per-user override (new `profiles.locale` nullable column). `next-intl`'s cookie/request-config mode: a `getRequestConfig` in `i18n/request.ts` resolves user → clinic → `ar` default. Root layout ([app/layout.tsx](../app/layout.tsx)) sets `<html lang={locale} dir={locale === 'ar' ? 'rtl' : 'ltr'}>`.
+- **Library: `next-intl`** — the de-facto App Router standard; first-class Server Component and server-action support; message catalogs `messages/en.json` (**default**, per the 2026-07-14 amendment) + `messages/ar.json`.
+- **Routing strategy: no URL locale prefix.** The public surface is the marketing site + login + early-access request + invited signup; the rest is authenticated. **Locale is per authenticated user — there is no clinic tier.** `next-intl`'s cookie/request-config mode: a `getRequestConfig` in `i18n/request.ts` resolves **user → `en`** (anonymous surfaces resolve **cookie → `en`**). Root layout ([app/layout.tsx](../app/layout.tsx)) sets `<html lang={locale} dir={locale === 'ar' ? 'rtl' : 'ltr'}>`.
+- **Language switchers (approved 2026-07-14) — three surfaces, three independent scopes, all delivered in P2:**
+
+  | Surface | Who | Control location | Scope | Persistence |
+  |---|---|---|---|---|
+  | **Marketing site** (`/`, `/privacy`, `/terms`, public funnel) | Anonymous visitors | Switcher in the **marketing header** | The public pages only | **Locale cookie**, independent of any account |
+  | **Clinic dashboard** | **Every clinic role** — Clinic Owner, Clinic Admin, Doctor, Receptionist, Accountant, future roles | **Preferences** (`/preferences`) | **That user only** | Per authenticated user |
+  | **Operator dashboard** | **Platform Admin (SaaS Owner)** | **Language Switcher in the Operator header** — the permanently reserved slot | **The operator dashboard only** | Per authenticated platform-admin user |
+
+  - The **clinic dashboard header carries no language control at all** — clinic users switch language in Preferences, alongside theme and their other personal UI preferences.
+  - The **Platform Admin's language setting has no effect on any clinic or clinic user**, and vice versa. The two are completely independent.
+  - Persistence is the **auth-user-keyed `user_ui_preferences` store (§4.5)**, which **P2A creates** — carrying both `theme` and `locale`. It is keyed on `auth.users.id` precisely so it serves **both** clinic users and platform admins: a `profiles.locale` column could never store the Platform Admin's language, because a platform admin has no `profiles` row. Row-level security is self-only (`user_id = auth.uid()`): no account can read or write another's UI preference.
+  - Switching applies at runtime with **no sign-out and no full reload** beyond the RSC refresh, and must leave open dialogs, form state, and the collapsed-sidebar state intact (P2C QA).
+  - **The reserved operator-header slot stays empty until P2.** The post-Pre-P2 sprint reserves the position and ships **nothing** there — a placeholder button that does not switch anything is forbidden.
+  - Adding a future locale must remain a one-message-file + one-registry-entry change.
 - **Server actions & zod:** validation messages in [lib/validations/](../lib/validations/) are currently hardcoded English strings. Plan: replace literal messages with **message keys** (`"validation.appointment.pastTime"`), and translate at the edge — a small `translateFieldErrors(fieldErrors, t)` helper applied where actions' `{ error, fieldErrors }` results are rendered (forms use react-hook-form; the resolver path stays untouched). This avoids threading `t()` into every schema and keeps schemas serializable. One shared zod error map for generic messages (`required`, `too_long`), registered in a `lib/validations/error-map.ts`.
 
 ### 4.2 RTL as default direction
@@ -300,19 +365,35 @@ Current state (measured): 87/176 TSX files, 339 physical-direction occurrences, 
 
 **Honest effort: 12–18 days** for retrofit + extraction + translation integration + RTL QA pass across all 36 pages in both directions. This is the estimate most tempting to shrink; don't.
 
-### 4.3 Arabic typography (distinctive, not Cairo/Tajawal)
+### 4.3 Arabic typography — **Thmanyah** (decided 2026-07-14; licensed font purchased by the founder)
 
-Loaded via `next/font/local` (self-hosted — also avoids Google Fonts latency in GCC), wired in [app/layout.tsx](../app/layout.tsx) where DM Sans/Instrument Serif/Geist Mono load today.
+Loaded via `next/font/local` (self-hosted — also avoids Google Fonts latency in GCC), wired in [app/layout.tsx](../app/layout.tsx) where the Latin faces load today.
 
-| Option | Type | Licensing (approx., as of 2026-07-09 — verify with foundry) | Notes |
+> ### ⚠️ P2 implementation reminder
+>
+> **Before starting P2 code changes, request the licensed Thmanyah font files from the user and confirm the permitted web-app usage.**
+
+**Decision:** **Thmanyah** is the **primary Arabic UI font**. It replaces IBM Plex Sans Arabic as the primary; IBM Plex Sans Arabic is retained as the **fallback** face (for environments without the licensed files, and as the metric-compatible degradation target).
+
+| Face | Role | Licensing | Notes |
 |---|---|---|---|
-| **IBM Plex Sans Arabic** ✅ primary | Free (OFL) | $0 | Premium, neutral, excellent weights; pairs with IBM Plex Sans for Latin — coherent bilingual system |
-| **Readex Pro** | Free (OFL) | $0 | Softer/rounder; good fallback or marketing-site face |
-| Rubik Arabic | Free (OFL) | $0 | Friendly; slightly less "clinical trust" |
-| **29LT Zarid Sans** (29LT) | Paid | Web licenses typically ~$100–500/style tier by pageviews — verify at https://29lt.com | Distinctive premium option if founder buys a license; strong Arabic-first design |
-| **TPTQ Greta Arabic** (TPTQ Arabic) | Paid | ~€100–500/style web license — verify at https://tptq-arabic.com | Editorial-grade; excellent legibility at small sizes |
+| **Thmanyah** ✅ **primary Arabic** | All Arabic UI | **Licensed — purchased by the founder** | Integrated with `next/font/local`. The files are **not in the repository** and must be supplied by the user before P2 implementation begins. |
+| **IBM Plex Sans Arabic** | Arabic fallback | Free (OFL) | The previous primary; kept as the fallback tier and as the reference for metric/weight mapping. |
+| **Latin companion** | Latin UI/marketing | Free (OFL) | The Latin stack is chosen in the post-Pre-P2 marketing-typography workstream (`docs/POST_PRE_P2_MANUAL_POLISH.md` §9-MP2 — current recommendation: IBM Plex Sans + a formal serif for display). P2 must pair Thmanyah with whatever ships there, as one coherent bilingual system. |
+| Geist Mono / IBM Plex Mono | Numerals, codes, monospace | Free (OFL) | Unchanged in role. |
 
-**Recommended stack:** IBM Plex Sans Arabic (primary UI) + IBM Plex Sans (Latin) + Geist Mono (kept for numerals/code), with 29LT Zarid Sans as the paid upgrade path for brand distinction. CSS: `font-family: var(--font-plex-arabic), var(--font-plex-latin), system-ui`.
+**Licensing & handling rules (binding):**
+
+- The **user must add the licensed font files before P2 implementation begins.** No P2 typography work starts without them.
+- **Font files must never be redistributed as standalone downloadable assets** — they are served only as font resources of the application (`next/font/local` output), never linked, listed, indexed, or exposed as a download, and never committed to a public artifact outside the app's own build output.
+- The permitted web-app usage (page-view tier, domains, sub-processors) must be **confirmed with the user against the purchased licence** before integration.
+- **No font file may be fabricated, generated, or substituted** by any planning or implementation task.
+
+**P2 must document, when the files arrive:** the exact **weights/styles used** (expected: Regular 400, Medium 500, SemiBold 600, Bold 700; italics only if the licence and the family provide them — Arabic families frequently do not), the **`unicodeRange`/subset** shipped, the file sizes, and the full **fallback stack**:
+
+`font-family: var(--font-thmanyah), var(--font-plex-arabic), "Segoe UI", system-ui, sans-serif;`
+
+**P2 QA must test Thmanyah specifically for:** line-height and vertical rhythm (Arabic ascender/descender metrics differ from the Latin face and *will* change row heights), **weight mapping** (a licensed family's 500/600 rarely lands where the Latin family's does), **forms** (inputs, labels, helper text, error text), **tables** (the shared `DataTable` — row height and header alignment), **calendars** (all three views; the hour-label column is the tightest space in the product), and **dense dashboards** (stat cards, chart labels, badges) — all in RTL.
 
 ### 4.4 Localization details clinics will notice
 
@@ -320,6 +401,24 @@ Loaded via `next/font/local` (self-hosted — also avoids Google Fonts latency i
 - **Dates:** Gregorian default; **Hijri as a display option** for the Saudi market via `Intl.DateTimeFormat('ar-SA-u-ca-islamic-umalqura')` — shown alongside (not instead of) Gregorian on appointment surfaces. Deferred to the Saudi-launch milestone; the formatter API from §3.5 is designed to accept a calendar parameter so this is additive.
 - **Currency:** per-clinic (§3.5): KWD (3 decimal places — note `formatCurrency`'s current `maximumFractionDigits: 2` must become currency-aware), SAR, EGP, AED.
 - **WhatsApp & agent RTL:** message templates stored per clinic in their own wording/dialect (§7.4); AI agent replies in the **patient's language — Arabic by default**, with a dialect-tolerant system prompt (understands Gulf/Egyptian/Levantine input, replies in clear polite Arabic mirroring the patient's register; §6.5). Template bodies are validated for Unicode bidi correctness (numbers/times embedded in Arabic text get LRM marks where needed — a `lib/messaging/bidi.ts` helper).
+
+### 4.5 Per-user UI-preference persistence — `user_ui_preferences` (architecture approved 2026-07-14; **implemented in P2A**)
+
+Theme and locale are the same kind of thing — a personal UI preference belonging to an **authenticated account** — so they share **one store**, not two mechanisms.
+
+```sql
+user_ui_preferences (user_id uuid PRIMARY KEY REFERENCES auth.users,
+                     theme text CHECK (theme IN ('light','dark')),
+                     locale text,                       -- 'en' | 'ar' | future
+                     created_at, updated_at)
+```
+
+- **Keyed on the auth user id, never on `profiles`.** This is load-bearing: **a Platform Admin has no `profiles` row** (`platform_admins.user_id` → `auth.users`; `profiles` is clinic-scoped and carries a `clinic_id`). A `profiles.theme`/`profiles.locale` column is therefore *structurally incapable* of storing the SaaS Owner's theme or the Operator dashboard's language — while the approved model requires both to be independent for **every** authenticated account, the Platform Admin included. One auth-user-keyed store serves clinic users and platform admins alike.
+- **RLS is self-only:** `user_id = auth.uid()` for select **and** write. No clinic scope, no role check, **no platform-admin exception** — no account can read or write another account's UI preference.
+- **The theme cookie is retained as the pre-render hint** so there is no flash: the write action updates the row *and* refreshes the cookie; layouts read the row for the signed-in user and fall back to the cookie, then to `light`. Sign-out clears the hint.
+- **Nothing about UI preferences may ever be stored on `clinics`** — there is no clinic theme and no clinic language (§4).
+
+**Timing (approved):** the architecture is settled, but **the implementation belongs to P2A** — the migration, the RLS policies and their denial tests, the **profile-migration strategy**, the **data backfill**, and the rewiring of `actions/theme.ts` / `ThemeToggle` / the two dashboard layouts. The post-Pre-P2 manual-polish sprint (`docs/POST_PRE_P2_MANUAL_POLISH.md`) is **documentation and UI work only and adds no migration**; until P2A lands this store, theme persistence stays in its current device cookie, with that scope documented honestly rather than half-corrected. **Backfill note for P2A:** a browser cookie is not readable server-side outside a request, so historical theme choices cannot be migrated — the honest approach is to create each user's row lazily on their first post-P2 preference write (defaulting to `light` until then) and to say so, not to invent history.
 
 ---
 
@@ -571,23 +670,26 @@ Summary table at the top of this document. Common to every phase: unit tests fol
 - *Tests/acceptance:* currency preference persists and applies consistently (dashboard, revenue, reports, billing surfaces) without sign-out; converted values marked approximate and exports retain canonical amounts; registry accepts a new currency/country in one definition change (contract test); phone component validates per-country and round-trips E.164; backfill migration integration-tested against representative legacy values (Kuwaiti 8-digit, Egyptian mobile, garbage input → flagged not dropped); existing booking/patient tests green with E.164 data.
 - *Parallel:* **yes — with P1.5B and P1.5C**.
 
-### P2 — Arabic-first i18n & RTL (12–18 days; parallelizable with P1 after P0)
+### P2 — Arabic i18n & RTL (12–18 days; parallelizable with P1 after P0)
 
-- **Goal:** entire staff UI ships Arabic/RTL by default; English secondary; **users switch language at runtime without signing out** (2026-07-11 revision — item 9).
-- **In scope:** `next-intl` setup (§4.1); **runtime language switching** — per-user preference in `profiles.locale` written by an in-app switcher mounted in the P1.5A header/user menu, locale cookie for anonymous/marketing surfaces, resolution order user → clinic → `ar`, switch applies on the next render with no sign-out and no full reload beyond the RSC refresh; zod message-key refactor across [lib/validations/](../lib/validations/); shadcn regeneration with `"rtl": true`; logical-properties codemod (inventory **re-measured after P1.5A** — 87 files / 339 occurrences at the 2026-07-09 audit); icon mirroring; string extraction + Arabic translation (including the P1.5 shell, operator analytics, and marketing-site strings, which ship translation-key-ready); typography stack (§4.3); digits/date/currency polish (§4.4, minus Hijri) **through the P1.5D display-currency path**. **Out:** Hijri (Saudi milestone). (Marketing site itself is P1.5C; its Arabic copy lands here.)
-- **Migrations:** `profiles.locale` (nullable).
-- **Tests:** i18n snapshot tests for representative pages in `ar`+`en` (extend `tests/unit/pages/`); runtime-switch test (authenticated user flips ar↔en, next render localized, session intact); CI grep-gate failing on new physical-direction classes; Playwright smoke in Arabic locale; visual QA checklist of all 36 pages in RTL.
-- **Acceptance:** default new clinic experience is fully Arabic RTL with zero mirrored-layout defects on the 36 pages; the in-app language switcher flips ar↔en at runtime without sign-out, persists per user, and scales to future locales (adding one = one message file + registry entry); no hardcoded English strings in components (lint/extraction check).
+- **Goal:** the entire staff UI is fully translatable and fully RTL-correct, Arabic ships complete, and **users switch language at runtime without signing out** (2026-07-11 revision — item 9). **English is the default language** (2026-07-14 amendment, §4).
+- **Prerequisite (external):** **the licensed Thmanyah font files must be supplied by the founder before P2 code changes begin** (§4.3). Request them and confirm permitted web-app usage first.
+- **In scope:** **the per-user preference store `user_ui_preferences` (§4.5)** — created here, carrying **theme + locale**, with self-only RLS, the profile-migration strategy, and the backfill decision (the post-Pre-P2 polish sprint is documentation/UI-only and adds no migration, so this whole piece is P2's); `next-intl` setup (§4.1); **runtime language switching via real switchers on three independent surfaces** — the **marketing site** (anonymous locale cookie), the **clinic user's Preferences page** (per-user; every clinic role, Clinic Owner included), and the **Operator header** (the Platform Admin's own operator-dashboard language, mounted in the slot the post-Pre-P2 sprint reserved and left empty) — with resolution **user → `en`** and **no clinic language tier**; switch applies on the next render with no sign-out and no full reload beyond the RSC refresh; zod message-key refactor across [lib/validations/](../lib/validations/); shadcn regeneration with `"rtl": true`; logical-properties codemod (inventory **re-measured after P1.5A** — 87 files / 339 occurrences at the 2026-07-09 audit; the Pre-P2 and post-Pre-P2 sprints added none by contract); icon mirroring; string extraction + Arabic translation (including the P1.5 shell, operator analytics, marketing-site, legal-page, and Preferences strings, which ship translation-key-ready); **Thmanyah typography stack (§4.3)**; digits/date/currency polish (§4.4, minus Hijri) **through the P1.5D display-currency path**. **Out:** Hijri (Saudi milestone). (Marketing site itself is P1.5C/Pre-P2; its Arabic copy lands here.)
+- **Surface invariants that P2 must not break:** the **landing page stays Light** and **all authentication pages stay Dark** (both delivered by the post-Pre-P2 polish sprint as pure CSS scoping). The **dashboard theme becomes per authenticated user — including the Platform Admin — when P2A lands `user_ui_preferences`** (§4.5); it is independent of locale in either state. Locale never implies a theme, and **no clinic-wide language or theme setting may be introduced**.
+- **Migrations:** **`user_ui_preferences`** — the auth-user-keyed per-user preference store carrying **both `theme` and `locale`**, with self-only RLS (§4.5). P2 **creates** it: the post-Pre-P2 polish sprint deliberately ships no migration, so the table, its policies, its profile-migration strategy, and its backfill are all P2A's. Whether `clinics.locale` survives as clinic *formatting* metadata or is retired is §13-Q11 — decide in P2A. It may not be a language source either way.
+- **Tests:** i18n snapshot tests for representative pages in `ar`+`en` (extend `tests/unit/pages/`); runtime-switch test (authenticated user flips ar↔en, next render localized, session intact, **another user's locale unchanged**); **concurrent multi-user test — a Doctor on Arabic, a Receptionist on English, and the Clinic Owner on Arabic in the same clinic at the same time, each rendering their own language**; **operator-isolation test — the Platform Admin switches the operator dashboard to Arabic and no clinic user's language changes, and vice versa**; **`user_ui_preferences` RLS denial tests (no account reads or writes another's row, platform admin included) and the per-user theme tests the polish sprint could not write — a shared browser no longer bleeds one user's theme into the next, and a user's theme follows them to a second device**; anonymous marketing-locale test (cookie persists across public pages, independent of any signed-in preference); CI grep-gate failing on new physical-direction classes; Playwright smoke in Arabic locale; visual QA checklist of all pages in RTL **with Thmanyah loaded** (row heights, forms, tables, calendars, dense dashboards — §4.3).
+- **Acceptance:** an Arabic-speaking user's experience is fully Arabic RTL with zero mirrored-layout defects; **English is what an undecided user sees** (marketing, login, new clinic users, new platform admins); the three switchers exist and are correctly scoped — **marketing header** (anonymous cookie), **Preferences** (each clinic user's own language), and **Operator header** (the Platform Admin's operator dashboard only) — each flipping ar↔en at runtime without sign-out; **no clinic language exists anywhere in the schema or UI**; the model scales to future locales (adding one = one message file + registry entry); no placeholder language control was ever shipped before this phase; no hardcoded English strings in components (lint/extraction check).
 
 #### P2 execution split (3 sub-phases; merge order P2A → P2B → P2C)
 
 **P2A — i18n infrastructure** — branch `feat/p2a-i18n-infrastructure`, est. **4–5 days**, merge **1st**.
 - *Goal:* the machinery exists and the app still renders identically in English — a low-risk, reviewable foundation.
-- *In scope:* `next-intl` setup + `getRequestConfig` (user → clinic → `ar` resolution, §4.1) **plus the runtime-switch plumbing**: locale cookie for anonymous surfaces, `updateOwnLocale` action writing `profiles.locale`, and the switcher component (mounted in the P1.5A header when both exist); root layout `lang`/`dir` wiring; `profiles.locale` column; zod message-key refactor + shared error map (`lib/validations/error-map.ts`) + `translateFieldErrors` helper; typography stack via `next/font/local` (IBM Plex Sans Arabic, §4.3); `messages/en.json`/`messages/ar.json` skeletons.
-- *Out of scope:* converting any physical-direction CSS (P2B); extracting existing UI strings (P2C).
-- *Dependencies:* P0. Runs **in parallel with P1 and P1.5** (per roadmap).
-- *Migrations:* `profiles.locale` (nullable) — the only P2 migration.
-- *Tests/acceptance:* locale resolution unit tests (user override beats clinic beats default); zod messages resolve through keys in both locales; app renders byte-identical in `en` (snapshot regression) — proof of zero behavior change.
+- *Prerequisite:* **request the licensed Thmanyah font files from the founder and confirm permitted web-app usage before starting** (§4.3).
+- *In scope:* **the `user_ui_preferences` store itself (§4.5)** — migration, self-only RLS + denial tests, **profile-migration strategy**, **data backfill decision**, and the rewiring of `actions/theme.ts` / `ThemeToggle` / the protected + operator layouts onto it (the post-Pre-P2 sprint left theme on its device cookie by design and added no migration, so this lands here, whole); `next-intl` setup + `getRequestConfig` (**user → `en`** resolution — **no clinic tier**, §4.1 as amended 2026-07-14) **plus the runtime-switch plumbing**: locale cookie for anonymous/marketing surfaces (independent of any account), `updateOwnLocale` action writing **`user_ui_preferences.locale`** (keyed on `auth.users.id` precisely so it also holds the **Platform Admin's** locale, which `profiles` structurally cannot), and **all three switcher mounts — the marketing header, the clinic user's Preferences page, and the Operator header** (the last in the slot the post-Pre-P2 sprint reserved and deliberately left empty; **the placeholder-free rule ends here — the control that lands must actually switch the language**, and the Operator switcher must affect the operator dashboard **only**); root layout `lang`/`dir` wiring; the `clinics.locale` disposition decision (§13-Q11); zod message-key refactor + shared error map (`lib/validations/error-map.ts`) + `translateFieldErrors` helper; typography stack via `next/font/local` (**Thmanyah** primary, IBM Plex Sans Arabic fallback, §4.3); `messages/en.json` (default) / `messages/ar.json` skeletons.
+- *Out of scope:* converting any physical-direction CSS (P2B); extracting existing UI strings (P2C); **any clinic-wide language setting — forbidden, permanently**.
+- *Dependencies:* P0. Runs **in parallel with P1 and P1.5** (per roadmap). **External:** the Thmanyah font files. Note the post-Pre-P2 polish sprint is *not* a dependency for the store — it deliberately shipped none; P2A owns it end to end.
+- *Migrations:* **`user_ui_preferences`** (`user_id` PK → `auth.users`, `theme`, `locale`, self-only RLS — §4.5) — the only P2 migration (plus, if §13-Q11 so decides, the `clinics.locale` disposition). Ships with its RLS denial suite, the profile-migration strategy, and the documented backfill decision.
+- *Tests/acceptance:* locale resolution unit tests (**user beats `en` default; no clinic tier exists to consult**); anonymous marketing-locale cookie is independent of any authenticated preference; a locale change by one user leaves every other user's locale untouched, in the same clinic and across clinics; **the Platform Admin's operator-dashboard locale changes nothing for any clinic user, and no clinic user's locale changes the operator dashboard**; RLS denial test — no account can read or write another's `user_ui_preferences` row, platform admin included; **theme now follows the user, not the browser** — a second user on the same browser gets their own theme, and a user's theme follows them to a second device (the gap the polish sprint documented and left open); zod messages resolve through keys in both locales; app renders byte-identical in `en` (snapshot regression) — proof of zero behavior change.
 - *Parallel:* with P1B–P1D freely (disjoint surface).
 
 **P2B — RTL retrofit** — branch `feat/p2b-rtl-retrofit`, est. **4–6 days**, merge **2nd**.
@@ -870,20 +972,23 @@ The runtime display-currency preference (P1.5D) must "apply consistently across 
 
 ## 13. Open Questions for the Founder
 
-Decided already (baked into this plan): staff UI fully Arabic in v1; Kuwait → Saudi → GCC/Egypt launch order; all HP recommendations approved; manual inbox is a first-class P3 deliverable.
+Decided already (baked into this plan): staff UI fully Arabic-capable in v1 with **English as the default language** (2026-07-14, §4); Kuwait → Saudi → GCC/Egypt launch order; all HP recommendations approved; manual inbox is a first-class P3 deliverable; **Thmanyah** is the primary Arabic font (2026-07-14, §4.3); **pricing is per active staff user with a free owner/primary-admin seat** (2026-07-14, §3.3).
 
 Still open:
 
-1. **Pricing points** for Basic / Pro / Pro+AI (cost floors in §11; suggested anchors: ~$49 / ~$99 / ~$149–199/month — pure founder call against Kuwaiti willingness-to-pay).
+1. ~~**Pricing points** for Basic / Pro / Pro+AI~~ — **DECIDED 2026-07-14 (§3.3): per active staff user; the clinic owner / primary admin seat is free; each additional active staff user is initially USD 9/month; pending invitations and disabled/inactive users do not count; the USD 9 figure is provisional and may change before GA; seat counting must be deterministic and auditable.** The plan-tier cost floors in §11 remain the input for validating that this price clears cost on the AI/messaging tiers — that validation is a billing-phase task, not a re-opening of the model. Not implemented in any phase before the billing phase; current subscription behavior is unchanged.
 2. **Data residency for Saudi launch:** accept EU-region Supabase with PDPL transfer safeguards, or invest in a KSA-region deployment before Saudi go-live? (Affects P-timeline after v1; §9.5.)
 3. **AI reply mode default:** launch patient AI as `suggest` (staff approves every AI reply — safer, slower) or `auto` with escalation? Recommendation: `suggest` for each clinic's first 2 weeks, then opt-in `auto`.
 4. **Trial policy:** 14-day free trial (planned default) vs. demo-clinic sandbox vs. founder-led onboarding only for the first ~10 customers.
-5. **Font licensing budget:** ship free IBM Plex Sans Arabic v1, or purchase 29LT Zarid Sans (~$300–1,500) for brand distinction at launch?
+5. ~~**Font licensing budget:** ship free IBM Plex Sans Arabic v1, or purchase a paid Arabic face?~~ — **DECIDED 2026-07-14 (§4.3): the founder purchased a licence for *Thmanyah*, which becomes the primary Arabic UI font (IBM Plex Sans Arabic remains the fallback).** Remaining action, not a decision: **the licensed font files must be supplied before P2 implementation begins**, and the permitted web-app usage confirmed against the licence. Font files are never redistributed as standalone downloadable assets.
 6. **Hijri calendar priority:** confirmed as Saudi-milestone (not v1) — acceptable?
 7. **Legal:** which entity/ jurisdiction will contract with clinics (affects the future payment-provider onboarding, DPAs, and the Meta Business verification in P6 — the verification should start as early as P3).
 8. **Final payment provider** (post-P1 decision by design, §3.3/HP4): Paddle, Stripe, Lemon Squeezy, Polar, Tap, or another — choose once real prospects reveal payment-rail demand (KNET/mada vs. cards) and the contracting entity (question 7) is settled.
 9. **FX rate source for the display-currency preference (P1.5D/HP9):** which provider feeds `fx_rates` (e.g., ECB/openexchangerates/exchangerate.host tiers), at what update cadence (daily recommended), and who owns the API cost? Blocking only for P1.5D's conversion feature — the selector/preference plumbing proceeds regardless.
-10. **Marketing-site launch languages (P1.5C):** launch `/` English-first with Arabic following in P2C (current plan), or hold the public marketing launch until Arabic copy is ready? Affects go-live sequencing between P1.5C and P2C, not engineering scope.
+10. **Marketing-site launch languages (P1.5C):** launch `/` English-first with Arabic following in P2C (current plan), or hold the public marketing launch until Arabic copy is ready? Affects go-live sequencing between P1.5C and P2C, not engineering scope. *(Largely settled by the 2026-07-14 English-default decision: `/` launches English and gains the Arabic switcher in P2 — confirm the go-live sequencing only.)*
+11. **Disposition of `clinics.locale` (P2A — added 2026-07-14):** the approved model is **English default + no clinic language** (§4) — dashboard language is always per user, so locale resolution becomes **user → `en`** with **no clinic tier**, and `clinics.locale` may never resolve a user's UI language again. What remains open is only the column's fate: (a) **retain it as clinic *formatting* metadata** alongside `timezone`/`currency`/`digits`, where a clinic-level locale still has a legitimate non-language use for dates/numbers on clinic-wide artifacts (recommended), or (b) **retire it** in P2. Decide **in P2A**, not silently.
+12. **Placement of the legal-acceptance & agreement-history feature (§3.7 — added 2026-07-14):** does it belong to a dedicated legal/compliance phase, to the billing phase (where the clinic agreement is signed anyway), or to an onboarding revision? It is **not** P2 and **not** any UX-polish sprint. Until it lands, the operator clinic history shows only real data and an honest, clearly-labeled placeholder — never synthesized acceptance rows.
+13. **Seat-count definition for per-seat billing (billing phase — added 2026-07-14, §3.3):** "active staff user" needs one deterministic definition before billing is implemented. Pending invitations are already excluded by decision; but `profiles` today has **no** `is_active`/`disabled_at` flag, so the billing phase must add one (or define an equivalent derivation) and settle the edge cases: mid-month joiners/leavers (proration?), a re-enabled user, a doctor who is also the owner, and how the count is snapshotted for an auditable invoice.
 
 ---
 

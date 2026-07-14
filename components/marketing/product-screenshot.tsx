@@ -34,15 +34,15 @@ export function ProductScreenshot({
   return (
     <div
       className={cn(
-        "marketing-product-frame relative overflow-hidden rounded-[1.4rem] border border-white/80 bg-white/70 p-1.5 shadow-[0_32px_80px_-44px_rgba(4,47,60,.48)] dark:border-white/10 dark:bg-white/5",
+        "marketing-product-frame relative overflow-hidden rounded-[1.4rem] border border-white/80 bg-white/70 p-1.5 shadow-[0_32px_80px_-44px_rgba(4,47,60,.48)]",
         className,
       )}
     >
-      <div className="flex h-7 items-center gap-1.5 border-b border-[#0b4654]/10 px-3 dark:border-white/10" aria-hidden="true">
+      <div className="flex h-7 items-center gap-1.5 border-b border-[#0b4654]/10 px-3" aria-hidden="true">
         <span className="size-1.5 rounded-full bg-[#ff8c72]" />
         <span className="size-1.5 rounded-full bg-[#f6c65b]" />
         <span className="size-1.5 rounded-full bg-[#29bfa6]" />
-        <span className="ms-2 h-1.5 w-24 rounded-full bg-[#0b4654]/8 dark:bg-white/10" />
+        <span className="ms-2 h-1.5 w-24 rounded-full bg-[#0b4654]/8" />
       </div>
       <picture>
         <source media="(max-width: 767px)" srcSet={mobileImage.props.srcSet} />

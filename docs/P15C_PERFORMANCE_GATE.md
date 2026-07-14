@@ -85,3 +85,34 @@ transfer improved from the preceding WS9 measurement of approximately 207 KB to
 Command used for each run (with the output path numbered 1–3):
 
 `pnpm dlx lighthouse@13.4.0 http://127.0.0.1:3112/ --quiet --chrome-flags="--headless --no-sandbox" --only-categories=performance,accessibility,best-practices,seo --output=json --output-path=/tmp/pre-p2-fix-lighthouse-run-1.json`
+
+## Post-Pre-P2 MP2 typography and motion verification — 2026-07-14
+
+MP2 replaced the Latin stack with IBM Plex Sans (variable, normal) + IBM Plex Serif
+(400 normal), retained Geist Mono, and deepened the marketing motion using CSS transforms and
+view timelines only. All fonts still load through `next/font/google`, which self-hosts the emitted
+WOFF2 assets; the production page makes no runtime request to Google or another font origin.
+
+The selected build was audited three times at `http://127.0.0.1:3120/` using the same Lighthouse
+13.4.0 mobile preset and simulated throttling as the previous gate:
+
+| Run | Performance | Accessibility | Best Practices | SEO | Simulated LCP | TBT | Initial script transfer | Result |
+|---|---:|---:|---:|---:|---:|---:|---:|---|
+| 1 | **92** | **100** | **100** | **100** | 3.39 s | 12.5 ms | 198,701 bytes | PASS |
+| 2 | **92** | **100** | **100** | **100** | 3.37 s | 3.5 ms | 198,701 bytes | PASS |
+| 3 | **92** | **100** | **100** | **100** | 3.37 s | 6.5 ms | 198,701 bytes | PASS |
+
+All three runs clear the mandatory ≥90 Performance / ≥90 Accessibility gate. Accessibility stays
+at 100, the initial script transfer is unchanged from the final Pre-P2 record within measurement
+noise (198,703 → 198,701 bytes), and TBT remains well below the approximately 10 ms budget except
+for a 12.5 ms first-run variance. The existing aspirational LCP ≤2.5 s target remains unmet and is
+not represented as passing.
+
+The actual font transfer on `/` decreased from **94,292 bytes** before MP2 to **80,874 bytes** in
+the selected build (**−13,418 bytes**). Source Serif 4 was measured as the recommended comparison
+candidate but failed the performance gate; the complete candidate record and the 360/768/1440
+screenshots are in `docs/reviews/POST_PRE_P2_MP2_REVIEW.md`.
+
+Command used for each final run (with the output path numbered 1–3):
+
+`pnpm dlx lighthouse@13.4.0 http://127.0.0.1:3120/ --quiet --chrome-flags='--headless --no-sandbox' --only-categories=performance,accessibility,best-practices,seo --output=json --output-path=/tmp/mp2-final-lighthouse-1.json`

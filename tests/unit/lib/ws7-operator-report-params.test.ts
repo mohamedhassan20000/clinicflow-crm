@@ -76,6 +76,32 @@ describe("Pre-P2 WS7 report filter contracts", () => {
     });
   });
 
+  it("keeps malformed Invitations URL state out of the database query", () => {
+    expect(parseReportParams(report("invitations"), {
+      status: ["not-a-status", "accepted"],
+      clinic: "not-a-uuid",
+      createdFrom: "2026-02-31",
+      createdTo: "yesterday",
+      emailSent: "sometimes",
+      sort: "email",
+      dir: "sideways",
+      page: "0",
+      pageSize: "5000",
+    }, now)).toMatchObject({
+      filters: {
+        status: "pending",
+        clinic: "all",
+        createdFrom: "2026-06-14",
+        createdTo: "2026-07-13",
+        emailSent: "all",
+      },
+      sort: "created_at",
+      direction: "desc",
+      page: 1,
+      pageSize: 25,
+    });
+  });
+
   it("resets inverted ranges and constrains a trial-ending window to trialing", () => {
     expect(parseReportParams(report("activity"), {
       createdFrom: "2026-07-13",

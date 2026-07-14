@@ -39,16 +39,25 @@ function getSidebarState() {
   } catch { return false; }
 }
 
+/**
+ * The audience the shell is rendered for. It is passed explicitly by the layout that owns the
+ * route group — `(protected)` passes "clinic", `(operator)` passes "operator" — and is never
+ * inferred from a role string: a Platform Admin has no `profiles` row, so no clinic role label
+ * can describe the operator surface.
+ */
+type DashboardSurface = "clinic" | "operator";
+
 type DashboardShellProps = {
   children: React.ReactNode;
   navItems: readonly ShellNavItem[];
   user: { fullName: string; email?: string; roleLabel: string; avatarUrl?: string | null; profileHref?: string };
   theme: "light" | "dark";
+  surface: DashboardSurface;
   brandLabel?: string;
   contentClassName?: string;
 };
 
-export function DashboardShell({ children, navItems, user, theme, brandLabel, contentClassName = "px-5 py-6 lg:px-10 lg:py-8" }: DashboardShellProps) {
+export function DashboardShell({ children, navItems, user, theme, surface, brandLabel, contentClassName = "px-5 py-6 lg:px-10 lg:py-8" }: DashboardShellProps) {
   const collapsed = useSyncExternalStore(subscribeToSidebarState, getSidebarState, () => false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -65,7 +74,7 @@ export function DashboardShell({ children, navItems, user, theme, brandLabel, co
     <div className="flex min-h-dvh bg-background">
       <Sidebar items={navItems} collapsed={collapsed} onCollapsedChange={updateCollapsed} brandLabel={brandLabel} />
       <div className="flex min-w-0 flex-1 flex-col">
-        <header data-testid="dashboard-header" className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 border-b bg-card/95 px-4 backdrop-blur md:px-6">
+        <header data-testid="dashboard-header" className="sticky top-0 z-30 flex h-[var(--shell-header-h)] shrink-0 items-center gap-3 border-b bg-card/95 px-4 backdrop-blur md:px-6">
           <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setMobileOpen(true)} aria-label="Open navigation"><Menu className="size-5" /></Button>
           <span className="flex items-center gap-2 md:hidden"><Image src="/brand/clinicflow-mark.png" alt="ClinicFlow" width={28} height={24} className="h-6 w-auto" /><span className="text-sm font-semibold">{brandLabel ?? "ClinicFlow"}</span></span>
           <div className="flex-1" />
@@ -81,7 +90,14 @@ export function DashboardShell({ children, navItems, user, theme, brandLabel, co
               <DropdownMenuLabel><span className="block truncate text-sm text-foreground">{user.fullName}</span>{user.email ? <span className="block truncate font-normal">{user.email}</span> : null}</DropdownMenuLabel>
               <DropdownMenuSeparator />
               {user.profileHref ? <DropdownMenuItem asChild><Link href={user.profileHref} className="gap-2 py-2"><UserRound />My profile</Link></DropdownMenuItem> : null}
-              <DropdownMenuItem asChild><Link href="/preferences" className="gap-2 py-2"><SlidersHorizontal />Preferences</Link></DropdownMenuItem>
+              {/*
+                Clinic surface only. `/preferences` is a clinic-user route (`requireUser()` + `profiles`),
+                so a Platform Admin has no row to read and the entry is a broken link there.
+                On the operator surface this position is the RESERVED SLOT for the P2 Operator Language
+                Switcher (AI_AGENT_PLAN.md §4.1) — reserved means left empty, never stubbed: it will govern
+                the operator dashboard's language for that platform-admin user only, never a clinic.
+              */}
+              {surface === "clinic" ? <DropdownMenuItem asChild><Link href="/preferences" className="gap-2 py-2"><SlidersHorizontal />Preferences</Link></DropdownMenuItem> : null}
               <form action={signOut}><DropdownMenuItem asChild variant="destructive" onSelect={(event) => event.preventDefault()}><button type="submit" className="w-full gap-2 py-2"><LogOut />Sign out</button></DropdownMenuItem></form>
             </DropdownMenuContent>
           </DropdownMenu>

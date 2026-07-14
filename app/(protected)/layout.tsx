@@ -44,7 +44,7 @@ export default async function ProtectedLayout({
 
   return (
     <ClinicSettingsProvider timeFormat={timeFormat} locale={clinicLocale} displayCurrency={displayCurrency} fxRates={rates}>
-      <DashboardShell navItems={navItems} user={{ fullName: user.fullName, email: user.email, roleLabel: user.role, avatarUrl: user.avatarUrl, profileHref: "/profile" }} theme={theme}>
+      <DashboardShell navItems={navItems} user={{ fullName: user.fullName, email: user.email, roleLabel: user.role, avatarUrl: user.avatarUrl, profileHref: "/profile" }} theme={theme} surface="clinic">
         {children}
       </DashboardShell>
     </ClinicSettingsProvider>

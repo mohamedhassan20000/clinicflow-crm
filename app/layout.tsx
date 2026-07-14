@@ -1,23 +1,24 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
-import { DM_Sans, Instrument_Serif, Geist_Mono } from "next/font/google";
+import { Geist_Mono, IBM_Plex_Sans, IBM_Plex_Serif } from "next/font/google";
 import { NuqsAdapter } from "nuqs/adapters/next/app";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
-const dmSans = DM_Sans({
-  variable: "--font-dm-sans",
+const ibmPlexSans = IBM_Plex_Sans({
+  variable: "--font-plex-sans",
   subsets: ["latin"],
   display: "swap",
-  weight: ["300", "400", "500", "600", "700"],
+  weight: "variable",
+  style: "normal",
 });
 
-const instrumentSerif = Instrument_Serif({
-  variable: "--font-instrument",
+const ibmPlexSerif = IBM_Plex_Serif({
+  variable: "--font-plex-serif",
   subsets: ["latin"],
   display: "swap",
   weight: "400",
-  style: ["normal", "italic"],
+  style: "normal",
 });
 
 const geistMono = Geist_Mono({
@@ -41,7 +42,7 @@ export default async function RootLayout({
   return (
     <html
       lang="en"
-      className={`${dmSans.variable} ${instrumentSerif.variable} ${geistMono.variable} h-full${theme === "dark" ? " dark" : ""}`}
+      className={`${ibmPlexSans.variable} ${ibmPlexSerif.variable} ${geistMono.variable} h-full${theme === "dark" ? " dark" : ""}`}
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col bg-background text-foreground antialiased">

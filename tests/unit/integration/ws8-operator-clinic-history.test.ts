@@ -19,6 +19,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY = secret;
 const service = createClient<Database>(url, secret, { auth: { persistSession: false } });
 const suffix = crypto.randomUUID();
 let clinicId: string;
+let legacyClinicId: string;
 let subscriptionId: string;
 let invitationId: string;
 let couponId: string;
@@ -53,6 +54,24 @@ beforeAll(async () => {
     .single();
   if (clinic.error) throw clinic.error;
   clinicId = clinic.data.id;
+
+  const legacyClinic = await service
+    .from("clinics")
+    .insert({
+      name: `WS8 Legacy Clinic ${suffix}`,
+      country: "KW",
+      timezone: "Asia/Kuwait",
+      locale: "en",
+      currency: "KWD",
+      onboarding_completed_at: null,
+      working_hours_start: null,
+      working_hours_end: null,
+      created_at: "2026-06-01T09:00:00.000Z",
+    })
+    .select("id")
+    .single();
+  if (legacyClinic.error) throw legacyClinic.error;
+  legacyClinicId = legacyClinic.data.id;
 
   const subscription = await service
     .from("subscriptions")
@@ -181,6 +200,7 @@ afterAll(async () => {
   await service.from("coupons").delete().eq("id", couponId);
   await service.from("subscriptions").delete().eq("id", subscriptionId);
   await service.from("clinics").delete().eq("id", clinicId);
+  await service.from("clinics").delete().eq("id", legacyClinicId);
 });
 
 describe("Pre-P2 WS8 operator clinic history", () => {
@@ -275,6 +295,37 @@ describe("Pre-P2 WS8 operator clinic history", () => {
     });
     expect(clamped.data?.usage.page).toBe(2);
     expect(clamped.data?.usage.rows).toHaveLength(1);
+  });
+
+  it("loads a legacy clinic with every optional history section absent", async () => {
+    const result = await getOperatorClinicHistory(legacyClinicId, {
+      metric: "all",
+      page: 2,
+      pageSize: 25,
+    });
+
+    expect(result.error).toBeNull();
+    expect(result.data).toEqual(expect.objectContaining({
+      subscription: null,
+      workingHours: [],
+      invitations: [],
+      redemptions: [],
+      overrides: [],
+      auditEvents: [],
+      auditTruncated: false,
+      usage: expect.objectContaining({
+        rows: [],
+        total: 0,
+        page: 1,
+        pageCount: 1,
+      }),
+    }));
+    expect(result.data?.clinic).toEqual(expect.objectContaining({
+      id: legacyClinicId,
+      onboarding_completed_at: null,
+      working_hours_start: null,
+      working_hours_end: null,
+    }));
   });
 
   it("normalizes invalid usage URL state and re-guards before privileged reads", async () => {

@@ -20,7 +20,7 @@ export default function AuthLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <div className="flex min-h-dvh">
+    <div className="dark forced-dark-scope flex min-h-dvh bg-background text-foreground">
 
       {/* ══════════════════════════════════════════
           LEFT  —  Cinematic brand panel (lg+)
@@ -156,7 +156,7 @@ export default function AuthLayout({
 
           {/* Top — logo lockup */}
           <Link
-            href="/login"
+            href="/"
             className="flex items-center gap-3 w-fit"
             aria-label="ClinicFlow home"
           >
@@ -279,7 +279,7 @@ export default function AuthLayout({
 
         {/* Mobile logo — hidden on lg+ */}
         <Link
-          href="/login"
+          href="/"
           className="relative z-10 mb-8 flex flex-col items-center gap-2 lg:hidden"
           aria-label="ClinicFlow home"
         >

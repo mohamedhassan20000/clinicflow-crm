@@ -23,6 +23,7 @@ process.env.NEXT_PUBLIC_SUPABASE_URL = url;
 process.env.SUPABASE_SERVICE_ROLE_KEY = secret;
 const service = createClient<Database>(url, secret, { auth: { persistSession: false } });
 const suffix = crypto.randomUUID();
+const invitationFixtureDay = new Date().toISOString().slice(0, 10);
 const clinicIds: string[] = [];
 const authIds: string[] = [];
 let basicPlanId: string;
@@ -70,9 +71,25 @@ beforeAll(async () => {
   ]);
   if (subscriptions.error) throw subscriptions.error;
 
+  const acceptedInvitations = Array.from({ length: 27 }, (_, index) => ({
+    clinic_name: `WS7 ${suffix} Accepted ${String(index + 1).padStart(2, "0")}`,
+    owner_name: "WS7 Owner",
+    phone: `+1202555${String(1000 + index)}`,
+    email: `ws7-${suffix}-accepted-${index}@example.com`,
+    status: "accepted" as const,
+    accepted_clinic_id: clinicIds[0]!,
+    accepted_at: `${invitationFixtureDay}T13:${String(index).padStart(2, "0")}:00.000Z`,
+    email_sent_at: index % 2 === 0
+      ? `${invitationFixtureDay}T11:${String(index).padStart(2, "0")}:00.000Z`
+      : null,
+    created_at: `${invitationFixtureDay}T12:${String(index).padStart(2, "0")}:00.000Z`,
+  }));
   const invitations = await service.from("clinic_invitations").insert([
-    { clinic_name: `WS7 ${suffix} Pending`, owner_name: "WS7 Owner", phone: "+12025550100", email: `ws7-${suffix}-pending@example.com`, status: "pending", email_sent_at: "2026-07-10T00:00:00.000Z" },
-    { clinic_name: `WS7 ${suffix} Unsent`, owner_name: "WS7 Owner", phone: "+12025550101", email: `ws7-${suffix}-unsent@example.com`, status: "pending" },
+    ...acceptedInvitations,
+    { clinic_name: `WS7 ${suffix} Pending`, owner_name: "WS7 Owner", phone: "+12025550100", email: `ws7-${suffix}-pending@example.com`, status: "pending", email_sent_at: `${invitationFixtureDay}T10:00:00.000Z`, created_at: `${invitationFixtureDay}T12:40:00.000Z` },
+    { clinic_name: `WS7 ${suffix} Unsent`, owner_name: "WS7 Owner", phone: "+12025550101", email: `ws7-${suffix}-unsent@example.com`, status: "pending", created_at: `${invitationFixtureDay}T12:41:00.000Z` },
+    { clinic_name: `WS7 ${suffix} Revoked`, owner_name: "WS7 Owner", phone: "+12025550102", email: `ws7-${suffix}-revoked@example.com`, status: "revoked", revoked_at: `${invitationFixtureDay}T13:00:00.000Z`, created_at: `${invitationFixtureDay}T12:42:00.000Z` },
+    { clinic_name: `WS7 ${suffix} Expired`, owner_name: "WS7 Owner", phone: "+12025550103", email: `ws7-${suffix}-expired@example.com`, status: "expired", created_at: `${invitationFixtureDay}T12:43:00.000Z` },
   ]);
   if (invitations.error) throw invitations.error;
 
@@ -152,25 +169,62 @@ describe("Pre-P2 WS7 operator report queries", () => {
     expect(exported.rows).toEqual(result.rows);
   });
 
-  it("uses the same invitation filters for page and export", async () => {
+  it("covers every invitation filter, both sort directions, page 2, and export", async () => {
     const definition = report("invitations");
-    const params = parseReportParams(definition, {
-      status: "pending",
-      clinic: "all",
-      createdFrom: "",
-      createdTo: "",
-      emailSent: "yes",
+    for (const status of ["all", "pending", "accepted", "revoked", "expired"]) {
+      const result = await definition.query(parseReportParams(definition, {
+        status,
+        clinic: "all",
+        createdFrom: invitationFixtureDay,
+        createdTo: invitationFixtureDay,
+        emailSent: "all",
+      }));
+      expect(
+        result.rows.some((row) => String(row.clinic_name).includes(suffix)),
+        `status=${status}`,
+      ).toBe(true);
+      if (status !== "all") {
+        expect(result.rows.every((row) => row.status === status)).toBe(true);
+      }
+    }
+
+    for (const emailSent of ["yes", "no"]) {
+      const result = await definition.query(parseReportParams(definition, {
+        status: "accepted",
+        clinic: clinicIds[0],
+        createdFrom: invitationFixtureDay,
+        createdTo: invitationFixtureDay,
+        emailSent,
+      }));
+      expect(result.rows.length).toBeGreaterThan(0);
+      expect(result.rows.every((row) => emailSent === "yes"
+        ? row.email_sent_at !== null
+        : row.email_sent_at === null)).toBe(true);
+    }
+
+    const base = {
+      status: "accepted",
+      clinic: clinicIds[0]!,
+      createdFrom: invitationFixtureDay,
+      createdTo: invitationFixtureDay,
+      emailSent: "all",
       sort: "created_at",
-      dir: "desc",
-    });
-    const [page, exported] = await Promise.all([
-      definition.query(params),
-      definition.query(params, "export"),
+      pageSize: "25",
+    };
+    const [ascending, descending, secondPage, exported] = await Promise.all([
+      definition.query(parseReportParams(definition, { ...base, dir: "asc" })),
+      definition.query(parseReportParams(definition, { ...base, dir: "desc" })),
+      definition.query(parseReportParams(definition, { ...base, dir: "desc", page: "2" })),
+      definition.query(parseReportParams(definition, { ...base, dir: "desc" }), "export"),
     ]);
-    const pageFixture = page.rows.filter((row) => String(row.clinic_name).includes(suffix));
-    const exportFixture = exported.rows.filter((row) => String(row.clinic_name).includes(suffix));
-    expect(pageFixture.map((row) => row.clinic_name)).toEqual([`WS7 ${suffix} Pending`]);
-    expect(exportFixture).toEqual(pageFixture);
+
+    expect(ascending.total).toBe(27);
+    expect(String(ascending.rows[0]?.created_at) < String(ascending.rows.at(-1)?.created_at)).toBe(true);
+    expect(String(descending.rows[0]?.created_at) > String(descending.rows.at(-1)?.created_at)).toBe(true);
+    expect(secondPage).toEqual(expect.objectContaining({ total: 27, page: 2, totalPages: 2 }));
+    expect(secondPage.rows).toHaveLength(2);
+    expect(exported.rows).toHaveLength(27);
+    expect(definition.export(exported.rows).split("\n")).toHaveLength(28);
   });
 
   it("keeps Revenue page/export filters aligned on canonical USD subscription values", async () => {

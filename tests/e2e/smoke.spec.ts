@@ -30,6 +30,7 @@ const ids = {
   receptionist: "",
   forced: "",
   operator: "",
+  legacyClinic: randomUUID(),
   emptyClinic: randomUUID(),
   emptyAdmin: "",
   emptyManager: "",
@@ -80,6 +81,8 @@ async function createAuthUser(email: string) {
 
 async function cleanup() {
   if (ids.operator) await service.from("platform_admins").delete().eq("user_id", ids.operator);
+  await service.from("clinic_invitations").delete().like("email", `${suffix}-%`);
+  await service.from("clinics").delete().eq("id", ids.legacyClinic);
   await service.from("subscriptions").delete().eq("clinic_id", ids.emptyClinic);
   await service.from("profiles").delete().eq("clinic_id", ids.emptyClinic);
   await service.from("clinics").delete().eq("id", ids.emptyClinic);
@@ -126,6 +129,23 @@ async function seedSmokeData() {
     id: ids.clinic,
     name: `Smoke Clinic ${suffix}`,
     onboarding_completed_at: new Date().toISOString(),
+  }));
+  await must(service.from("clinics").insert({
+    id: ids.legacyClinic,
+    name: `Legacy Clinic ${suffix}`,
+    onboarding_completed_at: null,
+    working_hours_start: null,
+    working_hours_end: null,
+  }));
+  await must(service.from("clinic_invitations").insert({
+    clinic_name: `Smoke Clinic ${suffix}`,
+    owner_name: "Operator History Fixture",
+    phone: "+96555555555",
+    email: `${suffix}-history@example.com`,
+    status: "accepted",
+    accepted_clinic_id: ids.clinic,
+    accepted_at: new Date().toISOString(),
+    email_sent_at: new Date().toISOString(),
   }));
   const planResult = await service.from("plans").select("id").eq("slug", "basic").single();
   if (planResult.error) throw new Error(planResult.error.message);
@@ -432,33 +452,105 @@ test("dashboard shell renders on a deep protected page and signs out", async ({ 
   await expect(navigation).toBeVisible();
   await expect(navigation.getByRole("link", { name: "Patients", exact: true })).toBeVisible();
 
-  // WS1 (BUG-2): the collapse toggle must be fully visible (not painted over by
-  // the sticky header) and operable in both states, with a ≥44px hit target.
+  // MP7: the brand row is the single collapse control; it must stay aligned with
+  // the header, remain keyboard-operable, and never navigate.
   const sidebar = page.getByTestId("dashboard-sidebar");
-  const toggle = page.getByRole("button", { name: /collapse sidebar/i });
+  const brandRow = sidebar.getByTestId("sidebar-brand-row");
+  const toggle = sidebar.getByRole("button", { name: "Collapse navigation" });
+  const header = page.getByTestId("dashboard-header");
+  const assertDividerBaseline = async () => {
+    const [brandBox, headerBox] = await Promise.all([
+      brandRow.boundingBox(),
+      header.boundingBox(),
+    ]);
+    expect(brandBox, "sidebar brand-row bounding box").not.toBeNull();
+    expect(headerBox, "dashboard header bounding box").not.toBeNull();
+    expect(Math.abs((brandBox!.y + brandBox!.height) - (headerBox!.y + headerBox!.height))).toBeLessThan(0.1);
+    const [brandBorder, headerBorder] = await Promise.all([
+      brandRow.evaluate((element) => getComputedStyle(element).borderBottomColor),
+      header.evaluate((element) => getComputedStyle(element).borderBottomColor),
+    ]);
+    expect(brandBorder).toBe(headerBorder);
+  };
+
   await expect(toggle).toBeVisible();
+  await expect(toggle).toHaveAttribute("aria-controls", "dashboard-navigation");
+  await expect(toggle).toHaveAttribute("title", "Collapse navigation");
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await expect(toggle.locator("img")).toHaveAttribute("alt", "ClinicFlow");
+  await expect(toggle.locator("a")).toHaveCount(0);
   const box = await toggle.boundingBox();
-  expect(box, "toggle bounding box").not.toBeNull();
+  expect(box, "brand-toggle bounding box").not.toBeNull();
   const sidebarBox = await sidebar.boundingBox();
-  // Overhang design: the button straddles the sidebar edge and must extend past it
-  expect(box!.x + box!.width).toBeGreaterThan(sidebarBox!.x + sidebarBox!.width);
-  // Painted-over check: the point at the button's center (in the header's column)
-  // must hit the button itself, not the header.
+  expect(sidebarBox, "sidebar bounding box").not.toBeNull();
+  expect(box!.height).toBeGreaterThanOrEqual(44);
+  expect(sidebarBox!.width - box!.width).toBeGreaterThanOrEqual(0);
+  expect(sidebarBox!.width - box!.width).toBeLessThanOrEqual(1);
+  await assertDividerBaseline();
+
+  // The whole row, including its inline end, belongs to the button.
   const hit = await page.evaluate(({ x, y }) => {
     const el = document.elementFromPoint(x, y);
     return el?.closest("button")?.getAttribute("aria-label") ?? el?.tagName ?? null;
-  }, { x: box!.x + box!.width - 2, y: box!.y + box!.height / 2 });
-  expect(hit).toMatch(/collapse sidebar/i);
-  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  }, { x: box!.x + box!.width - 4, y: box!.y + box!.height / 2 });
+  expect(hit).toBe("Collapse navigation");
+
+  await toggle.focus();
+  await expect(toggle).toBeFocused();
+  const focusOutline = await toggle.evaluate((element) => {
+    const styles = getComputedStyle(element);
+    return { style: styles.outlineStyle, width: styles.outlineWidth };
+  });
+  expect(focusOutline.style).not.toBe("none");
+  expect(Number.parseFloat(focusOutline.width)).toBeGreaterThanOrEqual(2);
+
+  const urlBeforeToggle = page.url();
   await toggle.click();
+  await assertDividerBaseline(); // sampled while the 200 ms width transition is active
   await expect(sidebar).toHaveAttribute("data-collapsed", "true");
-  const expandToggle = page.getByRole("button", { name: /expand sidebar/i });
+  expect(page.url()).toBe(urlBeforeToggle);
+  const expandToggle = sidebar.getByRole("button", { name: "Expand navigation" });
   await expect(expandToggle).toBeVisible();
   await expect(expandToggle).toHaveAttribute("aria-expanded", "false");
-  // Keyboard: focus + Enter toggles back to expanded
+  await expect(expandToggle).toHaveAttribute("title", "Expand navigation");
+  await assertDividerBaseline();
+
+  // Native button semantics cover both required keys without custom handlers.
   await expandToggle.focus();
   await page.keyboard.press("Enter");
   await expect(sidebar).toHaveAttribute("data-collapsed", "false");
+  const collapseToggle = sidebar.getByRole("button", { name: "Collapse navigation" });
+  await collapseToggle.focus();
+  await page.keyboard.press("Space");
+  await expect(sidebar).toHaveAttribute("data-collapsed", "true");
+  await sidebar.getByRole("button", { name: "Expand navigation" }).click();
+  await expect(sidebar).toHaveAttribute("data-collapsed", "false");
+
+  // Tablet, dark theme, and fractional zoom all use the same top-band token.
+  await page.setViewportSize({ width: 768, height: 720 });
+  await assertDividerBaseline();
+  await page.getByRole("button", { name: /switch to dark mode/i }).click();
+  await expect(page.locator("html")).toHaveClass(/dark/);
+  await assertDividerBaseline();
+  for (const zoom of [1.1, 1.25]) {
+    await page.evaluate((value) => { document.body.style.zoom = String(value); }, zoom);
+    await assertDividerBaseline();
+  }
+  await page.evaluate(() => { document.body.style.zoom = ""; });
+
+  // Below md the desktop rail disappears and the sheet brand is deliberately inert.
+  await page.setViewportSize({ width: 767, height: 720 });
+  await expect(sidebar).toBeHidden();
+  await page.getByRole("button", { name: "Open navigation" }).click();
+  const mobileSidebar = page.getByTestId("mobile-sidebar");
+  await expect(mobileSidebar).toBeVisible();
+  await expect(mobileSidebar.getByTestId("sidebar-brand-row").getByText("ClinicFlow")).toBeVisible();
+  await expect(mobileSidebar.getByRole("button", { name: /navigation/i })).toHaveCount(0);
+  await expect(mobileSidebar.locator("[aria-expanded]")).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(mobileSidebar).toBeHidden();
+
+  await page.setViewportSize({ width: 1280, height: 720 });
 
   await page.getByRole("button", { name: /open user menu/i }).click();
   await page.getByRole("menuitem", { name: /sign out/i }).click();
@@ -556,9 +648,17 @@ test("operator shell renders and persists theme without a clinic profile", async
   const gbEmail = `${suffix}-gb-invite@example.com`;
   await page.getByPlaceholder("Clinic name").fill("London E2E Clinic");
   await page.getByPlaceholder("Owner name").fill("London Owner");
-  await page.getByRole("combobox", { name: "Country calling code" }).click();
-  await page.getByPlaceholder(/search country/i).fill("United Kingdom");
-  await page.getByRole("option", { name: /United Kingdom/ }).click();
+  const phoneCountry = page.getByRole("combobox", { name: "Country calling code" });
+  await phoneCountry.click();
+  await expect(page.locator("html")).toHaveClass(/dark/);
+  await expect(page.getByRole("option", { name: /Kuwait.*KW.*\+965/i })).toBeVisible();
+  const countrySearch = page.getByPlaceholder(/search country/i);
+  await countrySearch.fill("united");
+  await expect(page.getByRole("option", { name: /United Kingdom/i })).toBeVisible();
+  await countrySearch.fill("United Kingdom");
+  await countrySearch.press("ArrowDown");
+  await countrySearch.press("Enter");
+  await expect(phoneCountry).toContainText("+44");
   await page.getByPlaceholder("Local number").fill("2079460000");
   await page.getByPlaceholder("owner@example.com").fill(gbEmail);
   await page.getByRole("checkbox", { name: "Override the weekly limit" }).check();
@@ -567,6 +667,65 @@ test("operator shell renders and persists theme without a clinic profile", async
   const gbInvitation = await service.from("clinic_invitations").select("phone").eq("email", gbEmail).single();
   expect(gbInvitation.data?.phone).toBe("+442079460000");
   await service.from("clinic_invitations").delete().eq("email", gbEmail);
+});
+
+test("MP6: the operator header drops Preferences and reserves the language slot; clinic users keep it", async ({ browser }) => {
+  const operatorContext = await browser.newContext();
+  const doctorContext = await browser.newContext();
+  const operatorPage = await operatorContext.newPage();
+  const doctorPage = await doctorContext.newPage();
+
+  try {
+    // Operator (Platform Admin): /preferences is a clinic-user route they cannot use, so the entry
+    // is gone. That position is reserved for the P2 Operator Language Switcher and ships nothing.
+    await loginOperator(operatorPage);
+    // The theme toggle stays: the Platform Admin's theme is their own (§6.C). Asserted before the
+    // menu opens, since the dropdown makes the rest of the page inert.
+    await expect(operatorPage.getByRole("button", { name: /switch to (dark|light) mode/i })).toBeVisible();
+    await operatorPage.getByRole("button", { name: /open user menu/i }).click();
+    await expect(operatorPage.getByRole("menuitem", { name: /sign out/i })).toBeVisible();
+    await expect(operatorPage.getByRole("menuitem", { name: /preferences/i })).toHaveCount(0);
+    await expect(operatorPage.locator('a[href="/preferences"]')).toHaveCount(0);
+    await expect(operatorPage.getByRole("menu").getByText(/language/i)).toHaveCount(0);
+    await expect(operatorPage.getByTestId("dashboard-header").getByText(/language/i)).toHaveCount(0);
+
+    // Clinic user (doctor): Preferences is untouched and still opens.
+    await login(doctorPage, emails.doctor);
+    await doctorPage.getByRole("button", { name: /open user menu/i }).click();
+    await doctorPage.getByRole("menuitem", { name: /preferences/i }).click();
+    await expect(doctorPage).toHaveURL(/\/preferences/);
+    await expect(doctorPage.getByRole("heading", { name: "Preferences" })).toBeVisible();
+    // No language *control* was added anywhere — the pre-existing read-only card is untouched.
+    await expect(doctorPage.getByRole("button", { name: /language/i })).toHaveCount(0);
+    await expect(doctorPage.getByRole("combobox", { name: /language/i })).toHaveCount(0);
+  } finally {
+    await operatorContext.close();
+    await doctorContext.close();
+  }
+});
+
+test("theme cookies stay isolated between authenticated users in separate browser contexts", async ({ browser }) => {
+  const receptionistContext = await browser.newContext();
+  const doctorContext = await browser.newContext();
+  const receptionistPage = await receptionistContext.newPage();
+  const doctorPage = await doctorContext.newPage();
+
+  try {
+    await login(receptionistPage, emails.receptionist);
+    await login(doctorPage, emails.doctor);
+
+    await receptionistPage.getByRole("button", { name: /switch to dark mode/i }).click();
+    await expect(receptionistPage.locator("html")).toHaveClass(/dark/);
+    await expect(doctorPage.locator("html")).not.toHaveClass(/dark/);
+
+    await doctorPage.reload();
+    await expect(doctorPage.locator("html")).not.toHaveClass(/dark/);
+    await receptionistPage.reload();
+    await expect(receptionistPage.locator("html")).toHaveClass(/dark/);
+  } finally {
+    await receptionistContext.close();
+    await doctorContext.close();
+  }
 });
 
 test("WS7 operator report filters persist in the URL and exports match active filters", async ({ page }) => {
@@ -629,6 +788,78 @@ test("WS7 operator report filters persist in the URL and exports match active fi
     .poll(() => new URL(page.url()).searchParams.get("country"))
     .toBe("all");
   await expect(page.getByRole("combobox", { name: "Country" })).toContainText("All");
+});
+
+test("MP0 operator clinic history and Invitations report render with recoverable failures", async ({ page }) => {
+  await loginOperator(page);
+
+  await page.goto("/operator/invitations");
+  await expect(page.getByRole("heading", { name: "Invitations", exact: true })).toBeVisible();
+  await expect(page.getByText(`${suffix}-history@example.com`)).toBeVisible();
+  await expect(page.getByText("Operator page could not be loaded")).toHaveCount(0);
+
+  await page.goto("/operator/reports/invitations");
+  await expect(page.getByRole("heading", { name: "Invitations report" })).toBeVisible();
+  await page.locator('select[name="status"]').selectOption("all");
+  await page.locator('select[name="emailSent"]').selectOption("yes");
+  await page.locator('input[type="date"][name="createdFrom"]').fill("");
+  await page.locator('input[type="date"][name="createdTo"]').fill("");
+  await page.getByRole("button", { name: "Apply filters" }).click();
+  await expect.poll(() => new URL(page.url()).searchParams.get("emailSent")).toBe("yes");
+  await expect.poll(() => new URL(page.url()).searchParams.get("status")).toBe("all");
+  await expect(page.getByText(`Smoke Clinic ${suffix}`)).toBeVisible();
+
+  await page.reload();
+  await expect(page.locator('select[name="emailSent"]')).toHaveValue("yes");
+  const sortLink = page.getByRole("link", { name: "Sort by Created ascending" });
+  await sortLink.click();
+  await expect.poll(() => new URL(page.url()).searchParams.get("dir")).toBe("asc");
+
+  const exportHref = await page
+    .getByRole("link", { name: "Export filtered CSV" })
+    .getAttribute("href");
+  expect(exportHref).toBeTruthy();
+  const exportResponse = await page.request.get(exportHref!);
+  expect(exportResponse.ok()).toBe(true);
+  const csv = await exportResponse.text();
+  expect(csv).toContain(`Smoke Clinic ${suffix}`);
+  expect(csv).not.toMatch(/Owner|Phone|Email address|Patient|National ID|Medical note/i);
+
+  await page.goto(`/operator/clinics/${ids.clinic}`);
+  for (const heading of [
+    "Clinic profile",
+    "Current subscription",
+    "Invitation lineage",
+    "Coupon redemptions",
+    "Feature overrides",
+    "Usage history",
+    "Audit timeline",
+    "Payments & contracts",
+  ]) {
+    await expect(page.getByRole("heading", { name: heading })).toBeVisible();
+  }
+  await expect(page.getByText("Operator page could not be loaded")).toHaveCount(0);
+
+  await page.goto(`/operator/clinics/${ids.legacyClinic}`);
+  await expect(page.getByRole("heading", { name: `Legacy Clinic ${suffix}` })).toBeVisible();
+  await expect(page.getByText("No working hours configured")).toBeVisible();
+  await expect(page.getByText("No linked clinic invitation")).toBeVisible();
+  await expect(page.getByText("No coupon redemptions")).toBeVisible();
+  await expect(page.getByText("No overrides — plan defaults apply.")).toBeVisible();
+  await expect(page.getByText("No usage recorded")).toBeVisible();
+
+  await page.goto(`/operator/clinics/${randomUUID()}`);
+  await expect(page.getByRole("heading", { name: "Operator page not found" })).toBeVisible();
+
+  await page.goto("/operator/clinics/not-a-uuid");
+  await expect(
+    page.getByRole("heading", { name: "Operator page could not be loaded" }),
+  ).toBeVisible();
+  await expect(page.getByText(/^Error ID:/)).toBeVisible();
+  await expect(page.getByRole("link", { name: "Go to Mission Control" })).toHaveAttribute(
+    "href",
+    "/operator",
+  );
 });
 
 test("WS6 operator clinic detail returns to the filtered list by keyboard on mobile and both themes", async ({ page }) => {

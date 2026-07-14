@@ -25,6 +25,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { ServiceForm } from "@/components/settings/service-form";
 import { softDeleteService, restoreService, updateService } from "@/actions/settings";
+import { useTranslations } from "next-intl";
 
 interface Props {
   service: {
@@ -37,6 +38,7 @@ interface Props {
 }
 
 export function ServiceRowActions({ service, departments }: Props) {
+  const t = useTranslations("settings");
   const [editOpen, setEditOpen] = useState(false);
   const [isDeleting, startDelete] = useTransition();
   const router = useRouter();
@@ -54,12 +56,11 @@ export function ServiceRowActions({ service, departments }: Props) {
             className="h-7 gap-1 px-2 text-xs"
           >
             <Pencil className="h-3.5 w-3.5" />
-            Edit
-          </Button>
+            {t("edit")}</Button>
         </DialogTrigger>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Edit service</DialogTitle>
+            <DialogTitle>{t("editService")}</DialogTitle>
           </DialogHeader>
           <ServiceForm
             action={updateBound}
@@ -69,7 +70,7 @@ export function ServiceRowActions({ service, departments }: Props) {
               name: service.name,
               price: service.price,
             }}
-            submitLabel="Save changes"
+            submitLabel={t("saveChanges")}
             onSuccess={() => {
               setEditOpen(false);
               router.refresh();
@@ -91,19 +92,18 @@ export function ServiceRowActions({ service, departments }: Props) {
             ) : (
               <Trash2 className="h-3.5 w-3.5" />
             )}
-            Delete
+            {t("delete")}
           </Button>
         </AlertDialogTrigger>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Move &ldquo;{service.name}&rdquo; to recycle bin?</AlertDialogTitle>
+            <AlertDialogTitle>{t("moveNamedServiceToBin", { name: service.name })}</AlertDialogTitle>
             <AlertDialogDescription>
-              This service will be hidden from the price list and can be
-              restored within 30 days.
-            </AlertDialogDescription>
+              {"This service will be hidden from the price list and can be"}
+              {t("restoredWithin30Days")}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={isDeleting}>{t("cancel")}</AlertDialogCancel>
             <AlertDialogAction
               disabled={isDeleting}
               onClick={() =>
@@ -114,10 +114,10 @@ export function ServiceRowActions({ service, departments }: Props) {
                   if (res.error) {
                     toast.error(res.error);
                   } else {
-                    toast.success(`"${service.name}" moved to recycle bin.`, {
+                    toast.success(t("namedItemMovedToRecycleBin", { name: service.name }), {
                       duration: 10000,
                       action: {
-                        label: "Undo",
+                        label: t("undo"),
                         onClick: () => {
                           if (deletePendingRef.current) return;
                           deletePendingRef.current = true;
@@ -125,7 +125,7 @@ export function ServiceRowActions({ service, departments }: Props) {
                             .then((r) => {
                               if (r.error) toast.error(r.error);
                               else {
-                                toast.success(`"${service.name}" restored.`);
+                                toast.success(t("namedItemRestored", { name: service.name }));
                                 router.refresh();
                               }
                             })
@@ -141,7 +141,7 @@ export function ServiceRowActions({ service, departments }: Props) {
                 })
               }
             >
-              Move to bin
+              {t("moveToBin")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

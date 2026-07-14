@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useTranslations } from "next-intl";
 
 const ACCEPTED_ATTACHMENTS = "application/pdf,image/jpeg,image/png,image/webp";
 
@@ -78,6 +79,7 @@ export function MedicalNoteAttachments({
   canUploadAttachments = true,
   initialAttachments,
 }: MedicalNoteAttachmentsProps) {
+  const t = useTranslations("patients");
   const [attachments, setAttachments] = useState(initialAttachments);
   const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -110,7 +112,7 @@ export function MedicalNoteAttachments({
         toast.error(result.error);
       } else {
         if (result.data) setAttachments(result.data);
-        toast.success("Attachment uploaded.");
+        toast.success(t("attachmentUploaded"));
       }
       event.target.value = "";
       setPendingKey(null);
@@ -146,10 +148,10 @@ export function MedicalNoteAttachments({
         toast.error(result.error);
       } else {
         if (result.data) setAttachments(result.data);
-        toast.success("Attachment moved to trash.", {
+        toast.success(t("attachmentMovedToTrash"), {
           duration: 15000,
           action: {
-            label: "Undo",
+            label: t("undo"),
             onClick: async () => {
               const restored = await restoreMedicalNoteAttachment(
                 patientId,
@@ -161,7 +163,7 @@ export function MedicalNoteAttachments({
                 return;
               }
               if (restored.data) setAttachments(restored.data);
-              toast.success("Attachment restored.");
+              toast.success(t("attachmentRestored"));
             },
           },
         });
@@ -179,8 +181,7 @@ export function MedicalNoteAttachments({
         <div className="flex min-w-0 items-center gap-2 text-xs font-medium text-muted-foreground">
           <FileText className="h-3.5 w-3.5" />
           <span>
-            {attachments.length} attachment
-            {attachments.length !== 1 ? "s" : ""}
+            {t("attachmentCount", { count: attachments.length })}
           </span>
         </div>
         {canUploadAttachments && (
@@ -188,7 +189,7 @@ export function MedicalNoteAttachments({
             <input
               ref={inputRef}
               type="file"
-              aria-label="Upload medical note attachment"
+              aria-label={t("uploadMedicalNoteAttachment")}
               accept={ACCEPTED_ATTACHMENTS}
               className="hidden"
               onChange={onUpload}
@@ -206,8 +207,7 @@ export function MedicalNoteAttachments({
               ) : (
                 <Upload className="h-3.5 w-3.5" />
               )}
-              Attach file
-            </Button>
+              {t("attachFile")}</Button>
           </>
         )}
       </div>
@@ -233,7 +233,7 @@ export function MedicalNoteAttachments({
                     </Badge>
                   </div>
                   <p className="text-[11px] text-muted-foreground">
-                    {formatBytes(attachment.sizeBytes)} · Uploaded{" "}
+                    {formatBytes(attachment.sizeBytes)} {t("uploaded")}{" "}
                     {formatDate(attachment.createdAt)}
                     {attachment.uploadedByName
                       ? ` by ${attachment.uploadedByName}`
@@ -246,7 +246,7 @@ export function MedicalNoteAttachments({
                     variant="outline"
                     size="sm"
                     className="h-7 gap-1 px-2 text-xs"
-                    aria-label={`View ${attachment.fileName}`}
+                    aria-label={t("viewNamedFile", { file: attachment.fileName })}
                     disabled={isPending}
                     onClick={() => onView(attachment)}
                   >
@@ -255,8 +255,7 @@ export function MedicalNoteAttachments({
                     ) : (
                       <Eye className="h-3.5 w-3.5" />
                     )}
-                    View
-                  </Button>
+                    {t("view")}</Button>
                   {canDelete(attachment) && (
                     <DeleteAttachmentDialog
                       attachment={attachment}
@@ -286,6 +285,7 @@ function DeleteAttachmentDialog({
   pending: boolean;
   onDelete: (attachment: MedicalNoteAttachmentItem) => void;
 }) {
+  const t = useTranslations("patients");
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
@@ -294,30 +294,27 @@ function DeleteAttachmentDialog({
           variant="outline"
           size="sm"
           className="h-7 gap-1 px-2 text-xs text-destructive hover:text-destructive"
-          aria-label={`Delete ${attachment.fileName}`}
+          aria-label={t("deleteNamedFile", { file: attachment.fileName })}
           disabled={disabled}
         >
           <Trash2 className="h-3.5 w-3.5" />
-          Delete
-        </Button>
+          {t("delete")}</Button>
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete attachment?</AlertDialogTitle>
+          <AlertDialogTitle>{t("deleteAttachment")}</AlertDialogTitle>
           <AlertDialogDescription>
-            This removes {attachment.fileName} from the medical note.
-          </AlertDialogDescription>
+            {t("thisRemoves")}{attachment.fileName} {t("fromTheMedicalNote")}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
+          <AlertDialogCancel disabled={pending}>{t("cancel")}</AlertDialogCancel>
           <AlertDialogAction
             onClick={() => onDelete(attachment)}
             disabled={pending}
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90 gap-2"
           >
             {pending && <Loader2 className="h-4 w-4 animate-spin" />}
-            Delete
-          </AlertDialogAction>
+            {t("delete")}</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { updateDisplayCurrency } from "@/actions/profile";
 import { SearchableCombobox } from "@/components/shared/searchable-combobox";
 import { CURRENCIES } from "@/lib/currency/registry";
+import { useTranslations } from "next-intl";
 
 /**
  * Searchable display-currency picker (Pre-P2 WS4) — shares the cmdk combobox
@@ -13,6 +14,7 @@ import { CURRENCIES } from "@/lib/currency/registry";
  * and offers only registry (= FX-provider-covered) currencies.
  */
 export function CurrencyCombobox({ value }: { value: string }) {
+  const t = useTranslations("settings");
   const [pending, startTransition] = useTransition();
   const router = useRouter();
 
@@ -24,7 +26,7 @@ export function CurrencyCombobox({ value }: { value: string }) {
         toast.error(result.error);
         return;
       }
-      toast.success("Display currency updated.");
+      toast.success(t("displayCurrencyUpdated"));
       router.refresh();
     });
   }
@@ -36,9 +38,9 @@ export function CurrencyCombobox({ value }: { value: string }) {
       onValueChange={choose}
       getValue={(item) => item.code}
       getSearchValue={(item) => `${item.currencyName}|${item.code}|${item.countryName}`}
-      ariaLabel="Display currency"
-      searchPlaceholder="Search currency or code…"
-      emptyMessage="No currency found."
+      ariaLabel={t("displayCurrency")}
+      searchPlaceholder={t("searchCurrencyOrCode")}
+      emptyMessage={t("noCurrencyFound")}
       disabled={pending}
       triggerClassName="w-full max-w-xs gap-2 sm:w-80"
       contentClassName="w-[min(22rem,calc(100vw-2rem))]"

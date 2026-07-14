@@ -4,10 +4,15 @@ import { requireRole } from "@/lib/rbac";
 import { getTrashPatients } from "@/actions/patients";
 import { TrashTable } from "@/components/patients/trash-table";
 import { PageHeader } from "@/components/shared/page-header";
+import { getTranslations } from "next-intl/server";
 
-export const metadata: Metadata = { title: "Patient Trash" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("protected");
+  return { title: t("metadataPatientTrash") };
+}
 
 export default async function PatientTrashPage() {
+  const t = await getTranslations("protected");
   const user = await requireRole(["admin", "receptionist"]);
   const { data: patients, error } = await getTrashPatients();
 
@@ -15,14 +20,12 @@ export default async function PatientTrashPage() {
     <div className="space-y-6">
       <PageHeader
         back={{ href: "/patients", label: "patients" }}
-        breadcrumbs={[{ label: "Patients", href: "/patients" }, { label: "Trash" }]}
+        breadcrumbs={[{ label: t("patients"), href: "/patients" }, { label: t("trash2") }]}
         leading={<Trash2 className="mt-1 size-6 text-muted-foreground" aria-hidden="true" />}
-        title="Trash"
+        title={t("trash")}
         description={
           <>
-            {patients?.length ?? 0} deleted patient{(patients?.length ?? 0) !== 1 ? "s" : ""}.
-            No patient files or history are permanently removed.
-          </>
+            {patients?.length ?? 0} {t("deletedPatient")}{(patients?.length ?? 0) !== 1 ? "s" : ""}{t("noPatientFilesOrHistoryAre")}</>
         }
       />
 

@@ -1,5 +1,6 @@
 "use server";
 
+import { actionError } from "@/lib/i18n/action-errors";
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
@@ -164,16 +165,6 @@ function logSupabaseError(
   });
 }
 
-function duplicateSingleSlotMessage(category: PatientDocumentCategory) {
-  if (category === "national_id") {
-    return "A national ID document already exists. Delete it before uploading a replacement.";
-  }
-  if (category === "insurance") {
-    return "An insurance document already exists. Delete it before uploading a replacement.";
-  }
-  return "A document already exists. Delete it before uploading a replacement.";
-}
-
 async function getPatientForDocuments(
   supabase: Awaited<ReturnType<typeof createClient>>,
   patientId: string,
@@ -191,20 +182,20 @@ async function getPatientForDocuments(
   return data;
 }
 
-function validateFile(formData: FormData) {
+async function validateFile(formData: FormData) {
   const file = formData.get(DOCUMENT_FIELD);
   if (!(file instanceof File) || file.size === 0) {
-    return { error: "Pick a document to upload." };
+    return { error: await actionError("patient-documents.pickADocumentToUpload") };
   }
   if (!ALLOWED_MIME.has(file.type)) {
-    return { error: "Document must be a PDF, JPEG, PNG, or WebP file." };
+    return { error: await actionError("patient-documents.documentMustBeAPdfJpegPngOrWebpFile") };
   }
   if (file.size > MAX_DOCUMENT_BYTES) {
-    return { error: "Document must be under 10 MB." };
+    return { error: await actionError("patient-documents.documentMustBeUnder10Mb") };
   }
 
   const ext = extensionForMime(file.type);
-  if (!ext) return { error: "Unsupported document file type." };
+  if (!ext) return { error: await actionError("patient-documents.unsupportedDocumentFileType") };
 
   return {
     file,
@@ -260,10 +251,10 @@ export async function listPatientDocuments(
   const supabase = await createClient();
 
   const patient = await getPatientForDocuments(supabase, patientId, user.clinicId);
-  if (!patient) return { error: "Patient not found." };
+  if (!patient) return { error: await actionError("patient-documents.patientNotFound") };
 
   const result = await listActiveDocuments(supabase, patientId, user.clinicId);
-  if (result.error) return { error: "Failed to load patient documents." };
+  if (result.error) return { error: await actionError("patient-documents.failedToLoadPatientDocuments") };
 
   return { data: groupDocuments(result.rows) };
 }
@@ -275,14 +266,14 @@ export async function uploadPatientDocument(
 ): Promise<PatientDocumentResult<PatientDocumentsData>> {
   const user = await requireMutationRole(["admin", "receptionist"]);
   if (!isPatientDocumentCategory(category)) {
-    return { error: "Select a valid document category." };
+    return { error: await actionError("patient-documents.selectAValidDocumentCategory") };
   }
 
   const supabase = await createClient();
   const patient = await getPatientForDocuments(supabase, patientId, user.clinicId);
-  if (!patient) return { error: "Patient not found." };
+  if (!patient) return { error: await actionError("patient-documents.patientNotFound") };
 
-  const fileResult = validateFile(formData);
+  const fileResult = await validateFile(formData);
   if ("error" in fileResult) return { error: fileResult.error };
 
   const documentId = randomUUID();
@@ -308,9 +299,17 @@ export async function uploadPatientDocument(
 
   if (insertError) {
     if (insertError.code === "23505" && SINGLE_SLOT_CATEGORIES.has(category)) {
-      return { error: duplicateSingleSlotMessage(category) };
+      return {
+        error: await actionError(
+          category === "national_id"
+            ? "patient-documents.nationalIdAlreadyExistsDeleteItBeforeUploadingReplacement"
+            : category === "insurance"
+              ? "patient-documents.insuranceAlreadyExistsDeleteItBeforeUploadingReplacement"
+              : "patient-documents.documentAlreadyExistsDeleteItBeforeUploadingReplacement",
+        ),
+      };
     }
-    return { error: "Failed to create patient document record." };
+    return { error: await actionError("patient-documents.failedToCreatePatientDocumentRecord") };
   }
 
   const bytes = new Uint8Array(await fileResult.file.arrayBuffer());
@@ -329,7 +328,7 @@ export async function uploadPatientDocument(
       .eq("patient_id", patientId)
       .eq("clinic_id", user.clinicId)
       .is("deleted_at", null);
-    return { error: uploadError.message || "Failed to upload document." };
+    return { error: await actionError("patient-documents.failedToUploadDocument") };
   }
 
   if (SINGLE_SLOT_CATEGORIES.has(category)) {
@@ -359,7 +358,7 @@ export async function deletePatientDocument(
   const supabase = await createClient();
 
   const patient = await getPatientForDocuments(supabase, patientId, user.clinicId);
-  if (!patient) return { error: "Patient not found." };
+  if (!patient) return { error: await actionError("patient-documents.patientNotFound") };
 
   const document = await getActiveDocument(
     supabase,
@@ -382,7 +381,7 @@ export async function deletePatientDocument(
       document.id,
     )
   ) {
-    return { error: "Stored document path is not valid for this patient." };
+    return { error: await actionError("patient-documents.storedDocumentPathIsNotValidForThisPatient") };
   }
 
   const { error: deleteError } = await supabase.rpc(
@@ -399,7 +398,7 @@ export async function deletePatientDocument(
       patientId,
       documentId,
     });
-    return { error: "Failed to delete document record." };
+    return { error: await actionError("patient-documents.failedToDeleteDocumentRecord") };
   }
 
   revalidatePath(`/patients/${patientId}`);
@@ -418,7 +417,7 @@ export async function restorePatientDocument(
   const supabase = await createClient();
 
   const patient = await getPatientForDocuments(supabase, patientId, user.clinicId);
-  if (!patient) return { error: "Patient not found." };
+  if (!patient) return { error: await actionError("patient-documents.patientNotFound") };
 
   const { error } = await supabase.rpc("restore_patient_document", {
     p_document_id: documentId,
@@ -431,7 +430,7 @@ export async function restorePatientDocument(
       patientId,
       documentId,
     });
-    return { error: "Failed to restore document." };
+    return { error: await actionError("patient-documents.failedToRestoreDocument") };
   }
 
   revalidatePath(`/patients/${patientId}`);
@@ -448,7 +447,7 @@ export async function getPatientDocumentSignedUrl(
   const supabase = await createClient();
 
   const patient = await getPatientForDocuments(supabase, patientId, user.clinicId);
-  if (!patient) return { error: "Patient not found." };
+  if (!patient) return { error: await actionError("patient-documents.patientNotFound") };
 
   const document = await getActiveDocument(
     supabase,
@@ -456,7 +455,7 @@ export async function getPatientDocumentSignedUrl(
     documentId,
     user.clinicId,
   );
-  if (!document) return { error: "Document not found." };
+  if (!document) return { error: await actionError("patient-documents.documentNotFound") };
 
   if (
     !isValidDocumentPath(
@@ -467,7 +466,7 @@ export async function getPatientDocumentSignedUrl(
       document.id,
     )
   ) {
-    return { error: "Stored document path is not valid for this patient." };
+    return { error: await actionError("patient-documents.storedDocumentPathIsNotValidForThisPatient") };
   }
 
   const { data, error } = await supabase.storage
@@ -483,7 +482,7 @@ export async function getPatientDocumentSignedUrl(
       documentId,
       storagePath: document.storage_path,
     });
-    return { error: "Document file is missing or unavailable." };
+    return { error: await actionError("patient-documents.documentFileIsMissingOrUnavailable") };
   }
 
   return { data: { url: data.signedUrl } };

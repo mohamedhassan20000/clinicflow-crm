@@ -2,31 +2,34 @@
 
 import { usePathname } from "next/navigation";
 import { PageHeader } from "@/components/shared/page-header";
+import { useTranslations } from "next-intl";
 
 const SETTINGS_LABELS: Record<string, string> = {
-  "/settings/staff": "Staff",
-  "/settings/departments": "Departments",
-  "/settings/services": "Services",
-  "/settings/packages": "Packages",
-  "/settings/insurance": "Insurance",
-  "/settings/clinic": "Clinic",
-  "/settings/customize": "Customize",
+  "/settings/staff": "staff",
+  "/settings/departments": "departments",
+  "/settings/services": "services",
+  "/settings/packages": "packages",
+  "/settings/insurance": "insurance",
+  "/settings/clinic": "clinic",
+  "/settings/customize": "customize",
 };
 
 export function SettingsPageHeader() {
+  const t = useTranslations("settings");
   const pathname = usePathname();
-  const current = SETTINGS_LABELS[pathname] ?? "Settings";
+  const currentKey = SETTINGS_LABELS[pathname];
+  const current = currentKey ? t(currentKey) : t("settings2");
 
   return (
     <PageHeader
       back={{ href: "/dashboard", label: "dashboard" }}
       breadcrumbs={[
-        { label: "Dashboard", href: "/dashboard" },
-        { label: "Settings" },
+        { label: t("dashboard"), href: "/dashboard" },
+        { label: t("settings2") },
         { label: current },
       ]}
-      title="Settings"
-      description="Manage your clinic, staff, and configuration."
+      title={t("settings")}
+      description={t("manageYourClinicStaffAndConfiguration")}
     />
   );
 }

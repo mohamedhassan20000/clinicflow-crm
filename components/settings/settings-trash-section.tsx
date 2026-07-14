@@ -17,6 +17,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useTranslations } from "next-intl";
 
 export interface TrashItem {
   id: string;
@@ -49,6 +50,7 @@ function RestoreButton({
   label: string;
   onRestore: (id: string) => Promise<{ error?: string; success?: boolean }>;
 }) {
+  const t = useTranslations("settings");
   const [isPending, start] = useTransition();
   const router = useRouter();
   const pendingRef = useRef(false);
@@ -66,7 +68,7 @@ function RestoreButton({
           const res = await onRestore(id);
           if (res.error) toast.error(res.error);
           else {
-            toast.success(`"${label}" restored.`);
+            toast.success(t("namedItemRestored", { name: label }));
             router.refresh();
           }
           pendingRef.current = false;
@@ -78,7 +80,7 @@ function RestoreButton({
       ) : (
         <RotateCcw className="h-3.5 w-3.5" />
       )}
-      Restore
+      {t("restore")}
     </Button>
   );
 }
@@ -92,6 +94,7 @@ function PermanentDeleteButton({
   label: string;
   onPermanentDelete: (id: string) => Promise<{ error?: string; success?: boolean }>;
 }) {
+  const t = useTranslations("settings");
   const [isPending, start] = useTransition();
   const router = useRouter();
   const pendingRef = useRef(false);
@@ -110,18 +113,18 @@ function PermanentDeleteButton({
           ) : (
             <Trash2 className="h-3.5 w-3.5" />
           )}
-          Delete permanently
+          {t("deletePermanently")}
         </Button>
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Permanently delete &ldquo;{label}&rdquo;?</AlertDialogTitle>
+          <AlertDialogTitle>{t("permanentlyDeleteNamedItem", { name: label })}</AlertDialogTitle>
           <AlertDialogDescription>
-            This cannot be undone. The record will be deleted forever.
+            {t("thisCannotBeUndoneTheRecord")}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
+          <AlertDialogCancel disabled={isPending}>{t("cancel")}</AlertDialogCancel>
           <AlertDialogAction
             disabled={isPending}
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
@@ -132,14 +135,14 @@ function PermanentDeleteButton({
                 const res = await onPermanentDelete(id);
                 if (res.error) toast.error(res.error);
                 else {
-                  toast.success(`"${label}" permanently deleted.`);
+                  toast.success(t("namedItemPermanentlyDeleted", { name: label }));
                   router.refresh();
                 }
                 pendingRef.current = false;
               })
             }
           >
-            Delete permanently
+            {t("deletePermanently")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -156,6 +159,7 @@ function EmptyTrashButton({
   entityLabel: string;
   onEmptyTrash: () => Promise<{ error?: string; success?: boolean }>;
 }) {
+  const t = useTranslations("settings");
   const [isPending, start] = useTransition();
   const router = useRouter();
   const pendingRef = useRef(false);
@@ -174,20 +178,18 @@ function EmptyTrashButton({
           ) : (
             <Trash2 className="h-3.5 w-3.5" />
           )}
-          Empty trash
+          {t("emptyTrash")}
         </Button>
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Empty settings recycle bin?</AlertDialogTitle>
+          <AlertDialogTitle>{t("emptySettingsRecycleBin")}</AlertDialogTitle>
           <AlertDialogDescription>
-            This will permanently delete {count} {entityLabel}
-            {count !== 1 ? "s" : ""} already in the recycle bin. Active
-            records will not be affected.
-          </AlertDialogDescription>
+            {t("thisWillPermanentlyDelete")}{count} {entityLabel}
+            {count !== 1 ? "s" : ""} {t("alreadyInTheRecycleBinActive")}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
+          <AlertDialogCancel disabled={isPending}>{t("cancel")}</AlertDialogCancel>
           <AlertDialogAction
             disabled={isPending}
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
@@ -199,7 +201,7 @@ function EmptyTrashButton({
                   const res = await onEmptyTrash();
                   if (res.error) toast.error(res.error);
                   else {
-                    toast.success("Recycle bin emptied.");
+                    toast.success(t("recycleBinEmptied"));
                     router.refresh();
                   }
                 } finally {
@@ -209,9 +211,9 @@ function EmptyTrashButton({
             }
           >
             {isPending ? (
-              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+              <Loader2 className="me-2 h-3.5 w-3.5 animate-spin" />
             ) : null}
-            Empty trash
+            {t("emptyTrash")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -226,6 +228,7 @@ export function SettingsTrashSection({
   onPermanentDelete,
   onEmptyTrash,
 }: SettingsTrashSectionProps) {
+  const t = useTranslations("settings");
   if (items.length === 0) return null;
 
   return (
@@ -233,9 +236,9 @@ export function SettingsTrashSection({
       <div className="flex items-center gap-2 border-b border-destructive/15 px-4 py-3">
         <Trash2 className="h-4 w-4 text-destructive/70" />
         <h3 className="text-sm font-semibold text-destructive/80">
-          Recycle Bin
+          {t("recycleBin")}
         </h3>
-        <span className="ml-auto rounded-full bg-destructive/10 px-2 py-0.5 text-[11px] font-medium text-destructive/70">
+        <span className="ms-auto rounded-full bg-destructive/10 px-2 py-0.5 text-[11px] font-medium text-destructive/70">
           {items.length} {entityLabel}
           {items.length !== 1 ? "s" : ""}
         </span>
@@ -248,7 +251,7 @@ export function SettingsTrashSection({
         )}
       </div>
       <p className="px-4 py-2 text-xs text-muted-foreground">
-        Items are permanently deleted after 30 days. Restore to bring them back.
+        {t("itemsArePermanentlyDeletedAfter30")}
       </p>
       <Table className="table-fixed">
         <colgroup>
@@ -259,9 +262,9 @@ export function SettingsTrashSection({
         <TableHeader className="[&_tr]:border-b-2 [&_tr]:border-destructive/10 bg-destructive/5">
           <TableRow>
             <TableHead>{entityLabel}</TableHead>
-            <TableHead>Deleted</TableHead>
+            <TableHead>{t("deleted")}</TableHead>
             <TableHead className="text-end">
-              <span className="sr-only">Actions</span>
+              <span className="sr-only">{t("actions")}</span>
             </TableHead>
           </TableRow>
         </TableHeader>
@@ -285,8 +288,8 @@ export function SettingsTrashSection({
                     className={`text-xs ${days <= 3 ? "font-semibold text-destructive" : "text-muted-foreground"}`}
                   >
                     {days === 0
-                      ? "Expires today"
-                      : `${days} day${days !== 1 ? "s" : ""} left`}
+                      ? t("expirestoday")
+                      : t("daysleft", { days })}
                   </span>
                 </TableCell>
                 <TableCell className="text-end">

@@ -1,6 +1,6 @@
 # ClinicFlow → Multi-Tenant SaaS: Platform, Arabic-First i18n, Per-Tenant WhatsApp & AI Assistant Agent — Feasibility & Implementation Plan
 
-**Status:** Approved plan — P0–P1 implemented; later phases not started
+**Status:** Approved plan — P0–P2 implemented; Phase 2 comprehensive-review blocker addressed; later phases not started
 **Date:** 2026-07-09
 **Revised:** 2026-07-11 — incorporates the approved product & UX revisions (official roadmap changes, not feature creep): dashboard shell redesign, operator executive analytics + extensible Reports module, marketing website at `/`, popup-based UX, runtime language & display-currency switching, country-aware currency selector, international E.164 phone input, and one-click invitation email. These land as the new **P1.5** phase (§8) plus amendments to P2/P3. Engineering philosophy, architecture, security model, multi-tenancy, and the RLS-first approach are unchanged.
 **Revised:** 2026-07-14 — records four approved decisions taken after the Pre-P2 polish sprint merged (`cf139cb`). **Nothing is implemented by this revision; it is a planning update only.** (1) **Thmanyah** — a licensed Arabic font purchased by the founder — becomes the primary Arabic UI face in P2 (§4.3). (2) The P2 **language switchers** are specified for three independent surfaces — the marketing site, the **clinic user's Preferences page**, and a dedicated **Operator-header switcher for the Platform Admin (SaaS Owner)** — with **English as the default language** and **no clinic language at all**: dashboard language is always a per-user preference (§4, §4.1, §4.3, P2/P2A/P2C in §8). (3) The product's commercial model is now **per active staff user, with the clinic owner/primary admin seat free**, provisionally **USD 9/month** per additional active staff user (§3.3, §13-Q1) — recorded for the future billing phase, not built. (4) A future **legal-acceptance & agreement-history** capability is defined prospectively (new §3.7) — the data does not exist today and must never be synthesized. (5) Per-user UI preferences (theme + locale, for clinic users **and** the Platform Admin) get one approved auth-user-keyed store, **`user_ui_preferences`** (new §4.5) — architecture approved now, **implemented in P2A**, including its RLS, profile-migration strategy, and backfill. Sub-phase numbering, completed phases, and all other scope are unchanged. Immediate post-Pre-P2 UX work lives in `docs/POST_PRE_P2_MANUAL_POLISH.md`, which is **documentation and UI work only and introduces no migration**.
@@ -353,7 +353,42 @@ No third-party flag service. **Feature flags are a P1 deliverable: per-clinic fl
 
 ### 4.2 RTL as default direction
 
-Current state (measured): 87/176 TSX files, 339 physical-direction occurrences, 0 logical properties, `"rtl": false` in [components.json](../components.json).
+Current state (measured 2026-07-09): 87/176 TSX files, 339 physical-direction occurrences, 0 logical properties, `"rtl": false` in [components.json](../components.json).
+
+> ### ✅ Delivered in P2B (2026-07-14) — the figures above are the *pre-retrofit* audit and are now historical
+>
+> Re-measured after P1.5A, as this section requires: **48 files / 131 flagged lines** — lower than the
+> 2026-07-09 audit because P1.5A retired the old top-nav shell and everything written since was authored
+> logical-properties-first. `components.json` is now **`"rtl": true`**; all 48 files are converted; 31
+> directional icons across 17 files are mirrored; and a **CI gate** (`pnpm lint:rtl`) now fails the build on
+> any new physical-direction class, physical CSS longhand, or un-mirrored directional icon.
+>
+> **Gate coverage was widened at the top of P2C**, closing the two blind spots the P2B phase review found
+> (`docs/reviews/P2B_PHASE_REVIEW.md`):
+>
+> - **P2B-R1 — directional icons.** `ToggleLeft` / `ToggleRight` are lucide's *switch glyphs*, they were
+>   live in the departments and insurance row menus, and the gate could not see them — while the real
+>   `Switch` primitive P2B taught to flip in Arabic *does* move its thumb. The icon and the widget it
+>   depicts disagreed. Both are now in `DIRECTIONAL_ICONS` and both call sites carry `rtl:-scale-x-100`
+>   (a half-turn is wrong for an off-centre knob — it would move the knob vertically too).
+> - **P2B-R2 — physical CSS longhands.** The gate's header comment promised to catch bare `left:` /
+>   `right:` declarations and did not; the class rules only match the Tailwind *class* form. Two rules
+>   close it. The form matters because it is what hand-written CSS and JSX `style={{ … }}` objects reach
+>   for — exactly the surfaces P2C adds.
+>
+> The widened gate surfaced six real sites, all now resolved rather than waived: the six decorative
+> inset values in the auth layout's brand panel became `insetInlineStart` / `insetInlineEnd` (the art
+> mirrors with the panel), and the print header's symmetric `left: 0; right: 0` became `inset-inline: 0`.
+> The documented exception list holds **the two revenue trend arrows** (which live in the chart's LTR
+> coordinate space per step 4 below) plus **four Recharts `margin` props** — chart-space geometry, not
+> page layout — each annotated inline at the point it applies. `scripts/rtl-allowlist.json` stays empty.
+>
+> Two steps below were amended in flight, and both are recorded in `docs/reviews/P2B_REVIEW.md`:
+> **step 1** (**P2B-D1**) — the primitives were converted *in place* by shadcn's own RTL transformer instead of
+> being re-added, because they are no longer purely generated code and `--overwrite` would have destroyed
+> real customizations; **step 3** (**P2B-D2**) — `rtl:rotate-180` is correct only for glyphs symmetric about the
+> horizontal axis, so diagonal glyphs (`ArrowUpRight`, `Send`, `ExternalLink`) get `rtl:-scale-x-100` instead.
+> Two latent RTL bugs in shadcn's transformer were found and fixed en route (**P2B-F1**, **P2B-F2**).
 
 **Approved approach — logical-properties codemod + shadcn regeneration (from §12-HP3):**
 
@@ -369,9 +404,16 @@ Current state (measured): 87/176 TSX files, 339 physical-direction occurrences, 
 
 Loaded via `next/font/local` (self-hosted — also avoids Google Fonts latency in GCC), wired in [app/layout.tsx](../app/layout.tsx) where the Latin faces load today.
 
-> ### ⚠️ P2 implementation reminder
+> ### ✅ Delivered in P2A (2026-07-14) — with one open licensing item
 >
-> **Before starting P2 code changes, request the licensed Thmanyah font files from the user and confirm the permitted web-app usage.**
+> The font files were supplied and integrated. **The permitted web-app usage did NOT check out**, and the
+> gate this reminder existed to enforce therefore *fired*: the licence permits embedding in a web app
+> **"only as part of a compiled, packaged, or obfuscated product"** and expressly prohibits making the font
+> reachable by end users "**including through web embedding**" — which is exactly what `next/font/local`
+> does (verified: the face is served at a public URL, HTTP 200). **The founder, as licence holder, elected
+> to ship anyway and accept the risk**; the repository was made **private** first, and only the five
+> `woff2` UI faces are shipped. Tracked as **P2A-L1** in `docs/reviews/P2A_REVIEW.md` §2.4 and retired only
+> by a written webfont grant from `ask@thmanyah.com` (which the licence expressly invites).
 
 **Decision:** **Thmanyah** is the **primary Arabic UI font**. It replaces IBM Plex Sans Arabic as the primary; IBM Plex Sans Arabic is retained as the **fallback** face (for environments without the licensed files, and as the metric-compatible degradation target).
 
@@ -389,7 +431,27 @@ Loaded via `next/font/local` (self-hosted — also avoids Google Fonts latency i
 - The permitted web-app usage (page-view tier, domains, sub-processors) must be **confirmed with the user against the purchased licence** before integration.
 - **No font file may be fabricated, generated, or substituted** by any planning or implementation task.
 
-**P2 must document, when the files arrive:** the exact **weights/styles used** (expected: Regular 400, Medium 500, SemiBold 600, Bold 700; italics only if the licence and the family provide them — Arabic families frequently do not), the **`unicodeRange`/subset** shipped, the file sizes, and the full **fallback stack**:
+**Documented by P2A (2026-07-14) — the files arrived and were measured, not assumed.** Family names are per-face and not uniform (`nameID 1`: `thmanyah sans Light`, `thmanyah sans`, `thmanyah sans Med`, `thmanyah sans`, `thmanyah sans Black`) — immaterial, since `next/font/local` generates its own family name (corrected 2026-07-14, **P2A-D2**); weights read from each file's `OS/2.usWeightClass`; **all faces upright** (`fsSelection` italic bit = 0):
+
+| Shipped face (`woff2`) | Real weight | Size |
+|---|---|---|
+| `thmanyahsans-Light` | 300 | 72 KB |
+| `thmanyahsans-Regular` | 400 | 78 KB |
+| `thmanyahsans-Medium` | 500 | 79 KB |
+| `thmanyahsans-Bold` | 700 | 79 KB |
+| `thmanyahsans-Black` | 900 | 77 KB |
+
+- **There is no SemiBold (600) and there are no italics.** The expectation above was wrong on 600. This
+  matters: `h1–h6` are `font-weight: 600` and shadcn uses `font-semibold`/`font-medium` widely, so **Arabic
+  600 resolves to the 700 face** and Arabic headings render heavier than their Latin counterparts. Visual-parity
+  item for **P2B/P2C QA** — tracked as **P2A-O2**.
+- **No `unicodeRange`/subset was applied.** Subsetting the file would be "modifying/repackaging" the Font
+  Software, which the licence prohibits outright. The faces ship whole; the browser fetches a face only when a
+  node actually resolves to that weight.
+- Only the **sans** family ships (the UI face). The serif-text and serif-display subfamilies and all OTFs are
+  not shipped.
+
+**Fallback stack (implemented, scoped to `html[lang="ar"]` so English renders byte-identically):**
 
 `font-family: var(--font-thmanyah), var(--font-plex-arabic), "Segoe UI", system-ui, sans-serif;`
 
@@ -680,19 +742,29 @@ Summary table at the top of this document. Common to every phase: unit tests fol
 - **Tests:** i18n snapshot tests for representative pages in `ar`+`en` (extend `tests/unit/pages/`); runtime-switch test (authenticated user flips ar↔en, next render localized, session intact, **another user's locale unchanged**); **concurrent multi-user test — a Doctor on Arabic, a Receptionist on English, and the Clinic Owner on Arabic in the same clinic at the same time, each rendering their own language**; **operator-isolation test — the Platform Admin switches the operator dashboard to Arabic and no clinic user's language changes, and vice versa**; **`user_ui_preferences` RLS denial tests (no account reads or writes another's row, platform admin included) and the per-user theme tests the polish sprint could not write — a shared browser no longer bleeds one user's theme into the next, and a user's theme follows them to a second device**; anonymous marketing-locale test (cookie persists across public pages, independent of any signed-in preference); CI grep-gate failing on new physical-direction classes; Playwright smoke in Arabic locale; visual QA checklist of all pages in RTL **with Thmanyah loaded** (row heights, forms, tables, calendars, dense dashboards — §4.3).
 - **Acceptance:** an Arabic-speaking user's experience is fully Arabic RTL with zero mirrored-layout defects; **English is what an undecided user sees** (marketing, login, new clinic users, new platform admins); the three switchers exist and are correctly scoped — **marketing header** (anonymous cookie), **Preferences** (each clinic user's own language), and **Operator header** (the Platform Admin's operator dashboard only) — each flipping ar↔en at runtime without sign-out; **no clinic language exists anywhere in the schema or UI**; the model scales to future locales (adding one = one message file + registry entry); no placeholder language control was ever shipped before this phase; no hardcoded English strings in components (lint/extraction check).
 
-#### P2 execution split (3 sub-phases; merge order P2A → P2B → P2C)
+#### P2 execution split (3 sub-phases; integration order P2A → P2B → P2C)
 
-**P2A — i18n infrastructure** — branch `feat/p2a-i18n-infrastructure`, est. **4–5 days**, merge **1st**.
+> **Release sequencing — decided 2026-07-14 (closes P2A-N1).** **P2A, P2B, and P2C integrate onto a single
+> long-lived P2 integration branch and none of them merges to `main` separately.** `main` is production
+> (`clinicflow.fit`, via Vercel's default Git integration), and P2A alone lands a real, ungated Arabic option
+> on three surfaces — including the public marketing site — while the RTL retrofit (P2B) and the Arabic
+> strings (P2C) do not yet exist. Merging P2A to `main` on its own would therefore expose a mirrored-but-not-
+> retrofitted, English-text-in-an-Arabic-face UI to real users for the 8–13 days P2B+P2C take. **The exposure
+> is closed by release sequencing, not by code:** the switchers are *not* gated, *not* feature-flagged, and
+> *not* removed — the plan always required a real, working control in P2A, and that requirement stands.
+> `main` receives P2 once, after P2C completes. Recorded in `docs/reviews/P2A_REVIEW.md` (Cycle 2, **P2A-N1**).
+
+**P2A — i18n infrastructure** — branch `feat/p2a-i18n-infrastructure`, est. **4–5 days**, integrates **1st** (into the P2 integration branch — **not** to `main`; see the release-sequencing note above). — **✅ IMPLEMENTED 2026-07-14; awaiting comprehensive review. Record: `docs/reviews/P2A_REVIEW.md`.** Two items carry forward: **P2A-L1** (the Thmanyah licence does not permit webfont serving; the founder elected to ship and accept the risk — retire with a written grant from `ask@thmanyah.com`) and **P2A-O1** (the zod error map ships but is **not** globally registered; registration lands with the P2C schema/consumer migration, because installing it today would print raw keys in every un-migrated form).
 - *Goal:* the machinery exists and the app still renders identically in English — a low-risk, reviewable foundation.
-- *Prerequisite:* **request the licensed Thmanyah font files from the founder and confirm permitted web-app usage before starting** (§4.3).
-- *In scope:* **the `user_ui_preferences` store itself (§4.5)** — migration, self-only RLS + denial tests, **profile-migration strategy**, **data backfill decision**, and the rewiring of `actions/theme.ts` / `ThemeToggle` / the protected + operator layouts onto it (the post-Pre-P2 sprint left theme on its device cookie by design and added no migration, so this lands here, whole); `next-intl` setup + `getRequestConfig` (**user → `en`** resolution — **no clinic tier**, §4.1 as amended 2026-07-14) **plus the runtime-switch plumbing**: locale cookie for anonymous/marketing surfaces (independent of any account), `updateOwnLocale` action writing **`user_ui_preferences.locale`** (keyed on `auth.users.id` precisely so it also holds the **Platform Admin's** locale, which `profiles` structurally cannot), and **all three switcher mounts — the marketing header, the clinic user's Preferences page, and the Operator header** (the last in the slot the post-Pre-P2 sprint reserved and deliberately left empty; **the placeholder-free rule ends here — the control that lands must actually switch the language**, and the Operator switcher must affect the operator dashboard **only**); root layout `lang`/`dir` wiring; the `clinics.locale` disposition decision (§13-Q11); zod message-key refactor + shared error map (`lib/validations/error-map.ts`) + `translateFieldErrors` helper; typography stack via `next/font/local` (**Thmanyah** primary, IBM Plex Sans Arabic fallback, §4.3); `messages/en.json` (default) / `messages/ar.json` skeletons.
+- *Prerequisite:* **request the licensed Thmanyah font files from the founder and confirm permitted web-app usage before starting** (§4.3). — *Files supplied; the usage check **failed** and was escalated. See §4.3 and P2A-L1.*
+- *In scope:* **the `user_ui_preferences` store itself (§4.5)** — migration, self-only RLS + denial tests, **profile-migration strategy**, **data backfill decision**, and the rewiring of `actions/theme.ts` / `ThemeToggle` / the protected + operator layouts onto it (the post-Pre-P2 sprint left theme on its device cookie by design and added no migration, so this lands here, whole); `next-intl` setup + `getRequestConfig` (**user → `en`** resolution — **no clinic tier**, §4.1 as amended 2026-07-14) **plus the runtime-switch plumbing**: locale cookie for anonymous/marketing surfaces (independent of any account), `updateOwnLocale` action writing **`user_ui_preferences.locale`** (keyed on `auth.users.id` precisely so it also holds the **Platform Admin's** locale, which `profiles` structurally cannot), and **all three switcher mounts — the marketing header, the clinic user's Preferences page, and the Operator header** (the last in the slot the post-Pre-P2 sprint reserved and deliberately left empty; **the placeholder-free rule ends here — the control that lands must actually switch the language**, and the Operator switcher must affect the operator dashboard **only**); root layout `lang`/`dir` wiring; the `clinics.locale` disposition decision (§13-Q11); the shared zod error map (`lib/validations/error-map.ts`) + `translateFieldErrors` helper — **amended 2026-07-14 (P2A-D3):** the *refactor of `lib/validations/*` to message keys* and the **global registration** of the map are **accepted deviations moved to P2C**, because 23 zod constraint calls across `appointment.ts`, `settings.ts`, `package-template.ts`, and `patient-package.ts` supply no explicit `message`, so registering the map today would print raw `validation.*` keys in every un-migrated form and regress English (see **P2A-O1**); typography stack via `next/font/local` (**Thmanyah** primary, IBM Plex Sans Arabic fallback, §4.3); `messages/en.json` (default) / `messages/ar.json` skeletons.
 - *Out of scope:* converting any physical-direction CSS (P2B); extracting existing UI strings (P2C); **any clinic-wide language setting — forbidden, permanently**.
 - *Dependencies:* P0. Runs **in parallel with P1 and P1.5** (per roadmap). **External:** the Thmanyah font files. Note the post-Pre-P2 polish sprint is *not* a dependency for the store — it deliberately shipped none; P2A owns it end to end.
 - *Migrations:* **`user_ui_preferences`** (`user_id` PK → `auth.users`, `theme`, `locale`, self-only RLS — §4.5) — the only P2 migration (plus, if §13-Q11 so decides, the `clinics.locale` disposition). Ships with its RLS denial suite, the profile-migration strategy, and the documented backfill decision.
 - *Tests/acceptance:* locale resolution unit tests (**user beats `en` default; no clinic tier exists to consult**); anonymous marketing-locale cookie is independent of any authenticated preference; a locale change by one user leaves every other user's locale untouched, in the same clinic and across clinics; **the Platform Admin's operator-dashboard locale changes nothing for any clinic user, and no clinic user's locale changes the operator dashboard**; RLS denial test — no account can read or write another's `user_ui_preferences` row, platform admin included; **theme now follows the user, not the browser** — a second user on the same browser gets their own theme, and a user's theme follows them to a second device (the gap the polish sprint documented and left open); zod messages resolve through keys in both locales; app renders byte-identical in `en` (snapshot regression) — proof of zero behavior change.
 - *Parallel:* with P1B–P1D freely (disjoint surface).
 
-**P2B — RTL retrofit** — branch `feat/p2b-rtl-retrofit`, est. **4–6 days**, merge **2nd**.
+**P2B — RTL retrofit** — branch `feat/p2b-rtl-retrofit`, est. **4–6 days**, integrates **2nd** (onto the P2 integration branch — **not** to `main`; see the release-sequencing note above). — **✅ IMPLEMENTED 2026-07-14; awaiting comprehensive review. Record: `docs/reviews/P2B_REVIEW.md`.** Two accepted deviations are recorded there: **P2B-D1** (the shadcn primitives were converted **in place** by shadcn's own RTL transformer rather than re-added with `--overwrite`, which would have destroyed substantive local customizations — including the Pre-P2 WS2 `table.tsx` treatment; the transform applied is the identical one the CLI runs, and `components.json` is flipped so future `shadcn add` is RTL-correct) and **P2B-D2** (icon mirroring needs **two** utilities, not only the `rtl:rotate-180` named in §4.2 step 3: rotating a diagonal glyph such as `ArrowUpRight` by 180° points it *down-left*, so asymmetric glyphs get `rtl:-scale-x-100`). Two latent RTL bugs in shadcn's own transformer were found and fixed (**P2B-F1**, **P2B-F2**). The re-measured inventory was **48 files / 131 flagged lines**, not the stale 87/339 (§4.2).
 - *Goal:* every layout is direction-safe; still no translated copy.
 - *In scope:* `components.json` `"rtl": true` + shadcn primitive regeneration with diff review (§4.2 step 1); logical-properties codemod of the app-owned files (**re-measure the inventory first** — the 87-file/339-occurrence count predates the P1.5A shell redesign, which retired some old-shell files and added logical-properties-first components) + manual pass on intentional physical cases (charts, print layouts); directional icon mirroring (`rtl:rotate-180`); CI grep-gate failing on new physical-direction classes.
 - *Out of scope:* string extraction/translation (P2C); Recharts internals (stay LTR by design).
@@ -701,7 +773,7 @@ Summary table at the top of this document. Common to every phase: unit tests fol
 - *Tests/acceptance:* CI grep-gate green (zero physical-direction classes outside the documented exception list); English UI unchanged in LTR (snapshots); spot-check RTL rendering on the 5 highest-traffic pages.
 - *Parallel:* not with P2C (P2C QAs on top of it); fine alongside P1D/P3A.
 
-**P2C — Arabic strings, localization polish & full QA** — branch `feat/p2c-arabic-strings-qa`, est. **4–7 days**, merge **3rd (last in P2)**.
+**P2C — Arabic strings, localization polish & full QA** — branch `feat/p2c-arabic-strings-qa`, est. **4–7 days**, merge **3rd (last in P2)**. — **✅ IMPLEMENTED 2026-07-15; P2 comprehensive-review blocker addressed. Records: `docs/reviews/P2C_REVIEW.md`, `docs/reviews/P2_PHASE_REVIEW.md`.**
 - *Goal:* the staff UI actually ships Arabic-first.
 - *In scope:* string extraction from the routes + components (inventory includes the P1.5 shell, operator analytics/reports, and marketing site) into `messages/en.json`; professional Arabic translation integration (~1,200–1,800 strings post-P1.5); digits/date/currency polish through the P0 `ClinicLocale` formatters **and the P1.5D display-currency preference** (§4.4, minus Hijri); wiring the P2A runtime language switcher through the full QA pass (switching mid-session leaves forms, dialogs, and the collapsed-sidebar state intact); full RTL/LTR visual QA pass across all pages including the marketing site.
 - *Out of scope:* Hijri calendar (Saudi milestone).
@@ -986,7 +1058,7 @@ Still open:
 8. **Final payment provider** (post-P1 decision by design, §3.3/HP4): Paddle, Stripe, Lemon Squeezy, Polar, Tap, or another — choose once real prospects reveal payment-rail demand (KNET/mada vs. cards) and the contracting entity (question 7) is settled.
 9. **FX rate source for the display-currency preference (P1.5D/HP9):** which provider feeds `fx_rates` (e.g., ECB/openexchangerates/exchangerate.host tiers), at what update cadence (daily recommended), and who owns the API cost? Blocking only for P1.5D's conversion feature — the selector/preference plumbing proceeds regardless.
 10. **Marketing-site launch languages (P1.5C):** launch `/` English-first with Arabic following in P2C (current plan), or hold the public marketing launch until Arabic copy is ready? Affects go-live sequencing between P1.5C and P2C, not engineering scope. *(Largely settled by the 2026-07-14 English-default decision: `/` launches English and gains the Arabic switcher in P2 — confirm the go-live sequencing only.)*
-11. **Disposition of `clinics.locale` (P2A — added 2026-07-14):** the approved model is **English default + no clinic language** (§4) — dashboard language is always per user, so locale resolution becomes **user → `en`** with **no clinic tier**, and `clinics.locale` may never resolve a user's UI language again. What remains open is only the column's fate: (a) **retain it as clinic *formatting* metadata** alongside `timezone`/`currency`/`digits`, where a clinic-level locale still has a legitimate non-language use for dates/numbers on clinic-wide artifacts (recommended), or (b) **retire it** in P2. Decide **in P2A**, not silently.
+11. ~~**Disposition of `clinics.locale` (P2A — added 2026-07-14):**~~ **DECIDED in P2A (2026-07-14) — option (a).** `clinics.locale` is **retained as clinic *formatting* metadata** (dates/numbers on clinic-wide artifacts), alongside `timezone`/`currency`/`digits`, and is **retired as a language source**: it may never resolve any user's UI language again. Locale resolution is **user → `en`** with **no clinic tier**. The column is **not** dropped, and the constraint is recorded as a `COMMENT ON COLUMN` in `supabase/migrations/20260714120000_p2a_user_ui_preferences.sql` so it travels with the schema rather than living only here. See `docs/reviews/P2A_REVIEW.md` §4.
 12. **Placement of the legal-acceptance & agreement-history feature (§3.7 — added 2026-07-14):** does it belong to a dedicated legal/compliance phase, to the billing phase (where the clinic agreement is signed anyway), or to an onboarding revision? It is **not** P2 and **not** any UX-polish sprint. Until it lands, the operator clinic history shows only real data and an honest, clearly-labeled placeholder — never synthesized acceptance rows.
 13. **Seat-count definition for per-seat billing (billing phase — added 2026-07-14, §3.3):** "active staff user" needs one deterministic definition before billing is implemented. Pending invitations are already excluded by decision; but `profiles` today has **no** `is_active`/`disabled_at` flag, so the billing phase must add one (or define an equivalent derivation) and settle the edge cases: mid-month joiners/leavers (proration?), a re-enabled user, a doctor who is also the owner, and how the count is snapshotted for an auditable invoice.
 

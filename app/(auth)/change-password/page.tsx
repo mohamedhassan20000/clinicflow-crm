@@ -1,12 +1,16 @@
 import type { Metadata } from "next";
 import { ShieldAlert } from "lucide-react";
 import { ChangePasswordForm } from "@/components/auth/change-password-form";
+import { useTranslations } from "next-intl";
+import { getTranslations } from "next-intl/server";
 
-export const metadata: Metadata = {
-  title: "Set new password",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("auth");
+  return { title: t("metadataSetNewPassword") };
+}
 
 export default function ChangePasswordPage() {
+  const t = useTranslations("auth");
   return (
     <div className="space-y-6">
       <div className="space-y-3">
@@ -15,11 +19,9 @@ export default function ChangePasswordPage() {
         </span>
         <div className="space-y-1.5">
           <h2 className="text-2xl font-semibold tracking-tight text-foreground">
-            Set a new password
-          </h2>
+            {t("setANewPassword")}</h2>
           <p className="text-sm leading-relaxed text-muted-foreground">
-            Your account requires a password change before you can continue.
-          </p>
+            {t("yourAccountRequiresAPasswordChange")}</p>
         </div>
       </div>
 

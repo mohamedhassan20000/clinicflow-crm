@@ -7,6 +7,7 @@ import {
   operatorReportRegistry,
 } from "@/lib/operator-reports/registry";
 import { parseReportParams, type RawReportSearchParams } from "@/lib/operator-reports/types";
+import { getTranslations } from "next-intl/server";
 
 export default async function OperatorReportPage({
   params,
@@ -21,11 +22,12 @@ export default async function OperatorReportPage({
   const reportsUrl = resolveReturnTo(returnTo, "/operator/reports", ["/operator/reports"]);
   const report = operatorReportRegistry.get(reportId);
   if (!report) notFound();
+  const t = await getTranslations("operator");
   const parsed = parseReportParams(report, rawSearch);
   const [result, filterOptions] = await Promise.all([
     report.query(parsed),
     loadOperatorReportFilterOptions(report),
   ]);
   const effectiveParams = { ...parsed, page: result.page };
-  return <><PageHeader back={{ href: reportsUrl, label: "reports" }} breadcrumbs={[{ label: "Operator", href: "/operator" }, { label: "Reports", href: reportsUrl }, { label: report.title }]} title={`${report.title} report`} description={report.description} /><ReportShell definition={report} result={result} params={effectiveParams} filterOptions={filterOptions} /></>;
+  return <><PageHeader back={{ href: reportsUrl, label: t("reports") }} breadcrumbs={[{ label: t("operator"), href: "/operator" }, { label: t("reports"), href: reportsUrl }, { label: report.title }]} title={t("namedReport", { name: report.title })} description={report.description} /><ReportShell definition={report} result={result} params={effectiveParams} filterOptions={filterOptions} /></>;
 }

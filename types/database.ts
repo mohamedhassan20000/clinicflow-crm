@@ -536,36 +536,6 @@ export type Database = {
         }
         Relationships: []
       }
-      fx_rates: {
-        Row: {
-          base_currency: string
-          currency_code: string
-          fetched_at: string
-          provider: string
-          provider_timestamp: string
-          rate: number
-          updated_at: string
-        }
-        Insert: {
-          base_currency?: string
-          currency_code: string
-          fetched_at?: string
-          provider: string
-          provider_timestamp: string
-          rate: number
-          updated_at?: string
-        }
-        Update: {
-          base_currency?: string
-          currency_code?: string
-          fetched_at?: string
-          provider?: string
-          provider_timestamp?: string
-          rate?: number
-          updated_at?: string
-        }
-        Relationships: []
-      }
       coupon_redemptions: {
         Row: {
           clinic_id: string
@@ -873,6 +843,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      fx_rates: {
+        Row: {
+          base_currency: string
+          currency_code: string
+          fetched_at: string
+          provider: string
+          provider_timestamp: string
+          rate: number
+          updated_at: string
+        }
+        Insert: {
+          base_currency?: string
+          currency_code: string
+          fetched_at?: string
+          provider: string
+          provider_timestamp: string
+          rate: number
+          updated_at?: string
+        }
+        Update: {
+          base_currency?: string
+          currency_code?: string
+          fetched_at?: string
+          provider?: string
+          provider_timestamp?: string
+          rate?: number
+          updated_at?: string
+        }
+        Relationships: []
       }
       insurance_providers: {
         Row: {
@@ -1597,7 +1597,15 @@ export type Database = {
           target_id?: string | null
           target_type?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "platform_audit_logs_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       platform_settings: {
         Row: {
@@ -2004,15 +2012,35 @@ export type Database = {
           },
         ]
       }
+      user_ui_preferences: {
+        Row: {
+          created_at: string
+          locale: string
+          theme: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          locale?: string
+          theme?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          locale?: string
+          theme?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      normalize_legacy_phone_e164: {
-        Args: { value: string; default_country: string }
-        Returns: string
-      }
       auth_clinic_id: { Args: never; Returns: string }
       auth_department_id: { Args: never; Returns: string }
       auth_profile: {
@@ -2084,8 +2112,8 @@ export type Database = {
       find_resumable_clinic_owner: {
         Args: { p_email: string }
         Returns: {
-          user_id: string
           email_confirmed: boolean
+          user_id: string
         }[]
       }
       get_cancellation_report: {
@@ -2154,6 +2182,10 @@ export type Database = {
           p_target_id?: string
           p_target_type: string
         }
+        Returns: string
+      }
+      normalize_legacy_phone_e164: {
+        Args: { default_country: string; value: string }
         Returns: string
       }
       platform_week_start: { Args: { p_at?: string }; Returns: string }

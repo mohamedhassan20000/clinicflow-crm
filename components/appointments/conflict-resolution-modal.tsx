@@ -15,6 +15,7 @@ import { confirmAndDisplaceConflicts, type ConflictingAppointment } from "@/acti
 import { toast } from "sonner";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
 import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
+import { useTranslations } from "next-intl";
 
 interface ConflictResolutionModalProps {
   open: boolean;
@@ -31,6 +32,7 @@ export function ConflictResolutionModal({
   conflicts,
   onConfirmed,
 }: ConflictResolutionModalProps) {
+  const t = useTranslations("appointments");
   const { formatTime } = useClinicSettings();
   const [isPending, setIsPending] = useState(false);
 
@@ -46,7 +48,7 @@ export function ConflictResolutionModal({
       toast.error(result.error);
       return;
     }
-    toast.success("Appointment confirmed. Conflicting appointments moved to rebook queue.");
+    toast.success(t("appointmentConfirmedConflictingAppointmentsMovedTo"));
     onOpenChange(false);
     onConfirmed();
   }
@@ -55,16 +57,15 @@ export function ConflictResolutionModal({
     <Dialog open={open} onOpenChange={(v) => { if (!isPending) onOpenChange(v); }}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Scheduling conflict detected</DialogTitle>
+          <DialogTitle>{t("schedulingConflictDetected")}</DialogTitle>
           <DialogDescription>
             {conflicts.length === 1
-              ? "1 pending appointment overlaps with this one for the same doctor."
-              : `${conflicts.length} pending appointments overlap with this one for the same doctor.`}{" "}
-            Confirming will move {conflicts.length === 1 ? "it" : "them"} to the rebook queue.
-          </DialogDescription>
+              ? t("1pendingappointmentoverlapswiththis")
+              : t("pendingAppointmentsOverlap", { count: conflicts.length })}{" "}
+            {t("confirmingMovesToRebook", { count: conflicts.length })}</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+        <div className="space-y-2 max-h-64 overflow-y-auto pe-1">
           {conflicts.map((c) => {
             const time = formatTime(c.scheduled_at);
             const date = new Date(c.scheduled_at).toLocaleDateString("en-GB", {
@@ -87,7 +88,7 @@ export function ConflictResolutionModal({
                     {c.patients?.full_name ?? "—"}
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    {date} · {time} · {c.duration_minutes ?? 30} min
+                      {date} · {time} · {t("durationMinutes", { count: c.duration_minutes ?? 30 })}
                     {c.departments?.name ? ` · ${c.departments.name}` : ""}
                   </div>
                 </div>
@@ -103,14 +104,13 @@ export function ConflictResolutionModal({
             onClick={() => onOpenChange(false)}
             disabled={isPending}
           >
-            Cancel
-          </Button>
+            {t("cancel")}</Button>
           <Button
             variant="destructive"
             onClick={handleConfirmAndDisplace}
             disabled={isPending}
           >
-            {isPending ? "Confirming…" : `Confirm & remove ${conflicts.length === 1 ? "conflict" : `${conflicts.length} conflicts`}`}
+            {isPending ? t("confirming") : t("confirmAndRemoveConflicts", { count: conflicts.length })}
           </Button>
         </DialogFooter>
       </DialogContent>

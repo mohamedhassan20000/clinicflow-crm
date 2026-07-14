@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useTranslations } from "next-intl";
 
 export default function OperatorError({
   error,
@@ -12,6 +13,7 @@ export default function OperatorError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const t = useTranslations("operator");
   useEffect(() => {
     console.error(error);
   }, [error]);
@@ -22,24 +24,20 @@ export default function OperatorError({
         <AlertTriangle className="size-6 text-destructive" aria-hidden="true" />
       </div>
       <div className="max-w-md">
-        <h2 className="text-lg font-semibold">Operator page could not be loaded</h2>
+        <h2 className="text-lg font-semibold">{t("operatorPageCouldNotBeLoaded")}</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          This page hit an unexpected error while loading. No data was changed.
-          Try again, or return to Mission Control. If the problem continues,
-          include the error ID below when contacting support.
-        </p>
+          {t("thisPageHitAnUnexpectedError")}</p>
         {error.digest ? (
           <p className="mt-2 font-mono text-xs text-muted-foreground">
-            Error ID: {error.digest}
+            {t("errorId")}{error.digest}
           </p>
         ) : null}
       </div>
       <div className="flex items-center gap-2">
         <Button onClick={reset} size="sm">
-          Try again
-        </Button>
+          {t("tryAgain")}</Button>
         <Button asChild variant="outline" size="sm">
-          <Link href="/operator">Go to Mission Control</Link>
+          <Link href="/operator">{t("goToMissionControl")}</Link>
         </Button>
       </div>
     </div>

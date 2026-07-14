@@ -3,10 +3,15 @@ import { redirect } from "next/navigation";
 import { KeyRound } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { ResetPasswordForm } from "@/components/auth/reset-password-form";
+import { getTranslations } from "next-intl/server";
 
-export const metadata: Metadata = { title: "Set new password" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("auth");
+  return { title: t("metadataSetNewPassword") };
+}
 
 export default async function ResetPasswordPage() {
+  const t = await getTranslations("auth");
   // The /auth/confirm callback exchanges the email link's code for a session
   // before forwarding here. If we somehow land here without one, push back to
   // the forgot-password screen so the user can ask for a fresh email.
@@ -24,11 +29,9 @@ export default async function ResetPasswordPage() {
         </span>
         <div className="space-y-1.5">
           <h2 className="text-2xl font-semibold tracking-tight text-foreground">
-            Set a new password
-          </h2>
+            {t("setANewPassword")}</h2>
           <p className="text-sm leading-relaxed text-muted-foreground">
-            Enter your new password twice to update your account.
-          </p>
+            {t("enterYourNewPasswordTwiceTo")}</p>
         </div>
       </div>
 

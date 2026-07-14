@@ -1,0 +1,4 @@
+{
+  "$comment": "P2B RTL gate — the documented exception list (AI_AGENT_PLAN §4.2 step 4). Whole-file exemptions only; a per-line exception belongs in the code as an `rtl-allow: <reason>` comment, where the reader will actually see it. Every entry needs a reason. An empty `files` array is the goal state.",
+  "files": []
+}

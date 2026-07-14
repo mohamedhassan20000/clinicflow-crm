@@ -9,6 +9,7 @@ import {
 } from "@/components/reports/report-formatters";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
+import { useTranslations } from "next-intl";
 
 export function RevenueSummaryReport({
   data,
@@ -19,6 +20,7 @@ export function RevenueSummaryReport({
   range: ReportDateRange;
   clinic: ClinicPrintMeta;
 }) {
+  const t = useTranslations("reports");
   const { locale, formatCurrency } = useClinicSettings();
   const hasData =
     data.transactionCount > 0 ||
@@ -29,22 +31,22 @@ export function RevenueSummaryReport({
   return (
     <ReportSectionShell
       section="revenue"
-      title="Revenue / Sales Summary"
-      description="Collected payments, deposits, settlements, and outstanding balances."
+      title={t("revenueSalesSummary")}
+      description={t("collectedPaymentsDepositsSettlementsAndOutstanding")}
       rangeLabel={formatDateRangeLabel(range.from, range.to, locale)}
       clinic={clinic}
     >
       <MetricGrid
         mobileColumns={2}
         items={[
-          { label: "Gross total", value: formatCurrency(data.grossTotal) },
-          { label: "Service total", value: formatCurrency(data.totalAmount) },
-          { label: "Primary payments", value: formatCurrency(data.primaryTotal) },
-          { label: "Secondary payments", value: formatCurrency(data.secondaryTotal) },
-          { label: "Insurance", value: formatCurrency(data.insuranceTotal) },
-          { label: "Deposits", value: formatCurrency(data.depositTotal) },
-          { label: "Settlements", value: formatCurrency(data.settlementsTotal) },
-          { label: "Outstanding", value: formatCurrency(data.outstandingTotal) },
+          { label: t("grossTotal"), value: formatCurrency(data.grossTotal) },
+          { label: t("serviceTotal"), value: formatCurrency(data.totalAmount) },
+          { label: t("primaryPayments"), value: formatCurrency(data.primaryTotal) },
+          { label: t("secondaryPayments"), value: formatCurrency(data.secondaryTotal) },
+          { label: t("insurance"), value: formatCurrency(data.insuranceTotal) },
+          { label: t("deposits"), value: formatCurrency(data.depositTotal) },
+          { label: t("settlements"), value: formatCurrency(data.settlementsTotal) },
+          { label: t("outstanding"), value: formatCurrency(data.outstandingTotal) },
         ]}
       />
 
@@ -56,15 +58,15 @@ export function RevenueSummaryReport({
             <Table dense>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Metric</TableHead>
-                  <TableHead className="text-end">Value</TableHead>
+                  <TableHead>{t("metric")}</TableHead>
+                  <TableHead className="text-end">{t("value")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                <RevenueRow label="Transactions" value={formatNumber(data.transactionCount, locale)} />
-                <RevenueRow label="Settlement payments" value={formatNumber(data.settlementCount, locale)} />
-                <RevenueRow label="Collected revenue" value={formatCurrency(data.grossTotal)} />
-                <RevenueRow label="Outstanding balance" value={formatCurrency(data.outstandingTotal)} />
+                <RevenueRow label={t("transactions")} value={formatNumber(data.transactionCount, locale)} />
+                <RevenueRow label={t("settlementPayments")} value={formatNumber(data.settlementCount, locale)} />
+                <RevenueRow label={t("collectedRevenue")} value={formatCurrency(data.grossTotal)} />
+                <RevenueRow label={t("outstandingBalance")} value={formatCurrency(data.outstandingTotal)} />
               </TableBody>
             </Table>
           </div>
@@ -73,16 +75,15 @@ export function RevenueSummaryReport({
             <Table dense>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Payment method</TableHead>
-                  <TableHead className="text-end">Amount</TableHead>
+                  <TableHead>{t("paymentMethod")}</TableHead>
+                  <TableHead className="text-end">{t("amount")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {data.methodBreakdown.length === 0 ? (
                   <TableRow>
                     <TableCell className="py-4 text-center text-muted-foreground" colSpan={2}>
-                      No payment method breakdown available.
-                    </TableCell>
+                      {t("noPaymentMethodBreakdownAvailable")}</TableCell>
                   </TableRow>
                 ) : (
                   data.methodBreakdown.map((row) => (

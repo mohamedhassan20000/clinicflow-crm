@@ -31,6 +31,7 @@ import {
   type FollowUpOutcomes,
 } from "@/actions/manager-dashboard";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
+import { useTranslations } from "next-intl";
 
 // ── Exported types (re-exported through analytics-section.tsx) ────────────────
 
@@ -144,16 +145,14 @@ function RevenueTooltip({
   label?: string;
   formatAmount: (value: number) => string;
 }) {
+  const t = useTranslations("dashboard");
   if (!active || !payload?.length) return null;
   const p = payload[0];
   return (
     <div className="rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-lg">
       <p className="mb-1 font-medium text-foreground">{label}</p>
       <p className="text-xs" style={{ color: p.color }}>
-        Revenue:{" "}
-        <span className="font-semibold text-foreground">
-          {formatAmount(p.value as number)}
-        </span>
+        {t("revenueAmount", { amount: formatAmount(p.value as number) })}
       </p>
     </div>
   );
@@ -161,6 +160,7 @@ function RevenueTooltip({
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function InsuranceTooltip({ active, payload, total }: any & { total: number }) {
+  const t = useTranslations("dashboard");
   if (!active || !payload?.length) return null;
   const p = payload[0];
   const pct = total > 0 ? Math.round((p.value / total) * 100) : 0;
@@ -168,7 +168,7 @@ function InsuranceTooltip({ active, payload, total }: any & { total: number }) {
     <div className="rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-lg">
       <p className="mb-1 font-medium text-foreground">{p.name}</p>
       <p className="text-xs" style={{ color: p.payload.fill }}>
-        {p.value} appointments{" "}
+        {t("appointmentCount", { count: Number(p.value) })}{" "}
         <span className="font-semibold text-foreground">({pct}%)</span>
       </p>
     </div>
@@ -177,6 +177,7 @@ function InsuranceTooltip({ active, payload, total }: any & { total: number }) {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function DoctorTooltip({ active, payload, label, totalAppts }: any & { totalAppts: number }) {
+  const t = useTranslations("dashboard");
   if (!active || !payload?.length) return null;
   const entry = payload[0]?.payload as DoctorStat | undefined;
   if (!entry) return null;
@@ -185,7 +186,7 @@ function DoctorTooltip({ active, payload, label, totalAppts }: any & { totalAppt
     <div className="rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-lg">
       <p className="mb-1 font-medium text-foreground">{label}</p>
       <p className="mb-1 text-xs text-muted-foreground">
-        {entry.total} total <span className="font-semibold text-foreground">({pct}% of clinic)</span>
+        {t("clinicAppointmentShare", { count: entry.total, percent: `${pct}%` })}
       </p>
       {payload.map((p: { color: string; name: string; value: number }, i: number) => (
         <p key={i} className="text-xs" style={{ color: p.color }}>
@@ -198,6 +199,7 @@ function DoctorTooltip({ active, payload, label, totalAppts }: any & { totalAppt
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function ReceptionistTooltip({ active, payload, label, totalAppts }: any & { totalAppts: number }) {
+  const t = useTranslations("dashboard");
   if (!active || !payload?.length) return null;
   const entry = payload[0]?.payload as ReceptionistStat | undefined;
   if (!entry) return null;
@@ -206,7 +208,7 @@ function ReceptionistTooltip({ active, payload, label, totalAppts }: any & { tot
     <div className="rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-lg">
       <p className="mb-1 font-medium text-foreground">{label}</p>
       <p className="mb-1 text-xs text-muted-foreground">
-        {entry.total} booked <span className="font-semibold text-foreground">({pct}% of total)</span>
+        {t("totalBookingShare", { count: entry.total, percent: `${pct}%` })}
       </p>
       {payload.map((p: { color: string; name: string; value: number }, i: number) => (
         <p key={i} className="text-xs" style={{ color: p.color }}>
@@ -257,6 +259,7 @@ function DeptTooltip({
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function OutcomeTooltip({ active, payload, countedTotal }: any & { countedTotal: number }) {
+  const t = useTranslations("dashboard");
   if (!active || !payload?.length) return null;
   const p = payload[0];
   const pct = countedTotal > 0 ? Math.round((p.value / countedTotal) * 100) : 0;
@@ -264,7 +267,7 @@ function OutcomeTooltip({ active, payload, countedTotal }: any & { countedTotal:
     <div className="rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-lg">
       <p className="mb-1 font-medium text-foreground">{p.name}</p>
       <p className="text-xs" style={{ color: p.payload.fill }}>
-        {p.value} follow-ups{" "}
+        {t("followupCount", { count: Number(p.value) })}{" "}
         <span className="font-semibold text-foreground">({pct}%)</span>
       </p>
     </div>
@@ -272,10 +275,10 @@ function OutcomeTooltip({ active, payload, countedTotal }: any & { countedTotal:
 }
 
 function EmptyState() {
+  const t = useTranslations("dashboard");
   return (
     <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">
-      No data for this period
-    </div>
+      {t("noDataForThisPeriod")}</div>
   );
 }
 
@@ -313,16 +316,15 @@ function DateFilter({
   onRangeFromChange,
   onRangeToChange,
 }: DateFilterProps) {
+  const t = useTranslations("dashboard");
   return (
     <div className="flex flex-wrap items-center gap-2">
       {isPending && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
       <div className="flex items-center rounded-lg border border-input bg-muted p-[3px]">
         <button type="button" onClick={() => onFilterModeChange("month")} className={modeBtnCls(filterMode === "month")}>
-          Month
-        </button>
+          {t("month")}</button>
         <button type="button" onClick={() => onFilterModeChange("range")} className={modeBtnCls(filterMode === "range")}>
-          Custom range
-        </button>
+          {t("customRange")}</button>
       </div>
       {filterMode === "month" ? (
         <input
@@ -335,7 +337,7 @@ function DateFilter({
       ) : (
         <div className="flex items-center gap-1.5">
           <input type="date" value={rangeFrom} max={rangeTo || todayStr()} onChange={(e) => onRangeFromChange(e.target.value)} className={INPUT_CLS} />
-          <span className="text-xs text-muted-foreground">to</span>
+          <span className="text-xs text-muted-foreground">{t("to")}</span>
           <input type="date" value={rangeTo} min={rangeFrom} max={todayStr()} onChange={(e) => onRangeToChange(e.target.value)} className={INPUT_CLS} />
         </div>
       )}
@@ -391,7 +393,7 @@ function HBarChart({ data, yWidth = 110, children }: { data: object[]; yWidth?: 
   const h = Math.max(220, data.length * 48);
   return (
     <ResponsiveContainer width="100%" height={h}>
-      <BarChart data={data} layout="vertical" margin={{ top: 0, right: 16, bottom: 0, left: 0 }}>
+      <BarChart data={data} layout="vertical" margin={{ top: 0, right: 16, bottom: 0, left: 0 /* rtl-allow: Recharts margin is the chart's own LTR coordinate space, not page layout (AI_AGENT_PLAN §4.2 step 4) */ }}>
         <CartesianGrid horizontal={false} {...GRID_PROPS} />
         <XAxis type="number" allowDecimals={false} tick={TICK} tickLine={false} axisLine={false} />
         <YAxis type="category" dataKey="name" width={yWidth} tick={TICK} tickLine={false} axisLine={false} />
@@ -402,18 +404,19 @@ function HBarChart({ data, yWidth = 110, children }: { data: object[]; yWidth?: 
 }
 
 function HBarChartRevenue({ data, yWidth = 110 }: { data: object[]; yWidth?: number }) {
+  const t = useTranslations("dashboard");
   const { formatCurrency } = useClinicSettings();
   const fmtMoney = (value: number) =>
     formatCurrency(value, { maximumFractionDigits: 0 });
   const h = Math.max(220, data.length * 48);
   return (
     <ResponsiveContainer width="100%" height={h}>
-      <BarChart data={data} layout="vertical" margin={{ top: 0, right: 16, bottom: 0, left: 0 }}>
+      <BarChart data={data} layout="vertical" margin={{ top: 0, right: 16, bottom: 0, left: 0 /* rtl-allow: Recharts margin is the chart's own LTR coordinate space, not page layout (AI_AGENT_PLAN §4.2 step 4) */ }}>
         <CartesianGrid horizontal={false} {...GRID_PROPS} />
         <XAxis type="number" allowDecimals={false} tick={TICK} tickLine={false} axisLine={false} tickFormatter={(v) => fmtMoney(Number(v))} />
         <YAxis type="category" dataKey="name" width={yWidth} tick={TICK} tickLine={false} axisLine={false} />
         <Tooltip content={<RevenueTooltip formatAmount={fmtMoney} />} />
-        <Bar dataKey="revenue" name="Revenue" fill={C.amber} radius={[0, 4, 4, 0]} maxBarSize={22} />
+        <Bar dataKey="revenue" name={t("revenue")} fill={C.amber} radius={[0, 4, 4, 0]} maxBarSize={22} />
       </BarChart>
     </ResponsiveContainer>
   );
@@ -422,6 +425,7 @@ function HBarChartRevenue({ data, yWidth = 110 }: { data: object[]; yWidth?: num
 // ── Appointments section ──────────────────────────────────────────────────────
 
 function AppointmentsSection({ clinicId, initialSeries }: { clinicId: string; initialSeries: DailyPoint[] }) {
+  const t = useTranslations("dashboard");
   const [series, setSeries] = useState<DailyPoint[]>(initialSeries);
   const [isPending, startTransition] = useTransition();
 
@@ -437,18 +441,18 @@ function AppointmentsSection({ clinicId, initialSeries }: { clinicId: string; in
   return (
     <div className="rounded-xl border border-border/60 bg-card p-5 shadow-sm">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h3 className="text-sm font-semibold text-foreground">Appointments</h3>
+        <h3 className="text-sm font-semibold text-foreground">{t("appointments")}</h3>
         <DateFilter filterMode={df.filterMode} month={df.month} rangeFrom={df.rangeFrom} rangeTo={df.rangeTo} isPending={isPending} onFilterModeChange={df.handleFilterModeChange} onMonthChange={df.handleMonthChange} onRangeFromChange={df.handleRangeFromChange} onRangeToChange={df.handleRangeToChange} />
       </div>
       <div className={cn("transition-opacity", isPending && "opacity-60")}>
         {series.length === 0 ? <EmptyState /> : (
           <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={series} margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
+            <LineChart data={series} margin={{ top: 4, right: 8, bottom: 0, left: -20 /* rtl-allow: Recharts margin is the chart's own LTR coordinate space, not page layout (AI_AGENT_PLAN §4.2 step 4) */ }}>
               <CartesianGrid {...GRID_PROPS} />
               <XAxis dataKey="date" tick={TICK} tickLine={false} axisLine={false} interval="preserveStartEnd" />
               <YAxis allowDecimals={false} tick={TICK} tickLine={false} axisLine={false} />
               <Tooltip content={<ChartTooltip />} />
-              <Line type="monotone" dataKey="appointments" name="Appointments" stroke={C.blue} strokeWidth={2} dot={false} activeDot={{ r: 4, strokeWidth: 0, fill: C.blue }} />
+              <Line type="monotone" dataKey="appointments" name={t("appointments")} stroke={C.blue} strokeWidth={2} dot={false} activeDot={{ r: 4, strokeWidth: 0, fill: C.blue }} />
             </LineChart>
           </ResponsiveContainer>
         )}
@@ -460,6 +464,7 @@ function AppointmentsSection({ clinicId, initialSeries }: { clinicId: string; in
 // ── Insurance section ─────────────────────────────────────────────────────────
 
 function InsuranceSection({ clinicId, initialSeries }: { clinicId: string; initialSeries: InsurancePoint[] }) {
+  const t = useTranslations("dashboard");
   const [series, setSeries] = useState<InsurancePoint[]>(initialSeries);
   const [isPending, startTransition] = useTransition();
 
@@ -476,7 +481,7 @@ function InsuranceSection({ clinicId, initialSeries }: { clinicId: string; initi
   return (
     <div className="rounded-xl border border-border/60 bg-card p-5 shadow-sm">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h3 className="text-sm font-semibold text-foreground">Insurance breakdown</h3>
+        <h3 className="text-sm font-semibold text-foreground">{t("insuranceBreakdown")}</h3>
         <DateFilter filterMode={df.filterMode} month={df.month} rangeFrom={df.rangeFrom} rangeTo={df.rangeTo} isPending={isPending} onFilterModeChange={df.handleFilterModeChange} onMonthChange={df.handleMonthChange} onRangeFromChange={df.handleRangeFromChange} onRangeToChange={df.handleRangeToChange} />
       </div>
       <div className={cn("transition-opacity", isPending && "opacity-60")}>
@@ -501,6 +506,7 @@ function InsuranceSection({ clinicId, initialSeries }: { clinicId: string; initi
 type DoctorMode = "appointments" | "revenue";
 
 function DoctorsSection({ clinicId, initialDoctors }: { clinicId: string; initialDoctors: DoctorStat[] }) {
+  const t = useTranslations("dashboard");
   const [doctorMode, setDoctorMode] = useState<DoctorMode>("appointments");
   const [doctors, setDoctors] = useState<DoctorStat[]>(initialDoctors);
   const [isPending, startTransition] = useTransition();
@@ -520,10 +526,10 @@ function DoctorsSection({ clinicId, initialDoctors }: { clinicId: string; initia
     <div className="rounded-xl border border-border/60 bg-card p-5 shadow-sm">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
-          <h3 className="text-sm font-semibold text-foreground">All doctors</h3>
+          <h3 className="text-sm font-semibold text-foreground">{t("allDoctors")}</h3>
           <div className="flex items-center rounded-lg border border-input bg-muted p-[3px]">
-            <button type="button" onClick={() => setDoctorMode("appointments")} className={modeBtnCls(doctorMode === "appointments")}>By appointments</button>
-            <button type="button" onClick={() => setDoctorMode("revenue")} className={modeBtnCls(doctorMode === "revenue")}>By revenue</button>
+            <button type="button" onClick={() => setDoctorMode("appointments")} className={modeBtnCls(doctorMode === "appointments")}>{t("byAppointments")}</button>
+            <button type="button" onClick={() => setDoctorMode("revenue")} className={modeBtnCls(doctorMode === "revenue")}>{t("byRevenue")}</button>
           </div>
         </div>
         <DateFilter filterMode={df.filterMode} month={df.month} rangeFrom={df.rangeFrom} rangeTo={df.rangeTo} isPending={isPending} onFilterModeChange={df.handleFilterModeChange} onMonthChange={df.handleMonthChange} onRangeFromChange={df.handleRangeFromChange} onRangeToChange={df.handleRangeToChange} />
@@ -533,9 +539,9 @@ function DoctorsSection({ clinicId, initialDoctors }: { clinicId: string; initia
           <HBarChart data={chartData}>
             <Tooltip content={<DoctorTooltip totalAppts={totalAppts} />} />
             <Legend iconType="rect" iconSize={8} wrapperStyle={LEGEND_STYLE} />
-            <Bar dataKey="confirmed" name="Confirmed" fill={C.emerald} stackId="a" maxBarSize={22} />
-            <Bar dataKey="cancelled" name="Cancelled" fill={C.rose} stackId="a" maxBarSize={22} />
-            <Bar dataKey="other" name="Other" fill={C.blue} stackId="a" maxBarSize={22} radius={[0, 4, 4, 0]} />
+            <Bar dataKey="confirmed" name={t("confirmed")} fill={C.emerald} stackId="a" maxBarSize={22} />
+            <Bar dataKey="cancelled" name={t("cancelled")} fill={C.rose} stackId="a" maxBarSize={22} />
+            <Bar dataKey="other" name={t("other")} fill={C.blue} stackId="a" maxBarSize={22} radius={[0, 4, 4, 0]} />
           </HBarChart>
         ) : (
           <HBarChartRevenue data={chartData} />
@@ -548,6 +554,7 @@ function DoctorsSection({ clinicId, initialDoctors }: { clinicId: string; initia
 // ── Receptionists section ─────────────────────────────────────────────────────
 
 function ReceptionistSection({ clinicId, initialReceptionists }: { clinicId: string; initialReceptionists: ReceptionistStat[] }) {
+  const t = useTranslations("dashboard");
   const [receptionists, setReceptionists] = useState<ReceptionistStat[]>(initialReceptionists);
   const [isPending, startTransition] = useTransition();
 
@@ -565,7 +572,7 @@ function ReceptionistSection({ clinicId, initialReceptionists }: { clinicId: str
   return (
     <div className="rounded-xl border border-border/60 bg-card p-5 shadow-sm">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-        <h3 className="text-sm font-semibold text-foreground">All receptionists</h3>
+        <h3 className="text-sm font-semibold text-foreground">{t("allReceptionists")}</h3>
         <DateFilter filterMode={df.filterMode} month={df.month} rangeFrom={df.rangeFrom} rangeTo={df.rangeTo} isPending={isPending} onFilterModeChange={df.handleFilterModeChange} onMonthChange={df.handleMonthChange} onRangeFromChange={df.handleRangeFromChange} onRangeToChange={df.handleRangeToChange} />
       </div>
       <div className={cn("transition-opacity", isPending && "opacity-60")}>
@@ -573,9 +580,9 @@ function ReceptionistSection({ clinicId, initialReceptionists }: { clinicId: str
           <HBarChart data={chartData}>
             <Tooltip content={<ReceptionistTooltip totalAppts={totalAppts} />} />
             <Legend iconType="rect" iconSize={8} wrapperStyle={LEGEND_STYLE} />
-            <Bar dataKey="confirmed" name="Confirmed" fill={C.emerald} stackId="a" maxBarSize={22} />
-            <Bar dataKey="cancelled" name="Cancelled" fill={C.rose} stackId="a" maxBarSize={22} />
-            <Bar dataKey="other" name="Other" fill={C.blue} stackId="a" maxBarSize={22} radius={[0, 4, 4, 0]} />
+            <Bar dataKey="confirmed" name={t("confirmed")} fill={C.emerald} stackId="a" maxBarSize={22} />
+            <Bar dataKey="cancelled" name={t("cancelled")} fill={C.rose} stackId="a" maxBarSize={22} />
+            <Bar dataKey="other" name={t("other")} fill={C.blue} stackId="a" maxBarSize={22} radius={[0, 4, 4, 0]} />
           </HBarChart>
         )}
       </div>
@@ -588,6 +595,7 @@ function ReceptionistSection({ clinicId, initialReceptionists }: { clinicId: str
 type DeptMode = "appointments" | "patients" | "revenue";
 
 function DepartmentSection({ clinicId, initialDepartments }: { clinicId: string; initialDepartments: DepartmentStat[] }) {
+  const t = useTranslations("dashboard");
   const [deptMode, setDeptMode] = useState<DeptMode>("appointments");
   const [departments, setDepartments] = useState<DepartmentStat[]>(initialDepartments);
   const [isPending, startTransition] = useTransition();
@@ -614,11 +622,11 @@ function DepartmentSection({ clinicId, initialDepartments }: { clinicId: string;
     <div className="rounded-xl border border-border/60 bg-card p-5 shadow-sm">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
-          <h3 className="text-sm font-semibold text-foreground">Department engagement</h3>
+          <h3 className="text-sm font-semibold text-foreground">{t("departmentEngagement")}</h3>
           <div className="flex items-center rounded-lg border border-input bg-muted p-[3px]">
-            <button type="button" onClick={() => setDeptMode("appointments")} className={modeBtnCls(deptMode === "appointments")}>Appointments</button>
-            <button type="button" onClick={() => setDeptMode("patients")} className={modeBtnCls(deptMode === "patients")}>Patients</button>
-            <button type="button" onClick={() => setDeptMode("revenue")} className={modeBtnCls(deptMode === "revenue")}>Revenue</button>
+            <button type="button" onClick={() => setDeptMode("appointments")} className={modeBtnCls(deptMode === "appointments")}>{t("appointments")}</button>
+            <button type="button" onClick={() => setDeptMode("patients")} className={modeBtnCls(deptMode === "patients")}>{t("patients")}</button>
+            <button type="button" onClick={() => setDeptMode("revenue")} className={modeBtnCls(deptMode === "revenue")}>{t("revenue")}</button>
           </div>
         </div>
         <DateFilter filterMode={df.filterMode} month={df.month} rangeFrom={df.rangeFrom} rangeTo={df.rangeTo} isPending={isPending} onFilterModeChange={df.handleFilterModeChange} onMonthChange={df.handleMonthChange} onRangeFromChange={df.handleRangeFromChange} onRangeToChange={df.handleRangeToChange} />
@@ -629,12 +637,12 @@ function DepartmentSection({ clinicId, initialDepartments }: { clinicId: string;
         ) : deptMode === "patients" ? (
           <HBarChart data={sorted} yWidth={120}>
             <Tooltip content={<DeptTooltip deptMode={deptMode} totalAppts={totalAppts} totalPatients={totalPatients} />} />
-            <Bar dataKey="patients" name="Patients" fill={C.violet} radius={[0, 4, 4, 0]} maxBarSize={22} />
+            <Bar dataKey="patients" name={t("patients")} fill={C.violet} radius={[0, 4, 4, 0]} maxBarSize={22} />
           </HBarChart>
         ) : (
           <HBarChart data={sorted} yWidth={120}>
             <Tooltip content={<DeptTooltip deptMode={deptMode} totalAppts={totalAppts} totalPatients={totalPatients} />} />
-            <Bar dataKey="appointments" name="Appointments" fill={C.cyan} radius={[0, 4, 4, 0]} maxBarSize={22} />
+            <Bar dataKey="appointments" name={t("appointments")} fill={C.cyan} radius={[0, 4, 4, 0]} maxBarSize={22} />
           </HBarChart>
         )}
       </div>
@@ -657,6 +665,7 @@ function FollowUpOutcomeSection({
   departmentsList: { id: string; name: string }[];
   doctorsList: { id: string; name: string }[];
 }) {
+  const t = useTranslations("dashboard");
   const [outcomes, setOutcomes] = useState<FollowUpOutcomes>(initialOutcomes);
   const [scope, setScope] = useState<OutcomeScope>("clinic");
   const [deptId, setDeptId] = useState("");
@@ -731,29 +740,29 @@ function FollowUpOutcomeSection({
   const hasProblemPct = countedTotal > 0 ? Math.round((outcomes.hasProblem / countedTotal) * 100) : 0;
 
   const pieData = [
-    { name: "All Fine", value: outcomes.allFine, pct: allFinePct, fill: C.emerald },
-    { name: "Has Problem", value: outcomes.hasProblem, pct: hasProblemPct, fill: C.rose },
+    { name: t("allFine"), value: outcomes.allFine, pct: allFinePct, fill: C.emerald },
+    { name: t("hasProblem"), value: outcomes.hasProblem, pct: hasProblemPct, fill: C.rose },
   ].filter((d) => d.value > 0);
 
   return (
     <div className="rounded-xl border border-border/60 bg-card p-5 shadow-sm">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
-          <h3 className="text-sm font-semibold text-foreground">Follow-up outcomes</h3>
+          <h3 className="text-sm font-semibold text-foreground">{t("followUpOutcomes")}</h3>
           <div className="flex items-center rounded-lg border border-input bg-muted p-[3px]">
-            <button type="button" onClick={() => handleScopeChange("clinic")} className={modeBtnCls(scope === "clinic")}>Entire clinic</button>
-            <button type="button" onClick={() => handleScopeChange("department")} className={modeBtnCls(scope === "department")}>Department</button>
-            <button type="button" onClick={() => handleScopeChange("doctor")} className={modeBtnCls(scope === "doctor")}>Doctor</button>
+            <button type="button" onClick={() => handleScopeChange("clinic")} className={modeBtnCls(scope === "clinic")}>{t("entireClinic")}</button>
+            <button type="button" onClick={() => handleScopeChange("department")} className={modeBtnCls(scope === "department")}>{t("department")}</button>
+            <button type="button" onClick={() => handleScopeChange("doctor")} className={modeBtnCls(scope === "doctor")}>{t("doctor")}</button>
           </div>
           {scope === "department" && (
             <select value={deptId} onChange={(e) => handleDeptChange(e.target.value)} className={INPUT_CLS}>
-              <option value="">All departments</option>
+              <option value="">{t("allDepartments")}</option>
               {departmentsList.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           )}
           {scope === "doctor" && (
             <select value={docId} onChange={(e) => handleDocChange(e.target.value)} className={INPUT_CLS}>
-              <option value="">All doctors</option>
+              <option value="">{t("allDoctors")}</option>
               {doctorsList.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           )}
@@ -761,15 +770,15 @@ function FollowUpOutcomeSection({
         <div className="flex flex-wrap items-center gap-2">
           {isPending && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
           <div className="flex items-center rounded-lg border border-input bg-muted p-[3px]">
-            <button type="button" onClick={() => handleFilterModeChange("month")} className={modeBtnCls(filterMode === "month")}>Month</button>
-            <button type="button" onClick={() => handleFilterModeChange("range")} className={modeBtnCls(filterMode === "range")}>Custom range</button>
+            <button type="button" onClick={() => handleFilterModeChange("month")} className={modeBtnCls(filterMode === "month")}>{t("month")}</button>
+            <button type="button" onClick={() => handleFilterModeChange("range")} className={modeBtnCls(filterMode === "range")}>{t("customRange")}</button>
           </div>
           {filterMode === "month" ? (
             <input type="month" value={month} max={currentYearMonth()} onChange={(e) => handleMonthChange(e.target.value)} className={INPUT_CLS} />
           ) : (
             <div className="flex items-center gap-1.5">
               <input type="date" value={rangeFrom} max={rangeTo || todayStr()} onChange={(e) => handleRangeFromChange(e.target.value)} className={INPUT_CLS} />
-              <span className="text-xs text-muted-foreground">to</span>
+              <span className="text-xs text-muted-foreground">{t("to")}</span>
               <input type="date" value={rangeTo} min={rangeFrom} max={todayStr()} onChange={(e) => handleRangeToChange(e.target.value)} className={INPUT_CLS} />
             </div>
           )}
@@ -791,18 +800,18 @@ function FollowUpOutcomeSection({
               <div className="flex items-center gap-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-4 py-3">
                 <div className="h-3 w-3 rounded-full bg-emerald-500" />
                 <div>
-                  <p className="text-xs text-muted-foreground">All Fine</p>
+                  <p className="text-xs text-muted-foreground">{t("allFine")}</p>
                   <p className="text-lg font-bold text-foreground">{outcomes.allFine} <span className="text-sm font-normal text-muted-foreground">({allFinePct}%)</span></p>
                 </div>
               </div>
               <div className="flex items-center gap-3 rounded-lg border border-rose-500/20 bg-rose-500/5 px-4 py-3">
                 <div className="h-3 w-3 rounded-full bg-rose-500" />
                 <div>
-                  <p className="text-xs text-muted-foreground">Has Problem</p>
+                  <p className="text-xs text-muted-foreground">{t("hasProblem")}</p>
                   <p className="text-lg font-bold text-foreground">{outcomes.hasProblem} <span className="text-sm font-normal text-muted-foreground">({hasProblemPct}%)</span></p>
                 </div>
               </div>
-              <p className="text-xs text-muted-foreground">{outcomes.total} follow-up{outcomes.total !== 1 ? "s" : ""} total</p>
+              <p className="text-xs text-muted-foreground">{t("followupTotal", { count: outcomes.total })}</p>
             </div>
           </div>
         )}

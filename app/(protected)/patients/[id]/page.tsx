@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import {
   DEFAULT_TIME_ZONE,
   clinicLocaleFromRow,
+  formatClinicDate,
 } from "@/lib/datetime";
 import { getServerMoneyFormatter } from "@/lib/currency/server";
 import { AlertCircle, Archive, CalendarPlus, FileText, Pencil, Receipt, Trash2 } from "lucide-react";
@@ -38,8 +39,12 @@ import type { MedicalNoteAttachmentItem } from "@/actions/medical-note-attachmen
 import { formatDoctorName } from "@/lib/format-doctor";
 import { PageHeader } from "@/components/shared/page-header";
 import { resolveReturnTo, withReturnTo } from "@/lib/navigation/return-url";
+import { getTranslations } from "next-intl/server";
 
-export const metadata: Metadata = { title: "Patient" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("protected");
+  return { title: t("metadataPatient") };
+}
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -47,6 +52,7 @@ interface PageProps {
 }
 
 export default async function PatientDetailPage({ params, searchParams }: PageProps) {
+  const t = await getTranslations("protected");
   const { id } = await params;
   const pageSearchParams: { returnTo?: string } = searchParams ? await searchParams : {};
   const { returnTo } = pageSearchParams;
@@ -406,13 +412,13 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
                 {patient.file_number}
               </Badge>
             ) : null}
-            {patient.is_deleted ? <Badge variant="destructive">Deleted</Badge> : null}
+            {patient.is_deleted ? <Badge variant="destructive">{t("deleted")}</Badge> : null}
           </span>
         }
         description={
           <div className="space-y-1">
             <p>
-              {age} years old · {new Date(patient.date_of_birth).toLocaleDateString("en-GB")}
+          {age} {t("yearsOld")}{formatClinicDate(patient.date_of_birth, clinicLocale)}
               {patient.blood_type && ` · ${patient.blood_type}`}
             </p>
             {canEdit ? (
@@ -426,8 +432,7 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
               <Button asChild size="sm" className="gap-1.5">
                 <Link href={withReturnTo(`/appointments/new?patient_id=${id}`, patientUrl)}>
                   <CalendarPlus className="size-3.5" aria-hidden="true" />
-                  Book appointment
-                </Link>
+                  {t("bookAppointment")}</Link>
               </Button>
             ) : null}
             {canEdit ? (
@@ -435,8 +440,7 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
                 <Button asChild variant="outline" size="sm" className="gap-1.5">
                   <Link href={withReturnTo(`${patientPath}/edit`, patientUrl)}>
                     <Pencil className="size-3.5" aria-hidden="true" />
-                    Edit
-                  </Link>
+                    {t("edit")}</Link>
                 </Button>
                 {!patient.is_deleted ? <DeletePatientButton patientId={id} /> : null}
               </>
@@ -450,36 +454,32 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
         <div className="flex items-start gap-3 rounded-xl border border-amber-500/40 bg-amber-500/8 px-4 py-3">
           <Archive className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-amber-800">Archived patient</p>
+            <p className="text-sm font-semibold text-amber-800">{t("archivedPatient")}</p>
             <p className="text-xs text-amber-700 mt-0.5">
-              This patient was archived on{" "}
+              {t("thisPatientWasArchivedOn")}{" "}
               {patient.archived_at
-                ? new Date(patient.archived_at).toLocaleDateString("en-GB", { dateStyle: "long" })
-                : "an unknown date"}
-              . Their full history is preserved below in read-only mode.
-            </p>
+                ? new Date(patient.archived_at).toLocaleDateString(t("enGb"), { dateStyle: "long" })
+                : t("anunknowndate")}
+              {t("theirFullHistoryIsPreservedBelow")}</p>
           </div>
           <Link href="/patients/archive" className="shrink-0 text-xs font-medium text-amber-700 hover:text-amber-900 underline underline-offset-2">
-            Archive
-          </Link>
+            {t("archive")}</Link>
         </div>
       )}
       {patient.is_deleted && !patient.is_archived && (
         <div className="flex items-start gap-3 rounded-xl border border-destructive/40 bg-destructive/8 px-4 py-3">
           <Trash2 className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-destructive">Patient is in Trash</p>
+            <p className="text-sm font-semibold text-destructive">{t("patientIsInTrash")}</p>
             <p className="text-xs text-destructive/80 mt-0.5">
-              Moved to trash on{" "}
+              {t("movedToTrashOn")}{" "}
               {patient.deleted_at
-                ? new Date(patient.deleted_at).toLocaleDateString("en-GB", { dateStyle: "long" })
-                : "an unknown date"}
-              . Their full history is preserved below in read-only mode. Restore the patient to make edits.
-            </p>
+                ? new Date(patient.deleted_at).toLocaleDateString(t("enGb"), { dateStyle: "long" })
+                : t("anunknowndate")}
+              {t("theirFullHistoryIsPreservedBelow2")}</p>
           </div>
           <Link href="/patients/trash" className="shrink-0 text-xs font-medium text-destructive hover:text-destructive/80 underline underline-offset-2">
-            Trash
-          </Link>
+            {t("trash")}</Link>
         </div>
       )}
 
@@ -488,37 +488,36 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
         <div className="lg:col-span-1 space-y-4">
           <div className="rounded-xl border border-border/50 bg-card p-5 space-y-4">
             <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-              Profile
-            </h2>
+              {t("profile")}</h2>
             <dl className="space-y-3 text-sm">
               <div>
-                <dt className="text-xs text-muted-foreground">File number</dt>
+                <dt className="text-xs text-muted-foreground">{t("fileNumber")}</dt>
                 <dd className="font-mono font-medium">
                   {patient.file_number ?? "—"}
                 </dd>
               </div>
               <div>
-                <dt className="text-xs text-muted-foreground">National ID</dt>
+                <dt className="text-xs text-muted-foreground">{t("nationalId")}</dt>
                 <dd className="font-mono font-medium">
                   {patient.national_id ?? "—"}
                 </dd>
               </div>
               <div>
-                <dt className="text-xs text-muted-foreground">Birth date</dt>
+                <dt className="text-xs text-muted-foreground">{t("birthDate")}</dt>
                 <dd className="font-medium">
-                  {new Date(patient.date_of_birth).toLocaleDateString("en-GB")}
+                    {formatClinicDate(patient.date_of_birth, clinicLocale)}
                 </dd>
               </div>
               <div>
-                <dt className="text-xs text-muted-foreground">Phone</dt>
+                <dt className="text-xs text-muted-foreground">{t("phone")}</dt>
                 <dd className="font-medium">{patient.phone}</dd>
               </div>
               <div>
-                <dt className="text-xs text-muted-foreground">Email</dt>
+                <dt className="text-xs text-muted-foreground">{t("email")}</dt>
                 <dd className="font-medium break-all">{patient.email}</dd>
               </div>
               <div>
-                <dt className="text-xs text-muted-foreground">Department</dt>
+                <dt className="text-xs text-muted-foreground">{t("department")}</dt>
                 <dd className="font-medium">
                   {deptInfo ? (
                     <span className="inline-flex items-center gap-1.5">
@@ -530,34 +529,33 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
                       {deptInfo.name}
                     </span>
                   ) : (
-                    <span className="text-muted-foreground/60">Unassigned</span>
+                    <span className="text-muted-foreground/60">{t("unassigned")}</span>
                   )}
                 </dd>
               </div>
               <div>
-                <dt className="text-xs text-muted-foreground">Treating doctor</dt>
+                <dt className="text-xs text-muted-foreground">{t("treatingDoctor")}</dt>
                 <dd className="font-medium">
                   {doctorName ? (
                     formatDoctorName(doctorName)
                   ) : (
-                    <span className="text-muted-foreground/60">Unassigned</span>
+                    <span className="text-muted-foreground/60">{t("unassigned")}</span>
                   )}
                 </dd>
               </div>
               <div>
-                <dt className="text-xs text-muted-foreground">Insurance</dt>
+                <dt className="text-xs text-muted-foreground">{t("insurance")}</dt>
                 <dd className="font-medium">
                   {insuranceProviderName ?? (
                     <span className="text-muted-foreground/60">
-                      No insurance
-                    </span>
+                      {t("noInsurance")}</span>
                   )}
                 </dd>
               </div>
               <div>
-                <dt className="text-xs text-muted-foreground">Registered</dt>
+                <dt className="text-xs text-muted-foreground">{t("registered")}</dt>
                 <dd className="font-medium">
-                  {new Date(patient.created_at).toLocaleDateString("en-GB")}
+                    {formatClinicDate(patient.created_at, clinicLocale)}
                 </dd>
               </div>
             </dl>
@@ -571,8 +569,7 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                 <Receipt className="h-4 w-4" />
-                Billing
-              </h2>
+                {t("billing")}</h2>
               {canEdit && (
                 <div className="flex items-center gap-2">
                   <AddDepositDialog
@@ -591,18 +588,18 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-px rounded-xl border border-border/50 bg-border/40 overflow-hidden">
               <BillingCell
-                label="Billed"
+                label={t("billed")}
                 amount={billingTotals.billed}
                 formatAmount={fmtMoney}
               />
               <BillingCell
-                label="Collected"
+                label={t("collected")}
                 amount={billingTotals.collected}
                 formatAmount={fmtMoney}
                 accent="text-emerald-600 dark:text-emerald-400"
               />
               <BillingCell
-                label="Outstanding"
+                label={t("outstanding")}
                 amount={billingTotals.outstanding}
                 formatAmount={fmtMoney}
                 accent={
@@ -612,7 +609,7 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
                 }
               />
               <BillingCell
-                label="Account balance"
+                label={t("accountBalance")}
                 amount={accountBalance}
                 formatAmount={fmtMoney}
                 accent={
@@ -625,7 +622,7 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
             {billingTotals.outstanding > 0 && (
               <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
                 <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                This patient has an outstanding balance of{" "}
+                {t("thisPatientHasAnOutstandingBalance")}{" "}
                 <span className="font-semibold tabular-nums">
                   {fmtMoney(billingTotals.outstanding)}
                 </span>
@@ -656,18 +653,15 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                Appointments
-              </h2>
+                {t("appointments")}</h2>
               <div className="flex items-center gap-2">
                 <span className="text-xs text-muted-foreground">
-                  {appointments?.length ?? 0} record
-                  {appointments?.length !== 1 ? "s" : ""}
+                  {t("appointmentRecordCount", { count: appointments?.length ?? 0 })}
                 </span>
                 <Button asChild variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs">
                   <Link href={withReturnTo(`${patientPath}/appointments-report`, patientUrl)}>
                     <FileText className="h-3 w-3" />
-                    Full report
-                  </Link>
+                    {t("fullReport")}</Link>
                 </Button>
               </div>
             </div>
@@ -676,7 +670,7 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
                 <div>
                   {appointments.map((a) =>
                     isDoctor ? (
-                      <SimpleApptRow key={a.id} a={a as Parameters<typeof SimpleApptRow>[0]["a"]} />
+                      <SimpleApptRow key={a.id} a={a as Parameters<typeof SimpleApptRow>[0]["a"]} clinicLocale={clinicLocale} />
                     ) : (
                       <AppointmentPaymentRow
                         key={a.id}
@@ -689,14 +683,12 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
                 </div>
               ) : (
                 <div className="px-5 py-6 text-center text-sm text-muted-foreground">
-                  No appointments yet.
-                </div>
+                  {t("noAppointmentsYet")}</div>
               )}
             </div>
             {!isDoctor && (appointments ?? []).some((a) => a.status === "completed") && (
               <p className="text-[11px] text-muted-foreground">
-                Tip: click a completed appointment to see its payment breakdown.
-              </p>
+                {t("tipClickACompletedAppointmentTo")}</p>
             )}
           </div>
 
@@ -704,17 +696,15 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                Follow-up Notes
-              </h2>
+                {t("followUpNotes")}</h2>
               <div className="flex items-center gap-2">
                 <span className="text-xs text-muted-foreground">
-                  {followups?.length ?? 0} record{followups?.length !== 1 ? "s" : ""}
+                  {t("followupRecordCount", { count: followups?.length ?? 0 })}
                 </span>
                 <Button asChild variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs">
                   <Link href={withReturnTo(`${patientPath}/followups-report`, patientUrl)}>
                     <FileText className="h-3 w-3" />
-                    Full report
-                  </Link>
+                    {t("fullReport")}</Link>
                 </Button>
               </div>
             </div>
@@ -726,18 +716,16 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
           {/* Medical notes */}
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-              Medical Notes
-            </h2>
+              {t("medicalNotes")}</h2>
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground">
-                {notes?.length ?? 0} note{notes?.length !== 1 ? "s" : ""}
+                {t("medicalNoteCount", { count: notes?.length ?? 0 })}
               </span>
               {canViewMedicalNotes && (
                 <Button asChild variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs">
                   <Link href={withReturnTo(`${patientPath}/medical-notes-report`, patientUrl)}>
                     <FileText className="h-3 w-3" />
-                    Full report
-                  </Link>
+                    {t("fullReport")}</Link>
                 </Button>
               )}
             </div>
@@ -751,8 +739,7 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
 
           {!canViewMedicalNotes && (
             <div className="rounded-lg border border-border/30 bg-muted/20 px-4 py-3 text-xs text-muted-foreground">
-              Medical notes are visible to clinical and reception staff only.
-            </div>
+              {t("medicalNotesAreVisibleToClinical")}</div>
           )}
 
           {canViewMedicalNotes && (
@@ -773,6 +760,7 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
 
 function SimpleApptRow({
   a,
+  clinicLocale,
 }: {
   a: {
     id: string;
@@ -784,14 +772,14 @@ function SimpleApptRow({
     insurance_providers?: { name: string } | null;
     appointment_services?: { id: string; name: string; price: number; quantity: number }[];
   };
+  clinicLocale: ReturnType<typeof clinicLocaleFromRow>;
 }) {
   const dept = a.departments;
   return (
     <div className="flex items-center gap-3 px-4 py-3 text-sm border-b border-border/30 last:border-0 hover:bg-muted/20 transition-colors">
       <div className="min-w-0 flex-1 space-y-0.5">
         <p className="font-medium tabular-nums text-xs">
-          {new Date(a.scheduled_at).toLocaleString("en-GB", {
-            timeZone: DEFAULT_TIME_ZONE,
+                              {formatClinicDate(a.scheduled_at, clinicLocale, {
             dateStyle: "medium",
             timeStyle: "short",
           })}

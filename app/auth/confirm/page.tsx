@@ -3,8 +3,12 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { ConfirmRunner } from "@/components/auth/confirm-runner";
+import { getTranslations } from "next-intl/server";
 
-export const metadata: Metadata = { title: "Confirming…" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("protected");
+  return { title: t("metadataConfirming") };
+}
 
 interface PageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;

@@ -12,6 +12,7 @@ import { TableEmptyState } from "@/components/shared/data-table";
 import { cn } from "@/lib/utils";
 import { formatDoctorName } from "@/lib/format-doctor";
 import { pathWithSearch, withReturnTo } from "@/lib/navigation/return-url";
+import { useTranslations } from "next-intl";
 type Patient = {
   id: string;
   file_number: string | null;
@@ -45,6 +46,7 @@ export function PatientTable({
   pageSize,
   canCreate,
 }: PatientTableProps) {
+  const t = useTranslations("patients");
   const params = useSearchParams();
   const search =
     params.get("name") ??
@@ -82,7 +84,7 @@ export function PatientTable({
       if (!map.has(key)) {
         map.set(key, {
           deptId: key,
-          name: dept?.name ?? "Unassigned",
+          name: dept?.name ?? t("unassigned"),
           color: dept?.color ?? UNASSIGNED_COLOR,
           patients: [],
         });
@@ -95,7 +97,7 @@ export function PatientTable({
       if (b.deptId === UNASSIGNED_KEY) return -1;
       return a.name.localeCompare(b.name);
     });
-  }, [data]);
+  }, [data, t]);
 
   return (
     <div className="space-y-4">
@@ -105,8 +107,7 @@ export function PatientTable({
           <Button asChild size="sm" className="h-9 gap-1.5">
             <Link href={newPatientHref}>
               <UserPlus className="h-4 w-4" />
-              New patient
-            </Link>
+              {t("newPatient")}</Link>
           </Button>
         </div>
       )}
@@ -115,21 +116,20 @@ export function PatientTable({
         <div className="rounded-xl border border-border/50 bg-card">
           <TableEmptyState
             icon={Users}
-            title={isSearching ? "No patients match your search" : "No patients yet"}
+            title={isSearching ? t("nopatientsmatchyoursearch") : t("nopatientsyet")}
             description={
               isSearching
-                ? "Try a different name, file number, national ID, or phone."
+                ? t("tryadifferentnamefilenumber")
                 : canCreate
-                  ? "Create the first patient record to get started."
-                  : "Patient records appear here once they are created."
+                  ? t("createthefirstpatientrecordto")
+                  : t("patientrecordsappearhereoncethey")
             }
             action={
               !isSearching && canCreate ? (
                 <Button asChild size="sm" className="h-9 gap-1.5">
                   <Link href={newPatientHref}>
                     <UserPlus className="h-4 w-4" />
-                    New patient
-                  </Link>
+                    {t("newPatient")}</Link>
                 </Button>
               ) : undefined
             }
@@ -138,7 +138,7 @@ export function PatientTable({
       ) : isSearching ? (
         // Search active → flat result list, hide grouped departments.
         <PatientGroupTable
-          name={`Search results for "${search}"`}
+          name={t("searchResultsFor", { search })}
           color={UNASSIGNED_COLOR}
           patients={data}
           showDepartmentBadge
@@ -164,7 +164,7 @@ export function PatientTable({
       {totalPages > 1 && (
         <div className="flex items-center justify-between text-sm text-muted-foreground print:hidden">
           <span>
-            {total} patient{total !== 1 ? "s" : ""}
+            {t("patientCount", { count: total })}
           </span>
           <div className="flex items-center gap-2">
             <Button
@@ -176,9 +176,9 @@ export function PatientTable({
               <Link
                 href={pageHref(page - 1)}
                 aria-disabled={page <= 1}
-                aria-label="Previous page"
+                aria-label={t("previousPage")}
               >
-                <ChevronLeft className="h-4 w-4" />
+                <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
               </Link>
             </Button>
             <span>
@@ -193,9 +193,9 @@ export function PatientTable({
               <Link
                 href={pageHref(page + 1)}
                 aria-disabled={page >= totalPages}
-                aria-label="Next page"
+                aria-label={t("nextPage")}
               >
-                <ChevronRight className="h-4 w-4" />
+                <ChevronRight className="h-4 w-4 rtl:rotate-180" />
               </Link>
             </Button>
           </div>
@@ -220,6 +220,7 @@ function PatientGroupTable({
   isSearch?: boolean;
   returnHref: string;
 }) {
+  const t = useTranslations("patients");
   return (
     <section
       data-patient-roster-section
@@ -254,7 +255,7 @@ function PatientGroupTable({
           }}
         >
           <Users className="h-3 w-3" />
-          {patients.length} patient{patients.length !== 1 ? "s" : ""}
+          {t("patientCount", { count: patients.length })}
         </span>
       </header>
       <Table className="table-fixed">
@@ -269,13 +270,13 @@ function PatientGroupTable({
         </colgroup>
         <TableHeader sticky>
           <TableRow>
-            <TableHead>File #</TableHead>
-            <TableHead>Patient</TableHead>
-            <TableHead className="hidden md:table-cell">National ID</TableHead>
-            {showDepartmentBadge && <TableHead className="hidden xl:table-cell">Department</TableHead>}
-            <TableHead className="hidden sm:table-cell">Doctor</TableHead>
-            <TableHead className="hidden lg:table-cell">Phone</TableHead>
-            <TableHead className="hidden sm:table-cell">Blood</TableHead>
+            <TableHead>{t("file")}</TableHead>
+            <TableHead>{t("patient")}</TableHead>
+            <TableHead className="hidden md:table-cell">{t("nationalId")}</TableHead>
+            {showDepartmentBadge && <TableHead className="hidden xl:table-cell">{t("department")}</TableHead>}
+            <TableHead className="hidden sm:table-cell">{t("doctor")}</TableHead>
+            <TableHead className="hidden lg:table-cell">{t("phone")}</TableHead>
+            <TableHead className="hidden sm:table-cell">{t("blood")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -305,6 +306,7 @@ function PatientRow({
   highlight: boolean;
   returnHref: string;
 }) {
+  const t = useTranslations("patients");
   const router = useRouter();
   const href = withReturnTo(`/patients/${patient.id}`, returnHref);
   const dept = patient.departments;
@@ -359,8 +361,7 @@ function PatientRow({
               variant="outline"
               className="shrink-0 border-amber-500/40 bg-amber-500/10 px-1.5 py-0 text-[10px] font-medium text-amber-700 dark:text-amber-300 print:border-black print:bg-white print:text-black"
             >
-              Balance
-            </Badge>
+              {t("balance")}</Badge>
           )}
         </div>
       </TableCell>

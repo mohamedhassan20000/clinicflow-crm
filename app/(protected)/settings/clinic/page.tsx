@@ -4,10 +4,15 @@ import { createClient } from "@/lib/supabase/server";
 import { ClinicForm } from "@/components/settings/clinic-form";
 import { ClinicWorkingHoursForm } from "@/components/settings/clinic-working-hours-form";
 import { getClinicWorkingHours } from "@/actions/settings";
+import { getTranslations } from "next-intl/server";
 
-export const metadata: Metadata = { title: "Clinic Settings" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("protected");
+  return { title: t("metadataClinicSettings") };
+}
 
 export default async function ClinicSettingsPage() {
+  const t = await getTranslations("protected");
   const user = await requireRole(["admin", "manager"]);
   const supabase = await createClient();
 
@@ -28,10 +33,9 @@ export default async function ClinicSettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="font-semibold">Clinic settings</h2>
+        <h2 className="font-semibold">{t("clinicSettings")}</h2>
         <p className="text-sm text-muted-foreground">
-          Update your clinic&apos;s name, logo, contact information, and working hours.
-        </p>
+          {t("updateYourClinicSNameLogo")}</p>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:items-start">

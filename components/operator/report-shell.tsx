@@ -17,6 +17,7 @@ import {
   type ReportQueryResult,
   type ReportRow,
 } from "@/lib/operator-reports/types";
+import { useTranslations } from "next-intl";
 
 function hiddenState(
   definition: OperatorReportDefinition,
@@ -52,6 +53,7 @@ export function ReportShell({
   params: ParsedReportParams;
   filterOptions: Record<string, readonly ReportFilterOption[]>;
 }) {
+  const t = useTranslations("operator");
   const basePath = `/operator/reports/${definition.id}`;
   const clearHref = pathWithSearch(basePath, clearedReportSearchParams(definition));
   const exportParams = reportParamsToSearchParams(definition, params, {
@@ -61,6 +63,8 @@ export function ReportShell({
   const exportHref = pathWithSearch(`${basePath}/export`, exportParams);
   const firstVisible = result.total === 0 ? 0 : (result.page - 1) * result.pageSize + 1;
   const lastVisible = Math.min(result.total, result.page * result.pageSize);
+  const ascendingLabel = t("ascending");
+  const descendingLabel = t("descending");
 
   const columns = definition.columns.map((column) => {
     const sortDefinition = definition.sorts.find((sort) => sort.key === column.key);
@@ -88,7 +92,7 @@ export function ReportShell({
             page: 1,
           })}
           className="inline-flex min-h-11 items-center gap-1.5 rounded-sm underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-          aria-label={`Sort by ${column.label} ${nextDirection === "asc" ? "ascending" : "descending"}`}
+          aria-label={t("sortByDirection", { column: column.label, direction: nextDirection === "asc" ? ascendingLabel : descendingLabel })}
         >
           {column.label}
           {active ? (
@@ -155,12 +159,11 @@ export function ReportShell({
         ]))}
         <input type="hidden" name="page" value="1" />
         <div className="mt-4 flex flex-wrap items-center gap-2">
-          <Button type="submit">Apply filters</Button>
+          <Button type="submit">{t("applyFilters")}</Button>
           <Button asChild type="button" variant="outline">
             <Link href={clearHref}>
               <FilterX className="size-4" aria-hidden="true" />
-              Clear filters
-            </Link>
+              {t("clearFilters2")}</Link>
           </Button>
         </div>
       </form>
@@ -171,22 +174,20 @@ export function ReportShell({
             <h2 id={`${definition.id}-table-title`} className="text-lg font-semibold">{definition.title}</h2>
             <p className="text-sm text-muted-foreground">
               {result.total === 0
-                ? "No rows"
-                : `Showing ${firstVisible}–${lastVisible} of ${result.total}`}
+                ? t("norows")
+                : t("showingRangeOfTotal", { first: firstVisible, last: lastVisible, total: result.total })}
             </p>
           </div>
           <Button asChild variant="outline">
             <a href={exportHref}>
               <Download className="size-4" aria-hidden="true" />
-              Export filtered CSV
-            </a>
+              {t("exportFilteredCsv")}</a>
           </Button>
         </div>
 
         {result.sourceTruncated ? (
           <p role="status" className="border-b border-amber-300 bg-amber-50 px-5 py-3 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
-            This aggregate reached its {REPORT_AGGREGATE_SOURCE_LIMIT.toLocaleString()}-row safety cap. Narrow the filters for complete results.
-          </p>
+            {t("thisAggregateReachedIts")}{REPORT_AGGREGATE_SOURCE_LIMIT.toLocaleString()}{t("rowSafetyCapNarrowTheFilters")}</p>
         ) : null}
 
         <DataTable
@@ -197,12 +198,12 @@ export function ReportShell({
           stickyHeader
           empty={{
             icon: result.hasAnyData ? FilterX : FileBarChart,
-            title: result.hasAnyData ? "No rows match these filters" : "No report data yet",
+            title: result.hasAnyData ? t("norowsmatchthesefilters") : t("noreportdatayet"),
             description: result.hasAnyData
-              ? "Clear the active filters to return to the full report data set."
-              : "Data appears here when the platform records the first matching event.",
+              ? t("cleartheactivefilterstoreturn")
+              : t("dataappearsherewhentheplatform"),
             action: result.hasAnyData ? (
-              <Button asChild variant="outline"><Link href={clearHref}>Clear filters</Link></Button>
+              <Button asChild variant="outline"><Link href={clearHref}>{t("clearFilters")}</Link></Button>
             ) : undefined,
           }}
         />
@@ -211,7 +212,7 @@ export function ReportShell({
           <form method="get" className="flex items-center gap-2 text-sm">
             {hiddenState(definition, params, new Set(["page", "pageSize"]))}
             <input type="hidden" name="page" value="1" />
-            <label htmlFor={`${definition.id}-page-size`} className="text-muted-foreground">Rows per page</label>
+            <label htmlFor={`${definition.id}-page-size`} className="text-muted-foreground">{t("rowsPerPage")}</label>
             <select
               key={params.pageSize}
               id={`${definition.id}-page-size`}
@@ -221,7 +222,7 @@ export function ReportShell({
             >
               {REPORT_PAGE_SIZES.map((size) => <option key={size} value={size}>{size}</option>)}
             </select>
-            <Button type="submit" size="sm" variant="outline">Update</Button>
+            <Button type="submit" size="sm" variant="outline">{t("update")}</Button>
           </form>
 
           <nav aria-label={`${definition.title} pagination`} className="flex items-center gap-2">
@@ -231,11 +232,10 @@ export function ReportShell({
                 tabIndex={result.page <= 1 ? -1 : undefined}
                 className={result.page <= 1 ? "pointer-events-none opacity-50" : undefined}
               >
-                Previous
-              </Link>
+                {t("previous")}</Link>
             </Button>
             <span className="min-w-24 text-center text-sm tabular-nums text-muted-foreground">
-              Page {result.page} of {result.totalPages}
+              {t("pageOf", { page: result.page, totalPages: result.totalPages })}
             </span>
             <Button asChild variant="outline" size="sm" aria-disabled={result.page >= result.totalPages}>
               <Link
@@ -243,12 +243,11 @@ export function ReportShell({
                 tabIndex={result.page >= result.totalPages ? -1 : undefined}
                 className={result.page >= result.totalPages ? "pointer-events-none opacity-50" : undefined}
               >
-                Next
-              </Link>
+                {t("next")}</Link>
             </Button>
           </nav>
         </div>
-        <p className="sr-only">CSV exports ignore pagination and are capped at {REPORT_EXPORT_LIMIT.toLocaleString()} filtered rows.</p>
+        <p className="sr-only">{t("csvExportsIgnorePaginationAndAre")}{REPORT_EXPORT_LIMIT.toLocaleString()} {t("filteredRows")}</p>
       </section>
     </div>
   );

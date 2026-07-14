@@ -1,39 +1,45 @@
 import type { Metadata } from "next";
-import { cookies } from "next/headers";
-import { Manrope } from "next/font/google";
+import { NextIntlClientProvider } from "next-intl";
+import { getLocale, getMessages, getTranslations } from "next-intl/server";
 import { NuqsAdapter } from "nuqs/adapters/next/app";
 import { Toaster } from "@/components/ui/sonner";
+import { fontVariables } from "@/app/fonts";
+import { localeDirection, type Locale } from "@/lib/i18n/config";
+import { resolveTheme } from "@/lib/preferences/server";
 import "./globals.css";
 
-const manrope = Manrope({
-  variable: "--font-manrope",
-  subsets: ["latin"],
-  display: "swap",
-  weight: "variable",
-  style: "normal",
-});
-
-export const metadata: Metadata = {
-  title: { default: "ClinicFlow", template: "%s · ClinicFlow" },
-  description: "The all-in-one CRM built for modern private clinics.",
-  robots: { index: false },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("shell");
+  return {
+    title: { default: "ClinicFlow", template: "%s · ClinicFlow" },
+    description: t("metadataDescription"),
+    robots: { index: false },
+  };
+}
 
 export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const cookieStore = await cookies();
-  const theme = cookieStore.get("theme")?.value ?? "light";
+  // Locale comes from the next-intl request config, so `lang`/`dir` and the messages handed to the
+  // client can never disagree — both resolve through the same call (§4.1).
+  const [locale, messages, theme] = await Promise.all([
+    getLocale() as Promise<Locale>,
+    getMessages(),
+    resolveTheme(),
+  ]);
 
   return (
     <html
-      lang="en"
-      className={`${manrope.variable} h-full${theme === "dark" ? " dark" : ""}`}
+      lang={locale}
+      dir={localeDirection(locale)}
+      className={`${fontVariables} h-full${theme === "dark" ? " dark" : ""}`}
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col bg-background text-foreground antialiased">
-        <NuqsAdapter>{children}</NuqsAdapter>
-        <Toaster richColors closeButton position="top-right" />
+        <NextIntlClientProvider locale={locale} messages={messages}>
+          <NuqsAdapter>{children}</NuqsAdapter>
+          <Toaster richColors closeButton position="top-right" />
+        </NextIntlClientProvider>
       </body>
     </html>
   );

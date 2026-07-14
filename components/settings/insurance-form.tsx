@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/form";
 import { insuranceSchema, type InsuranceValues } from "@/lib/validations/settings";
 import type { ActionResult } from "@/actions/settings";
+import { useTranslations } from "next-intl";
 
 interface InsuranceFormProps {
   action: (prev: ActionResult | null, fd: FormData) => Promise<ActionResult>;
@@ -31,6 +32,7 @@ export function InsuranceForm({
   submitLabel = "Create provider",
   onSuccess,
 }: InsuranceFormProps) {
+  const t = useTranslations("settings");
   const [state, formAction, isPending] = useActionState(action, null);
 
   const form = useForm<InsuranceValues>({
@@ -44,7 +46,7 @@ export function InsuranceForm({
 
   useEffect(() => {
     if (state?.success) {
-      toast.success("Insurance provider saved.");
+      toast.success(t("insuranceProviderSaved"));
       onSuccess?.();
     }
   }, [state, onSuccess]);
@@ -70,9 +72,9 @@ export function InsuranceForm({
           name="name"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Provider name</FormLabel>
+              <FormLabel>{t("providerName")}</FormLabel>
               <FormControl>
-                <Input {...field} disabled={isPending} placeholder="SGK" />
+                <Input {...field} disabled={isPending} placeholder={t("sgk")} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -83,13 +85,13 @@ export function InsuranceForm({
           name="code"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Code (optional)</FormLabel>
+              <FormLabel>{t("codeOptional")}</FormLabel>
               <FormControl>
                 <Input
                   {...field}
                   value={field.value ?? ""}
                   disabled={isPending}
-                  placeholder="SGK-01"
+                  placeholder={t("sgk01")}
                 />
               </FormControl>
               <FormMessage />

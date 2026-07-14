@@ -22,6 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
+import { useTranslations } from "next-intl";
 
 export type PatientPackageDepartment = {
   id: string;
@@ -80,6 +81,7 @@ export function PatientPackagesSection({
   patientDepartmentId,
   canManage,
 }: PatientPackagesSectionProps) {
+  const t = useTranslations("patients");
   const activeCount = packages.filter((pkg) => pkg.is_active).length;
 
   return (
@@ -91,10 +93,9 @@ export function PatientPackagesSection({
             className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground"
           >
             <Package className="h-4 w-4" />
-            Packages
-          </h2>
+            {t("packages")}</h2>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            {activeCount} active of {packages.length} total
+            {t("activePackageSummary", { active: activeCount, total: packages.length })}
           </p>
         </div>
         {canManage && (
@@ -112,10 +113,9 @@ export function PatientPackagesSection({
         {packages.length === 0 ? (
           <div className="px-5 py-8 text-center">
             <Archive className="mx-auto h-6 w-6 text-muted-foreground/60" />
-            <p className="mt-2 text-sm font-medium">No packages yet</p>
+            <p className="mt-2 text-sm font-medium">{t("noPackagesYet")}</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Session bundles created for this patient will appear here.
-            </p>
+              {t("sessionBundlesCreatedForThisPatient")}</p>
           </div>
         ) : (
           <div className="divide-y divide-border/30">
@@ -146,9 +146,10 @@ function PackageRow({
   services: PatientPackageService[];
   canManage: boolean;
 }) {
+  const t = useTranslations("patients");
   const { formatCurrency } = useClinicSettings();
   const fmtMoney = (value: number | null) =>
-    value == null ? "Not set" : formatCurrency(value);
+    value == null ? t("notSet") : formatCurrency(value);
   const remaining = Math.max(
     0,
     packageItem.total_sessions - packageItem.used_sessions,
@@ -176,14 +177,14 @@ function PackageRow({
                 : "text-muted-foreground",
             )}
           >
-            {packageItem.is_active ? "Active" : "Inactive"}
+            {packageItem.is_active ? t("active") : t("inactive")}
           </Badge>
           {department && (
             <Badge variant="outline" className="h-5 gap-1 px-2 text-[10px]">
               <span
                 aria-hidden
                 className="h-1.5 w-1.5 rounded-full"
-                style={{ backgroundColor: department.color ?? "currentColor" }}
+                style={{ backgroundColor: department.color ?? t("currentcolor") }}
               />
               {department.name}
             </Badge>
@@ -196,11 +197,11 @@ function PackageRow({
         </div>
 
         <div className="grid gap-2 text-xs sm:grid-cols-4">
-          <Metric label="Total" value={packageItem.total_sessions} />
-          <Metric label="Used" value={packageItem.used_sessions} />
-          <Metric label="Remaining" value={remaining} />
+          <Metric label={t("total")} value={packageItem.total_sessions} />
+          <Metric label={t("used")} value={packageItem.used_sessions} />
+          <Metric label={t("remaining")} value={remaining} />
           <Metric
-            label="Price/session"
+            label={t("priceSession")}
             value={fmtMoney(packageItem.price_per_session)}
           />
         </div>
@@ -251,6 +252,7 @@ function Metric({ label, value }: { label: string; value: string | number }) {
 }
 
 function DeactivatePackageButton({ packageId }: { packageId: string }) {
+  const t = useTranslations("patients");
   const router = useRouter();
   const [state, formAction, isPending] = useActionState(
     deactivatePatientPackage,
@@ -264,7 +266,7 @@ function DeactivatePackageButton({ packageId }: { packageId: string }) {
       return;
     }
     if (state.success) {
-      toast.success("Package deactivated.");
+      toast.success(t("packageDeactivated"));
       router.refresh();
     }
   }, [router, state]);
@@ -284,18 +286,16 @@ function DeactivatePackageButton({ packageId }: { packageId: string }) {
           ) : (
             <PowerOff className="h-3 w-3" />
           )}
-          Deactivate
-        </Button>
+          {t("deactivate")}</Button>
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Deactivate package?</AlertDialogTitle>
+          <AlertDialogTitle>{t("deactivatePackage")}</AlertDialogTitle>
           <AlertDialogDescription>
-            This keeps the package history but hides it from active package lists.
-          </AlertDialogDescription>
+            {t("thisKeepsThePackageHistoryBut")}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
+          <AlertDialogCancel disabled={isPending}>{t("cancel")}</AlertDialogCancel>
           <form action={formAction}>
             <input type="hidden" name="package_id" value={packageId} />
             <AlertDialogAction asChild>
@@ -306,8 +306,7 @@ function DeactivatePackageButton({ packageId }: { packageId: string }) {
                 className="gap-2"
               >
                 {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-                Deactivate
-              </Button>
+                {t("deactivate")}</Button>
             </AlertDialogAction>
           </form>
         </AlertDialogFooter>

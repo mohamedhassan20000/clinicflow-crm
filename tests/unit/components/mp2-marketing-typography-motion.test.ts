@@ -1,25 +1,44 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const layout = readFileSync("app/layout.tsx", "utf8");
 const css = readFileSync("app/globals.css", "utf8");
+// P2A moved the font declarations out of `app/layout.tsx` into `app/fonts.ts`, because the app now
+// loads three families (Manrope, Thmanyah, and the IBM Plex Sans Arabic fallback tier) rather than
+// one. MP2's contract is unchanged and still asserted below: Manrope is the primary English face,
+// and no other family touches an English surface.
+const fonts = readFileSync("app/fonts.ts", "utf8");
 const marketingPage = readFileSync(
   "components/marketing/marketing-page.tsx",
   "utf8",
 );
 
+/** The Arabic-only block, which by construction applies to nothing until the root element is `ar`. */
+const arabicScope = css.slice(css.indexOf('html[lang="ar"]'));
+const englishScope = css.slice(0, css.indexOf('html[lang="ar"]'));
+
 describe("Post-Pre-P2 MP2 marketing typography and motion", () => {
   it("uses Manrope as the primary English font through shared variables", () => {
-    expect(layout).toContain("Manrope");
-    expect(layout).toContain('variable: "--font-manrope"');
-    expect(layout).not.toMatch(/IBM_Plex|Geist_Mono|DM_Sans|Instrument_Serif/);
+    expect(fonts).toContain("Manrope");
+    expect(fonts).toContain('variable: "--font-manrope"');
 
     for (const role of ["sans", "heading", "display", "mono"]) {
       expect(css).toContain(
         `--font-${role}: var(--font-manrope), "Segoe UI", system-ui`,
       );
     }
-    expect(css).not.toMatch(/font-(?:plex|geist|instrument)|Georgia|Times New Roman/);
+
+    // The English cascade is untouched by P2A: no Arabic face and no serif reaches it.
+    expect(englishScope).not.toMatch(/font-(?:plex|geist|instrument|thmanyah)|Georgia|Times New Roman/);
+    expect(css).not.toMatch(/Geist_Mono|DM_Sans|Instrument_Serif/);
+  });
+
+  it("confines the Arabic faces to lang=ar (P2A §4.3)", () => {
+    expect(arabicScope).toContain("var(--font-thmanyah)");
+    expect(arabicScope).toContain("var(--font-plex-arabic)");
+    // Thmanyah is the primary Arabic face and IBM Plex Sans Arabic is only the fallback tier.
+    expect(arabicScope.indexOf("var(--font-thmanyah)")).toBeLessThan(
+      arabicScope.indexOf("var(--font-plex-arabic)"),
+    );
   });
 
   it("keeps marketing motion CSS-first, transform-based, and centrally timed", () => {

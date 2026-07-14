@@ -1,0 +1,4 @@
+{
+  "$comment": "P2C i18n gate — the documented exception list. Whole-file exemptions only; a per-line exception belongs in the code as an `i18n-allow: <reason>` comment, where the reader will actually see it. Every entry needs a reason.",
+  "files": []
+}

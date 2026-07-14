@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
-import { cookies } from "next/headers";
 import { requireUser } from "@/lib/rbac";
+import { resolveTheme } from "@/lib/preferences/server";
 import { createClient } from "@/lib/supabase/server";
 import { DashboardShell } from "@/components/layout/dashboard-shell";
 import { getVisiblePageSlugs } from "@/lib/server-page-permissions";
@@ -9,6 +9,7 @@ import { ClinicSettingsProvider } from "@/contexts/clinic-settings-context";
 import type { TimeFormat } from "@/lib/format-time";
 import { clinicLocaleFromRow } from "@/lib/datetime";
 import { loadDisplayContext } from "@/lib/currency/server";
+import { getLocale } from "next-intl/server";
 
 export default async function ProtectedLayout({
   children,
@@ -21,8 +22,8 @@ export default async function ProtectedLayout({
     redirect("/change-password");
   }
 
-  const cookieStore = await cookies();
-  const theme = (cookieStore.get("theme")?.value ?? "light") as "light" | "dark";
+  // P2A (§4.5): theme is the signed-in user's stored preference, not this browser's cookie.
+  const theme = await resolveTheme();
   const visiblePages = await getVisiblePageSlugs(user);
 
   const supabase = await createClient();
@@ -34,7 +35,8 @@ export default async function ProtectedLayout({
 
   const timeFormat: TimeFormat =
     clinic?.time_format === "12h" ? "12h" : "24h";
-  const clinicLocale = clinicLocaleFromRow(clinic);
+  const requestLocale = await getLocale();
+  const clinicLocale = { ...clinicLocaleFromRow(clinic), locale: requestLocale };
   const navItems = getTenantShellNavigation(visiblePages);
 
   // Shared, request-memoized load (P15-P3): the same cache() the server money

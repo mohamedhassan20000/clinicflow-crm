@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Suspense } from "react";
+import { useTranslations } from "next-intl";
 import {
   ArrowDown,
   BarChart3,
@@ -19,13 +20,16 @@ import {
   WalletCards,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AnimatedStat } from "@/components/marketing/animated-stat";
 import { BackToTopButton } from "@/components/marketing/back-to-top-button";
 import { EarlyAccessButton } from "@/components/marketing/early-access-button";
 import { MarketingLogo } from "@/components/marketing/marketing-logo";
 import { MobileMarketingMenu } from "@/components/marketing/mobile-marketing-menu";
 import { ProductScreenshot } from "@/components/marketing/product-screenshot";
 import { PublicThemeShell, PublicThemeToggle } from "@/components/marketing/public-theme";
-import { marketingCopy as copy } from "@/lib/marketing-copy";
+import { getMarketingCopy, type MarketingCopy } from "@/lib/marketing-copy";
+import { MARKETING_STATS } from "@/lib/marketing-stats";
+import type { MessageTranslator } from "@/lib/i18n/translator";
 
 type RegistrationStatus = {
   registrationMode: string;
@@ -33,7 +37,13 @@ type RegistrationStatus = {
   acceptedThisWeek: number;
 };
 
-type Props = RegistrationStatus | { statusPromise: Promise<RegistrationStatus> };
+type Props = (RegistrationStatus | { statusPromise: Promise<RegistrationStatus> }) & {
+  /**
+   * P2A: the marketing language switcher, injected by the page so this component stays synchronous
+   * (it is rendered directly by existing component tests). Omitted, the header renders as before.
+   */
+  languageSwitcher?: React.ReactNode;
+};
 
 const fallbackStatus: RegistrationStatus = {
   registrationMode: "invite_only",
@@ -41,16 +51,9 @@ const fallbackStatus: RegistrationStatus = {
   acceptedThisWeek: 0,
 };
 
-const navigation = [
-  ["#product", copy.nav.product],
-  ["#features", copy.nav.features],
-  ["#security", copy.nav.security],
-  ["#pricing", copy.nav.pricing],
-  ["#faq", copy.nav.faq],
-] as const;
-
 export const MARKETING_SECTION_TONES = {
   hero: "bg-[var(--m-paper)]",
+  stats: "bg-[var(--m-panel)]",
   proof: "bg-[var(--m-panel)]",
   product: "bg-[var(--m-paper)]",
   features: "bg-[var(--m-warm)]",
@@ -72,21 +75,68 @@ const featureIcons = [
 
 const securityIcons = [Layers3, DatabaseZap, UserRoundCheck, History, FileArchive] as const;
 
+/**
+ * Marketing digits stay **Latin in both locales**.
+ *
+ * That is not an oversight and it is not laziness: Latin digits in Arabic-language B2B software are
+ * the regional norm in Kuwait and the wider GCC (AI_AGENT_PLAN §4.4), and the Arabic-Indic option is
+ * a deliberate *per-clinic* setting inside the product — a preference an anonymous visitor to the
+ * marketing site has not expressed and cannot have. Formatting is centralized here rather than
+ * sprinkled as `String(n)` so that if the marketing site ever does grow a digit preference, there is
+ * exactly one place to change.
+ */
+function marketingNumber(value: number): string {
+  return new Intl.NumberFormat("en", { useGrouping: true }).format(value);
+}
+
+/** A year is an identifier, not a quantity — it never takes a thousands separator. */
+function marketingYear(value: number): string {
+  return new Intl.NumberFormat("en", { useGrouping: false }).format(value);
+}
+
 function normalizeStatus(status: RegistrationStatus) {
   const safeLimit = Math.max(status.weeklyLimit, 1);
   const safeAccepted = Math.min(Math.max(status.acceptedThisWeek, 0), safeLimit);
   return { ...status, safeLimit, safeAccepted };
 }
 
-function CohortProgress({ status }: { status: RegistrationStatus }) {
+/**
+ * Renders the hero headline with its key clause in the accent face.
+ *
+ * The accent clause is a **message-file value** (`hero.titleAccent`), not a slice index or a word
+ * count, because the clause that carries the weight of the sentence is not in the same position in
+ * Arabic as in English — and a translator, not a `split(" ")`, is the one who knows which clause it
+ * is. If the clause is not found verbatim in the title (a translator edited one and not the other),
+ * the title renders whole and unaccented. Copy is never dropped to satisfy a decoration.
+ */
+function AccentedTitle({ title, accent, className }: { title: string; accent: string; className?: string }) {
+  const at = accent ? title.indexOf(accent) : -1;
+
+  if (at === -1) {
+    return <span className={className}>{title}</span>;
+  }
+
+  return (
+    <span className={className}>
+      {title.slice(0, at)}
+      <em className="marketing-accent not-italic">{accent}</em>
+      {title.slice(at + accent.length)}
+    </span>
+  );
+}
+
+function CohortProgress({ status, copy }: { status: RegistrationStatus; copy: MarketingCopy }) {
   const { safeLimit, safeAccepted } = normalizeStatus(status);
   const percentage = Math.round((safeAccepted / safeLimit) * 100);
+  const progressText = copy.proof.progress(marketingNumber(safeAccepted), marketingNumber(safeLimit));
 
   return (
     <div className="flex min-h-40 flex-col justify-center rounded-2xl border border-[var(--m-line)] bg-[var(--m-paper)] p-7 sm:p-8">
       <div className="flex items-end justify-between gap-6">
-        <span className="text-base font-semibold sm:text-lg">{copy.proof.progress(safeAccepted, safeLimit)}</span>
-        <span className="font-mono text-base text-[var(--m-accent-text)] sm:text-lg">{percentage}%</span>
+        <span className="text-base font-semibold sm:text-lg">{progressText}</span>
+        <span className="marketing-accent font-mono text-base font-semibold sm:text-lg">
+          {marketingNumber(percentage)}%
+        </span>
       </div>
       <div
         className="mt-5 h-3 overflow-hidden rounded-full bg-[var(--m-soft)]"
@@ -95,7 +145,7 @@ function CohortProgress({ status }: { status: RegistrationStatus }) {
         aria-valuemin={0}
         aria-valuemax={safeLimit}
         aria-valuenow={safeAccepted}
-        aria-valuetext={copy.proof.progress(safeAccepted, safeLimit)}
+        aria-valuetext={progressText}
       >
         <div className="h-full rounded-full bg-[linear-gradient(90deg,#087f7b,#14c5cf)]" style={{ width: `${percentage}%` }} />
       </div>
@@ -103,8 +153,14 @@ function CohortProgress({ status }: { status: RegistrationStatus }) {
   );
 }
 
-async function LiveCohortProgress({ statusPromise }: { statusPromise: Promise<RegistrationStatus> }) {
-  return <CohortProgress status={await statusPromise} />;
+async function LiveCohortProgress({
+  statusPromise,
+  copy,
+}: {
+  statusPromise: Promise<RegistrationStatus>;
+  copy: MarketingCopy;
+}) {
+  return <CohortProgress status={await statusPromise} copy={copy} />;
 }
 
 async function LiveEarlyAccessButton({
@@ -117,16 +173,32 @@ async function LiveEarlyAccessButton({
   return <EarlyAccessButton registrationMode={status.registrationMode} {...props} />;
 }
 
-function CohortText({ status }: { status: RegistrationStatus }) {
+function CohortText({ status, copy }: { status: RegistrationStatus; copy: MarketingCopy }) {
   const { safeLimit, safeAccepted } = normalizeStatus(status);
-  return <>{copy.proof.progress(safeAccepted, safeLimit)}</>;
+  return <>{copy.proof.progress(marketingNumber(safeAccepted), marketingNumber(safeLimit))}</>;
 }
 
-async function LiveCohortText({ statusPromise }: { statusPromise: Promise<RegistrationStatus> }) {
-  return <CohortText status={await statusPromise} />;
+async function LiveCohortText({
+  statusPromise,
+  copy,
+}: {
+  statusPromise: Promise<RegistrationStatus>;
+  copy: MarketingCopy;
+}) {
+  return <CohortText status={await statusPromise} copy={copy} />;
 }
 
 export function MarketingPage(props: Props) {
+  const copy = getMarketingCopy(useTranslations("marketing") as unknown as MessageTranslator);
+
+  const navigation = [
+    ["#product", copy.nav.product],
+    ["#features", copy.nav.features],
+    ["#security", copy.nav.security],
+    ["#pricing", copy.nav.pricing],
+    ["#faq", copy.nav.faq],
+  ] as const;
+
   let statusPromise: Promise<RegistrationStatus> | null = null;
   let status = fallbackStatus;
   if ("statusPromise" in props) {
@@ -152,6 +224,7 @@ export function MarketingPage(props: Props) {
             ))}
           </nav>
           <div className="flex shrink-0 items-center gap-2">
+            {props.languageSwitcher}
             <PublicThemeToggle />
             <div className="hidden items-center gap-2 xl:flex">
               <Button asChild variant="ghost" className="h-11 rounded-full px-5 text-[var(--m-ink)] hover:bg-[var(--m-soft)]">
@@ -175,7 +248,7 @@ export function MarketingPage(props: Props) {
             {copy.hero.eyebrow}
           </p>
           <h1 className="marketing-hero-title mt-6 max-w-3xl font-display text-[clamp(3.05rem,6.2vw,6.65rem)] font-normal leading-[.93] tracking-[-.042em] text-balance">
-            {copy.hero.title}
+            <AccentedTitle title={copy.hero.title} accent={copy.hero.titleAccent} />
           </h1>
           <p className="marketing-hero-body mt-7 max-w-xl text-lg leading-8 text-[var(--m-muted)] sm:text-xl">
             {copy.hero.body}
@@ -214,7 +287,7 @@ export function MarketingPage(props: Props) {
               </Link>
             </Button>
           </div>
-          <ul className="marketing-hero-assurances mt-8 flex flex-wrap gap-x-6 gap-y-2 text-sm text-[var(--m-muted)]" aria-label="Early-access assurances">
+          <ul className="marketing-hero-assurances mt-8 flex flex-wrap gap-x-6 gap-y-2 text-sm text-[var(--m-muted)]" aria-label={copy.hero.assurancesLabel}>
             {copy.hero.assurances.map((item) => (
               <li key={item} className="flex items-center gap-2">
                 <span className="grid size-5 place-items-center rounded-full bg-[#d6f3ee] text-[#087f7b]">
@@ -241,10 +314,45 @@ export function MarketingPage(props: Props) {
         </div>
       </section>
 
-      <BackToTopButton />
+      <BackToTopButton label={copy.backToTop} />
 
-      <section className={`${MARKETING_SECTION_TONES.proof} flex min-h-[32rem] items-center border-y border-[var(--m-line)] px-5 py-24 sm:min-h-[36rem] sm:py-28 md:min-h-[40rem] md:px-8 md:py-32 lg:min-h-[44rem] lg:px-10 lg:py-36 2xl:min-h-[48rem] 2xl:px-16 2xl:py-40`} aria-labelledby="cohort-title">
-        <div className="mx-auto grid w-full max-w-[90rem] items-center gap-12 md:grid-cols-[1fr_minmax(18rem,.72fr)] lg:gap-16">
+      {/*
+        P2C — the statistics band, immediately below the hero.
+
+        The figures are provisional pre-launch display values from `lib/marketing-stats.ts` and the
+        note under the band says so on the page. They are deliberately never captioned as verified
+        customer metrics: this page already earns its credibility by refusing to fabricate
+        testimonials, and a band of invented traction numbers would spend exactly that credibility.
+      */}
+      <section
+        id="stats"
+        className={`${MARKETING_SECTION_TONES.stats} marketing-tex-mesh relative border-b border-[var(--m-line)] px-5 py-16 md:px-8 lg:px-10 lg:py-20 2xl:px-16`}
+        aria-labelledby="stats-title"
+      >
+        <div className="relative mx-auto max-w-[90rem]">
+          <p id="stats-title" className="marketing-section-label">{copy.stats.eyebrow}</p>
+          <dl className="marketing-scroll-reveal mt-10 grid gap-10 sm:grid-cols-3 sm:gap-6">
+            {MARKETING_STATS.map((stat) => (
+              <div key={stat.id} className="border-s-2 border-[var(--m-line-strong)] ps-6">
+                <dd className="marketing-stat-figure font-display text-[clamp(2.75rem,5vw,4.25rem)] font-normal leading-none tracking-[-.04em] tabular-nums">
+                  <AnimatedStat
+                    value={stat.value}
+                    suffix={stat.suffix}
+                    formattedValue={marketingNumber(stat.value)}
+                    className="marketing-accent"
+                  />
+                </dd>
+                <dt className="mt-4 text-lg font-semibold tracking-[-.02em]">{copy.stats.label(stat.id)}</dt>
+                <p className="mt-1.5 text-sm leading-6 text-[var(--m-muted)]">{copy.stats.detail(stat.id)}</p>
+              </div>
+            ))}
+          </dl>
+          <p className="mt-10 text-xs leading-5 text-[var(--m-faint)]">{copy.stats.note}</p>
+        </div>
+      </section>
+
+      <section className={`${MARKETING_SECTION_TONES.proof} marketing-tex-glow relative flex min-h-[32rem] items-center border-y border-[var(--m-line)] px-5 py-24 sm:min-h-[36rem] sm:py-28 md:min-h-[40rem] md:px-8 md:py-32 lg:min-h-[44rem] lg:px-10 lg:py-36 2xl:min-h-[48rem] 2xl:px-16 2xl:py-40`} aria-labelledby="cohort-title">
+        <div className="relative mx-auto grid w-full max-w-[90rem] items-center gap-12 md:grid-cols-[1fr_minmax(18rem,.72fr)] lg:gap-16">
           <div>
             <p className="font-mono text-xs font-semibold uppercase tracking-[.16em] text-[var(--m-accent-text)]">
               {copy.proof.eyebrow}
@@ -255,11 +363,11 @@ export function MarketingPage(props: Props) {
             <p className="mt-5 max-w-3xl text-lg leading-8 text-[var(--m-muted)]">{copy.proof.body}</p>
           </div>
           {statusPromise ? (
-            <Suspense fallback={<CohortProgress status={fallbackStatus} />}>
-              <LiveCohortProgress statusPromise={statusPromise} />
+            <Suspense fallback={<CohortProgress status={fallbackStatus} copy={copy} />}>
+              <LiveCohortProgress statusPromise={statusPromise} copy={copy} />
             </Suspense>
           ) : (
-            <CohortProgress status={status} />
+            <CohortProgress status={status} copy={copy} />
           )}
         </div>
       </section>
@@ -288,7 +396,7 @@ export function MarketingPage(props: Props) {
               >
                 <div className={index % 2 === 1 ? "lg:order-2" : undefined}>
                   <div className="flex items-center gap-4">
-                    <span className="font-mono text-xs font-semibold tracking-[.16em] text-[var(--m-accent-text)]">{workflow.time}</span>
+                    <span className="marketing-accent font-mono text-xs font-semibold tracking-[.16em]">{workflow.time}</span>
                     <span className="h-px w-10 bg-[var(--m-line-strong)]" aria-hidden="true" />
                     <span className="text-sm font-semibold text-[var(--m-muted)]">{workflow.label}</span>
                   </div>
@@ -317,8 +425,8 @@ export function MarketingPage(props: Props) {
         </div>
       </section>
 
-      <section id="features" className={`${MARKETING_SECTION_TONES.features} scroll-mt-24 border-y border-[var(--m-line)] px-5 py-24 lg:px-10 lg:py-28`} aria-labelledby="features-title">
-        <div className="mx-auto max-w-[90rem]">
+      <section id="features" className={`${MARKETING_SECTION_TONES.features} marketing-tex-grid relative scroll-mt-24 border-y border-[var(--m-line)] px-5 py-24 lg:px-10 lg:py-28`} aria-labelledby="features-title">
+        <div className="relative mx-auto max-w-[90rem]">
           <div className="marketing-scroll-reveal max-w-3xl">
             <p className="marketing-section-label">{copy.features.eyebrow}</p>
             <h2 id="features-title" className="mt-4 font-display text-[clamp(2.75rem,4.5vw,4rem)] font-normal leading-[1.01] tracking-[-.03em] text-balance">
@@ -373,8 +481,8 @@ export function MarketingPage(props: Props) {
         </div>
       </section>
 
-      <section id="pricing" className={`${MARKETING_SECTION_TONES.pricing} scroll-mt-24 px-5 py-24 lg:px-10 lg:py-28`} aria-labelledby="pricing-title">
-        <div className="mx-auto max-w-[90rem]">
+      <section id="pricing" className={`${MARKETING_SECTION_TONES.pricing} marketing-tex-glow relative scroll-mt-24 px-5 py-24 lg:px-10 lg:py-28`} aria-labelledby="pricing-title">
+        <div className="relative mx-auto max-w-[90rem]">
           <div className="marketing-scroll-reveal max-w-3xl">
             <p className="marketing-section-label">{copy.pricing.eyebrow}</p>
             <h2 id="pricing-title" className="mt-4 font-display text-[clamp(2.75rem,4.5vw,4rem)] font-normal leading-[1.01] tracking-[-.03em] text-balance">
@@ -416,11 +524,11 @@ export function MarketingPage(props: Props) {
             <p className="mt-7 max-w-2xl text-xl leading-9 text-[var(--m-muted)] sm:text-[1.375rem]">{copy.earlyAccess.body}</p>
             <p className="mt-8 font-mono text-sm text-[var(--m-muted)]">
               {statusPromise ? (
-                <Suspense fallback={<CohortText status={fallbackStatus} />}>
-                  <LiveCohortText statusPromise={statusPromise} />
+                <Suspense fallback={<CohortText status={fallbackStatus} copy={copy} />}>
+                  <LiveCohortText statusPromise={statusPromise} copy={copy} />
                 </Suspense>
               ) : (
-                <CohortText status={status} />
+                <CohortText status={status} copy={copy} />
               )}
             </p>
           </div>
@@ -447,8 +555,8 @@ export function MarketingPage(props: Props) {
         </div>
       </section>
 
-      <section id="faq" className={`${MARKETING_SECTION_TONES.faq} scroll-mt-24 border-t border-[var(--m-line)] px-5 py-24 lg:px-10 lg:py-28`} aria-labelledby="faq-title">
-        <div className="mx-auto grid max-w-[90rem] gap-12 lg:grid-cols-[.68fr_1.32fr]">
+      <section id="faq" className={`${MARKETING_SECTION_TONES.faq} marketing-tex-grid relative scroll-mt-24 border-t border-[var(--m-line)] px-5 py-24 lg:px-10 lg:py-28`} aria-labelledby="faq-title">
+        <div className="relative mx-auto grid max-w-[90rem] gap-12 lg:grid-cols-[.68fr_1.32fr]">
           <div className="marketing-scroll-reveal">
             <p className="marketing-section-label">{copy.faq.eyebrow}</p>
             <h2 id="faq-title" className="mt-4 max-w-xl font-display text-[clamp(2.75rem,4.5vw,4rem)] font-normal leading-[1.01] tracking-[-.03em] text-balance">
@@ -478,7 +586,7 @@ export function MarketingPage(props: Props) {
             <p className="mt-4 max-w-md text-sm leading-6 text-[#b7d5d9]">{copy.footer.tagline}</p>
             <p className="mt-2 text-xs text-[#8fb9be]">{copy.footer.legal}</p>
           </div>
-          <nav aria-label="Footer navigation" className="flex flex-wrap gap-x-6 gap-y-3 text-sm text-[#c4dde0]">
+          <nav aria-label={copy.footer.navLabel} className="flex flex-wrap gap-x-6 gap-y-3 text-sm text-[#c4dde0]">
             <a href={`mailto:${copy.footer.email}`} className="hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6ee7dc]">{copy.footer.email}</a>
             <Link href="/login" className="hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6ee7dc]">{copy.footer.login}</Link>
             <Link href="/privacy" className="hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6ee7dc]">{copy.footer.privacy}</Link>
@@ -486,7 +594,7 @@ export function MarketingPage(props: Props) {
           </nav>
         </div>
         <div className="mx-auto mt-10 max-w-[90rem] border-t border-white/10 pt-5 font-mono text-[11px] uppercase tracking-[.14em] text-[#7faeb4]">
-          {copy.footer.copyright(new Date().getFullYear())}
+          {copy.footer.copyright(marketingYear(new Date().getFullYear()))}
         </div>
       </footer>
     </PublicThemeShell>

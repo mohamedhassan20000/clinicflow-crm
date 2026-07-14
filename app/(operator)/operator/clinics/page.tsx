@@ -8,6 +8,7 @@ import { resolveSubscriptionAccess } from "@/lib/billing/access";
 import { pathWithSearch, withReturnTo } from "@/lib/navigation/return-url";
 import { listOperatorClinics, OPERATOR_CLINIC_LIST_LIMIT } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { getTranslations } from "next-intl/server";
 
 // Keeps the .in() filter URLs bounded when the clinic list grows.
 const SUBSCRIPTION_CHUNK = 150;
@@ -17,6 +18,7 @@ export default async function OperatorClinicsPage({
 }: {
   searchParams: Promise<{ q?: string; country?: string }>;
 }) {
+  const t = await getTranslations("operator");
   const rawFilters = await searchParams;
   const q = rawFilters.q?.trim().slice(0, 80) ?? "";
   const countryCandidate = rawFilters.country?.trim().toUpperCase() ?? "";
@@ -53,42 +55,38 @@ export default async function OperatorClinicsPage({
   return (
     <>
       <header>
-        <h1 className="text-3xl font-bold tracking-tight">Clinics</h1>
+        <h1 className="text-3xl font-bold tracking-tight">{t("clinics")}</h1>
         <p className="mt-1 text-muted-foreground">
-          {q || country ? `${totalClinics} matching` : `${totalClinics} total`} · tenant metadata and subscription state only — no clinical data.
-        </p>
+          {q || country ? `${totalClinics} matching` : `${totalClinics} total`} {t("tenantMetadataAndSubscriptionStateOnly")}</p>
         {totalClinics > clinicRows.length ? (
           <p className="mt-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm dark:border-amber-700 dark:bg-amber-950">
-            Showing the newest {OPERATOR_CLINIC_LIST_LIMIT} of {totalClinics} clinics.
-          </p>
+            {t("showingNewestClinics", { limit: OPERATOR_CLINIC_LIST_LIMIT, total: totalClinics })}</p>
         ) : null}
       </header>
       <form method="get" className="grid gap-3 rounded-xl border bg-card p-4 sm:grid-cols-[minmax(0,1fr)_12rem_auto] sm:items-end">
         <label className="grid gap-1.5 text-sm font-medium">
-          Search clinics
-          <Input name="q" defaultValue={q} placeholder="Clinic name" />
+          {t("searchClinics")}<Input name="q" defaultValue={q} placeholder={t("clinicName")} />
         </label>
         <label className="grid gap-1.5 text-sm font-medium">
-          Country code
-          <Input name="country" defaultValue={country} placeholder="TR" maxLength={2} className="uppercase" />
+          {t("countryCode")}<Input name="country" defaultValue={country} placeholder={t("tr")} maxLength={2} className="uppercase" />
         </label>
         <div className="flex flex-wrap gap-2">
-          <Button type="submit">Filter</Button>
-          {(q || country) ? <Button asChild type="button" variant="outline"><Link href="/operator/clinics">Clear</Link></Button> : null}
+          <Button type="submit">{t("filter")}</Button>
+          {(q || country) ? <Button asChild type="button" variant="outline"><Link href="/operator/clinics">{t("clear")}</Link></Button> : null}
         </div>
       </form>
       <div className="overflow-hidden rounded-xl border bg-card">
         {clinicRows.length === 0 ? (
           <TableEmptyState
             icon={Building2}
-            title="No clinics yet"
-            description="Clinics appear here once the first invitation is accepted."
+            title={t("noClinicsYet")}
+            description={t("clinicsAppearHereOnceTheFirst")}
           />
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
-                {["Clinic", "Country", "Created", "Onboarding", "Plan", "Access", "Period / trial end"].map((heading) => (
+                {[t("clinic"), t("country"), t("created"), t("onboarding"), t("plan"), t("access"), t("periodOrTrialEnd")].map((heading) => (
                   <TableHead key={heading}>{heading}</TableHead>
                 ))}
               </TableRow>

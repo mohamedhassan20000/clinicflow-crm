@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils";
 import { formatDoctorName } from "@/lib/format-doctor";
 import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
+import { useTranslations } from "next-intl";
 
 type PaymentMethod =
   | "cash"
@@ -86,22 +87,22 @@ export interface RevenueSummary {
 
 const METHOD_META: Record<
   PaymentMethod,
-  { label: string; icon: ComponentType<{ className?: string }> }
+  { labelKey: string; icon: ComponentType<{ className?: string }> }
 > = {
-  cash: { label: "Cash", icon: Banknote },
-  credit_card: { label: "Credit card", icon: CreditCard },
-  paypal: { label: "PayPal", icon: Wallet },
-  bank_transfer: { label: "Bank transfer", icon: Landmark },
-  insurance: { label: "Insurance", icon: ShieldCheck },
+  cash: { labelKey: "paymentCash", icon: Banknote },
+  credit_card: { labelKey: "paymentCreditCard", icon: CreditCard },
+  paypal: { labelKey: "paymentPaypal", icon: Wallet },
+  bank_transfer: { labelKey: "paymentBankTransfer", icon: Landmark },
+  insurance: { labelKey: "paymentInsurance", icon: ShieldCheck },
 };
 
-const PRESETS: { value: string; label: string }[] = [
-  { value: "today", label: "Today" },
-  { value: "week", label: "This week" },
-  { value: "this_month", label: "This month" },
-  { value: "last_month", label: "Last month" },
-  { value: "last_year", label: "Last year" },
-  { value: "custom", label: "Custom range" },
+const PRESETS: { value: string; labelKey: string }[] = [
+  { value: "today", labelKey: "dateToday" },
+  { value: "week", labelKey: "dateThisWeek" },
+  { value: "this_month", labelKey: "dateThisMonth" },
+  { value: "last_month", labelKey: "dateLastMonth" },
+  { value: "last_year", labelKey: "dateLastYear" },
+  { value: "custom", labelKey: "dateCustomRange" },
 ];
 
 function useMoneyFormatter() {
@@ -128,10 +129,6 @@ function fmtDateTime(iso: string) {
     minute: "2-digit",
     hour12: false,
   });
-}
-
-function presetLabel(preset: string) {
-  return PRESETS.find((p) => p.value === preset)?.label ?? "Custom range";
 }
 
 interface Props {
@@ -167,6 +164,7 @@ export function RevenueReport({
   clinicPhone,
   clinicLogoUrl,
 }: Props) {
+  const t = useTranslations("revenue");
   const fmtMoney = useMoneyFormatter();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -220,7 +218,7 @@ export function RevenueReport({
             )}
             <span style={{ fontSize: "11px", fontWeight: 600 }}>{clinicName}</span>
           </div>
-          <span style={{ fontSize: "10px", color: "#64748b" }}>Revenue Statement</span>
+          <span style={{ fontSize: "10px", color: "#64748b" }}>{t("revenueStatement")}</span>
         </div>
         <div style={{ borderBottom: "1px solid #cbd5e1", marginTop: "4px" }} />
       </div>
@@ -235,7 +233,7 @@ export function RevenueReport({
             )}
             <span style={{ fontSize: "11px", fontWeight: 600 }}>{clinicName}</span>
           </div>
-          <span style={{ fontSize: "10px", color: "#64748b" }}>Settlement Payments</span>
+          <span style={{ fontSize: "10px", color: "#64748b" }}>{t("settlementPayments")}</span>
         </div>
         <div style={{ borderBottom: "1px solid #cbd5e1", marginTop: "4px" }} />
       </div>
@@ -259,11 +257,11 @@ export function RevenueReport({
                 className={cn(
                   "rounded-full border px-3 py-1 text-xs font-medium transition",
                   active
-                    ? "border-primary bg-primary/10 text-foreground"
+                    ? "border-primary bg-primary/10 text-foreground ring-2 ring-primary/20"
                     : "border-border/60 bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground",
                 )}
               >
-                {p.label}
+                {t(p.labelKey)}
               </button>
             );
           })}
@@ -282,7 +280,7 @@ export function RevenueReport({
             }}
           >
             <div className="space-y-1.5">
-              <Label htmlFor="from" className="text-xs">From</Label>
+              <Label htmlFor="from" className="text-xs">{t("from")}</Label>
               <Input
                 id="from"
                 name="from"
@@ -292,7 +290,7 @@ export function RevenueReport({
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="to" className="text-xs">To</Label>
+              <Label htmlFor="to" className="text-xs">{t("to")}</Label>
               <Input
                 id="to"
                 name="to"
@@ -301,7 +299,7 @@ export function RevenueReport({
                 required
               />
             </div>
-            <Button type="submit" className="h-10">Apply</Button>
+            <Button type="submit" className="h-10">{t("apply")}</Button>
           </form>
         )}
       </div>
@@ -335,8 +333,8 @@ export function RevenueReport({
                 )}
               </div>
             </div>
-            <div className="text-right text-xs text-muted-foreground">
-              <p>Generated {fmtDateTime(new Date().toISOString())}</p>
+            <div className="text-end text-xs text-muted-foreground">
+              <p>{t("generatedAt", { date: fmtDateTime(new Date().toISOString()) })}</p>
             </div>
           </div>
         </div>
@@ -345,21 +343,17 @@ export function RevenueReport({
         <div className="px-5 py-4 border-b border-border/50 flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
-              Period
-            </p>
+              {t("period")}</p>
             <p className="text-sm font-semibold">
-              {presetLabel(preset)} · {fmtDate(range.start)} → {fmtDate(range.end)}
+              {t(PRESETS.find((p) => p.value === preset)?.labelKey ?? t("datecustomrange"))} · {fmtDate(range.start)} → {fmtDate(range.end)}
             </p>
           </div>
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Receipt className="h-4 w-4" />
-            {summary.transactionCount + summary.settlementCount} transaction
-            {summary.transactionCount + summary.settlementCount !== 1 ? "s" : ""}
+            {t("transactionCount", { count: summary.transactionCount + summary.settlementCount })}
             {summary.settlementCount > 0 && (
               <span className="text-xs">
-                ({summary.transactionCount} session{summary.transactionCount !== 1 ? "s" : ""} ·{" "}
-                {summary.settlementCount} settlement
-                {summary.settlementCount !== 1 ? "s" : ""})
+                ({t("sessionCount", { count: summary.transactionCount })} · {t("settlementCount", { count: summary.settlementCount })})
               </span>
             )}
           </div>
@@ -369,40 +363,40 @@ export function RevenueReport({
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-px bg-border/40 border-b border-border/50">
           <SummaryCell
             icon={TrendingUp}
-            label="Total revenue"
-            sublabel="Sessions + deposit + settlements"
+            label={t("totalRevenue")}
+            sublabel={t("sessionsDepositAndSettlements")}
             amount={grossTotal}
             accent="text-primary"
           />
           <SummaryCell
             icon={Banknote}
-            label="Primary methods"
+            label={t("primaryMethods")}
             amount={primaryTotal}
             accent="text-emerald-600 dark:text-emerald-400"
           />
           <SummaryCell
             icon={CreditCard}
-            label="Secondary methods"
+            label={t("secondaryMethods")}
             amount={secondaryTotal}
             accent="text-cyan-600 dark:text-cyan-400"
           />
           <SummaryCell
             icon={ShieldCheck}
-            label="Insurance"
+            label={t("insurance")}
             amount={insuranceTotal}
             accent="text-sky-600 dark:text-sky-400"
           />
           <SummaryCell
             icon={Wallet2}
-            label="From deposit"
-            sublabel="Account credit applied"
+            label={t("fromDeposit")}
+            sublabel={t("accountCreditApplied")}
             amount={depositTotal}
             accent="text-violet-600 dark:text-violet-400"
           />
           <SummaryCell
             icon={Receipt}
-            label="Settlements"
-            sublabel="Outstanding paid"
+            label={t("settlements")}
+            sublabel={t("outstandingPaid")}
             amount={settlementsTotal}
             accent="text-amber-600 dark:text-amber-400"
           />
@@ -412,8 +406,7 @@ export function RevenueReport({
         {methodBreakdown.length > 0 && (
           <div className="px-5 py-4 border-b border-border/50">
             <p className="mb-2 text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
-              Breakdown by method
-            </p>
+              {t("breakdownByMethod")}</p>
             <div className="flex flex-wrap gap-2">
               {methodBreakdown.map(({ method, amount }) => {
                 const meta = METHOD_META[method];
@@ -424,7 +417,7 @@ export function RevenueReport({
                     className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/40 px-2.5 py-1 text-xs"
                   >
                     <Icon className="h-3 w-3" />
-                    <span className="font-medium">{meta.label}</span>
+                    <span className="font-medium">{t(meta.labelKey)}</span>
                     <span className="tabular-nums">{fmtMoney(amount)}</span>
                   </span>
                 );
@@ -432,14 +425,13 @@ export function RevenueReport({
               {depositTotal > 0 && (
                 <span className="inline-flex items-center gap-1.5 rounded-md border border-violet-500/40 bg-violet-500/10 px-2.5 py-1 text-xs text-violet-700 dark:text-violet-400">
                   <Wallet2 className="h-3 w-3" />
-                  From deposit{" "}
-                  <span className="tabular-nums">{fmtMoney(depositTotal)}</span>
+                  {t("amountLabel", { label: t("fromDeposit"), amount: fmtMoney(depositTotal) })}
                 </span>
               )}
               {outstandingTotal > 0 && (
                 <span className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-xs text-amber-700 dark:text-amber-400">
                   <Building2 className="h-3 w-3" />
-                  Outstanding <span className="tabular-nums">{fmtMoney(outstandingTotal)}</span>
+                  {t("amountLabel", { label: t("outstanding"), amount: fmtMoney(outstandingTotal) })}
                 </span>
               )}
             </div>
@@ -451,23 +443,22 @@ export function RevenueReport({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Paid at</TableHead>
-                <TableHead>Patient</TableHead>
-                <TableHead>Doctor / Dept.</TableHead>
-                <TableHead className="text-end">Total</TableHead>
-                <TableHead>Primary</TableHead>
-                <TableHead>Secondary</TableHead>
-                <TableHead className="text-end">Insurance</TableHead>
-                <TableHead className="text-end">From deposit</TableHead>
-                <TableHead className="text-end">Outstanding</TableHead>
+                <TableHead>{t("paidAt")}</TableHead>
+                <TableHead>{t("patient")}</TableHead>
+                <TableHead>{t("doctorDept")}</TableHead>
+                <TableHead className="text-end">{t("total")}</TableHead>
+                <TableHead>{t("primary")}</TableHead>
+                <TableHead>{t("secondary")}</TableHead>
+                <TableHead className="text-end">{t("insurance")}</TableHead>
+                <TableHead className="text-end">{t("fromDeposit")}</TableHead>
+                <TableHead className="text-end">{t("outstanding")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {rows.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={9} className="px-4 py-10 text-center text-sm text-muted-foreground">
-                    No transactions in this period.
-                  </TableCell>
+                    {t("noTransactionsInThisPeriod")}</TableCell>
                 </TableRow>
               ) : (
                 rows.map((r) => <TxnRow key={r.id} row={r} />)
@@ -477,8 +468,7 @@ export function RevenueReport({
               <TableFooter className="print:break-inside-avoid">
                 <TableRow className="print:border-black">
                   <TableCell className="px-4 py-3 text-xs uppercase tracking-wider text-muted-foreground" colSpan={3}>
-                    Totals
-                  </TableCell>
+                    {t("totals")}</TableCell>
                   <TableCell className="px-4 py-3 text-end tabular-nums">
                     {fmtMoney(summary.totalAmount)}
                   </TableCell>
@@ -506,17 +496,7 @@ export function RevenueReport({
         {/* Pagination — appears when there are more than one page of rows */}
         {summary.transactionCount > pageSize && (
           <div className="flex items-center justify-between border-t border-border/50 bg-card px-4 py-3 text-xs text-muted-foreground print:hidden">
-            <span>
-              Showing{" "}
-              <span className="font-medium text-foreground tabular-nums">
-                {showingFrom}–{showingTo}
-              </span>{" "}
-              of{" "}
-              <span className="font-medium text-foreground tabular-nums">
-                {summary.transactionCount}
-              </span>{" "}
-              transactions
-            </span>
+            <span>{t("showingTransactions", { from: showingFrom, to: showingTo, total: summary.transactionCount })}</span>
             <div className="flex items-center gap-2">
               <Button
                 variant="outline"
@@ -524,23 +504,20 @@ export function RevenueReport({
                 className="h-8 w-8 p-0"
                 onClick={() => gotoPage(page - 1)}
                 disabled={page <= 1}
-                aria-label="Previous page"
+                aria-label={t("previousPage")}
               >
-                <ChevronLeft className="h-4 w-4" />
+                <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
               </Button>
-              <span className="tabular-nums">
-                Page <span className="font-medium text-foreground">{page}</span>{" "}
-                of <span className="font-medium text-foreground">{totalPages}</span>
-              </span>
+              <span className="tabular-nums">{t("pageOf", { page, total: totalPages })}</span>
               <Button
                 variant="outline"
                 size="sm"
                 className="h-8 w-8 p-0"
                 onClick={() => gotoPage(page + 1)}
                 disabled={page >= totalPages}
-                aria-label="Next page"
+                aria-label={t("nextPage")}
               >
-                <ChevronRight className="h-4 w-4" />
+                <ChevronRight className="h-4 w-4 rtl:rotate-180" />
               </Button>
             </div>
           </div>
@@ -548,18 +525,13 @@ export function RevenueReport({
 
         {summary.transactionCount > rows.length && (
           <div className="hidden border-t border-border/50 px-4 py-2 text-[10px] text-muted-foreground print:block">
-            Printed rows are limited to the current screen page: {showingFrom}–
-            {showingTo} of {summary.transactionCount} matching session
-            transactions.
+            {t("printedRowsLimited", { from: showingFrom, to: showingTo, total: summary.transactionCount })}
           </div>
         )}
 
         {/* Print footer */}
         <div className="hidden print:block px-6 py-4 text-[10px] text-muted-foreground border-t border-border">
-          This statement reflects completed appointments recorded within the
-          specified period. Outstanding balances remain due and are not
-          included in gross collected.
-        </div>
+          {t("thisStatementReflectsCompletedAppointmentsRecorded")}</div>
       </div>
 
       {/* Settlement payments — separate card below the main statement */}
@@ -592,10 +564,10 @@ export function RevenueReport({
                   )}
                 </div>
               </div>
-              <div className="text-right text-xs text-muted-foreground">
-                <p>Generated {fmtDateTime(new Date().toISOString())}</p>
+              <div className="text-end text-xs text-muted-foreground">
+                <p>{t("generatedAt", { date: fmtDateTime(new Date().toISOString()) })}</p>
                 <p className="mt-0.5">
-                  {presetLabel(preset)} · {fmtDate(range.start)} →{" "}
+                  {t(PRESETS.find((p) => p.value === preset)?.labelKey ?? t("datecustomrange"))} · {fmtDate(range.start)} →{" "}
                   {fmtDate(range.end)}
                 </p>
               </div>
@@ -605,19 +577,16 @@ export function RevenueReport({
           <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-3 bg-amber-500/5 border-b border-border/50">
             <div>
               <p className="text-[10px] font-medium uppercase tracking-widest text-amber-700 dark:text-amber-400">
-                Settlement payments
-              </p>
+                {t("settlementPayments2")}</p>
               <p className="text-xs text-muted-foreground">
-                Payments recorded against previously outstanding balances
-              </p>
+                {t("paymentsRecordedAgainstPreviouslyOutstandingBalances")}</p>
             </div>
             <div className="flex items-center gap-4 text-sm">
               <span className="text-muted-foreground">
-                {summary.settlementCount} payment
-                {summary.settlementCount !== 1 ? "s" : ""}
+                {t("paymentCount", { count: summary.settlementCount })}
               </span>
               <span>
-                <span className="text-muted-foreground">Total settled: </span>
+                <span className="text-muted-foreground">{t("totalSettled")}</span>
                 <span className="font-semibold tabular-nums text-amber-700 dark:text-amber-400">
                   {fmtMoney(settlementsTotal)}
                 </span>
@@ -629,12 +598,12 @@ export function RevenueReport({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Settled at</TableHead>
-                  <TableHead>Patient</TableHead>
-                  <TableHead>Department &amp; Doctor</TableHead>
-                  <TableHead>Method</TableHead>
-                  <TableHead className="text-end">Amount paid</TableHead>
-                  <TableHead className="text-end">Remaining balance</TableHead>
+                  <TableHead>{t("settledAt")}</TableHead>
+                  <TableHead>{t("patient")}</TableHead>
+                  <TableHead>{t("departmentDoctor")}</TableHead>
+                  <TableHead>{t("method")}</TableHead>
+                  <TableHead className="text-end">{t("amountPaid")}</TableHead>
+                  <TableHead className="text-end">{t("remainingBalance")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -648,8 +617,7 @@ export function RevenueReport({
                     className="px-4 py-3 text-xs uppercase tracking-wider text-muted-foreground"
                     colSpan={4}
                   >
-                    Total settled
-                  </TableCell>
+                    {t("totalSettled2")}</TableCell>
                   <TableCell className="px-4 py-3 text-end tabular-nums text-emerald-600 dark:text-emerald-400">
                     {fmtMoney(settlementsTotal)}
                   </TableCell>
@@ -660,14 +628,10 @@ export function RevenueReport({
           </div>
 
           <div className="hidden print:block px-6 py-4 text-[10px] text-muted-foreground border-t border-border">
-            Settlement payments are amounts collected against outstanding
-            balances from prior sessions.
-          </div>
+            {t("settlementPaymentsAreAmountsCollectedAgainst")}</div>
           {settlementOverflow && (
             <div className="border-t border-border/50 px-4 py-2 text-xs text-muted-foreground print:text-[10px]">
-              Showing first {Math.min(settlementDetailLimit, settlements.length)} of{" "}
-              {summary.settlementCount} settlement payments. Totals include all
-              matching settlements.
+              {t("settlementOverflow", { shown: Math.min(settlementDetailLimit, settlements.length), total: summary.settlementCount })}
             </div>
           )}
         </div>
@@ -707,6 +671,7 @@ function SummaryCell({
 }
 
 function SettlementTxnRow({ row }: { row: SettlementRow }) {
+  const t = useTranslations("revenue");
   const fmtMoney = useMoneyFormatter();
   const meta = METHOD_META[row.payment_method];
   const MethodIcon = meta?.icon;
@@ -720,7 +685,7 @@ function SettlementTxnRow({ row }: { row: SettlementRow }) {
         {fmtDateTime(row.settled_at)}
       </TableCell>
       <TableCell className="font-medium">
-        {row.patient?.full_name ?? "Unknown"}
+        {row.patient?.full_name ?? t("unknown")}
       </TableCell>
       <TableCell>
         {appt ? (
@@ -738,8 +703,7 @@ function SettlementTxnRow({ row }: { row: SettlementRow }) {
                 </span>
               ) : (
                 <span className="text-[11px] text-muted-foreground">
-                  No department
-                </span>
+                  {t("noDepartment")}</span>
               )}
               {appt.profiles?.full_name && (
                 <span className="text-xs font-medium">
@@ -748,10 +712,10 @@ function SettlementTxnRow({ row }: { row: SettlementRow }) {
               )}
             </div>
             <div className="text-[11px] text-muted-foreground">
-              Session {fmtDate(appt.scheduled_at)}
+              {t("sessionDate", { date: fmtDate(appt.scheduled_at) })}
               {appt.total_amount != null && (
-                <span className="ml-2">
-                  · total{" "}
+                <span className="ms-2">
+                  {t("totalLabel")}{" "}
                   <span className="tabular-nums font-medium text-foreground">
                     {fmtMoney(appt.total_amount)}
                   </span>
@@ -761,8 +725,7 @@ function SettlementTxnRow({ row }: { row: SettlementRow }) {
           </div>
         ) : (
           <span className="text-xs text-muted-foreground">
-            Patient-level balance
-          </span>
+            {t("patientLevelBalance")}</span>
         )}
         {row.note && (
           <p className="mt-1 text-[11px] italic text-muted-foreground">
@@ -773,7 +736,7 @@ function SettlementTxnRow({ row }: { row: SettlementRow }) {
       <TableCell>
         <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/30 bg-amber-500/5 px-2 py-0.5 text-xs">
           {MethodIcon && <MethodIcon className="h-3 w-3" />}
-          {meta?.label ?? row.payment_method}
+          {meta ? t(meta.labelKey) : row.payment_method}
         </span>
       </TableCell>
       <TableCell className="text-end tabular-nums font-semibold text-emerald-600 dark:text-emerald-400">
@@ -786,8 +749,7 @@ function SettlementTxnRow({ row }: { row: SettlementRow }) {
           </span>
         ) : (
           <span className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
-            Settled
-          </span>
+            {t("settled")}</span>
         )}
       </TableCell>
     </TableRow>
@@ -795,6 +757,7 @@ function SettlementTxnRow({ row }: { row: SettlementRow }) {
 }
 
 function TxnRow({ row, hidden }: { row: RevenueRow; hidden?: boolean }) {
+  const t = useTranslations("revenue");
   const fmtMoney = useMoneyFormatter();
   const primary = row.payment_method ? METHOD_META[row.payment_method] : null;
   const secondary = row.secondary_payment_method
@@ -810,7 +773,7 @@ function TxnRow({ row, hidden }: { row: RevenueRow; hidden?: boolean }) {
         {row.paid_at ? fmtDateTime(row.paid_at) : "—"}
       </TableCell>
       <TableCell className="font-medium">
-        {row.patients?.full_name ?? "Unknown"}
+        {row.patients?.full_name ?? t("unknown")}
       </TableCell>
       <TableCell>
         <div className="text-xs">{formatDoctorName(row.profiles?.full_name)}</div>
@@ -833,8 +796,8 @@ function TxnRow({ row, hidden }: { row: RevenueRow; hidden?: boolean }) {
         {primary ? (
           <span className="inline-flex items-center gap-1 text-xs">
             <primary.icon className="h-3 w-3 text-muted-foreground" />
-            {primary.label}
-            <span className="ml-1 tabular-nums font-medium">
+            {t(primary.labelKey)}
+            <span className="ms-1 tabular-nums font-medium">
               {fmtMoney(row.paid_amount ?? 0)}
             </span>
           </span>
@@ -846,8 +809,8 @@ function TxnRow({ row, hidden }: { row: RevenueRow; hidden?: boolean }) {
         {secondary && (row.secondary_amount ?? 0) > 0 ? (
           <span className="inline-flex items-center gap-1 text-xs">
             <secondary.icon className="h-3 w-3 text-muted-foreground" />
-            {secondary.label}
-            <span className="ml-1 tabular-nums font-medium">
+            {t(secondary.labelKey)}
+            <span className="ms-1 tabular-nums font-medium">
               {fmtMoney(row.secondary_amount ?? 0)}
             </span>
           </span>

@@ -12,6 +12,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import type { AnalyticsSectionChartsProps } from "./analytics-section-charts";
+import { useTranslations } from "next-intl";
 
 export type { DailyPoint, InsurancePoint } from "./analytics-section-charts";
 
@@ -60,16 +61,17 @@ export function AnalyticsSection({
   departmentsList,
   doctorsList,
 }: AnalyticsSectionProps) {
+  const t = useTranslations("dashboard");
   return (
     <div className="space-y-6">
       {/* KPI cards — render immediately, no Recharts dependency */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        <KpiCard title="Today" value={todayCount} icon={CalendarDays} variant="primary" />
-        <KpiCard title="This week" value={weekCount} icon={TrendingUp} />
-        <KpiCard title="This month" value={monthCount} icon={BarChart3} variant="success" />
-        <KpiCard title="Total patients" value={totalPatients} icon={Users} />
-        <KpiCard title="No-show rate" value={`${noShowRate}%`} icon={UserX} variant={noShowRate > 10 ? "warning" : "default"} />
-        <KpiCard title="Cancellation rate" value={`${cancelRate}%`} icon={XCircle} variant={cancelRate > 15 ? "warning" : "default"} />
+        <KpiCard title={t("today")} value={todayCount} icon={CalendarDays} variant="primary" />
+        <KpiCard title={t("thisWeek")} value={weekCount} icon={TrendingUp} />
+        <KpiCard title={t("thisMonth")} value={monthCount} icon={BarChart3} variant="success" />
+        <KpiCard title={t("totalPatients")} value={totalPatients} icon={Users} />
+        <KpiCard title={t("noShowRate")} value={`${noShowRate}%`} icon={UserX} variant={noShowRate > 10 ? "warning" : "default"} />
+        <KpiCard title={t("cancellationRate")} value={`${cancelRate}%`} icon={XCircle} variant={cancelRate > 15 ? "warning" : "default"} />
       </div>
 
       {/* Charts — lazy-loaded so Recharts bundle doesn't block initial paint */}

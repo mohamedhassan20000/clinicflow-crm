@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
+import { useTranslations } from "next-intl";
 
 export type PaymentMethod =
   | "cash"
@@ -84,14 +85,14 @@ export interface BillingPackageInfo {
 
 const METHODS: {
   value: PaymentMethod;
-  label: string;
+  labelKey: string;
   icon: React.ComponentType<{ className?: string }>;
 }[] = [
-  { value: "cash", label: "Cash", icon: Banknote },
-  { value: "credit_card", label: "Credit card", icon: CreditCard },
-  { value: "paypal", label: "PayPal", icon: Wallet },
-  { value: "bank_transfer", label: "Bank transfer", icon: Landmark },
-  { value: "insurance", label: "Insurance", icon: ShieldCheck },
+  { value: "cash", labelKey: "paymentCash", icon: Banknote },
+  { value: "credit_card", labelKey: "paymentCreditCard", icon: CreditCard },
+  { value: "paypal", labelKey: "paymentPaypal", icon: Wallet },
+  { value: "bank_transfer", labelKey: "paymentBankTransfer", icon: Landmark },
+  { value: "insurance", labelKey: "paymentInsurance", icon: ShieldCheck },
 ];
 
 interface BillingDialogProps {
@@ -145,6 +146,7 @@ export function BillingDialog({
   initialPayload,
   draftKey = 0,
 }: BillingDialogProps) {
+  const t = useTranslations("appointments");
   const { formatCurrency } = useClinicSettings();
   const fmtMoney = (n: number) => formatCurrency(n);
   const [lines, setLines] = useState<DraftLine[]>([]);
@@ -354,7 +356,7 @@ export function BillingDialog({
     const payload: BillingPayload = {
       line_items: lines.map((l) => ({
         service_id: l.service_id,
-        name: l.name.trim() || "Service",
+        name: l.name.trim() || t("service"),
         price: Number(Number(l.price).toFixed(2)),
         quantity: Math.max(1, Math.floor(l.quantity)),
       })),
@@ -395,17 +397,16 @@ export function BillingDialog({
     >
       <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Invoice — complete appointment</DialogTitle>
+          <DialogTitle>{t("invoiceCompleteAppointment")}</DialogTitle>
           <DialogDescription>
-            Add the services performed, then record how the patient paid.
-            {patientName ? ` Patient: ${patientName}.` : ""}
+            {t("billingDescription", { patient: patientName ? t("patientnamedsuffix", { patient: patientName }) : "" })}
           </DialogDescription>
           {(departmentName || patientName) && (
             <div className="flex flex-wrap items-center gap-2 pt-2">
               {departmentName && (
                 <span
                   className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-muted/50 px-2.5 py-1 text-[11px] font-medium"
-                  title="Department"
+                  title={t("department")}
                 >
                   <span
                     className="h-2 w-2 rounded-full"
@@ -428,8 +429,7 @@ export function BillingDialog({
         {loadingContext && (
           <div className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
-            Loading price list and patient billing details in the background.
-          </div>
+            {t("loadingPriceListAndPatientBilling")}</div>
         )}
 
         <div className="space-y-5 py-1">
@@ -437,13 +437,10 @@ export function BillingDialog({
             <div className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-800 dark:text-emerald-300">
               <Package className="h-3.5 w-3.5" />
               <span className="font-medium">{packageInfo.name}</span>
-              <span>
-                Session {packageInfo.sessionNumber ?? "—"} of{" "}
-                {packageInfo.totalSessions}
-              </span>
-              <span>{packageInfo.remainingSessions} remaining</span>
+              <span>{t("sessionOfTotal", { session: packageInfo.sessionNumber ?? "—", total: packageInfo.totalSessions })}</span>
+              <span>{t("remainingCount", { count: packageInfo.remainingSessions })}</span>
               {packageInfo.pricePerSession != null && (
-                <span>{fmtMoney(packageInfo.pricePerSession)} / session</span>
+                <span>{fmtMoney(packageInfo.pricePerSession)} {t("session2")}</span>
               )}
             </div>
           )}
@@ -452,24 +449,21 @@ export function BillingDialog({
           <div className="grid grid-cols-3 gap-2 rounded-lg border border-border/60 bg-muted/30 p-3 text-center">
             <div>
               <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                Invoice total
-              </p>
+                {t("invoiceTotal")}</p>
               <p className="text-sm font-semibold tabular-nums">
                 {fmtMoney(totalN)}
               </p>
             </div>
             <div>
               <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                Collected
-              </p>
+                {t("collected")}</p>
               <p className="text-sm font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
                 {fmtMoney(collected)}
               </p>
             </div>
             <div>
               <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                Outstanding
-              </p>
+                {t("outstanding")}</p>
               <p
                 className={cn(
                   "text-sm font-semibold tabular-nums",
@@ -486,18 +480,16 @@ export function BillingDialog({
           {/* Line items */}
           <section className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label className="text-xs">Services</Label>
+              <Label className="text-xs">{t("services")}</Label>
               <span className="text-[11px] text-muted-foreground">
-                {lines.length} item{lines.length !== 1 ? "s" : ""}
+                {t("itemCount", { count: lines.length })}
               </span>
             </div>
 
             <div className="rounded-lg border border-border/60 bg-card overflow-hidden">
               {lines.length === 0 ? (
                 <div className="px-4 py-6 text-center text-xs text-muted-foreground">
-                  No services on the invoice yet. Pick one from the list below
-                  or add a custom line.
-                </div>
+                  {t("noServicesOnTheInvoiceYet")}</div>
               ) : (
                 <div className="divide-y divide-border/60">
                   {lines.map((l) => {
@@ -517,7 +509,7 @@ export function BillingDialog({
                           ) : (
                             <Input
                               value={l.name}
-                              placeholder="Custom service"
+                              placeholder={t("customService")}
                               disabled={isPending}
                               onChange={(e) =>
                                 updateLine(l._key, { name: e.target.value })
@@ -561,7 +553,7 @@ export function BillingDialog({
                             className="h-8 text-sm tabular-nums"
                           />
                         </div>
-                        <div className="col-span-1 text-right text-xs font-semibold tabular-nums">
+                        <div className="col-span-1 text-end text-xs font-semibold tabular-nums">
                           {fmtMoney(lineTotal)}
                         </div>
                         <div className="col-span-1 flex justify-end">
@@ -572,7 +564,7 @@ export function BillingDialog({
                             disabled={isPending}
                             onClick={() => removeLine(l._key)}
                             className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-                            aria-label="Remove line"
+                            aria-label={t("removeLine")}
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </Button>
@@ -595,8 +587,8 @@ export function BillingDialog({
                     <SelectValue
                       placeholder={
                         services.length === 0
-                          ? "No services in this department"
-                          : "Add a service from the price list…"
+                          ? t("noservicesinthisdepartment")
+                          : t("addaservicefromtheprice")
                       }
                     />
                   </SelectTrigger>
@@ -623,8 +615,7 @@ export function BillingDialog({
                 className="gap-1.5 h-9"
               >
                 <Plus className="h-3.5 w-3.5" />
-                Custom line
-              </Button>
+                {t("customLine")}</Button>
             </div>
           </section>
 
@@ -634,7 +625,7 @@ export function BillingDialog({
             disabled={isPending}
             onClick={() => setDeferAll((v) => !v)}
             className={cn(
-              "flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2.5 text-left text-xs transition",
+              "flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2.5 text-start text-xs transition",
               deferAll
                 ? "border-amber-500/50 bg-amber-500/10 text-amber-700 dark:text-amber-300"
                 : "border-dashed border-border/70 text-muted-foreground hover:border-amber-500/40 hover:text-foreground",
@@ -643,8 +634,7 @@ export function BillingDialog({
             <span className="flex items-center gap-2">
               <Clock3 className="h-4 w-4" />
               <span className="font-medium">
-                Pay later — collect part now, remainder on patient file
-              </span>
+                {t("payLaterCollectPartNowRemainder")}</span>
             </span>
             <span
               aria-hidden
@@ -661,10 +651,7 @@ export function BillingDialog({
 
           {deferAll && totalN > 0 && (
             <p className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-400">
-              Enter any partial payment collected now below — the unpaid
-              difference will become outstanding and can be settled from the
-              patient&apos;s file.
-            </p>
+              {t("enterAnyPartialPaymentCollectedNow")}</p>
           )}
 
           {/* Account balance */}
@@ -676,10 +663,9 @@ export function BillingDialog({
                   className="flex items-center gap-1.5 text-xs"
                 >
                   <Wallet2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                  Apply from patient account
-                </Label>
+                  {t("applyFromPatientAccount")}</Label>
                 <span className="text-[11px] text-muted-foreground">
-                  Available{" "}
+                  {t("available")}{" "}
                   <span className="font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
                     {fmtMoney(accountBalance)}
                   </span>
@@ -709,12 +695,11 @@ export function BillingDialog({
                     )
                   }
                 >
-                  Use max
-                </Button>
+                  {t("useMax")}</Button>
               </div>
               {depositN > 0 && (
                 <p className="text-[11px] text-muted-foreground">
-                  Remaining account balance after this invoice:{" "}
+                  {t("remainingAccountBalanceAfterThisInvoice")}{" "}
                   <span className="font-semibold tabular-nums">
                     {fmtMoney(remainingBalanceAfter)}
                   </span>
@@ -726,8 +711,7 @@ export function BillingDialog({
           {/* Patient paid now */}
           <div className={cn("space-y-1.5")}>
             <Label htmlFor="bill-paid" className="text-xs">
-              Patient paid now
-            </Label>
+              {t("patientPaidNow")}</Label>
             <Input
               id="bill-paid"
               type="number"
@@ -743,9 +727,9 @@ export function BillingDialog({
 
           {/* Primary method */}
           <div className={cn("space-y-1.5")}>
-            <Label className="text-xs">Primary payment method</Label>
+            <Label className="text-xs">{t("primaryPaymentMethod")}</Label>
             <div className="grid grid-cols-5 gap-1.5">
-              {METHODS.map(({ value, label, icon: Icon }) => {
+              {METHODS.map(({ value, labelKey, icon: Icon }) => {
                 const active = method === value;
                 return (
                   <button
@@ -761,7 +745,7 @@ export function BillingDialog({
                     )}
                   >
                     <Icon className={cn("h-4 w-4", active ? "text-primary" : "")} />
-                    {label}
+                    {t(labelKey)}
                   </button>
                 );
               })}
@@ -773,8 +757,8 @@ export function BillingDialog({
             <div className="space-y-1.5 rounded-lg border border-sky-500/30 bg-sky-500/5 p-3">
               <Label htmlFor="bill-insurance" className="text-xs">
                 {insuranceProviderName
-                  ? `Covered by ${insuranceProviderName}`
-                  : "Covered by insurance"}
+                  ? t("coveredbyprovider", { provider: insuranceProviderName })
+                  : t("coveredbyinsurance")}
               </Label>
               <Input
                 id="bill-insurance"
@@ -809,13 +793,11 @@ export function BillingDialog({
               {showSplit ? (
                 <>
                   <X className="h-3.5 w-3.5" />
-                  Remove split payment
-                </>
+                  {t("removeSplitPayment")}</>
               ) : (
                 <>
                   <Plus className="h-3.5 w-3.5" />
-                  Add split payment
-                </>
+                  {t("addSplitPayment")}</>
               )}
             </button>
           </div>
@@ -825,8 +807,7 @@ export function BillingDialog({
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="bill-secondary" className="text-xs">
-                    Paid via another method
-                  </Label>
+                    {t("paidViaAnotherMethod")}</Label>
                   <Input
                     id="bill-secondary"
                     type="number"
@@ -841,7 +822,7 @@ export function BillingDialog({
                 </div>
                 <div className="flex items-end">
                   <p className="text-[11px] text-muted-foreground pb-2">
-                    Outstanding{" "}
+                    {t("outstanding2")}{" "}
                     <span
                       className={cn(
                         "font-semibold tabular-nums",
@@ -857,9 +838,9 @@ export function BillingDialog({
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-xs">Secondary payment method</Label>
+                <Label className="text-xs">{t("secondaryPaymentMethod")}</Label>
                 <div className="grid grid-cols-5 gap-1.5">
-                  {METHODS.map(({ value, label, icon: Icon }) => {
+                  {METHODS.map(({ value, labelKey, icon: Icon }) => {
                     const active = secondaryMethod === value;
                     const disabled = value === method;
                     return (
@@ -879,7 +860,7 @@ export function BillingDialog({
                         <Icon
                           className={cn("h-4 w-4", active ? "text-primary" : "")}
                         />
-                        {label}
+                        {t(labelKey)}
                       </button>
                     );
                   })}
@@ -890,8 +871,7 @@ export function BillingDialog({
 
           {remaining > 0 && totalN > 0 && (
             <p className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-400">
-              {fmtMoney(remaining)} will be saved as outstanding on the
-              patient&apos;s file (settle later).
+              {t("remainingSavedAsOutstanding", { amount: fmtMoney(remaining) })}
             </p>
           )}
 
@@ -904,15 +884,13 @@ export function BillingDialog({
                     className="flex items-center gap-1.5 text-xs"
                   >
                     <Receipt className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
-                    Previous outstanding balance
-                  </Label>
+                    {t("previousOutstandingBalance")}</Label>
                   <p className="text-[11px] text-muted-foreground">
-                    Optional payment toward older unpaid appointments. This is
-                    recorded separately from today&apos;s invoice.
+                    {t("olderOutstandingPaymentDescription")}
                   </p>
                 </div>
                 <span className="text-[11px] text-muted-foreground">
-                  Previous balance:{" "}
+                  {t("previousBalance2")}{" "}
                   <span className="font-semibold tabular-nums text-amber-700 dark:text-amber-400">
                     {fmtMoney(previousBalanceN)}
                   </span>
@@ -921,9 +899,7 @@ export function BillingDialog({
               {previousOutstandingAction && (
                 <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-500/20 bg-card/70 px-3 py-2">
                   <p className="text-[11px] text-muted-foreground">
-                    Prefer not to include it on this invoice? Record it as a
-                    separate outstanding-balance payment.
-                  </p>
+                    {t("preferNotToIncludeItOn")}</p>
                   {previousOutstandingAction}
                 </div>
               )}
@@ -931,8 +907,7 @@ export function BillingDialog({
               <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
                 <div className="space-y-1.5">
                   <Label htmlFor="previous-settlement" className="text-xs">
-                    Settle now
-                  </Label>
+                    {t("settleNow")}</Label>
                   <Input
                     id="previous-settlement"
                     type="number"
@@ -955,22 +930,21 @@ export function BillingDialog({
                   disabled={isPending}
                   onClick={() => setPreviousSettlement(previousBalanceN.toFixed(2))}
                 >
-                  Use full balance
-                </Button>
+                  {t("useFullBalance")}</Button>
               </div>
 
               {(previousInputInvalid || previousAboveBalance) && (
                 <p className="text-[11px] text-destructive">
                   {previousInputInvalid
-                    ? "Enter a positive amount or leave this blank."
-                    : "Amount cannot exceed the previous balance."}
+                    ? t("enterAPositiveAmountOrLeave")
+                    : t("amountCannotExceedThePreviousBalance")}
                 </p>
               )}
 
               <div className="space-y-1.5">
-                <Label className="text-xs">Previous balance payment method</Label>
+                <Label className="text-xs">{t("previousBalancePaymentMethod")}</Label>
                 <div className="grid grid-cols-5 gap-1.5">
-                  {METHODS.map(({ value, label, icon: Icon }) => {
+                  {METHODS.map(({ value, labelKey, icon: Icon }) => {
                     const active = previousMethod === value;
                     return (
                       <button
@@ -991,26 +965,24 @@ export function BillingDialog({
                             active && "text-amber-600 dark:text-amber-400",
                           )}
                         />
-                        {label}
+                        {t(labelKey)}
                       </button>
                     );
                   })}
                 </div>
                 {previousMethodMissing && (
                   <p className="text-[11px] text-destructive">
-                    Select a payment method for previous balance.
-                  </p>
+                    {t("selectAPaymentMethodForPrevious")}</p>
                 )}
               </div>
 
               <div className="space-y-1.5">
                 <Label htmlFor="previous-note" className="text-xs">
-                  Previous balance note (optional)
-                </Label>
+                  {t("previousBalanceNoteOptional")}</Label>
                 <Textarea
                   id="previous-note"
                   rows={2}
-                  placeholder="Receipt number, context, etc."
+                  placeholder={t("receiptNumberContextEtc")}
                   value={previousNote}
                   disabled={isPending}
                   onChange={(event) => setPreviousNote(event.target.value)}
@@ -1020,12 +992,12 @@ export function BillingDialog({
 
               <div className="grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-border/50 bg-border/40">
                 <SummaryCell
-                  label="Previous balance"
+                  label={t("previousBalance")}
                   amount={previousBalanceN}
                   formatAmount={fmtMoney}
                 />
                 <SummaryCell
-                  label="Settled now"
+                  label={t("settledNow")}
                   amount={previousAboveBalance ? 0 : previousSettlementN}
                   formatAmount={fmtMoney}
                   accent={
@@ -1035,7 +1007,7 @@ export function BillingDialog({
                   }
                 />
                 <SummaryCell
-                  label="Remaining previous balance"
+                  label={t("remainingPreviousBalance")}
                   amount={previousRemaining}
                   formatAmount={fmtMoney}
                   accent={
@@ -1048,8 +1020,7 @@ export function BillingDialog({
 
               <div className="flex items-center justify-between gap-2 rounded-md border border-border/50 bg-card px-3 py-2 text-xs">
                 <span className="font-medium text-muted-foreground">
-                  Total collected today
-                </span>
+                  {t("totalCollectedToday")}</span>
                 <span className="font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
                   {fmtMoney(totalCollectedToday)}
                 </span>
@@ -1059,12 +1030,11 @@ export function BillingDialog({
 
           <div className="space-y-1.5">
             <Label htmlFor="bill-note" className="text-xs">
-              Billing note (optional)
-            </Label>
+              {t("billingNoteOptional")}</Label>
             <Textarea
               id="bill-note"
               rows={2}
-              placeholder="Discount reason, receipt number, etc."
+              placeholder={t("discountReasonReceiptNumberEtc")}
               value={note}
               disabled={isPending}
               onChange={(e) => setNote(e.target.value)}
@@ -1080,8 +1050,7 @@ export function BillingDialog({
             onClick={() => onOpenChange(false)}
             disabled={isPending}
           >
-            Cancel
-          </Button>
+            {t("cancel")}</Button>
           <Button
             type="button"
             onClick={handleSubmit}
@@ -1090,8 +1059,8 @@ export function BillingDialog({
           >
             {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
             {remaining > 0 && totalN > 0
-              ? "Complete with outstanding"
-              : "Complete & charge"}
+              ? t("completeWithOutstanding")
+              : t("completeCharge")}
           </Button>
         </DialogFooter>
       </DialogContent>

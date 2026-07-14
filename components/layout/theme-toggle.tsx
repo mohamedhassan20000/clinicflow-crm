@@ -5,12 +5,14 @@ import { useRouter } from "next/navigation";
 import { Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { setTheme } from "@/actions/theme";
+import { useTranslations } from "next-intl";
 
 interface ThemeToggleProps {
   currentTheme: "light" | "dark";
 }
 
 export function ThemeToggle({ currentTheme }: ThemeToggleProps) {
+  const t = useTranslations("layout");
   const [, startTransition] = useTransition();
   const router = useRouter();
   const isDark = currentTheme === "dark";
@@ -38,8 +40,8 @@ export function ThemeToggle({ currentTheme }: ThemeToggleProps) {
       size="icon"
       className="h-7 w-7"
       onClick={toggle}
-      aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
-      title={isDark ? "Light mode" : "Dark mode"}
+      aria-label={isDark ? t("switchToLightMode") : t("switchToDarkMode")}
+      title={isDark ? t("lightMode") : t("darkMode")}
     >
       {isDark ? (
         <Sun className="h-3.5 w-3.5" />

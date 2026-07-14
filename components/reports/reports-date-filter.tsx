@@ -8,15 +8,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import type { ReportDateRange, ReportDateRangePreset } from "@/types/reports";
+import { useTranslations } from "next-intl";
 
-const PRESETS: { value: ReportDateRangePreset; label: string }[] = [
-  { value: "today", label: "Today" },
-  { value: "this_week", label: "This week" },
-  { value: "this_month", label: "This month" },
-  { value: "custom", label: "Custom range" },
+const PRESETS: { value: ReportDateRangePreset; labelKey: string }[] = [
+  { value: "today", labelKey: "dateToday" },
+  { value: "this_week", labelKey: "dateThisWeek" },
+  { value: "this_month", labelKey: "dateThisMonth" },
+  { value: "custom", labelKey: "dateCustomRange" },
 ];
 
 export function ReportsDateFilter({ range }: { range: ReportDateRange }) {
+  const t = useTranslations("reports");
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -46,8 +48,7 @@ export function ReportsDateFilter({ range }: { range: ReportDateRange }) {
         <div className="space-y-2">
           <div className="flex items-center gap-2 text-sm font-medium">
             <CalendarDays className="h-4 w-4 text-muted-foreground" aria-hidden />
-            Date range
-          </div>
+            {t("dateRange")}</div>
           <div className="flex flex-wrap gap-2">
             {PRESETS.map((preset) => {
               const active = range.preset === preset.value;
@@ -63,7 +64,7 @@ export function ReportsDateFilter({ range }: { range: ReportDateRange }) {
                       : "border-border bg-background text-muted-foreground hover:text-foreground",
                   )}
                 >
-                  {preset.label}
+                  {t(preset.labelKey)}
                 </button>
               );
             })}
@@ -73,8 +74,7 @@ export function ReportsDateFilter({ range }: { range: ReportDateRange }) {
         <div className="flex flex-wrap items-end gap-3">
           <div className="space-y-1.5">
             <Label htmlFor="reports-from" className="text-xs text-muted-foreground">
-              From
-            </Label>
+              {t("from")}</Label>
             <Input
               id="reports-from"
               type="date"
@@ -87,8 +87,7 @@ export function ReportsDateFilter({ range }: { range: ReportDateRange }) {
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="reports-to" className="text-xs text-muted-foreground">
-              To
-            </Label>
+              {t("to")}</Label>
             <Input
               id="reports-to"
               type="date"
@@ -104,8 +103,7 @@ export function ReportsDateFilter({ range }: { range: ReportDateRange }) {
             variant="outline"
             onClick={() => updateParams({ preset: "custom", from: range.from, to: range.to })}
           >
-            Apply
-          </Button>
+            {t("apply")}</Button>
         </div>
       </div>
     </div>

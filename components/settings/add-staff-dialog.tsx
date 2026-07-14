@@ -38,6 +38,7 @@ import {
   type StaffFiles,
 } from "@/actions/staff-files";
 import type { Tables } from "@/types/database";
+import { useTranslations } from "next-intl";
 
 type Department = Pick<Tables<"departments">, "id" | "name">;
 
@@ -58,6 +59,7 @@ export function AddStaffDialog({
   currentRole: string;
   canCustomize: boolean;
 }) {
+  const t = useTranslations("settings");
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<"form" | "files">("form");
@@ -121,7 +123,7 @@ export function AddStaffDialog({
         if (res.error) toast.error(res.error);
         else {
           setFiles(res.data ?? null);
-          toast.success("File uploaded.");
+          toast.success(t("fileUploaded"));
         }
       });
     };
@@ -135,7 +137,7 @@ export function AddStaffDialog({
       if (res.error) toast.error(res.error);
       else {
         setFiles(res.data ?? null);
-        toast.success("File removed.");
+        toast.success(t("fileRemoved"));
       }
     });
   }
@@ -146,7 +148,7 @@ export function AddStaffDialog({
       const res = await resetUserPageVisibilityToRoleDefaults(created.staffId);
       if (res.error) toast.error(res.error);
       else {
-        toast.success("Role default pages saved.");
+        toast.success(t("roleDefaultPagesSaved"));
         handleOpenChange(false);
       }
     });
@@ -163,22 +165,21 @@ export function AddStaffDialog({
       <SheetTrigger asChild>
         <Button size="sm" className="gap-2">
           <UserPlus className="h-4 w-4" />
-          Add staff
+          {t("addStaff")}
         </Button>
       </SheetTrigger>
 
       <SheetContent
-        side="right"
+        side="inline-end"
         className="flex w-full flex-col gap-0 p-0 sm:max-w-2xl"
       >
         {step === "form" ? (
           <>
-            <SheetHeader className="border-b border-border/50 px-8 py-5 pr-14">
-              <SheetTitle>Add staff member</SheetTitle>
+            <SheetHeader className="border-b border-border/50 px-8 py-5 pe-14">
+              <SheetTitle>{t("addStaffMember")}</SheetTitle>
               <SheetDescription>
-                Fill in the details below. You can upload documents right after
-                creating the account.
-              </SheetDescription>
+                {t("fillInTheDetailsBelowYou")}
+                {t("creatingTheAccount")}</SheetDescription>
             </SheetHeader>
             <div className="flex-1 overflow-y-auto px-8 py-6">
               <CreateStaffForm
@@ -192,19 +193,17 @@ export function AddStaffDialog({
         ) : (
           <>
             {/* Step 2 — Documents */}
-            <SheetHeader className="border-b border-border/50 px-8 py-5 pr-14">
+            <SheetHeader className="border-b border-border/50 px-8 py-5 pe-14">
               <div className="flex items-center gap-3">
                 <span className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/10">
                   <CheckCircle2 className="h-5 w-5 text-emerald-600" />
                 </span>
                 <div>
                   <SheetTitle className="text-base">
-                    {created?.full_name} created
+                    {t("staffCreatedTitle", { name: created?.full_name ?? "" })}
                   </SheetTitle>
                   <p className="text-xs text-muted-foreground">
-                    Add their profile avatar and documents below — you can also
-                    do this later from the staff profile.
-                  </p>
+                    {t("addTheirProfileAvatarAndDocuments")}</p>
                 </div>
               </div>
             </SheetHeader>
@@ -218,7 +217,7 @@ export function AddStaffDialog({
                     onClick={customizePagesNow}
                     disabled={!created || isPending}
                   >
-                    Customize pages now
+                    {t("customizePagesNow")}
                   </Button>
                 )}
                 <Button
@@ -230,8 +229,8 @@ export function AddStaffDialog({
                     canCustomize ? "" : "sm:col-span-2"
                   }
                 >
-                  {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Use role defaults
+                  {isPending && <Loader2 className="me-2 h-4 w-4 animate-spin" />}
+                  {t("useRoleDefaults")}
                 </Button>
               </div>
 
@@ -269,17 +268,15 @@ export function AddStaffDialog({
                 <div className="space-y-8">
                   <div>
                     <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                      Profile avatar
+                      {t("profileAvatar")}
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      This photo appears beside the staff member&apos;s name and is
-                      stored separately from staff documents.
-                    </p>
+                      {t("thisPhotoAppearsBesideTheStaff")}</p>
                   </div>
                   <DocSection
-                    title="Avatar photo"
+                    title={t("avatarPhoto")}
                     icon={<User className="h-4 w-4" />}
-                    hint="JPEG, PNG, or WebP · max 2 MB"
+                    hint={t("jpegPngOrWebpMax2")}
                     file={files?.photo ?? null}
                     isPending={isPending}
                     onUpload={() => triggerUpload(photoRef, uploadStaffPhoto)}
@@ -291,14 +288,14 @@ export function AddStaffDialog({
 
                   <div>
                     <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                      Staff documents
+                      {t("staffDocuments")}
                     </p>
                   </div>
 
                   <DocSection
-                    title="Employment contract"
+                    title={t("employmentContract")}
                     icon={<FileText className="h-4 w-4" />}
-                    hint="PDF or Word · max 10 MB"
+                    hint={t("pdfOrWordMax10Mb")}
                     file={files?.contract ?? null}
                     isPending={isPending}
                     onUpload={() =>
@@ -311,9 +308,9 @@ export function AddStaffDialog({
                   <Separator />
 
                   <DocSection
-                    title="University certificates"
+                    title={t("universityCertificates")}
                     icon={<GraduationCap className="h-4 w-4" />}
-                    hint="PDF or Word · max 10 MB each"
+                    hint={t("pdfOrWordMax10MbEach")}
                     files={files?.certificates ?? []}
                     isPending={isPending}
                     onUpload={() =>
@@ -321,16 +318,16 @@ export function AddStaffDialog({
                     }
                     onDelete={handleDelete}
                     multi={true}
-                    addLabel="Add certificate"
-                    emptyLabel="No certificates uploaded yet"
+                    addLabel={t("addCertificate")}
+                    emptyLabel={t("noCertificatesUploadedYet")}
                   />
 
                   <Separator />
 
                   <DocSection
-                    title="Other documents"
+                    title={t("otherDocuments")}
                     icon={<FolderOpen className="h-4 w-4" />}
-                    hint="PDF or Word · max 10 MB each"
+                    hint={t("pdfOrWordMax10MbEach")}
                     files={files?.other ?? []}
                     isPending={isPending}
                     onUpload={() =>
@@ -338,8 +335,8 @@ export function AddStaffDialog({
                     }
                     onDelete={handleDelete}
                     multi={true}
-                    addLabel="Add document"
-                    emptyLabel="No other documents uploaded yet"
+                    addLabel={t("addDocument")}
+                    emptyLabel={t("noOtherDocumentsUploadedYet")}
                   />
                 </div>
               )}
@@ -347,8 +344,7 @@ export function AddStaffDialog({
 
             <div className="border-t border-border/50 px-8 py-4">
               <Button className="w-full" onClick={() => handleOpenChange(false)}>
-                Done
-              </Button>
+                {t("done")}</Button>
             </div>
           </>
         )}
@@ -388,6 +384,7 @@ type DocSectionProps =
     };
 
 function DocSection(props: DocSectionProps) {
+  const t = useTranslations("settings");
   const { title, icon, hint, isPending, onUpload, onDelete } = props;
 
   return (
@@ -407,8 +404,8 @@ function DocSection(props: DocSectionProps) {
           {props.multi
             ? props.addLabel
             : props.file
-              ? "Replace"
-              : "Upload"}
+              ? t("replace")
+              : t("upload")}
         </Button>
       </div>
       <p className="text-xs text-muted-foreground">{hint}</p>
@@ -438,7 +435,7 @@ function DocSection(props: DocSectionProps) {
         />
       ) : (
         <p className="rounded-lg border border-dashed border-border/60 py-6 text-center text-xs text-muted-foreground">
-          Not uploaded yet
+          {t("notUploadedYet")}
         </p>
       )}
     </div>

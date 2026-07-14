@@ -58,6 +58,7 @@ import { getAvailableTimeSlots, type SlotInfo } from "@/actions/time-slots";
 import type { Tables } from "@/types/database";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
 import { CALENDAR_STYLES } from "@/components/appointments/calendar-visuals";
+import { useTranslations } from "next-intl";
 
 export type Patient = Pick<
   Tables<"patients">,
@@ -170,6 +171,7 @@ export function AppointmentForm({
   onPatientChange,
   cancelHref = "/appointments",
 }: AppointmentFormProps) {
+  const t = useTranslations("appointments");
   const closedDays = clinicWorkingHours ? getClosedDaysOfWeek(clinicWorkingHours) : new Set<number>();
   const { formatCurrency, formatSlotTime } = useClinicSettings();
   const [state, formAction, isPending] = useActionState(action, null);
@@ -335,7 +337,7 @@ export function AppointmentForm({
     if (isPastClinicSlot(values.scheduled_at)) {
       form.setError("scheduled_at", {
         type: "validate",
-        message: "Choose a future date and time for the appointment.",
+        message: t("chooseAFutureDateAndTime"),
       });
       return;
     }
@@ -383,7 +385,7 @@ export function AppointmentForm({
           name="patient_id"
           render={({ field }) => (
             <FormItem className="flex flex-col">
-              <FormLabel>Patient</FormLabel>
+              <FormLabel>{t("patient")}</FormLabel>
               <Popover
                 open={patientOpen}
                 onOpenChange={(open) => {
@@ -409,16 +411,16 @@ export function AppointmentForm({
                     >
                       {field.value
                         ? patients.find((p) => p.id === field.value)?.full_name
-                        : "Search patient…"}
-                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        : t("searchpatient")}
+                      <ChevronsUpDown className="ms-2 h-4 w-4 shrink-0 opacity-50" />
                     </Button>
                   </FormControl>
                 </PopoverTrigger>
                 <PopoverContent className="w-[400px] p-0" align="start">
                   <Command>
-                    <CommandInput placeholder="Name, phone, file # or national ID…" />
+                    <CommandInput placeholder={t("namePhoneFileOrNationalId")} />
                     <CommandList>
-                      <CommandEmpty>No patients found.</CommandEmpty>
+                      <CommandEmpty>{t("noPatientsFound")}</CommandEmpty>
                       <CommandGroup>
                         {patients.map((p) => (
                           <CommandItem
@@ -452,7 +454,7 @@ export function AppointmentForm({
                           >
                             <Check
                               className={cn(
-                                "mr-2 h-4 w-4",
+                                "me-2 h-4 w-4",
                                 field.value === p.id
                                   ? "opacity-100"
                                   : "opacity-0",
@@ -463,12 +465,12 @@ export function AppointmentForm({
                               <p className="text-xs text-muted-foreground">
                                 {p.phone}
                                 {p.file_number && (
-                                  <span className="ml-2 font-mono">
+                                  <span className="ms-2 font-mono">
                                     #{p.file_number}
                                   </span>
                                 )}
                                 {p.national_id && (
-                                  <span className="ml-2 font-mono">
+                                  <span className="ms-2 font-mono">
                                     {p.national_id}
                                   </span>
                                 )}
@@ -492,7 +494,7 @@ export function AppointmentForm({
             name="package_id"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Package (optional)</FormLabel>
+                <FormLabel>{t("packageOptional")}</FormLabel>
                 <Select
                   value={field.value ?? "__none__"}
                   onValueChange={(value) =>
@@ -502,11 +504,11 @@ export function AppointmentForm({
                 >
                   <FormControl>
                     <SelectTrigger>
-                      <SelectValue placeholder="No package" />
+                      <SelectValue placeholder={t("noPackage")} />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="__none__">No package</SelectItem>
+                    <SelectItem value="__none__">{t("noPackage")}</SelectItem>
                     {availablePackages.map((pkg) => {
                       const remaining =
                         Number(pkg.total_sessions) - Number(pkg.used_sessions);
@@ -516,7 +518,7 @@ export function AppointmentForm({
                           <span className="flex flex-col gap-0.5">
                             <span className="font-medium">{pkg.name}</span>
                             <span className="text-xs text-muted-foreground">
-                              {remaining}/{pkg.total_sessions} remaining · session {nextSession}
+                              {remaining}/{pkg.total_sessions} {t("remainingSession")}{nextSession}
                               {pkg.price_per_session != null
                                 ? ` · ${formatCurrency(Number(pkg.price_per_session))}`
                                 : ""}
@@ -529,20 +531,18 @@ export function AppointmentForm({
                 </Select>
                 {availablePackages.length === 0 ? (
                   <p className="text-xs text-muted-foreground">
-                    No active packages with remaining sessions for this patient.
-                  </p>
+                    {t("noActivePackagesWithRemainingSessions")}</p>
                 ) : selectedPackage ? (
                   <div className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-400">
                     <Package className="h-3.5 w-3.5" />
                     <span className="font-medium">{selectedPackage.name}</span>
                     <span>
-                      Session {Number(selectedPackage.used_sessions) + 1} of{" "}
-                      {selectedPackage.total_sessions}
+                          {t("sessionOfTotal", { session: Number(selectedPackage.used_sessions) + 1, total: selectedPackage.total_sessions })}
                     </span>
                     <span>
                       {Number(selectedPackage.total_sessions) -
                         Number(selectedPackage.used_sessions)}{" "}
-                      remaining
+                          {t("remaining")}
                     </span>
                     {selectedPackage.price_per_session != null && (
                       <span>{formatCurrency(Number(selectedPackage.price_per_session))}</span>
@@ -562,7 +562,7 @@ export function AppointmentForm({
             name="department_id"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Department</FormLabel>
+                <FormLabel>{t("department")}</FormLabel>
                 <Select
                   value={field.value ?? undefined}
                   onValueChange={(v) => {
@@ -574,7 +574,7 @@ export function AppointmentForm({
                 >
                   <FormControl>
                     <SelectTrigger>
-                      <SelectValue placeholder="Select department" />
+                      <SelectValue placeholder={t("selectDepartment")} />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
@@ -596,7 +596,7 @@ export function AppointmentForm({
             name="doctor_id"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Doctor</FormLabel>
+                <FormLabel>{t("doctor")}</FormLabel>
                 <Select
                   value={field.value}
                   onValueChange={(value) => {
@@ -616,14 +616,13 @@ export function AppointmentForm({
                         doctorInteractedRef.current = true;
                       }}
                     >
-                      <SelectValue placeholder="Select doctor" />
+                      <SelectValue placeholder={t("selectDoctor")} />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
                     {filteredDoctors.length === 0 ? (
                       <SelectItem value="__empty__" disabled>
-                        No doctors in this department
-                      </SelectItem>
+                        {t("noDoctorsInThisDepartment")}</SelectItem>
                     ) : (
                       filteredDoctors.map((d) => (
                         <SelectItem key={d.id} value={d.id}>
@@ -652,7 +651,7 @@ export function AppointmentForm({
               const isClosedDay = selectedDow !== null && closedDays.has(selectedDow);
               return (
                 <FormItem>
-                  <FormLabel>Date</FormLabel>
+                  <FormLabel>{t("date")}</FormLabel>
                   <FormControl>
                     <Input
                       type="date"
@@ -669,8 +668,7 @@ export function AppointmentForm({
                   </FormControl>
                   {isClosedDay && (
                     <p className="text-sm text-destructive">
-                      The clinic is closed on {DAY_NAMES[selectedDow!]}s. Please select a different date.
-                    </p>
+                      {t("theClinicIsClosedOn")}{DAY_NAMES[selectedDow!]}{t("sPleaseSelectADifferentDate")}</p>
                   )}
                   <FormMessage />
                 </FormItem>
@@ -690,7 +688,7 @@ export function AppointmentForm({
               const selectedDate = dateVal || now.date;
               return (
                 <FormItem>
-                  <FormLabel>Time</FormLabel>
+                  <FormLabel>{t("time")}</FormLabel>
                   <Select
                     value={timeVal}
                     onValueChange={(t) => {
@@ -706,10 +704,9 @@ export function AppointmentForm({
                         {slotsLoading ? (
                           <span className="flex items-center gap-1.5 text-muted-foreground">
                             <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            Loading…
-                          </span>
+                            {t("loading")}</span>
                         ) : (
-                          <SelectValue placeholder="Select time" />
+                          <SelectValue placeholder={t("selectTime")} />
                         )}
                       </SelectTrigger>
                     </FormControl>
@@ -717,8 +714,8 @@ export function AppointmentForm({
                       {slots.length === 0 && !slotsLoading && (
                         <SelectItem value="__empty__" disabled>
                           {selectedDoctorId && dateVal
-                            ? "No slots available"
-                            : "Select a doctor and date first"}
+                            ? t("noslotsavailable")
+                            : t("selectadoctoranddatefirst")}
                         </SelectItem>
                       )}
                       {slots.map((slot) => {
@@ -734,12 +731,10 @@ export function AppointmentForm({
                             disabled={isDisabled}
                             className={cn(
                               CALENDAR_STYLES.selectedSlotItem,
-                              slot.label === "Break" && "text-muted-foreground italic",
-                              slot.label && slot.label !== "Break" &&
-                                "text-amber-700 dark:text-amber-300",
+                              slot.label === "break" && "text-muted-foreground italic",
                             )}
                           >
-                            {slot.label ? `${formatSlotTime(slot.time)} — ${slot.label}` : formatSlotTime(slot.time)}
+                            {slot.label ? `${formatSlotTime(slot.time)} — ${t("calendarBreak")}` : formatSlotTime(slot.time)}
                           </SelectItem>
                         );
                       })}
@@ -757,7 +752,7 @@ export function AppointmentForm({
             name="duration_minutes"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Duration</FormLabel>
+                <FormLabel>{t("duration")}</FormLabel>
                 <Select
                   value={String(field.value)}
                   onValueChange={(v) => field.onChange(Number(v))}
@@ -769,11 +764,11 @@ export function AppointmentForm({
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="15">15 min</SelectItem>
-                    <SelectItem value="30">30 min</SelectItem>
-                    <SelectItem value="45">45 min</SelectItem>
-                    <SelectItem value="60">60 min</SelectItem>
-                    <SelectItem value="90">90 min</SelectItem>
+                    <SelectItem value="15">{t("15Min")}</SelectItem>
+                    <SelectItem value="30">{t("30Min")}</SelectItem>
+                    <SelectItem value="45">{t("45Min")}</SelectItem>
+                    <SelectItem value="60">{t("60Min")}</SelectItem>
+                    <SelectItem value="90">{t("90Min")}</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormMessage />
@@ -787,7 +782,7 @@ export function AppointmentForm({
             name="insurance_provider_id"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Insurance</FormLabel>
+                <FormLabel>{t("insurance")}</FormLabel>
                 <Select
                   value={field.value ?? "__none__"}
                   onValueChange={(v) => {
@@ -798,11 +793,11 @@ export function AppointmentForm({
                 >
                   <FormControl>
                     <SelectTrigger>
-                      <SelectValue placeholder="None / Unknown" />
+                      <SelectValue placeholder={t("noneUnknown")} />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="__none__">None / Unknown</SelectItem>
+                    <SelectItem value="__none__">{t("noneUnknown")}</SelectItem>
                     {insuranceProviders.map((ip) => (
                       <SelectItem key={ip.id} value={ip.id}>
                         {ip.name}
@@ -822,12 +817,12 @@ export function AppointmentForm({
           name="notes"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Notes (optional)</FormLabel>
+              <FormLabel>{t("notesOptional")}</FormLabel>
               <FormControl>
                 <Textarea
                   {...field}
                   value={field.value ?? ""}
-                  placeholder="Any additional information…"
+                  placeholder={t("anyAdditionalInformation")}
                   rows={3}
                   disabled={isPending}
                   className="resize-none text-sm"
@@ -846,8 +841,7 @@ export function AppointmentForm({
               tabIndex={isPending ? -1 : undefined}
               className={isPending ? "pointer-events-none opacity-50" : undefined}
             >
-              Cancel
-            </Link>
+              {t("cancel")}</Link>
           </Button>
           <Button type="submit" disabled={isPending || checkingDay} className="gap-2">
             {isPending || checkingDay ? (
@@ -855,32 +849,27 @@ export function AppointmentForm({
             ) : (
               <CalendarPlus className="h-4 w-4" />
             )}
-            Book appointment
-          </Button>
+            {t("bookAppointment")}</Button>
         </div>
       </form>
 
       <AlertDialog open={sameDayWarning} onOpenChange={setSameDayWarning}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Patient already has an appointment today</AlertDialogTitle>
+            <AlertDialogTitle>{t("patientAlreadyHasAnAppointmentToday")}</AlertDialogTitle>
             <AlertDialogDescription>
-              This patient already has an appointment scheduled for this day. Do
-              you want to continue and book another appointment?
-            </AlertDialogDescription>
+              {t("thisPatientAlreadyHasAnAppointment")}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => setPendingFd(null)}>
-              Cancel
-            </AlertDialogCancel>
+              {t("cancel")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
                 if (pendingFd) submitFd(pendingFd);
                 setPendingFd(null);
               }}
             >
-              Continue booking
-            </AlertDialogAction>
+              {t("continueBooking")}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

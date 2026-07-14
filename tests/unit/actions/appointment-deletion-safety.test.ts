@@ -206,7 +206,7 @@ describe("permanentDeleteAppointment", () => {
 
     const result = await permanentDeleteAppointment(APPOINTMENT_ID);
 
-    expect(result.error).toBe("cannot delete due to constraint");
+    expect(result.error).toBe("We could not complete this request. Please try again.");
     expect(mocks.state.queryLog).not.toContainEqual(
       expect.objectContaining({ table: "appointments", operation: "delete" }),
     );
@@ -306,7 +306,7 @@ describe("emptyAppointmentsTrash — Phase 7 batch operations", () => {
 
     const result = await emptyAppointmentsTrash();
 
-    expect(result.error).toBe("foreign key violation");
+    expect(result.error).toBe("We could not complete this request. Please try again.");
     expect(mocks.state.queryLog).not.toContainEqual(
       expect.objectContaining({ table: "appointments", operation: "delete" }),
     );
@@ -321,7 +321,7 @@ describe("emptyAppointmentsTrash — Phase 7 batch operations", () => {
 
     const result = await emptyAppointmentsTrash();
 
-    expect(result.error).toBe("permission denied");
+    expect(result.error).toBe("We could not complete this request. Please try again.");
     expect(mocks.state.queryLog).not.toContainEqual(
       expect.objectContaining({ table: "appointment_services" }),
     );

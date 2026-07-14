@@ -13,6 +13,7 @@ import {
 } from "react-hook-form";
 import { cn } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
+import { useTranslations } from "next-intl";
 
 const Form = FormProvider;
 
@@ -131,8 +132,12 @@ const FormMessage = React.forwardRef<
   HTMLParagraphElement,
   React.ComponentPropsWithoutRef<"p">
 >(({ className, children, ...props }, ref) => {
+  const validationT = useTranslations("validation");
   const { error, formMessageId } = useFormField();
-  const body = error ? String(error?.message ?? error) : children;
+  const rawBody = error ? String(error?.message ?? error) : children;
+  const body = typeof rawBody === "string" && rawBody.startsWith("validation.")
+    ? validationT(rawBody.slice("validation.".length))
+    : rawBody;
   if (!body) return null;
   return (
     <p

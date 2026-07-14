@@ -15,11 +15,11 @@ vi.mock("@/actions/auth", () => ({ signOut: vi.fn() }));
 vi.mock("@/actions/theme", () => ({ setTheme: vi.fn() }));
 
 const clinicItems = [
-  { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
-  { href: "/patients", label: "Patients", icon: "patients" },
+  { href: "/dashboard", labelKey: "tenant.dashboard", icon: "dashboard" },
+  { href: "/patients", labelKey: "tenant.patients", icon: "patients" },
 ] as const;
 
-const operatorItems = [{ href: "/operator", label: "Mission Control", icon: "dashboard" }] as const;
+const operatorItems = [{ href: "/operator", labelKey: "operator.missionControl", icon: "mission-control" }] as const;
 
 async function openUserMenu() {
   await userEvent.click(screen.getByRole("button", { name: "Open user menu" }));

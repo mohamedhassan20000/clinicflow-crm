@@ -1,5 +1,6 @@
 "use server";
 
+import { actionError, actionWeekday } from "@/lib/i18n/action-errors";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { createClinicScopedAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -68,14 +69,14 @@ export async function createStaff(
   });
 
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Validation error" };
+    return { error: await actionError("settings.validationError") };
   }
 
   const { full_name, email, temporary_password, role, department_id, phone } =
     parsed.data;
 
   if (user.role !== "admin" && role === "admin") {
-    return { error: "Only admins can create admin users." };
+    return { error: await actionError("settings.onlyAdminsCanCreateAdminUsers") };
   }
 
   const adminClient = createClinicScopedAdminClient(user.clinicId);
@@ -90,9 +91,9 @@ export async function createStaff(
 
   if (authError || !authData.user) {
     if (authError?.message?.includes("already been registered")) {
-      return { error: "A staff member with this email already exists." };
+      return { error: await actionError("settings.aStaffMemberWithThisEmailAlreadyExists") };
     }
-    return { error: authError?.message ?? "Failed to create auth user." };
+    return { error: await actionError("settings.failedToCreateAuthUser") };
   }
 
   const userId = authData.user.id;
@@ -113,7 +114,7 @@ export async function createStaff(
   if (profileError) {
     // Roll back auth user if profile insert fails
     await adminClient.auth.admin.deleteUser(userId);
-    return { error: profileError.message };
+    return { error: await actionError("settings.weCouldNotCompleteThisRequestPleaseTryAgain") };
   }
 
   if (user.role === "admin" || user.role === "manager") {
@@ -141,21 +142,21 @@ export async function updateStaff(
   });
 
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Validation error" };
+    return { error: await actionError("settings.validationError") };
   }
 
   // Prevent self-deactivation
   if (staffId === user.id && !parsed.data.is_active) {
-    return { error: "You cannot deactivate your own account." };
+    return { error: await actionError("settings.youCannotDeactivateYourOwnAccount") };
   }
 
   const target = await getStaffTargetForClinic(staffId, user.clinicId);
-  if (!target) return { error: "Staff member not found." };
+  if (!target) return { error: await actionError("settings.staffMemberNotFound") };
   if (!managerCanManageTarget(user.role, target.role)) {
-    return { error: "Only admins can manage admin users." };
+    return { error: await actionError("settings.onlyAdminsCanManageAdminUsers") };
   }
   if (user.role !== "admin" && parsed.data.role !== target.role) {
-    return { error: "Only admins can change staff roles." };
+    return { error: await actionError("settings.onlyAdminsCanChangeStaffRoles") };
   }
 
   const supabase = await createClient();
@@ -171,8 +172,8 @@ export async function updateStaff(
     .eq("id", staffId)
     .eq("clinic_id", user.clinicId);
 
-  if (error) return { error: error.message };
-  if (!count) return { error: "Could not update this staff member. You may lack permission." };
+  if (error) return { error: await actionError("settings.weCouldNotCompleteThisRequestPleaseTryAgain") };
+  if (!count) return { error: await actionError("settings.couldNotUpdateThisStaffMemberYouMayLackPermission") };
 
   if (user.role === "admin" || user.role === "manager") {
     await ensureDefaultPagePermissions(staffId, parsed.data.role, user.clinicId);
@@ -190,13 +191,13 @@ export async function toggleStaffActive(
   const user = await requireRole(["admin", "manager"]);
 
   if (staffId === user.id && !isActive) {
-    return { error: "You cannot deactivate your own account." };
+    return { error: await actionError("settings.youCannotDeactivateYourOwnAccount") };
   }
 
   const target = await getStaffTargetForClinic(staffId, user.clinicId);
-  if (!target) return { error: "Staff member not found." };
+  if (!target) return { error: await actionError("settings.staffMemberNotFound") };
   if (!managerCanManageTarget(user.role, target.role)) {
-    return { error: "Only admins can manage admin users." };
+    return { error: await actionError("settings.onlyAdminsCanManageAdminUsers") };
   }
 
   const supabase = await createClient();
@@ -206,7 +207,7 @@ export async function toggleStaffActive(
     .eq("id", staffId)
     .eq("clinic_id", user.clinicId);
 
-  if (error) return { error: error.message };
+  if (error) return { error: await actionError("settings.weCouldNotCompleteThisRequestPleaseTryAgain") };
 
   revalidateTag(`staff:${user.clinicId}`, {});
   revalidatePath("/settings/staff");
@@ -217,13 +218,13 @@ export async function softDeleteStaff(staffId: string): Promise<ActionResult> {
   const user = await requireRole(["admin", "manager"]);
 
   if (staffId === user.id) {
-    return { error: "You cannot delete your own account." };
+    return { error: await actionError("settings.youCannotDeleteYourOwnAccount") };
   }
 
   const target = await getStaffTargetForClinic(staffId, user.clinicId);
-  if (!target) return { error: "Staff member not found." };
+  if (!target) return { error: await actionError("settings.staffMemberNotFound") };
   if (!managerCanManageTarget(user.role, target.role)) {
-    return { error: "Only admins can manage admin users." };
+    return { error: await actionError("settings.onlyAdminsCanManageAdminUsers") };
   }
 
   const supabase = await createClient();
@@ -233,7 +234,7 @@ export async function softDeleteStaff(staffId: string): Promise<ActionResult> {
     .eq("id", staffId)
     .eq("clinic_id", user.clinicId);
 
-  if (error) return { error: error.message };
+  if (error) return { error: await actionError("settings.weCouldNotCompleteThisRequestPleaseTryAgain") };
 
   revalidateTag(`staff:${user.clinicId}`, {});
   revalidatePath("/settings/staff");
@@ -244,9 +245,9 @@ export async function restoreStaff(staffId: string): Promise<ActionResult> {
   const user = await requireRole(["admin", "manager"]);
 
   const target = await getStaffTargetForClinic(staffId, user.clinicId);
-  if (!target) return { error: "Staff member not found." };
+  if (!target) return { error: await actionError("settings.staffMemberNotFound") };
   if (!managerCanManageTarget(user.role, target.role)) {
-    return { error: "Only admins can manage admin users." };
+    return { error: await actionError("settings.onlyAdminsCanManageAdminUsers") };
   }
 
   const supabase = await createClient();
@@ -256,7 +257,7 @@ export async function restoreStaff(staffId: string): Promise<ActionResult> {
     .eq("id", staffId)
     .eq("clinic_id", user.clinicId);
 
-  if (error) return { error: error.message };
+  if (error) return { error: await actionError("settings.weCouldNotCompleteThisRequestPleaseTryAgain") };
 
   revalidateTag(`staff:${user.clinicId}`, {});
   revalidatePath("/settings/staff");
@@ -267,7 +268,7 @@ export async function deleteStaff(staffId: string): Promise<ActionResult> {
   const user = await requireRole(["admin", "manager"]);
 
   if (staffId === user.id) {
-    return { error: "You cannot delete your own account." };
+    return { error: await actionError("settings.youCannotDeleteYourOwnAccount") };
   }
 
   const supabase = await createClient();
@@ -280,16 +281,16 @@ export async function deleteStaff(staffId: string): Promise<ActionResult> {
     .single();
 
   if (!target || target.clinic_id !== user.clinicId) {
-    return { error: "Staff member not found." };
+    return { error: await actionError("settings.staffMemberNotFound") };
   }
   if (!managerCanManageTarget(user.role, target.role)) {
-    return { error: "Only admins can manage admin users." };
+    return { error: await actionError("settings.onlyAdminsCanManageAdminUsers") };
   }
 
   // Delete auth user → cascades to profile via FK on auth.users
   const adminClient = createClinicScopedAdminClient(user.clinicId);
   const { error } = await adminClient.auth.admin.deleteUser(staffId);
-  if (error) return { error: error.message };
+  if (error) return { error: await actionError("settings.weCouldNotCompleteThisRequestPleaseTryAgain") };
 
   // Best-effort profile cleanup if FK cascade didn't fire
   await supabase.from("profiles").delete().eq("id", staffId);
@@ -313,13 +314,13 @@ export async function resetStaffPassword(
     temporary_password: temporaryPassword,
   });
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Invalid password." };
+    return { error: await actionError("settings.invalidPassword") };
   }
 
   const target = await getStaffTargetForClinic(staffId, user.clinicId);
-  if (!target) return { error: "Staff member not found." };
+  if (!target) return { error: await actionError("settings.staffMemberNotFound") };
   if (!managerCanManageTarget(user.role, target.role)) {
-    return { error: "Only admins can manage admin users." };
+    return { error: await actionError("settings.onlyAdminsCanManageAdminUsers") };
   }
 
   const adminClient = createClinicScopedAdminClient(user.clinicId);
@@ -328,7 +329,7 @@ export async function resetStaffPassword(
     password: parsed.data.temporary_password,
   });
 
-  if (error) return { error: error.message };
+  if (error) return { error: await actionError("settings.weCouldNotCompleteThisRequestPleaseTryAgain") };
 
   // Force must_change_password
   const supabase = await createClient();
@@ -353,24 +354,24 @@ export async function emptyStaffTrash(): Promise<ActionResult> {
     .eq("clinic_id", user.clinicId)
     .not("deleted_at", "is", null);
 
-  if (selectError) return { error: selectError.message };
+  if (selectError) return { error: await actionError("settings.weCouldNotCompleteThisRequestPleaseTryAgain") };
 
   const staff = targets ?? [];
   if (staff.some((target) => target.id === user.id)) {
-    return { error: "You cannot permanently delete your own account." };
+    return { error: await actionError("settings.youCannotPermanentlyDeleteYourOwnAccount") };
   }
   if (
     user.role !== "admin" &&
     staff.some((target) => target.role === "admin")
   ) {
-    return { error: "Only admins can empty trash containing admin users." };
+    return { error: await actionError("settings.onlyAdminsCanEmptyTrashContainingAdminUsers") };
   }
   if (staff.length === 0) return { success: true };
 
   const adminClient = createClinicScopedAdminClient(user.clinicId);
   for (const target of staff) {
     const { error } = await adminClient.auth.admin.deleteUser(target.id);
-    if (error) return { error: error.message };
+    if (error) return { error: await actionError("settings.weCouldNotCompleteThisRequestPleaseTryAgain") };
   }
 
   await supabase
@@ -403,7 +404,7 @@ export async function createDepartment(
   });
 
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Validation error" };
+    return { error: await actionError("settings.validationError") };
   }
 
   const supabase = await createClient();
@@ -413,8 +414,8 @@ export async function createDepartment(
   });
 
   if (error) {
-    if (error.code === "23505") return { error: "A department with this name already exists." };
-    return { error: error.message };
+    if (error.code === "23505") return { error: await actionError("settings.aDepartmentWithThisNameAlreadyExists") };
+    return { error: await actionError("settings.weCouldNotCompleteThisRequestPleaseTryAgain") };
   }
 
   revalidateTag(`departments:${user.clinicId}`, {});
@@ -436,7 +437,7 @@ export async function updateDepartment(
   });
 
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Validation error" };
+    return { error: await actionError("settings.validationError") };
   }
 
   const supabase = await createClient();
@@ -446,7 +447,7 @@ export async function updateDepartment(
     .eq("id", deptId)
     .eq("clinic_id", user.clinicId);
 
-  if (error) return { error: error.message };
+  if (error) return { error: await actionError("settings.weCouldNotCompleteThisRequestPleaseTryAgain") };
 
   revalidateTag(`departments:${user.clinicId}`, {});
   revalidatePath("/settings/departments");
@@ -466,7 +467,7 @@ export async function toggleDepartmentActive(
     .eq("id", deptId)
     .eq("clinic_id", user.clinicId);
 
-  if (error) return { error: error.message };
+  if (error) return { error: await actionError("settings.weCouldNotCompleteThisRequestPleaseTryAgain") };
 
   revalidateTag(`departments:${user.clinicId}`, {});
   revalidatePath("/settings/departments");
@@ -481,7 +482,7 @@ export async function softDeleteDepartment(deptId: string): Promise<ActionResult
     .update({ deleted_at: new Date().toISOString() })
     .eq("id", deptId)
     .eq("clinic_id", user.clinicId);
-  if (error) return { error: error.message };
+  if (error) return { error: await actionError("settings.weCouldNotCompleteThisRequestPleaseTryAgain") };
   revalidateTag(`departments:${user.clinicId}`, {});
   revalidatePath("/settings/departments");
   return { success: true };
@@ -495,7 +496,7 @@ export async function restoreDepartment(deptId: string): Promise<ActionResult> {
     .update({ deleted_at: null })
     .eq("id", deptId)
     .eq("clinic_id", user.clinicId);
-  if (error) return { error: error.message };
+  if (error) return { error: await actionError("settings.weCouldNotCompleteThisRequestPleaseTryAgain") };
   revalidateTag(`departments:${user.clinicId}`, {});
   revalidatePath("/settings/departments");
   return { success: true };
@@ -510,7 +511,7 @@ export async function permanentDeleteDepartment(deptId: string): Promise<ActionR
     .eq("id", deptId)
     .eq("clinic_id", user.clinicId)
     .not("deleted_at", "is", null);
-  if (error) return { error: error.message };
+  if (error) return { error: await actionError("settings.weCouldNotCompleteThisRequestPleaseTryAgain") };
   revalidateTag(`departments:${user.clinicId}`, {});
   revalidatePath("/settings/departments");
   return { success: true };
@@ -525,7 +526,7 @@ export async function emptyDepartmentsTrash(): Promise<ActionResult> {
     .eq("clinic_id", user.clinicId)
     .not("deleted_at", "is", null);
 
-  if (error) return { error: error.message };
+  if (error) return { error: await actionError("settings.weCouldNotCompleteThisRequestPleaseTryAgain") };
   revalidateTag(`departments:${user.clinicId}`, {});
   revalidatePath("/settings/departments");
   return { success: true };
@@ -545,7 +546,7 @@ export async function createInsurance(
   });
 
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Validation error" };
+    return { error: await actionError("settings.validationError") };
   }
 
   const supabase = await createClient();
@@ -555,8 +556,8 @@ export async function createInsurance(
   });
 
   if (error) {
-    if (error.code === "23505") return { error: "An insurance provider with this name already exists." };
-    return { error: error.message };
+    if (error.code === "23505") return { error: await actionError("settings.anInsuranceProviderWithThisNameAlreadyExists") };
+    return { error: await actionError("settings.weCouldNotCompleteThisRequestPleaseTryAgain") };
   }
 
   revalidateTag(`insurance:${user.clinicId}`, {});
@@ -577,7 +578,7 @@ export async function updateInsurance(
   });
 
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Validation error" };
+    return { error: await actionError("settings.validationError") };
   }
 
   const supabase = await createClient();
@@ -587,7 +588,7 @@ export async function updateInsurance(
     .eq("id", insuranceId)
     .eq("clinic_id", user.clinicId);
 
-  if (error) return { error: error.message };
+  if (error) return { error: await actionError("settings.weCouldNotCompleteThisRequestPleaseTryAgain") };
 
   revalidateTag(`insurance:${user.clinicId}`, {});
   revalidatePath("/settings/insurance");
@@ -607,7 +608,7 @@ export async function toggleInsuranceActive(
     .eq("id", insuranceId)
     .eq("clinic_id", user.clinicId);
 
-  if (error) return { error: error.message };
+  if (error) return { error: await actionError("settings.weCouldNotCompleteThisRequestPleaseTryAgain") };
 
   revalidateTag(`insurance:${user.clinicId}`, {});
   revalidatePath("/settings/insurance");
@@ -622,7 +623,7 @@ export async function softDeleteInsurance(insuranceId: string): Promise<ActionRe
     .update({ deleted_at: new Date().toISOString() })
     .eq("id", insuranceId)
     .eq("clinic_id", user.clinicId);
-  if (error) return { error: error.message };
+  if (error) return { error: await actionError("settings.weCouldNotCompleteThisRequestPleaseTryAgain") };
   revalidateTag(`insurance:${user.clinicId}`, {});
   revalidatePath("/settings/insurance");
   return { success: true };
@@ -636,7 +637,7 @@ export async function restoreInsurance(insuranceId: string): Promise<ActionResul
     .update({ deleted_at: null })
     .eq("id", insuranceId)
     .eq("clinic_id", user.clinicId);
-  if (error) return { error: error.message };
+  if (error) return { error: await actionError("settings.weCouldNotCompleteThisRequestPleaseTryAgain") };
   revalidateTag(`insurance:${user.clinicId}`, {});
   revalidatePath("/settings/insurance");
   return { success: true };
@@ -651,7 +652,7 @@ export async function permanentDeleteInsurance(insuranceId: string): Promise<Act
     .eq("id", insuranceId)
     .eq("clinic_id", user.clinicId)
     .not("deleted_at", "is", null);
-  if (error) return { error: error.message };
+  if (error) return { error: await actionError("settings.weCouldNotCompleteThisRequestPleaseTryAgain") };
   revalidateTag(`insurance:${user.clinicId}`, {});
   revalidatePath("/settings/insurance");
   return { success: true };
@@ -666,7 +667,7 @@ export async function emptyInsuranceTrash(): Promise<ActionResult> {
     .eq("clinic_id", user.clinicId)
     .not("deleted_at", "is", null);
 
-  if (error) return { error: error.message };
+  if (error) return { error: await actionError("settings.weCouldNotCompleteThisRequestPleaseTryAgain") };
   revalidateTag(`insurance:${user.clinicId}`, {});
   revalidatePath("/settings/insurance");
   return { success: true };
@@ -688,7 +689,7 @@ export async function updateClinic(
   });
 
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Validation error" };
+    return { error: await actionError("settings.validationError") };
   }
 
   const supabase = await createClient();
@@ -702,7 +703,7 @@ export async function updateClinic(
     })
     .eq("id", user.clinicId);
 
-  if (error) return { error: error.message };
+  if (error) return { error: await actionError("settings.weCouldNotCompleteThisRequestPleaseTryAgain") };
 
   revalidatePath("/", "layout");
   return { success: true };
@@ -712,14 +713,14 @@ export async function uploadClinicLogo(fd: FormData): Promise<ActionResult & { u
   const user = await requireRole(["admin", "manager"]);
 
   const file = fd.get("logo") as File | null;
-  if (!file || file.size === 0) return { error: "No file provided." };
+  if (!file || file.size === 0) return { error: await actionError("settings.noFileProvided") };
 
   const MAX_SIZE = 5 * 1024 * 1024; // 5 MB
-  if (file.size > MAX_SIZE) return { error: "File must be under 5 MB." };
+  if (file.size > MAX_SIZE) return { error: await actionError("settings.fileMustBeUnder5Mb") };
 
   const allowedTypes = ["image/png", "image/jpeg", "image/svg+xml"];
   if (!allowedTypes.includes(file.type)) {
-    return { error: "Only PNG, JPEG, or SVG files are accepted." };
+    return { error: await actionError("settings.onlyPngJpegOrSvgFilesAreAccepted") };
   }
 
   const ext = file.name.split(".").pop() ?? "png";
@@ -730,7 +731,7 @@ export async function uploadClinicLogo(fd: FormData): Promise<ActionResult & { u
     .from("clinic-assets")
     .upload(path, file, { upsert: true, contentType: file.type });
 
-  if (uploadError) return { error: uploadError.message };
+  if (uploadError) return { error: await actionError("settings.weCouldNotCompleteThisRequestPleaseTryAgain") };
 
   const { data: urlData } = supabase.storage
     .from("clinic-assets")
@@ -759,7 +760,7 @@ export async function createService(
   });
 
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Validation error" };
+    return { error: await actionError("settings.validationError") };
   }
 
   const supabase = await createClient();
@@ -771,7 +772,7 @@ export async function createService(
     is_active: true,
   });
 
-  if (error) return { error: error.message };
+  if (error) return { error: await actionError("settings.weCouldNotCompleteThisRequestPleaseTryAgain") };
 
   revalidateTag(`services:${user.clinicId}`, {});
   revalidatePath("/settings/services");
@@ -792,7 +793,7 @@ export async function updateService(
   });
 
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Validation error" };
+    return { error: await actionError("settings.validationError") };
   }
 
   const supabase = await createClient();
@@ -806,7 +807,7 @@ export async function updateService(
     .eq("id", serviceId)
     .eq("clinic_id", user.clinicId);
 
-  if (error) return { error: error.message };
+  if (error) return { error: await actionError("settings.weCouldNotCompleteThisRequestPleaseTryAgain") };
 
   revalidateTag(`services:${user.clinicId}`, {});
   revalidatePath("/settings/services");
@@ -821,7 +822,7 @@ export async function softDeleteService(serviceId: string): Promise<ActionResult
     .update({ deleted_at: new Date().toISOString() })
     .eq("id", serviceId)
     .eq("clinic_id", user.clinicId);
-  if (error) return { error: error.message };
+  if (error) return { error: await actionError("settings.weCouldNotCompleteThisRequestPleaseTryAgain") };
   revalidateTag(`services:${user.clinicId}`, {});
   revalidatePath("/settings/services");
   return { success: true };
@@ -835,7 +836,7 @@ export async function restoreService(serviceId: string): Promise<ActionResult> {
     .update({ deleted_at: null })
     .eq("id", serviceId)
     .eq("clinic_id", user.clinicId);
-  if (error) return { error: error.message };
+  if (error) return { error: await actionError("settings.weCouldNotCompleteThisRequestPleaseTryAgain") };
   revalidateTag(`services:${user.clinicId}`, {});
   revalidatePath("/settings/services");
   return { success: true };
@@ -851,7 +852,7 @@ export async function deleteService(serviceId: string): Promise<ActionResult> {
     .eq("clinic_id", user.clinicId)
     .not("deleted_at", "is", null);
 
-  if (error) return { error: error.message };
+  if (error) return { error: await actionError("settings.weCouldNotCompleteThisRequestPleaseTryAgain") };
 
   revalidateTag(`services:${user.clinicId}`, {});
   revalidatePath("/settings/services");
@@ -867,7 +868,7 @@ export async function emptyServicesTrash(): Promise<ActionResult> {
     .eq("clinic_id", user.clinicId)
     .not("deleted_at", "is", null);
 
-  if (error) return { error: error.message };
+  if (error) return { error: await actionError("settings.weCouldNotCompleteThisRequestPleaseTryAgain") };
   revalidateTag(`services:${user.clinicId}`, {});
   revalidatePath("/settings/services");
   return { success: true };
@@ -885,7 +886,7 @@ export async function toggleServiceActive(
     .eq("id", serviceId)
     .eq("clinic_id", user.clinicId);
 
-  if (error) return { error: error.message };
+  if (error) return { error: await actionError("settings.weCouldNotCompleteThisRequestPleaseTryAgain") };
 
   revalidateTag(`services:${user.clinicId}`, {});
   revalidatePath("/settings/services");
@@ -929,18 +930,18 @@ export async function upsertClinicWorkingHours(
   const user = await requireRole(["admin"]);
 
   const raw = fd.get("working_hours");
-  if (typeof raw !== "string") return { error: "Invalid payload." };
+  if (typeof raw !== "string") return { error: await actionError("settings.invalidPayload") };
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    return { error: "Invalid payload." };
+    return { error: await actionError("settings.invalidPayload") };
   }
 
   const result = clinicWorkingHoursSchema.safeParse(parsed);
   if (!result.success) {
-    return { error: result.error.issues[0]?.message ?? "Validation error." };
+    return { error: await actionError("settings.validationError2") };
   }
 
   const rows = result.data
@@ -960,13 +961,13 @@ export async function upsertClinicWorkingHours(
     .from("clinic_working_hours")
     .delete()
     .eq("clinic_id", user.clinicId);
-  if (delErr) return { error: delErr.message };
+  if (delErr) return { error: await actionError("settings.weCouldNotCompleteThisRequestPleaseTryAgain") };
 
   if (rows.length > 0) {
     const { error: insErr } = await supabase
       .from("clinic_working_hours")
       .insert(rows);
-    if (insErr) return { error: insErr.message };
+    if (insErr) return { error: await actionError("settings.weCouldNotCompleteThisRequestPleaseTryAgain") };
   }
 
   revalidatePath("/settings/clinic");
@@ -1009,18 +1010,18 @@ export async function upsertDoctorSchedule(
   const user = await requireRole(["admin"]);
 
   const raw = fd.get("schedule");
-  if (typeof raw !== "string") return { error: "Invalid payload." };
+  if (typeof raw !== "string") return { error: await actionError("settings.invalidPayload") };
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    return { error: "Invalid payload." };
+    return { error: await actionError("settings.invalidPayload") };
   }
 
   const result = doctorScheduleSchema.safeParse(parsed);
   if (!result.success) {
-    return { error: result.error.issues[0]?.message ?? "Validation error." };
+    return { error: await actionError("settings.validationError2") };
   }
 
   // Validate each working day against clinic working hours
@@ -1028,20 +1029,25 @@ export async function upsertDoctorSchedule(
   const clinicHasConfig = clinicHours.some((d) => d.open);
 
   if (clinicHasConfig) {
-    const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
     for (const day of result.data) {
       if (!day.works || !day.start_time || !day.end_time) continue;
       const clinicDay = clinicHours.find((c) => c.day_of_week === day.day_of_week);
       if (!clinicDay?.open || clinicDay.shifts.length === 0) {
         return {
-          error: `${DAY_NAMES[day.day_of_week]} is a clinic closed day. The doctor cannot work on a clinic closed day.`,
+          error: await actionError("settings.doctorScheduleOnClosedDay", { day: await actionWeekday(day.day_of_week) }),
         };
       }
       const clinicOpen = clinicDay.shifts.reduce((min, s) => s.shift_start < min ? s.shift_start : min, clinicDay.shifts[0].shift_start);
       const clinicClose = clinicDay.shifts.reduce((max, s) => s.shift_end > max ? s.shift_end : max, clinicDay.shifts[0].shift_end);
       if (day.start_time < clinicOpen || day.end_time > clinicClose) {
         return {
-          error: `${DAY_NAMES[day.day_of_week]}: doctor hours (${day.start_time}–${day.end_time}) must be within clinic hours (${clinicOpen}–${clinicClose}).`,
+          error: await actionError("settings.doctorHoursOutsideClinicHours", {
+            day: await actionWeekday(day.day_of_week),
+            start: day.start_time,
+            end: day.end_time,
+            clinicOpen,
+            clinicClose,
+          }),
         };
       }
     }
@@ -1064,13 +1070,13 @@ export async function upsertDoctorSchedule(
     .delete()
     .eq("doctor_id", doctorId)
     .eq("clinic_id", user.clinicId);
-  if (delErr) return { error: delErr.message };
+  if (delErr) return { error: await actionError("settings.weCouldNotCompleteThisRequestPleaseTryAgain") };
 
   if (rows.length > 0) {
     const { error: insErr } = await supabase
       .from("doctor_schedules")
       .insert(rows);
-    if (insErr) return { error: insErr.message };
+    if (insErr) return { error: await actionError("settings.weCouldNotCompleteThisRequestPleaseTryAgain") };
   }
 
   revalidatePath("/settings/staff");

@@ -2,11 +2,20 @@ import Link from "next/link";
 import { AlertCircle, ArrowUpRight } from "lucide-react";
 import { MarketingLogo } from "@/components/marketing/marketing-logo";
 import { PublicThemeShell, PublicThemeToggle } from "@/components/marketing/public-theme";
-import { marketingCopy as copy } from "@/lib/marketing-copy";
+import { useTranslations } from "next-intl";
+import { getLegalCopy, getMarketingCopy, type LegalCopy } from "@/lib/marketing-copy";
+import type { MessageTranslator } from "@/lib/i18n/translator";
 
-type LegalContent = typeof copy.legal.privacy | typeof copy.legal.terms;
+/**
+ * P2C — which of the two outlines to render. The *content* now comes from the message catalog, so
+ * the page takes a document key rather than a copy object: `/privacy` and `/terms` cannot hand it
+ * an English literal any more, which is exactly the mistake this shape prevents.
+ */
+export function LegalPage({ document }: { document: "privacy" | "terms" }) {
+  const legal: LegalCopy = getLegalCopy(useTranslations("legal") as unknown as MessageTranslator);
+  const marketing = getMarketingCopy(useTranslations("marketing") as unknown as MessageTranslator);
+  const content = legal[document];
 
-export function LegalPage({ content }: { content: LegalContent }) {
   return (
     <PublicThemeShell className="min-h-dvh bg-[var(--m-paper)] text-[var(--m-ink)]">
       <header className="border-b border-[var(--m-line)]">
@@ -18,8 +27,8 @@ export function LegalPage({ content }: { content: LegalContent }) {
               href="/"
               className="inline-flex min-h-11 items-center gap-2 rounded-full border border-[var(--m-line-strong)] bg-[var(--m-panel)] px-4 text-sm font-semibold hover:bg-[var(--m-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0d9488]"
             >
-              {copy.legal.back}
-              <ArrowUpRight className="size-4" aria-hidden="true" />
+              {legal.back}
+              <ArrowUpRight className="size-4 rtl:-scale-x-100" aria-hidden="true" />
             </Link>
           </div>
         </div>
@@ -40,8 +49,8 @@ export function LegalPage({ content }: { content: LegalContent }) {
         >
           <AlertCircle className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
           <div>
-            <h2 id="legal-review-notice" className="text-base font-bold tracking-normal">{copy.legal.noticeTitle}</h2>
-            <p className="mt-1 text-sm leading-6">{copy.legal.noticeBody}</p>
+            <h2 id="legal-review-notice" className="text-base font-bold tracking-normal">{legal.noticeTitle}</h2>
+            <p className="mt-1 text-sm leading-6">{legal.noticeBody}</p>
           </div>
         </aside>
 
@@ -62,10 +71,10 @@ export function LegalPage({ content }: { content: LegalContent }) {
 
       <footer className="border-t border-[var(--m-line)] px-5 py-8 text-sm text-[var(--m-muted)]">
         <div className="mx-auto flex max-w-5xl flex-wrap justify-between gap-4">
-          <span>{copy.footer.copyright(new Date().getFullYear())}</span>
+          <span>{marketing.footer.copyright(new Intl.NumberFormat("en", { useGrouping: false }).format(new Date().getFullYear()))}</span>
           <div className="flex gap-5">
-            <Link href="/privacy" className="hover:text-[var(--m-ink)]">{copy.footer.privacy}</Link>
-            <Link href="/terms" className="hover:text-[var(--m-ink)]">{copy.footer.terms}</Link>
+            <Link href="/privacy" className="hover:text-[var(--m-ink)]">{marketing.footer.privacy}</Link>
+            <Link href="/terms" className="hover:text-[var(--m-ink)]">{marketing.footer.terms}</Link>
           </div>
         </div>
       </footer>

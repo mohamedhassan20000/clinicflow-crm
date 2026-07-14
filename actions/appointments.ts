@@ -1,5 +1,7 @@
 "use server";
 
+import { actionAppointmentStatus, actionError, actionWeekday } from "@/lib/i18n/action-errors";
+import { localizeZodFieldErrors } from "@/lib/validations/server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { fromZonedTime, toZonedTime } from "date-fns-tz";
@@ -87,24 +89,24 @@ async function validateAppointmentReferences(
         : Promise.resolve({ data: null, error: null }),
     ]);
 
-  if (patientResult.error) return { error: "Failed to validate patient." };
-  if (doctorResult.error) return { error: "Failed to validate doctor." };
-  if (departmentResult.error) return { error: "Failed to validate department." };
-  if (insuranceResult.error) return { error: "Failed to validate insurance provider." };
-  if (!patientResult.data) return { error: "Select an active patient in this clinic." };
-  if (!doctorResult.data) return { error: "Select an active doctor in this clinic." };
+  if (patientResult.error) return { error: await actionError("appointments.failedToValidatePatient") };
+  if (doctorResult.error) return { error: await actionError("appointments.failedToValidateDoctor") };
+  if (departmentResult.error) return { error: await actionError("appointments.failedToValidateDepartment") };
+  if (insuranceResult.error) return { error: await actionError("appointments.failedToValidateInsuranceProvider") };
+  if (!patientResult.data) return { error: await actionError("appointments.selectAnActivePatientInThisClinic") };
+  if (!doctorResult.data) return { error: await actionError("appointments.selectAnActiveDoctorInThisClinic") };
   if (values.department_id && !departmentResult.data) {
-    return { error: "Select an active department in this clinic." };
+    return { error: await actionError("appointments.selectAnActiveDepartmentInThisClinic") };
   }
   if (values.insurance_provider_id && !insuranceResult.data) {
-    return { error: "Select an active insurance provider in this clinic." };
+    return { error: await actionError("appointments.selectAnActiveInsuranceProviderInThisClinic") };
   }
   if (
     values.department_id &&
     doctorResult.data.department_id &&
     doctorResult.data.department_id !== values.department_id
   ) {
-    return { error: "Selected doctor does not belong to the selected department." };
+    return { error: await actionError("appointments.selectedDoctorDoesNotBelongToTheSelectedDepartment") };
   }
 
   return {};
@@ -144,22 +146,22 @@ async function validateAppointmentPackage(
 
   if (error) {
     return {
-      error: "Failed to validate package.",
-      fieldErrors: { package_id: ["Failed to validate package."] },
+      error: await actionError("appointments.failedToValidatePackage"),
+      fieldErrors: { package_id: [await actionError("appointments.failedToValidatePackage")] },
     };
   }
 
   if (!pkg) {
     return {
-      error: "Select an active package for this patient.",
-      fieldErrors: { package_id: ["Select an active package for this patient."] },
+      error: await actionError("appointments.selectAnActivePackageForThisPatient"),
+      fieldErrors: { package_id: [await actionError("appointments.selectAnActivePackageForThisPatient")] },
     };
   }
 
   if (!pkg.is_active || Number(pkg.used_sessions) >= Number(pkg.total_sessions)) {
     return {
-      error: "Selected package has no remaining sessions.",
-      fieldErrors: { package_id: ["Selected package has no remaining sessions."] },
+      error: await actionError("appointments.selectedPackageHasNoRemainingSessions"),
+      fieldErrors: { package_id: [await actionError("appointments.selectedPackageHasNoRemainingSessions")] },
     };
   }
 
@@ -218,7 +220,7 @@ async function validateAppointmentSlot(
   if (error) {
     return {
       error:
-        "Could not verify the doctor's availability. Please try again before booking.",
+        await actionError("appointments.couldNotVerifyTheDoctorSAvailabilityPleaseTryAgain"),
     };
   }
 
@@ -230,7 +232,7 @@ async function validateAppointmentSlot(
     if (overlapsSession) {
       return {
         error:
-          "This doctor is already booked during the selected session time. Please choose a different time slot.",
+          await actionError("appointments.thisDoctorIsAlreadyBookedDuringTheSelectedSessionTime"),
       };
     }
     if (
@@ -239,7 +241,7 @@ async function validateAppointmentSlot(
     ) {
       return {
         error:
-          "This doctor needs a 15-minute recovery/buffer window between appointments. Please choose a different time slot.",
+          await actionError("appointments.thisDoctorNeedsA15MinuteRecoveryBufferWindowBetween"),
       };
     }
   }
@@ -267,13 +269,13 @@ export async function createAppointment(
 
   const parsed = appointmentSchema.safeParse(raw);
   if (!parsed.success) {
-    const flat = parsed.error.flatten().fieldErrors;
+    const flat = await localizeZodFieldErrors(parsed.error);
     const first = Object.values(flat).flat()[0];
-    return { error: first ?? "Please fill every required field.", fieldErrors: flat };
+    return { error: first ?? await actionError("appointments.pleaseFillEveryRequiredField"), fieldErrors: flat };
   }
 
   if (isPastScheduledAt(parsed.data.scheduled_at)) {
-    return { error: "Choose a future date and time for the appointment." };
+    return { error: await actionError("appointments.chooseAFutureDateAndTimeForTheAppointment") };
   }
 
   const clinicTimeZone = await getClinicTimeZone(user.clinicId);
@@ -285,8 +287,7 @@ export async function createAppointment(
     const dow = apptDate.getDay();
     const clinicDay = clinicHours.find((d) => d.day_of_week === dow);
     if (!clinicDay?.open) {
-      const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-      return { error: `The clinic is closed on ${dayNames[dow]}s. Please select a different date.` };
+      return { error: await actionError("appointments.clinicClosedOnDay", { day: await actionWeekday(dow) }) };
     }
   }
 
@@ -321,15 +322,15 @@ export async function createAppointment(
       if (msg.includes("appointments_patient_active_slot_key")) {
         return {
           error:
-            "This patient already has another appointment at the same time. Pick a different slot.",
+            await actionError("appointments.thisPatientAlreadyHasAnotherAppointmentAtTheSameTime"),
         };
       }
       return {
         error:
-          "This doctor already has an appointment at that time. Please choose a different slot.",
+          await actionError("appointments.thisDoctorAlreadyHasAnAppointmentAtThatTimePlease"),
       };
     }
-    return { error: error.message || "Failed to create appointment. Please try again." };
+    return { error: await actionError("appointments.failedToCreateAppointmentPleaseTryAgain") };
   }
 
   revalidatePath("/appointments");
@@ -364,18 +365,24 @@ export async function updateAppointmentStatus(
     .eq("clinic_id", user.clinicId)
     .single();
 
-  if (!appt) return { error: "Appointment not found." };
+  if (!appt) return { error: await actionError("appointments.appointmentNotFound") };
 
   const allowed = STATUS_TRANSITIONS[appt.status] ?? [];
   const completingWithInvoice = newStatus === "completed" && !!billingPayload;
   if (!completingWithInvoice && !allowed.includes(newStatus)) {
-    return { error: `Cannot transition from ${appt.status} to ${newStatus}.` };
+    return { error: await actionError("appointments.cannotTransitionStatus", {
+      from: await actionAppointmentStatus(appt.status),
+      to: await actionAppointmentStatus(newStatus),
+    }) };
   }
   if (
     completingWithInvoice &&
     !["pending", "confirmed", "arrived", "in_session"].includes(appt.status)
   ) {
-    return { error: `Cannot transition from ${appt.status} to ${newStatus}.` };
+    return { error: await actionError("appointments.cannotTransitionStatus", {
+      from: await actionAppointmentStatus(appt.status),
+      to: await actionAppointmentStatus(newStatus),
+    }) };
   }
 
   const update: TablesUpdate<"appointments"> = {
@@ -386,10 +393,10 @@ export async function updateAppointmentStatus(
   if (newStatus === "cancelled") {
     const reason = (cancellationReason ?? "").trim();
     if (!reason) {
-      return { error: "Please provide a reason for cancelling this appointment." };
+      return { error: await actionError("appointments.pleaseProvideAReasonForCancellingThisAppointment") };
     }
     if (reason.length > 500) {
-      return { error: "Cancellation reason must be 500 characters or less." };
+      return { error: await actionError("appointments.cancellationReasonMustBe500CharactersOrLess") };
     }
     update.cancellation_reason = reason;
     update.cancelled_at = new Date().toISOString();
@@ -400,11 +407,11 @@ export async function updateAppointmentStatus(
     const reason = (noShowReason ?? "").trim();
     if (!reason) {
       return {
-        error: "Please provide a reason for marking this appointment as a no-show.",
+        error: await actionError("appointments.pleaseProvideAReasonForMarkingThisAppointmentAsA"),
       };
     }
     if (reason.length > 500) {
-      return { error: "No-show reason must be 500 characters or less." };
+      return { error: await actionError("appointments.noShowReasonMustBe500CharactersOrLess") };
     }
     update.no_show_reason = reason;
     update.no_showed_at = new Date().toISOString();
@@ -413,20 +420,20 @@ export async function updateAppointmentStatus(
 
   if (newStatus === "completed") {
     if (!billingPayload) {
-      return { error: "Billing details are required to complete this appointment." };
+      return { error: await actionError("appointments.billingDetailsAreRequiredToCompleteThisAppointment") };
     }
 
     const parsed = billingSchema.safeParse(billingPayload);
     if (!parsed.success) {
-      const flat = parsed.error.flatten().fieldErrors;
+      const flat = await localizeZodFieldErrors(parsed.error);
       const first = Object.values(flat).flat()[0];
-      return { error: first ?? "Invalid billing details.", fieldErrors: flat };
+      return { error: first ?? await actionError("appointments.invalidBillingDetails"), fieldErrors: flat };
     }
     const billing = parsed.data;
 
     const total = lineItemTotal(billing.line_items);
     if (total <= 0) {
-      return { error: "Invoice total must be greater than zero." };
+      return { error: await actionError("appointments.invoiceTotalMustBeGreaterThanZero") };
     }
 
     // Validate deposit_amount against patient's available balance
@@ -437,13 +444,14 @@ export async function updateAppointmentStatus(
       );
       if (billing.deposit_amount > balance + 0.001) {
         return {
-          error: `Deposit applied (${billing.deposit_amount.toFixed(
-            2,
-          )}) exceeds patient's account balance (${balance.toFixed(2)}).`,
+          error: await actionError("appointments.depositExceedsBalance", {
+            deposit: billing.deposit_amount.toFixed(2),
+            balance: balance.toFixed(2),
+          }),
         };
       }
       if (billing.deposit_amount > total + 0.001) {
-        return { error: "Deposit applied cannot exceed invoice total." };
+        return { error: await actionError("appointments.depositAppliedCannotExceedInvoiceTotal") };
       }
     }
 
@@ -453,7 +461,7 @@ export async function updateAppointmentStatus(
       billing.secondary_amount +
       billing.deposit_amount;
     if (collected > total + 0.001) {
-      return { error: "Collected amount exceeds invoice total." };
+      return { error: await actionError("appointments.collectedAmountExceedsInvoiceTotal") };
     }
     const baseBillingArgs = {
       p_appointment_id: id,
@@ -483,7 +491,7 @@ export async function updateAppointmentStatus(
           )
         : await supabase.rpc("complete_appointment_billing", baseBillingArgs);
 
-    if (error) return { error: error.message };
+    if (error) return { error: await actionError("appointments.weCouldNotCompleteThisRequestPleaseTryAgain") };
     revalidatePath("/appointments");
     revalidatePath(`/patients/${appt.patient_id}`);
     return {};
@@ -495,7 +503,7 @@ export async function updateAppointmentStatus(
     .eq("id", id)
     .eq("clinic_id", user.clinicId);
 
-  if (error) return { error: "Failed to update status." };
+  if (error) return { error: await actionError("appointments.failedToUpdateStatus") };
 
   revalidatePath("/appointments");
   revalidatePath(`/patients/${appt.patient_id}`);
@@ -513,7 +521,7 @@ export async function softDeleteAppointment(id: string): Promise<ActionResult> {
     .eq("clinic_id", user.clinicId)
     .single();
 
-  if (fetchError || !appt) return { error: "Appointment not found." };
+  if (fetchError || !appt) return { error: await actionError("appointments.appointmentNotFound") };
 
   if (
     ["arrived", "in_session", "completed"].includes(appt.status) ||
@@ -523,7 +531,7 @@ export async function softDeleteAppointment(id: string): Promise<ActionResult> {
   ) {
     return {
       error:
-        "Arrived, in-session, completed, or charged appointments cannot be deleted.",
+        await actionError("appointments.arrivedInSessionCompletedOrChargedAppointmentsCannotBeDeleted"),
     };
   }
 
@@ -546,7 +554,7 @@ export async function softDeleteAppointment(id: string): Promise<ActionResult> {
     } as TablesUpdate<"appointments">)
     .eq("id", id)
     .eq("clinic_id", user.clinicId);
-  if (error) return { error: error.message };
+  if (error) return { error: await actionError("appointments.weCouldNotCompleteThisRequestPleaseTryAgain") };
   revalidatePath("/appointments");
   return {};
 }
@@ -559,7 +567,7 @@ export async function restoreAppointment(id: string): Promise<ActionResult> {
     .update({ deleted_at: null })
     .eq("id", id)
     .eq("clinic_id", user.clinicId);
-  if (error) return { error: error.message };
+  if (error) return { error: await actionError("appointments.weCouldNotCompleteThisRequestPleaseTryAgain") };
   revalidatePath("/appointments");
   return {};
 }
@@ -590,7 +598,7 @@ async function deleteAppointmentDependents(
 
   const results = await Promise.all(operations);
   const failed = results.find((r) => r.error);
-  if (failed?.error) return { error: failed.error.message };
+  if (failed?.error) return { error: await actionError("appointments.weCouldNotCompleteThisRequestPleaseTryAgain") };
   return {};
 }
 
@@ -608,13 +616,13 @@ export async function undoAppointmentStatus(
     .eq("clinic_id", user.clinicId)
     .single();
 
-  if (!appt) return { error: "Appointment not found." };
+  if (!appt) return { error: await actionError("appointments.appointmentNotFound") };
   if (user.role === "doctor") {
     if (appt.doctor_id !== user.id) {
-      return { error: "You can only update your own appointments." };
+      return { error: await actionError("appointments.youCanOnlyUpdateYourOwnAppointments") };
     }
     if (targetStatus !== "arrived" || appt.status !== "in_session") {
-      return { error: "Doctors can only undo a session start." };
+      return { error: await actionError("appointments.doctorsCanOnlyUndoASessionStart") };
     }
   }
 
@@ -623,7 +631,7 @@ export async function undoAppointmentStatus(
     p_target_status: targetStatus,
   });
 
-  if (error) return { error: error.message };
+  if (error) return { error: await actionError("appointments.weCouldNotCompleteThisRequestPleaseTryAgain") };
 
   revalidatePath("/appointments");
   revalidatePath(`/patients/${appt.patient_id}`);
@@ -641,9 +649,12 @@ export async function arriveAppointment(id: string): Promise<ActionResult> {
     .eq("clinic_id", user.clinicId)
     .single();
 
-  if (!appt) return { error: "Appointment not found." };
+  if (!appt) return { error: await actionError("appointments.appointmentNotFound") };
   if (appt.status !== "confirmed") {
-    return { error: `Cannot transition from ${appt.status} to arrived.` };
+    return { error: await actionError("appointments.cannotTransitionStatus", {
+      from: await actionAppointmentStatus(appt.status),
+      to: await actionAppointmentStatus("arrived"),
+    }) };
   }
 
   const { error } = await supabase
@@ -656,7 +667,7 @@ export async function arriveAppointment(id: string): Promise<ActionResult> {
     .eq("clinic_id", user.clinicId)
     .eq("status", "confirmed");
 
-  if (error) return { error: "Failed to mark appointment as arrived." };
+  if (error) return { error: await actionError("appointments.failedToMarkAppointmentAsArrived") };
 
   revalidatePath("/appointments");
   revalidatePath(`/patients/${appt.patient_id}`);
@@ -675,25 +686,25 @@ export async function startAppointmentSession(
     .eq("id", id)
     .maybeSingle();
 
-  if (readError) return { error: readError.message };
-  if (!appt) return { error: "Appointment not found." };
+  if (readError) return { error: await actionError("appointments.weCouldNotCompleteThisRequestPleaseTryAgain") };
+  if (!appt) return { error: await actionError("appointments.appointmentNotFound") };
   if (appt.clinic_id !== user.clinicId) {
-    return { error: "Appointment not found." };
+    return { error: await actionError("appointments.appointmentNotFound") };
   }
   if (appt.doctor_id !== user.id) {
-    return { error: "Only the assigned doctor can start this session." };
+    return { error: await actionError("appointments.onlyTheAssignedDoctorCanStartThisSession") };
   }
   if (appt.status !== "arrived") {
-    return { error: "This appointment is no longer arrived." };
+    return { error: await actionError("appointments.thisAppointmentIsNoLongerArrived") };
   }
 
   const { data: startedSession, error } = await supabase
     .rpc("start_appointment_session", { p_appointment_id: id })
     .single();
 
-  if (error) return { error: error.message };
+  if (error) return { error: await actionError("appointments.weCouldNotCompleteThisRequestPleaseTryAgain") };
   if (startedSession.status !== "in_session") {
-    return { error: "Could not verify the updated session status." };
+    return { error: await actionError("appointments.couldNotVerifyTheUpdatedSessionStatus") };
   }
 
   const redirectTo = `/patients/${startedSession.patient_id}/medical-notes-report`;
@@ -718,7 +729,7 @@ export async function undoInvoiceCompletion(
     .eq("clinic_id", user.clinicId)
     .single();
 
-  if (!appt) return { error: "Appointment not found." };
+  if (!appt) return { error: await actionError("appointments.appointmentNotFound") };
 
   const { data: provenanceRows, error: provenanceError } = await supabase
     .from("outstanding_settlements")
@@ -727,7 +738,7 @@ export async function undoInvoiceCompletion(
     .eq("source_appointment_id", id)
     .limit(1);
 
-  if (provenanceError) return { error: provenanceError.message };
+  if (provenanceError) return { error: await actionError("appointments.weCouldNotCompleteThisRequestPleaseTryAgain") };
 
   const undoRpc =
     (provenanceRows?.length ?? 0) > 0
@@ -739,7 +750,7 @@ export async function undoInvoiceCompletion(
     p_target_status: targetStatus,
   });
 
-  if (error) return { error: error.message };
+  if (error) return { error: await actionError("appointments.weCouldNotCompleteThisRequestPleaseTryAgain") };
 
   revalidatePath("/appointments");
   revalidatePath(`/patients/${appt.patient_id}`);
@@ -758,8 +769,8 @@ export async function permanentDeleteAppointment(id: string): Promise<ActionResu
     .not("deleted_at", "is", null)
     .maybeSingle();
 
-  if (fetchError) return { error: fetchError.message };
-  if (!appt) return { error: "Appointment not found." };
+  if (fetchError) return { error: await actionError("appointments.weCouldNotCompleteThisRequestPleaseTryAgain") };
+  if (!appt) return { error: await actionError("appointments.appointmentNotFound") };
 
   const cascaded = await deleteAppointmentDependents(id, user.clinicId);
   if (cascaded.error) return cascaded;
@@ -771,7 +782,7 @@ export async function permanentDeleteAppointment(id: string): Promise<ActionResu
     .eq("clinic_id", user.clinicId)
     .not("deleted_at", "is", null);
 
-  if (error) return { error: error.message };
+  if (error) return { error: await actionError("appointments.weCouldNotCompleteThisRequestPleaseTryAgain") };
 
   revalidatePath("/appointments");
   return { success: true };
@@ -787,7 +798,7 @@ export async function emptyAppointmentsTrash(): Promise<ActionResult> {
     .eq("clinic_id", user.clinicId)
     .not("deleted_at", "is", null);
 
-  if (selectError) return { error: selectError.message };
+  if (selectError) return { error: await actionError("appointments.weCouldNotCompleteThisRequestPleaseTryAgain") };
 
   const ids = (trashedAppointments ?? []).map((appointment) => appointment.id);
   if (ids.length === 0) return { success: true };
@@ -799,27 +810,27 @@ export async function emptyAppointmentsTrash(): Promise<ActionResult> {
     .delete()
     .in("appointment_id", ids)
     .eq("clinic_id", user.clinicId);
-  if (servicesError) return { error: servicesError.message };
+  if (servicesError) return { error: await actionError("appointments.weCouldNotCompleteThisRequestPleaseTryAgain") };
 
   const { error: feedbackError } = await adminClient
     .from("feedback")
     .delete()
     .in("appointment_id", ids);
-  if (feedbackError) return { error: feedbackError.message };
+  if (feedbackError) return { error: await actionError("appointments.weCouldNotCompleteThisRequestPleaseTryAgain") };
 
   const { error: followUpsError } = await adminClient
     .from("follow_ups")
     .delete()
     .in("appointment_id", ids)
     .eq("clinic_id", user.clinicId);
-  if (followUpsError) return { error: followUpsError.message };
+  if (followUpsError) return { error: await actionError("appointments.weCouldNotCompleteThisRequestPleaseTryAgain") };
 
   const { error: settlementsError } = await adminClient
     .from("outstanding_settlements")
     .delete()
     .in("appointment_id", ids)
     .eq("clinic_id", user.clinicId);
-  if (settlementsError) return { error: settlementsError.message };
+  if (settlementsError) return { error: await actionError("appointments.weCouldNotCompleteThisRequestPleaseTryAgain") };
 
   const { error } = await supabase
     .from("appointments")
@@ -828,7 +839,7 @@ export async function emptyAppointmentsTrash(): Promise<ActionResult> {
     .in("id", ids)
     .not("deleted_at", "is", null);
 
-  if (error) return { error: error.message };
+  if (error) return { error: await actionError("appointments.weCouldNotCompleteThisRequestPleaseTryAgain") };
 
   revalidatePath("/appointments");
   return { success: true };
@@ -882,7 +893,7 @@ export async function getBillingContext(
     .eq("clinic_id", user.clinicId)
     .single();
 
-  if (apptError || !appt) return { error: "Appointment not found." };
+  if (apptError || !appt) return { error: await actionError("appointments.appointmentNotFound") };
 
   const [balance, { data: previousOutstandingRows }] = await Promise.all([
     getPatientAccountBalance(appt.patient_id, user.clinicId),
@@ -1041,7 +1052,7 @@ export async function getConflictingPendingAppointments(
       .eq("clinic_id", user.clinicId)
       .single();
 
-    if (targetErr || !target) return { error: "Appointment not found." };
+    if (targetErr || !target) return { error: await actionError("appointments.appointmentNotFound") };
 
     const targetStart = new Date(target.scheduled_at);
     const targetEnd = new Date(targetStart.getTime() + (target.duration_minutes ?? 30) * 60_000);
@@ -1065,7 +1076,7 @@ export async function getConflictingPendingAppointments(
       .gte("scheduled_at", dayStart.toISOString())
       .lte("scheduled_at", dayEnd.toISOString());
 
-    if (candErr) return { error: "Failed to check for conflicts." };
+    if (candErr) return { error: await actionError("appointments.failedToCheckForConflicts") };
 
     // Filter to true time overlaps in JS
     const conflicts = (candidates ?? []).filter((c) => {
@@ -1076,7 +1087,7 @@ export async function getConflictingPendingAppointments(
 
     return { data: conflicts as unknown as ConflictingAppointment[] };
   } catch {
-    return { error: "Failed to check for conflicts." };
+    return { error: await actionError("appointments.failedToCheckForConflicts") };
   }
 }
 
@@ -1102,9 +1113,9 @@ export async function confirmAndDisplaceConflicts(
 
   if (confirmErr) {
     if (confirmErr.code === "check_violation" || confirmErr.message?.includes("transition")) {
-      return { error: "Cannot confirm this appointment." };
+      return { error: await actionError("appointments.cannotConfirmThisAppointment") };
     }
-    return { error: confirmErr.message || "Failed to confirm appointment." };
+    return { error: await actionError("appointments.failedToConfirmAppointment") };
   }
 
   // Displace all conflicting pending appointments
@@ -1122,7 +1133,7 @@ export async function confirmAndDisplaceConflicts(
       .eq("status", "pending");
 
     if (displaceErr) {
-      return { error: "Appointment confirmed, but failed to remove conflicting appointments." };
+      return { error: await actionError("appointments.appointmentConfirmedButFailedToRemoveConflictingAppointments") };
     }
   }
 
@@ -1144,7 +1155,7 @@ export async function dismissDisplacedAppointment(id: string): Promise<ActionRes
     .eq("clinic_id", user.clinicId)
     .not("displaced_at", "is", null);
 
-  if (error) return { error: error.message || "Failed to dismiss appointment." };
+  if (error) return { error: await actionError("appointments.failedToDismissAppointment") };
 
   revalidatePath("/appointments");
   return { success: true };

@@ -7,8 +7,12 @@ import { createAppointment } from "@/actions/appointments";
 import { getClinicWorkingHours } from "@/actions/settings";
 import { PageHeader } from "@/components/shared/page-header";
 import { resolveReturnTo } from "@/lib/navigation/return-url";
+import { getTranslations } from "next-intl/server";
 
-export const metadata: Metadata = { title: "New Appointment" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("protected");
+  return { title: t("metadataNewAppointment") };
+}
 
 interface PageProps {
   searchParams: Promise<{
@@ -21,6 +25,7 @@ interface PageProps {
 }
 
 export default async function NewAppointmentPage({ searchParams }: PageProps) {
+  const t = await getTranslations("protected");
   const user = await requireRole(["admin", "receptionist"]);
   const { patient_id, doctor_id, dept_id, insurance_id, returnTo } = await searchParams;
   const allowedParentPaths = [
@@ -71,10 +76,10 @@ export default async function NewAppointmentPage({ searchParams }: PageProps) {
       <PageHeader
         back={{ href: returnHref, label: returnsToPatient ? "patient" : "appointments" }}
         breadcrumbs={returnsToPatient
-          ? [{ label: "Patients", href: "/patients" }, { label: "Patient", href: returnHref }, { label: "New appointment" }]
-          : [{ label: "Appointments", href: returnHref }, { label: "New appointment" }]}
-        title="New appointment"
-        description="Book a new appointment for a patient."
+          ? [{ label: t("patients"), href: "/patients" }, { label: t("patient"), href: returnHref }, { label: t("newAppointment2") }]
+          : [{ label: t("appointments"), href: returnHref }, { label: t("newAppointment2") }]}
+        title={t("newAppointment")}
+        description={t("bookANewAppointmentForA")}
       />
 
       <NewAppointmentLayout

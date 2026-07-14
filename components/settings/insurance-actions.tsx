@@ -26,6 +26,7 @@ import { InsuranceForm } from "@/components/settings/insurance-form";
 import type { ActionResult } from "@/actions/settings";
 import { restoreInsurance } from "@/actions/settings";
 import type { Tables } from "@/types/database";
+import { useTranslations } from "next-intl";
 
 type InsuranceProvider = Tables<"insurance_providers">;
 
@@ -37,6 +38,7 @@ interface InsuranceActionsProps {
 }
 
 export function InsuranceActions({ provider, updateAction, toggleAction, deleteAction }: InsuranceActionsProps) {
+  const t = useTranslations("settings");
   const [editOpen, setEditOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
@@ -50,7 +52,7 @@ export function InsuranceActions({ provider, updateAction, toggleAction, deleteA
       if (result.error) toast.error(result.error);
       else {
         toast.success(
-          provider.is_active ? "Provider deactivated." : "Provider activated.",
+          provider.is_active ? t("providerDeactivated") : t("providerActivated"),
         );
         router.refresh();
       }
@@ -66,10 +68,10 @@ export function InsuranceActions({ provider, updateAction, toggleAction, deleteA
       if (result.error) {
         toast.error(result.error);
       } else {
-        toast.success(`"${provider.name}" moved to recycle bin.`, {
+        toast.success(t("namedItemMovedToRecycleBin", { name: provider.name }), {
           duration: 10000,
           action: {
-            label: "Undo",
+            label: t("undo"),
             onClick: () => {
               if (pendingRef.current) return;
               pendingRef.current = true;
@@ -77,7 +79,7 @@ export function InsuranceActions({ provider, updateAction, toggleAction, deleteA
                 .then((res) => {
                   if (res.error) toast.error(res.error);
                   else {
-                    toast.success(`"${provider.name}" restored.`);
+                    toast.success(t("namedItemRestored", { name: provider.name }));
                     router.refresh();
                   }
                 })
@@ -112,12 +114,12 @@ export function InsuranceActions({ provider, updateAction, toggleAction, deleteA
             size="icon"
             className="h-7 w-7"
             onClick={handleToggle}
-            title={provider.is_active ? "Deactivate" : "Activate"}
+            title={provider.is_active ? t("deactivate") : t("activate")}
           >
             {provider.is_active ? (
-              <ToggleRight className="h-4 w-4 text-emerald-600" />
+              <ToggleRight className="h-4 w-4 text-emerald-600 rtl:-scale-x-100" />
             ) : (
-              <ToggleLeft className="h-4 w-4 text-muted-foreground" />
+              <ToggleLeft className="h-4 w-4 text-muted-foreground rtl:-scale-x-100" />
             )}
           </Button>
           <AlertDialog>
@@ -132,15 +134,14 @@ export function InsuranceActions({ provider, updateAction, toggleAction, deleteA
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Move to recycle bin?</AlertDialogTitle>
+                <AlertDialogTitle>{t("moveToRecycleBin")}</AlertDialogTitle>
                 <AlertDialogDescription>
-                  <strong>{provider.name}</strong> will be moved to the recycle bin and can be restored within 30 days.
-                </AlertDialogDescription>
+                  <strong>{provider.name}</strong> {t("willBeMovedToTheRecycle")}</AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
+                <AlertDialogCancel disabled={isPending}>{t("cancel")}</AlertDialogCancel>
                 <AlertDialogAction disabled={isPending} onClick={handleDelete}>
-                  Move to bin
+                  {t("moveToBin")}
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
@@ -151,12 +152,12 @@ export function InsuranceActions({ provider, updateAction, toggleAction, deleteA
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Edit insurance provider</DialogTitle>
+            <DialogTitle>{t("editInsuranceProvider")}</DialogTitle>
           </DialogHeader>
           <InsuranceForm
             action={updateAction}
             defaultValues={{ name: provider.name, code: provider.code }}
-            submitLabel="Save changes"
+            submitLabel={t("saveChanges")}
             onSuccess={() => {
               setEditOpen(false);
               router.refresh();

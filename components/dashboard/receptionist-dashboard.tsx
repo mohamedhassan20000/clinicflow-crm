@@ -19,6 +19,7 @@ import type { Tables } from "@/types/database";
 import { formatDoctorName } from "@/lib/format-doctor";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
 import type { ReceptionInSessionGroup } from "@/actions/receptionist-dashboard";
+import { useTranslations } from "next-intl";
 
 type Appointment = Tables<"appointments"> & {
   patients: { full_name: string } | null;
@@ -59,6 +60,7 @@ export function ReceptionistDashboard({
   showTodaySchedule = true,
   showPendingConfirmationsList = true,
 }: ReceptionistDashboardProps) {
+  const t = useTranslations("dashboard");
   const { formatTime } = useClinicSettings();
   const inSessionBoardKey = inSessionGroups
     .flatMap((group) => group.items.map((item) => `${item.id}:${item.updatedAt}`))
@@ -69,23 +71,21 @@ export function ReceptionistDashboard({
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{t("dashboard")}</h1>
           <p className="text-sm text-muted-foreground">
-            Welcome back, {fullName}.
+            {t("welcomeBack")}{fullName}.
           </p>
         </div>
         <div className="flex gap-2">
           <Button asChild variant="outline" size="sm" className="gap-2">
             <Link href="/patients/new">
               <UserPlus className="h-4 w-4" />
-              New patient
-            </Link>
+              {t("newPatient")}</Link>
           </Button>
           <Button asChild size="sm" className="gap-2">
             <Link href="/appointments/new">
               <CalendarPlus className="h-4 w-4" />
-              Book appointment
-            </Link>
+              {t("bookAppointment")}</Link>
           </Button>
         </div>
       </div>
@@ -99,13 +99,13 @@ export function ReceptionistDashboard({
       {(showKpiToday || showKpiPendingConfirmations || showKpiConfirmedToday) && (
         <div className="grid gap-4 sm:grid-cols-3">
           {showKpiToday && (
-            <KpiCard title="Today's appointments" value={todayCount} icon={CalendarDays} variant="primary" />
+            <KpiCard title={t("todaySAppointments")} value={todayCount} icon={CalendarDays} variant="primary" />
           )}
           {showKpiPendingConfirmations && (
-            <KpiCard title="Pending confirmation" value={pendingCount} icon={Hourglass} variant={pendingCount > 0 ? "warning" : "default"} />
+            <KpiCard title={t("pendingConfirmation")} value={pendingCount} icon={Hourglass} variant={pendingCount > 0 ? "warning" : "default"} />
           )}
           {showKpiConfirmedToday && (
-            <KpiCard title="Confirmed today" value={confirmedCount} icon={CheckCircle2} variant="success" />
+            <KpiCard title={t("confirmedToday")} value={confirmedCount} icon={CheckCircle2} variant="success" />
           )}
         </div>
       )}
@@ -116,8 +116,7 @@ export function ReceptionistDashboard({
           <div className="flex items-center gap-2 mb-2">
             <Clock className="h-4 w-4 text-primary shrink-0" />
             <span className="text-sm font-semibold text-primary">
-              Next 2 hours — {nextTwoHoursAppointments.length} appointment
-              {nextTwoHoursAppointments.length !== 1 ? "s" : ""}
+              {t("nextTwoHoursAppointmentCount", { count: nextTwoHoursAppointments.length })}
             </span>
           </div>
           <div className="space-y-1">
@@ -130,7 +129,7 @@ export function ReceptionistDashboard({
                 <span className="text-muted-foreground text-xs">
                   → {formatDoctorName(appt.profiles?.full_name)}
                 </span>
-                <div className="ml-auto">
+                <div className="ms-auto">
                   <StatusBadge status={appt.status} />
                 </div>
               </div>
@@ -145,20 +144,19 @@ export function ReceptionistDashboard({
           <div className="flex items-center justify-between border-b border-border/50 px-5 py-4">
             <div className="flex items-center gap-2">
               <CalendarDays className="h-4 w-4 text-primary" />
-              <h2 className="font-semibold text-sm">Today&apos;s schedule</h2>
+              <h2 className="font-semibold text-sm">{t("todaySSchedule")}</h2>
             </div>
             <Link
               href="/appointments"
               className="text-xs text-muted-foreground hover:text-foreground transition-colors"
             >
-              Full calendar →
-            </Link>
+              {t("fullCalendar")}</Link>
           </div>
           <div className="divide-y divide-border/50 max-h-[380px] overflow-y-auto">
             {todayAppointments.length === 0 ? (
               <div className="flex flex-col items-center gap-1 py-10 text-center">
                 <CheckCircle2 className="h-6 w-6 text-muted-foreground/40" />
-                <p className="text-sm text-muted-foreground">No appointments today</p>
+                <p className="text-sm text-muted-foreground">{t("noAppointmentsToday")}</p>
               </div>
             ) : (
               todayAppointments.map((appt) => (
@@ -166,14 +164,14 @@ export function ReceptionistDashboard({
                   key={appt.id}
                   className="flex items-center gap-3 px-5 py-3 hover:bg-muted/30 transition-colors"
                 >
-                  <div className="w-14 shrink-0 text-right">
+                  <div className="w-14 shrink-0 text-end">
                     <span className="text-xs font-mono font-medium tabular-nums">
                       {formatTime(appt.scheduled_at)}
                     </span>
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">
-                      {appt.patients?.full_name ?? "Unknown"}
+                      {appt.patients?.full_name ?? t("unknown")}
                     </p>
                     <p className="truncate text-xs text-muted-foreground">
                       {formatDoctorName(appt.profiles?.full_name)}
@@ -200,9 +198,9 @@ export function ReceptionistDashboard({
         {showPendingConfirmationsList && <div className="rounded-xl border border-border/50 bg-card">
           <div className="flex items-center gap-2 border-b border-border/50 px-5 py-4">
             <AlertCircle className="h-4 w-4 text-amber-500" />
-            <h2 className="font-semibold text-sm">Needs confirmation</h2>
+            <h2 className="font-semibold text-sm">{t("needsConfirmation")}</h2>
             {pendingCount > 0 && (
-              <span className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500/10 px-1.5 text-[10px] font-semibold text-amber-700">
+              <span className="ms-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500/10 px-1.5 text-[10px] font-semibold text-amber-700">
                 {pendingCount}
               </span>
             )}
@@ -211,7 +209,7 @@ export function ReceptionistDashboard({
             {pendingAppointments.length === 0 ? (
               <div className="flex flex-col items-center gap-1 py-10 text-center">
                 <CheckCircle2 className="h-6 w-6 text-muted-foreground/40" />
-                <p className="text-sm text-muted-foreground">All caught up!</p>
+                <p className="text-sm text-muted-foreground">{t("allCaughtUp")}</p>
               </div>
             ) : (
               pendingAppointments.map((appt) => (
@@ -221,7 +219,7 @@ export function ReceptionistDashboard({
                 >
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">
-                      {appt.patients?.full_name ?? "Unknown"}
+                      {appt.patients?.full_name ?? t("unknown")}
                     </p>
                     <p className="truncate text-xs text-muted-foreground">
                       {formatTime(appt.scheduled_at)} ·{" "}

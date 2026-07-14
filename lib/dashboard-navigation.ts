@@ -2,7 +2,15 @@ import { PAGE_DEFINITIONS, type PageSlug } from "@/lib/page-permissions";
 
 export type TenantShellNavItem = {
   href: string;
-  label: string;
+  /**
+   * P2C — a message key under the `nav` namespace, not display copy.
+   *
+   * Navigation is resolved on the server (authorization lives in `getVisiblePageSlugs`), and the
+   * result is serialized into a Client Component. Serializing an English label would have frozen the
+   * sidebar in English regardless of the reader's locale — the one surface on every single page.
+   * The item carries a key; the Sidebar translates it at render, in the reader's language.
+   */
+  labelKey: string;
   icon: PageSlug;
 };
 
@@ -16,7 +24,7 @@ export type OperatorIconKey =
 
 export type OperatorShellNavItem = {
   href: string;
-  label: string;
+  labelKey: string;
   icon: OperatorIconKey;
 };
 
@@ -36,16 +44,16 @@ export function getTenantShellNavigation(
     .filter((page) => page.alwaysVisible || visible.has(page.slug))
     .map((page) => ({
       href: page.href,
-      label: page.label,
+      labelKey: `tenant.${page.slug}`,
       icon: page.slug,
     }));
 }
 
 export const OPERATOR_SHELL_NAVIGATION: readonly OperatorShellNavItem[] = [
-  { href: "/operator", label: "Mission Control", icon: "mission-control" },
-  { href: "/operator/clinics", label: "Clinics", icon: "clinics" },
-  { href: "/operator/invitations", label: "Invitations", icon: "invitations" },
-  { href: "/operator/reports", label: "Reports", icon: "reports" },
-  { href: "/operator/coupons", label: "Coupons", icon: "coupons" },
-  { href: "/operator/settings", label: "Settings", icon: "settings" },
+  { href: "/operator", labelKey: "operator.missionControl", icon: "mission-control" },
+  { href: "/operator/clinics", labelKey: "operator.clinics", icon: "clinics" },
+  { href: "/operator/invitations", labelKey: "operator.invitations", icon: "invitations" },
+  { href: "/operator/reports", labelKey: "operator.reports", icon: "reports" },
+  { href: "/operator/coupons", labelKey: "operator.coupons", icon: "coupons" },
+  { href: "/operator/settings", labelKey: "operator.settings", icon: "settings" },
 ];

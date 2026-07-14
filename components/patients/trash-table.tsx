@@ -22,6 +22,7 @@ import {
 import { restorePatient, archivePatient, archiveAllTrashPatients } from "@/actions/patients";
 import type { PatientStub } from "@/actions/patients";
 import { withReturnTo } from "@/lib/navigation/return-url";
+import { useTranslations } from "next-intl";
 
 function daysAgo(iso: string | null): string {
   if (!iso) return "Unknown date";
@@ -61,6 +62,7 @@ interface TrashTableProps {
 }
 
 export function TrashTable({ patients, isAdmin }: TrashTableProps) {
+  const t = useTranslations("patients");
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [confirmArchiveAll, setConfirmArchiveAll] = useState(false);
@@ -72,7 +74,7 @@ export function TrashTable({ patients, isAdmin }: TrashTableProps) {
       const res = await restorePatient(id);
       setPendingId(null);
       if (res.error) toast.error(res.error);
-      else { toast.success("Patient restored."); router.refresh(); }
+      else { toast.success(t("patientRestored")); router.refresh(); }
     });
   }
 
@@ -82,7 +84,7 @@ export function TrashTable({ patients, isAdmin }: TrashTableProps) {
       const res = await archivePatient(id);
       setPendingId(null);
       if (res.error) toast.error(res.error);
-      else { toast.success("Patient archived."); router.refresh(); }
+      else { toast.success(t("patientArchived")); router.refresh(); }
     });
   }
 
@@ -91,7 +93,7 @@ export function TrashTable({ patients, isAdmin }: TrashTableProps) {
     startTransition(async () => {
       const res = await archiveAllTrashPatients();
       if (res.error) toast.error(res.error);
-      else { toast.success("All trash patients archived."); router.refresh(); }
+      else { toast.success(t("allTrashPatientsArchived")); router.refresh(); }
     });
   }
 
@@ -99,14 +101,14 @@ export function TrashTable({ patients, isAdmin }: TrashTableProps) {
     startTransition(async () => {
       const res = await archiveAllTrashPatients(30);
       if (res.error) toast.error(res.error);
-      else { toast.success("Patients in trash for 30+ days archived."); router.refresh(); }
+      else { toast.success(t("patientsInTrashFor30Days")); router.refresh(); }
     });
   }
 
   if (patients.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-border/60">
-        <TableEmptyState icon={User} title="Trash is empty" description="Deleted patients appear here." />
+        <TableEmptyState icon={User} title={t("trashIsEmpty")} description={t("deletedPatientsAppearHere")} />
       </div>
     );
   }
@@ -126,8 +128,7 @@ export function TrashTable({ patients, isAdmin }: TrashTableProps) {
             onClick={handleArchiveOld}
           >
             <Archive className="h-3.5 w-3.5" />
-            Archive 30+ day old
-          </Button>
+            {t("archive30DayOld")}</Button>
           <Button
             variant="outline"
             size="sm"
@@ -136,8 +137,7 @@ export function TrashTable({ patients, isAdmin }: TrashTableProps) {
             onClick={() => setConfirmArchiveAll(true)}
           >
             <Archive className="h-3.5 w-3.5" />
-            Archive all
-          </Button>
+            {t("archiveAll2")}</Button>
         </div>
       )}
 
@@ -155,10 +155,10 @@ export function TrashTable({ patients, isAdmin }: TrashTableProps) {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Patient</TableHead>
-                  <TableHead className="hidden sm:table-cell">File #</TableHead>
-                  <TableHead>Deleted</TableHead>
-                  {isAdmin && <TableHead className="text-end">Actions</TableHead>}
+                  <TableHead>{t("patient")}</TableHead>
+                  <TableHead className="hidden sm:table-cell">{t("file")}</TableHead>
+                  <TableHead>{t("deleted")}</TableHead>
+                  {isAdmin && <TableHead className="text-end">{t("actions")}</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -194,8 +194,7 @@ export function TrashTable({ patients, isAdmin }: TrashTableProps) {
                           <p className="text-xs text-muted-foreground">{fmtDate(p.deleted_at)}</p>
                           {daysOld !== null && daysOld >= 30 && (
                             <Badge variant="outline" className="mt-0.5 text-[10px] border-amber-500/40 text-amber-700">
-                              30+ days
-                            </Badge>
+                              {t("30Days")}</Badge>
                           )}
                         </div>
                       </TableCell>
@@ -214,8 +213,7 @@ export function TrashTable({ patients, isAdmin }: TrashTableProps) {
                                   disabled={isPending}
                                 >
                                   <RotateCcw className="h-3 w-3" />
-                                  Restore
-                                </Button>
+                                  {t("restore")}</Button>
                                 <Button
                                   variant="outline"
                                   size="sm"
@@ -224,8 +222,7 @@ export function TrashTable({ patients, isAdmin }: TrashTableProps) {
                                   disabled={isPending}
                                 >
                                   <Archive className="h-3 w-3" />
-                                  Archive
-                                </Button>
+                                  {t("archive")}</Button>
                               </>
                             )}
                           </div>
@@ -243,14 +240,13 @@ export function TrashTable({ patients, isAdmin }: TrashTableProps) {
       <AlertDialog open={confirmArchiveAll} onOpenChange={setConfirmArchiveAll}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Archive all trash patients?</AlertDialogTitle>
+            <AlertDialogTitle>{t("archiveAllTrashPatients")}</AlertDialogTitle>
             <AlertDialogDescription>
-              All {patients.length} patient{patients.length !== 1 ? "s" : ""} in trash will be moved to the Archive. This action can be undone by restoring individual patients from the Archive.
-            </AlertDialogDescription>
+              {t("archiveAllPatientsDescription", { count: patients.length })}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleArchiveAll}>Archive all</AlertDialogAction>
+            <AlertDialogCancel>{t("cancel")}</AlertDialogCancel>
+            <AlertDialogAction onClick={handleArchiveAll}>{t("archiveAll")}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

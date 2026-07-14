@@ -1,5 +1,7 @@
 "use server";
 
+import { actionError } from "@/lib/i18n/action-errors";
+import { localizeZodFieldErrors } from "@/lib/validations/server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClinicScopedAdminClient } from "@/lib/supabase/admin";
@@ -120,13 +122,13 @@ async function validatePatientInsuranceProvider(
     .maybeSingle();
 
   if (error) {
-    return { error: "Failed to validate insurance provider. Please try again." };
+    return { error: await actionError("patients.failedToValidateInsuranceProviderPleaseTryAgain") };
   }
 
   if (!data) {
     return {
       fieldErrors: {
-        insurance_provider_id: ["Select an active insurance provider."],
+        insurance_provider_id: [await actionError("patients.selectAnActiveInsuranceProvider")],
       },
     };
   }
@@ -154,7 +156,7 @@ export async function createPatient(
 
   const parsed = patientSchema.safeParse(raw);
   if (!parsed.success) {
-    return { fieldErrors: parsed.error.flatten().fieldErrors };
+    return { fieldErrors: await localizeZodFieldErrors(parsed.error) };
   }
 
   const insuranceError = await validatePatientInsuranceProvider(
@@ -169,7 +171,6 @@ export async function createPatient(
   const fileNumber = await generateFileNumber(user.clinicId);
 
   // Try insert; on file_number collision (rare race), retry up to 3 times.
-  let lastError: { code?: string; message?: string } | null = null;
   let insertedId: string | null = null;
   for (let attempt = 0; attempt < 3; attempt++) {
     const candidate =
@@ -188,13 +189,17 @@ export async function createPatient(
       insertedId = data.id;
       break;
     }
-    lastError = error;
+    console.error("patient_create_attempt_failed", {
+      attempt: attempt + 1,
+      code: error.code,
+      message: error.message,
+    });
     if (error.code !== "23505") break;
     if (!error.message?.includes("patients_clinic_file_number_unique")) break;
   }
 
   if (!insertedId) {
-    return { error: lastError?.message || "Failed to create patient. Please try again." };
+    return { error: await actionError("patients.failedToCreatePatientPleaseTryAgain") };
   }
 
   revalidatePath("/patients");
@@ -239,7 +244,7 @@ export async function updatePatient(
 
   const parsed = patientSchema.safeParse(raw);
   if (!parsed.success) {
-    return { fieldErrors: parsed.error.flatten().fieldErrors };
+    return { fieldErrors: await localizeZodFieldErrors(parsed.error) };
   }
 
   const insuranceError = await validatePatientInsuranceProvider(
@@ -257,7 +262,7 @@ export async function updatePatient(
     .eq("is_deleted", false);
 
   if (error) {
-    return { error: "Failed to update patient. Please try again." };
+    return { error: await actionError("patients.failedToUpdatePatientPleaseTryAgain") };
   }
 
   revalidatePath(`/patients/${id}`);
@@ -278,11 +283,11 @@ export async function softDeletePatient(id: string): Promise<ActionResult> {
       clinicId: user.clinicId,
       patientId: id,
     });
-    return { error: "Failed to delete patient." };
+    return { error: await actionError("patients.failedToDeletePatient") };
   }
 
   if (data === false) {
-    return { error: "Patient not found." };
+    return { error: await actionError("patients.patientNotFound") };
   }
 
   // Stamp deleted_at so trash page can show age and enforce 30-day rule.
@@ -314,7 +319,7 @@ export async function restorePatient(id: string): Promise<ActionResult> {
     .eq("clinic_id", user.clinicId);
 
   if (error) {
-    return { error: "Failed to restore patient." };
+    return { error: await actionError("patients.failedToRestorePatient") };
   }
 
   revalidatePath(`/patients/${id}`);
@@ -350,7 +355,7 @@ export async function getTrashPatients(): Promise<{ data?: PatientStub[]; error?
     .eq("is_archived", false)
     .order("deleted_at", { ascending: false });
 
-  if (error) return { error: "Failed to load trash." };
+  if (error) return { error: await actionError("patients.failedToLoadTrash") };
   return { data: (data ?? []) as PatientStub[] };
 }
 
@@ -365,7 +370,7 @@ export async function getArchivePatients(): Promise<{ data?: PatientStub[]; erro
     .eq("is_archived", true)
     .order("archived_at", { ascending: false });
 
-  if (error) return { error: "Failed to load archive." };
+  if (error) return { error: await actionError("patients.failedToLoadArchive") };
   return { data: (data ?? []) as PatientStub[] };
 }
 
@@ -381,7 +386,7 @@ export async function archivePatient(id: string): Promise<ActionResult> {
     .eq("is_deleted", true)
     .eq("is_archived", false);
 
-  if (error) return { error: "Failed to archive patient." };
+  if (error) return { error: await actionError("patients.failedToArchivePatient") };
 
   revalidatePath("/patients/trash");
   revalidatePath("/patients/archive");
@@ -405,7 +410,7 @@ export async function archiveAllTrashPatients(olderThanDays?: number): Promise<A
   }
 
   const { error } = await query;
-  if (error) return { error: "Failed to archive patients." };
+  if (error) return { error: await actionError("patients.failedToArchivePatients") };
 
   revalidatePath("/patients/trash");
   revalidatePath("/patients/archive");
@@ -429,11 +434,11 @@ export async function addMedicalNote(
 
   const parsed = medicalNoteSchema.safeParse(raw);
   if (!parsed.success) {
-    return { fieldErrors: parsed.error.flatten().fieldErrors };
+    return { fieldErrors: await localizeZodFieldErrors(parsed.error) };
   }
 
   if (!(await canAccessPatientForMedicalNotes(parsed.data.patient_id, user))) {
-    return { error: "Patient not found or you do not have permission." };
+    return { error: await actionError("patients.patientNotFoundOrYouDoNotHavePermission") };
   }
 
   const supabase = await createClient();
@@ -445,7 +450,7 @@ export async function addMedicalNote(
   });
 
   if (error) {
-    return { error: "Failed to save note. Please try again." };
+    return { error: await actionError("patients.failedToSaveNotePleaseTryAgain") };
   }
 
   revalidatePath(`/patients/${parsed.data.patient_id}`);
@@ -458,20 +463,21 @@ export async function updateMedicalNote(
 ): Promise<ActionResult> {
   const user = await requireMutationRole(["admin", "doctor"]);
   const trimmed = note.trim();
-  if (!trimmed) return { error: "Note is required." };
-  if (trimmed.length > 5000) return { error: "Note is too long." };
+  if (!trimmed) return { error: await actionError("patients.noteIsRequired") };
+  if (trimmed.length > 5000) return { error: await actionError("patients.noteIsTooLong") };
 
   let existing: Awaited<ReturnType<typeof getMedicalNoteForClinic>>;
   try {
     existing = await getMedicalNoteForClinic(noteId, user.clinicId);
   } catch (error) {
+    console.error("medical_note_lookup_failed", { noteId, error });
     return {
-      error: error instanceof Error ? error.message : "Failed to find note.",
+      error: await actionError("patients.failedToFindNote"),
     };
   }
-  if (!existing) return { error: "Medical note not found." };
+  if (!existing) return { error: await actionError("patients.medicalNoteNotFound") };
   if (!canMutateMedicalNote(existing, user)) {
-    return { error: "You can only edit your own medical notes." };
+    return { error: await actionError("patients.youCanOnlyEditYourOwnMedicalNotes") };
   }
 
   const adminClient = createClinicScopedAdminClient(user.clinicId);
@@ -480,7 +486,7 @@ export async function updateMedicalNote(
     .update({ note: trimmed })
     .eq("id", existing.id);
 
-  if (error) return { error: error.message || "Failed to update note." };
+  if (error) return { error: await actionError("patients.failedToUpdateNote") };
 
   revalidatePath(`/patients/${existing.patient_id}`);
   return {};
@@ -492,13 +498,14 @@ export async function deleteMedicalNote(noteId: string): Promise<ActionResult> {
   try {
     existing = await getMedicalNoteForClinic(noteId, user.clinicId);
   } catch (error) {
+    console.error("medical_note_lookup_failed", { noteId, error });
     return {
-      error: error instanceof Error ? error.message : "Failed to find note.",
+      error: await actionError("patients.failedToFindNote"),
     };
   }
-  if (!existing) return { error: "Medical note not found." };
+  if (!existing) return { error: await actionError("patients.medicalNoteNotFound") };
   if (!canMutateMedicalNote(existing, user)) {
-    return { error: "You can only delete your own medical notes." };
+    return { error: await actionError("patients.youCanOnlyDeleteYourOwnMedicalNotes") };
   }
 
   const adminClient = createClinicScopedAdminClient(user.clinicId);
@@ -507,7 +514,7 @@ export async function deleteMedicalNote(noteId: string): Promise<ActionResult> {
     .update({ deleted_at: new Date().toISOString() })
     .eq("id", existing.id);
 
-  if (error) return { error: error.message || "Failed to delete note." };
+  if (error) return { error: await actionError("patients.failedToDeleteNote") };
 
   revalidatePath(`/patients/${existing.patient_id}`);
   return { success: true };
@@ -523,9 +530,9 @@ export async function restoreMedicalNote(noteId: string): Promise<ActionResult> 
     .eq("id", noteId)
     .limit(1);
 
-  if (noteError) return { error: noteError.message || "Failed to find note." };
+  if (noteError) return { error: await actionError("patients.failedToFindNote") };
   const note = notes?.[0];
-  if (!note) return { error: "Medical note not found." };
+  if (!note) return { error: await actionError("patients.medicalNoteNotFound") };
 
   const { data: patients, error: patientError } = await adminClient
     .from("patients")
@@ -535,10 +542,10 @@ export async function restoreMedicalNote(noteId: string): Promise<ActionResult> 
     .eq("is_deleted", false)
     .limit(1);
 
-  if (patientError) return { error: patientError.message || "Failed to find patient." };
-  if (!patients?.[0]) return { error: "Medical note not found." };
+  if (patientError) return { error: await actionError("patients.failedToFindPatient") };
+  if (!patients?.[0]) return { error: await actionError("patients.medicalNoteNotFound") };
   if (!canMutateMedicalNote(note, user)) {
-    return { error: "You can only restore your own medical notes." };
+    return { error: await actionError("patients.youCanOnlyRestoreYourOwnMedicalNotes") };
   }
 
   const { error } = await adminClient
@@ -546,7 +553,7 @@ export async function restoreMedicalNote(noteId: string): Promise<ActionResult> 
     .update({ deleted_at: null })
     .eq("id", note.id);
 
-  if (error) return { error: error.message || "Failed to restore note." };
+  if (error) return { error: await actionError("patients.failedToRestoreNote") };
 
   revalidatePath(`/patients/${note.patient_id}`);
   return { success: true };
@@ -608,7 +615,7 @@ export async function addPatientDeposit(
 
   const parsed = depositSchema.safeParse(raw);
   if (!parsed.success) {
-    return { fieldErrors: parsed.error.flatten().fieldErrors };
+    return { fieldErrors: await localizeZodFieldErrors(parsed.error) };
   }
 
   const supabase = await createClient();
@@ -621,7 +628,7 @@ export async function addPatientDeposit(
     created_by: user.id,
   });
 
-  if (error) return { error: error.message || "Failed to add deposit." };
+  if (error) return { error: await actionError("patients.failedToAddDeposit") };
 
   revalidatePath(`/patients/${parsed.data.patient_id}`);
   return {};
@@ -643,12 +650,12 @@ export async function settleOutstanding(
   );
   const note = String(formData.get("note") ?? "").trim() || null;
 
-  if (!patientId) return { error: "Missing patient." };
+  if (!patientId) return { error: await actionError("patients.missingPatient") };
   if (!Number.isFinite(amountRaw) || amountRaw <= 0) {
-    return { error: "Amount must be greater than zero." };
+    return { error: await actionError("patients.amountMustBeGreaterThanZero") };
   }
   if (!PAYMENT_METHODS.includes(method)) {
-    return { error: "Select a valid payment method." };
+    return { error: await actionError("patients.selectAValidPaymentMethod") };
   }
 
   const hasSecondary =
@@ -659,7 +666,7 @@ export async function settleOutstanding(
     ? (secondaryMethodRaw as PaymentMethod)
     : null;
   if (hasSecondary && secondaryMethod === method) {
-    return { error: "Split methods must differ from the primary method." };
+    return { error: await actionError("patients.splitMethodsMustDifferFromThePrimaryMethod") };
   }
 
   const supabase = await createClient();
@@ -679,7 +686,7 @@ export async function settleOutstanding(
   });
 
   if (error) {
-    return { error: error.message || "Failed to save settlement." };
+    return { error: await actionError("patients.failedToSaveSettlement") };
   }
 
   revalidatePath(`/patients/${patientId}`);

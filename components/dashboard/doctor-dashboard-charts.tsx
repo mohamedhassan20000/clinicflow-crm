@@ -15,6 +15,7 @@ import {
 } from "recharts";
 import type { DoctorDashboardStats } from "@/actions/doctor-dashboard";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
+import { useTranslations } from "next-intl";
 
 export interface DoctorDashboardChartsProps {
   stats: DoctorDashboardStats;
@@ -81,7 +82,8 @@ function ShareRow({
 }
 
 export default function DoctorDashboardCharts({ stats, departmentName }: DoctorDashboardChartsProps) {
-  const { formatCurrency } = useClinicSettings();
+  const t = useTranslations("dashboard");
+  const { formatCurrency, formatNumber, formatPercent } = useClinicSettings();
   const fmtMoney = (n: number) =>
     formatCurrency(n, { maximumFractionDigits: 0 });
   const deptNoShowRate = pct(stats.deptNoShow, stats.deptTotal);
@@ -90,9 +92,9 @@ export default function DoctorDashboardCharts({ stats, departmentName }: DoctorD
   const deptPatientShareOfClinic = pct(stats.deptPatients, stats.clinicPatients || 1);
 
   const patientShareData = [
-    { name: "My patients", value: stats.myPatients, color: "#3B82F6" },
-    { name: "Dept (others)", value: Math.max(0, stats.deptPatients - stats.myPatients), color: "#10B981" },
-    { name: "Clinic (other depts)", value: Math.max(0, stats.clinicPatients - stats.deptPatients), color: "#94A3B8" },
+    { name: t("myPatients"), value: stats.myPatients, color: "#3B82F6" },
+    { name: t("departmentOtherPatients"), value: Math.max(0, stats.deptPatients - stats.myPatients), color: "#10B981" },
+    { name: t("clinicOtherDepartments"), value: Math.max(0, stats.clinicPatients - stats.deptPatients), color: "#94A3B8" },
   ].filter((d) => d.value > 0);
 
   return (
@@ -102,37 +104,36 @@ export default function DoctorDashboardCharts({ stats, departmentName }: DoctorD
         {/* Dept rates */}
         <div className="rounded-xl border border-border/50 bg-card p-5 space-y-4">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-            {departmentName} — Department rates
+            {t("departmentRates", { department: departmentName })}
           </h2>
           <div className="space-y-3">
-            <RateRow label="Completion rate" value={pct(stats.deptCompleted, stats.deptTotal)} color="bg-emerald-500" />
-            <RateRow label="No-show rate" value={deptNoShowRate} color="bg-amber-500" />
-            <RateRow label="Cancellation rate" value={deptCancelRate} color="bg-rose-500" />
+            <RateRow label={t("completionRate")} value={pct(stats.deptCompleted, stats.deptTotal)} color="bg-emerald-500" />
+            <RateRow label={t("noShowRate")} value={deptNoShowRate} color="bg-amber-500" />
+            <RateRow label={t("cancellationRate")} value={deptCancelRate} color="bg-rose-500" />
           </div>
           <div className="grid grid-cols-2 gap-3 pt-2 border-t border-border/30">
-            <MiniStat label="Dept total appts" value={stats.deptTotal} />
-            <MiniStat label="Dept patients" value={stats.deptPatients} />
-            <MiniStat label="Dept revenue" value={fmtMoney(stats.deptRevenue)} />
-            <MiniStat label="No-shows" value={stats.deptNoShow} />
+            <MiniStat label={t("deptTotalAppts")} value={stats.deptTotal} />
+            <MiniStat label={t("deptPatients")} value={stats.deptPatients} />
+            <MiniStat label={t("deptRevenue")} value={fmtMoney(stats.deptRevenue)} />
+            <MiniStat label={t("noShows")} value={stats.deptNoShow} />
           </div>
         </div>
 
         {/* Patient share */}
         <div className="rounded-xl border border-border/50 bg-card p-5 space-y-4">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-            Patient share
-          </h2>
+            {t("patientShare")}</h2>
           <div className="flex items-center gap-4">
             <div className="flex-1 space-y-2">
               <ShareRow
-                label="My patients / dept"
+                label={t("myPatientsDept")}
                 myVal={stats.myPatients}
                 totalVal={stats.deptPatients}
                 pctVal={myPatientShareOfDept}
                 color="#3B82F6"
               />
               <ShareRow
-                label="Dept patients / clinic"
+                label={t("deptPatientsClinic")}
                 myVal={stats.deptPatients}
                 totalVal={stats.clinicPatients}
                 pctVal={deptPatientShareOfClinic}
@@ -163,7 +164,7 @@ export default function DoctorDashboardCharts({ stats, departmentName }: DoctorD
                         borderRadius: "8px",
                         fontSize: "11px",
                       }}
-                      formatter={(val, name) => [`${val} patients`, name]}
+                      formatter={(val, name) => [formatNumber(Number(val)), name]}
                     />
                   </PieChart>
                 </ResponsiveContainer>
@@ -184,15 +185,14 @@ export default function DoctorDashboardCharts({ stats, departmentName }: DoctorD
       {/* Follow-up outcomes */}
       {stats.followUpOutcomes.total > 0 && (() => {
         const fuData = [
-          { name: "All fine", value: stats.followUpOutcomes.allFine, color: "#10B981" },
-          { name: "Has problem", value: stats.followUpOutcomes.hasProblem, color: "#F59E0B" },
+          { name: t("allFine"), value: stats.followUpOutcomes.allFine, color: "#10B981" },
+          { name: t("hasProblem"), value: stats.followUpOutcomes.hasProblem, color: "#F59E0B" },
         ].filter((d) => d.value > 0);
         const total = stats.followUpOutcomes.total;
         return (
           <div className="rounded-xl border border-border/50 bg-card p-5 space-y-4">
             <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-              My patients — Follow-up outcomes
-            </h2>
+              {t("myPatientsFollowUpOutcomes")}</h2>
             <div className="flex flex-wrap items-center gap-6">
               <div className="h-32 w-32 shrink-0">
                 <ResponsiveContainer width="100%" height="100%">
@@ -217,7 +217,7 @@ export default function DoctorDashboardCharts({ stats, departmentName }: DoctorD
                         borderRadius: "8px",
                         fontSize: "11px",
                       }}
-                      formatter={(val, name) => [`${val} (${pct(Number(val), total)}%)`, name]}
+                      formatter={(val, name) => [`${formatNumber(Number(val))} (${formatPercent(pct(Number(val), total))})`, name]}
                     />
                   </PieChart>
                 </ResponsiveContainer>
@@ -243,7 +243,7 @@ export default function DoctorDashboardCharts({ stats, departmentName }: DoctorD
                   </div>
                 ))}
                 <p className="text-[10px] text-muted-foreground pt-1">
-                  {total} follow-up{total !== 1 ? "s" : ""} recorded in this period
+                  {t("followUpsRecorded", { count: total })}
                 </p>
               </div>
             </div>
@@ -254,11 +254,10 @@ export default function DoctorDashboardCharts({ stats, departmentName }: DoctorD
       {/* Appointments chart */}
       <div className="rounded-xl border border-border/50 bg-card p-5 space-y-4">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-          Appointments over time
-        </h2>
+          {t("appointmentsOverTime")}</h2>
         {stats.dailySeries.length > 1 ? (
           <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={stats.dailySeries} margin={{ top: 4, right: 16, left: -16, bottom: 0 }}>
+            <LineChart data={stats.dailySeries} margin={{ top: 4, right: 16, left: -16, bottom: 0 /* rtl-allow: Recharts margin is the chart's own LTR coordinate space, not page layout (AI_AGENT_PLAN §4.2 step 4) */ }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.5} />
               <XAxis
                 dataKey="date"
@@ -285,7 +284,7 @@ export default function DoctorDashboardCharts({ stats, departmentName }: DoctorD
               <Line
                 type="monotone"
                 dataKey="mine"
-                name="My appointments"
+                name={t("myAppointments")}
                 stroke="#3B82F6"
                 strokeWidth={2}
                 dot={false}
@@ -294,7 +293,7 @@ export default function DoctorDashboardCharts({ stats, departmentName }: DoctorD
               <Line
                 type="monotone"
                 dataKey="dept"
-                name="Department total"
+                name={t("departmentTotal")}
                 stroke="#10B981"
                 strokeWidth={2}
                 dot={false}
@@ -305,8 +304,7 @@ export default function DoctorDashboardCharts({ stats, departmentName }: DoctorD
           </ResponsiveContainer>
         ) : (
           <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">
-            Not enough data to chart.
-          </div>
+            {t("notEnoughDataToChart")}</div>
         )}
       </div>
     </>

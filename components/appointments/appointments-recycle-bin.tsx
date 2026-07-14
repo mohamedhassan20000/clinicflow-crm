@@ -18,6 +18,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
+import { useTranslations } from "next-intl";
 
 export interface AppointmentTrashItem {
   id: string;
@@ -58,6 +59,7 @@ function RestoreButton({
   item: AppointmentTrashItem;
   onRestore: AppointmentsRecycleBinProps["onRestore"];
 }) {
+  const t = useTranslations("appointments");
   const [isPending, start] = useTransition();
   const router = useRouter();
   const pendingRef = useRef(false);
@@ -75,7 +77,7 @@ function RestoreButton({
           const res = await onRestore(item.id);
           if (res.error) toast.error(res.error);
           else {
-            toast.success(`Appointment for ${item.patientName} restored.`);
+            toast.success(t("appointmentRestoredForPatient", { patient: item.patientName }));
             router.refresh();
           }
           pendingRef.current = false;
@@ -87,8 +89,7 @@ function RestoreButton({
       ) : (
         <RotateCcw className="h-3.5 w-3.5" />
       )}
-      Restore
-    </Button>
+      {t("restore")}</Button>
   );
 }
 
@@ -99,6 +100,7 @@ function PermanentDeleteButton({
   item: AppointmentTrashItem;
   onPermanentDelete: AppointmentsRecycleBinProps["onPermanentDelete"];
 }) {
+  const t = useTranslations("appointments");
   const [isPending, start] = useTransition();
   const router = useRouter();
   const pendingRef = useRef(false);
@@ -117,21 +119,17 @@ function PermanentDeleteButton({
           ) : (
             <Trash2 className="h-3.5 w-3.5" />
           )}
-          Delete permanently
-        </Button>
+          {t("deletePermanently2")}</Button>
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>
-            Permanently delete this appointment?
-          </AlertDialogTitle>
+            {t("permanentlyDeleteThisAppointment")}</AlertDialogTitle>
           <AlertDialogDescription>
-            This cannot be undone. The appointment for {item.patientName} on{" "}
-            {fmtDate(item.scheduledAt)} will be deleted forever.
-          </AlertDialogDescription>
+            {t("permanentDeleteAppointmentDescription", { patient: item.patientName, date: fmtDate(item.scheduledAt) })}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
+          <AlertDialogCancel disabled={isPending}>{t("cancel")}</AlertDialogCancel>
           <AlertDialogAction
             disabled={isPending}
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
@@ -142,15 +140,14 @@ function PermanentDeleteButton({
                 const res = await onPermanentDelete(item.id);
                 if (res.error) toast.error(res.error);
                 else {
-                  toast.success("Appointment permanently deleted.");
+                  toast.success(t("appointmentPermanentlyDeleted"));
                   router.refresh();
                 }
                 pendingRef.current = false;
               })
             }
           >
-            Delete permanently
-          </AlertDialogAction>
+            {t("deletePermanently")}</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
@@ -164,6 +161,7 @@ function EmptyTrashButton({
   count: number;
   onEmptyTrash: AppointmentsRecycleBinProps["onEmptyTrash"];
 }) {
+  const t = useTranslations("appointments");
   const [isPending, start] = useTransition();
   const router = useRouter();
   const pendingRef = useRef(false);
@@ -182,20 +180,16 @@ function EmptyTrashButton({
           ) : (
             <Trash2 className="h-3.5 w-3.5" />
           )}
-          Empty trash
-        </Button>
+          {t("emptyTrash")}</Button>
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Empty appointment recycle bin?</AlertDialogTitle>
+          <AlertDialogTitle>{t("emptyAppointmentRecycleBin")}</AlertDialogTitle>
           <AlertDialogDescription>
-            This will permanently delete {count} appointment
-            {count !== 1 ? "s" : ""} already in the recycle bin. Active
-            appointments will not be affected.
-          </AlertDialogDescription>
+            {t("emptyTrashAppointmentDescription", { count })}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
+          <AlertDialogCancel disabled={isPending}>{t("cancel")}</AlertDialogCancel>
           <AlertDialogAction
             disabled={isPending}
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
@@ -207,7 +201,7 @@ function EmptyTrashButton({
                   const res = await onEmptyTrash();
                   if (res.error) toast.error(res.error);
                   else {
-                    toast.success("Appointment recycle bin emptied.");
+                    toast.success(t("appointmentRecycleBinEmptied"));
                     router.refresh();
                   }
                 } finally {
@@ -217,10 +211,9 @@ function EmptyTrashButton({
             }
           >
             {isPending ? (
-              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+              <Loader2 className="me-2 h-3.5 w-3.5 animate-spin" />
             ) : null}
-            Empty trash
-          </AlertDialogAction>
+            {t("emptyTrash")}</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
@@ -233,6 +226,7 @@ export function AppointmentsRecycleBin({
   onPermanentDelete,
   onEmptyTrash,
 }: AppointmentsRecycleBinProps) {
+  const t = useTranslations("appointments");
   if (items.length === 0) return null;
 
   return (
@@ -240,17 +234,14 @@ export function AppointmentsRecycleBin({
       <div className="flex items-center gap-2 border-b border-destructive/15 px-4 py-3">
         <Trash2 className="h-4 w-4 text-destructive/70" />
         <h2 className="text-sm font-semibold text-destructive/80">
-          Recycle Bin
-        </h2>
-        <span className="ml-auto rounded-full bg-destructive/10 px-2 py-0.5 text-[11px] font-medium text-destructive/70">
-          {items.length} appointment{items.length !== 1 ? "s" : ""}
+          {t("recycleBin")}</h2>
+        <span className="ms-auto rounded-full bg-destructive/10 px-2 py-0.5 text-[11px] font-medium text-destructive/70">
+          {t("appointmentCount", { count: items.length })}
         </span>
         <EmptyTrashButton count={items.length} onEmptyTrash={onEmptyTrash} />
       </div>
       <p className="px-4 py-2 text-xs text-muted-foreground">
-        Appointments are permanently deleted after 30 days. Restore to bring
-        them back.
-      </p>
+        {t("appointmentsArePermanentlyDeletedAfter30")}</p>
       <Table className="table-fixed">
         <colgroup>
           <col />
@@ -260,10 +251,10 @@ export function AppointmentsRecycleBin({
         </colgroup>
         <TableHeader className="[&_tr]:border-b-2 [&_tr]:border-destructive/10 bg-destructive/5">
           <TableRow>
-            <TableHead>Patient</TableHead>
-            <TableHead>Doctor</TableHead>
-            <TableHead>Date</TableHead>
-            <TableHead className="text-end">Actions</TableHead>
+            <TableHead>{t("patient")}</TableHead>
+            <TableHead>{t("doctor")}</TableHead>
+            <TableHead>{t("date")}</TableHead>
+            <TableHead className="text-end">{t("actions")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -279,8 +270,8 @@ export function AppointmentsRecycleBin({
                     className={`text-xs ${days <= 3 ? "font-semibold text-destructive" : "text-muted-foreground/70"}`}
                   >
                     {days === 0
-                      ? "Expires today"
-                      : `${days} day${days !== 1 ? "s" : ""} left`}
+                      ? t("expirestoday")
+                      : t("daysLeft", { days })}
                   </p>
                 </TableCell>
                 <TableCell className="text-muted-foreground">

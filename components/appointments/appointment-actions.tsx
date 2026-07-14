@@ -26,6 +26,7 @@ import {
 import { CancelAppointmentDialog } from "@/components/appointments/cancel-dialog";
 import { NoShowDialog } from "@/components/appointments/noshow-dialog";
 import { SettleOutstandingDialog } from "@/components/patients/settle-outstanding-dialog";
+import { useTranslations } from "next-intl";
 
 type Status = Database["public"]["Enums"]["appointment_status"];
 type UserRole = "admin" | "receptionist" | "manager" | "doctor";
@@ -61,6 +62,7 @@ function AppointmentActionsInner({
   /** Called after a terminal action (cancel, no-show) succeeds. */
   onActionComplete?: () => void;
 }) {
+  const t = useTranslations("appointments");
   const router = useRouter();
   const [billingOpen, setBillingOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
@@ -111,7 +113,7 @@ function AppointmentActionsInner({
           toast.error(
             err instanceof Error
               ? err.message
-              : "Failed to load invoice details.",
+              : t("failedToLoadInvoiceDetails"),
           );
         })
         .finally(() => {
@@ -164,7 +166,7 @@ function AppointmentActionsInner({
       targetStatus !== "arrived" &&
       targetStatus !== "in_session"
     ) {
-      toast.error("This appointment cannot be restored to its previous status.");
+      toast.error(t("thisAppointmentCannotBeRestoredTo"));
       return;
     }
 
@@ -199,10 +201,10 @@ function AppointmentActionsInner({
           toast.error(result.error);
           setOptimisticStatus(null);
         } else {
-          toast.success(`Appointment ${newStatus}.`, {
+          toast.success(t("appointmentStatusUpdated", { status: newStatus }), {
             duration: 10000,
             action: {
-              label: "Undo",
+              label: t("undo"),
               onClick: () => doUndo(prevStatus, newStatus),
             },
           });
@@ -225,10 +227,10 @@ function AppointmentActionsInner({
           toast.error(result.error);
           setOptimisticStatus(null);
         } else {
-          toast.success("Appointment marked as arrived.", {
+          toast.success(t("appointmentMarkedAsArrived"), {
             duration: 10000,
             action: {
-              label: "Undo",
+              label: t("undo"),
               onClick: () => doUndo(prevStatus, "arrived"),
             },
           });
@@ -259,10 +261,10 @@ function AppointmentActionsInner({
             ? `/patients/${targetPatientId}/medical-notes-report`
             : null);
 
-        toast.success("Session started.", {
+        toast.success(t("sessionStarted"), {
           duration: 10000,
           action: {
-            label: "Undo",
+            label: t("undo"),
             onClick: () => {
               doUndo("arrived", "in_session");
               if (
@@ -277,16 +279,16 @@ function AppointmentActionsInner({
         });
 
         if (!redirectTo) {
-          toast.message("Open the patient profile to view medical notes.");
+          toast.message(t("openThePatientProfileToView"));
           return;
         }
 
         try {
           router.push(redirectTo);
         } catch {
-          toast.message("Session is in progress.", {
+          toast.message(t("sessionIsInProgress"), {
             action: {
-              label: "Open notes",
+              label: t("openNotes"),
               onClick: () => router.push(redirectTo),
             },
           });
@@ -332,10 +334,10 @@ function AppointmentActionsInner({
         resetCancelState();
         setOptimisticStatus("cancelled");
         onActionComplete?.();
-        toast.success("Appointment cancelled.", {
+        toast.success(t("appointmentCancelled"), {
           duration: 10000,
           action: {
-            label: "Undo",
+            label: t("undo"),
             onClick: () => doUndo(prevStatus, "cancelled"),
           },
         });
@@ -358,10 +360,10 @@ function AppointmentActionsInner({
       } else {
         resetNoShowState();
         onActionComplete?.();
-        toast.success("Appointment marked as no-show.", {
+        toast.success(t("appointmentMarkedAsNoShow"), {
           duration: 10000,
           action: {
-            label: "Undo",
+            label: t("undo"),
             onClick: () => doUndo(prevStatus, "no_show"),
           },
         });
@@ -390,10 +392,10 @@ function AppointmentActionsInner({
         setOptimisticStatus(null);
       } else {
         setOptimisticStatus("completed");
-        toast.success("Appointment completed & charged.", {
+        toast.success(t("appointmentCompletedCharged"), {
           duration: 10000,
           action: {
-            label: "Undo",
+            label: t("undo"),
             onClick: async () => {
               if (pendingActionRef.current) return;
               setActionPending("undo");
@@ -450,8 +452,7 @@ function AppointmentActionsInner({
             disabled={hasPendingAction}
             onClick={handleConfirmClick}
           >
-            Confirm
-          </Button>
+            {t("confirm")}</Button>
         )}
         {showArrive && (
           <Button
@@ -461,8 +462,7 @@ function AppointmentActionsInner({
             disabled={hasPendingAction}
             onClick={runArrive}
           >
-            Arrive
-          </Button>
+            {t("arrive")}</Button>
         )}
         {showStartSession && (
           <Button
@@ -475,8 +475,7 @@ function AppointmentActionsInner({
             disabled={hasPendingAction}
             onClick={runStartSession}
           >
-            Start Session
-          </Button>
+            {t("startSession")}</Button>
         )}
         {showComplete && (
           <Button
@@ -494,8 +493,7 @@ function AppointmentActionsInner({
               setBillingOpen(true);
             }}
           >
-            Complete
-          </Button>
+            {t("complete")}</Button>
         )}
         {showNoShow && (
           <Button
@@ -505,8 +503,7 @@ function AppointmentActionsInner({
             disabled={hasPendingAction}
             onClick={() => setNoShowOpen(true)}
           >
-            No-show
-          </Button>
+            {t("noShow")}</Button>
         )}
         {showCancel && (
           <Button
@@ -516,8 +513,7 @@ function AppointmentActionsInner({
             disabled={hasPendingAction}
             onClick={() => setCancelOpen(true)}
           >
-            Cancel
-          </Button>
+            {t("cancel")}</Button>
         )}
       </div>
 
@@ -541,7 +537,7 @@ function AppointmentActionsInner({
               patientId={ctx.patientId}
               outstanding={ctx.previousOutstandingBalance}
               patientName={ctx.patientName}
-              triggerLabel="Pay separately"
+              triggerLabel={t("paySeparately")}
             />
           ) : null
         }

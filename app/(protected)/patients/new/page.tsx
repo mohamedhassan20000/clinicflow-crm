@@ -5,14 +5,19 @@ import { PatientForm } from "@/components/patients/patient-form";
 import { createPatient } from "@/actions/patients";
 import { PageHeader } from "@/components/shared/page-header";
 import { resolveReturnTo } from "@/lib/navigation/return-url";
+import { getTranslations } from "next-intl/server";
 
-export const metadata: Metadata = { title: "New Patient" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("protected");
+  return { title: t("metadataNewPatient") };
+}
 
 export default async function NewPatientPage({
   searchParams,
 }: {
   searchParams: Promise<{ returnTo?: string }>;
 }) {
+  const t = await getTranslations("protected");
   const { returnTo } = await searchParams;
   const patientsUrl = resolveReturnTo(returnTo, "/patients", ["/patients"]);
   const user = await requireRole(["admin", "receptionist"]);
@@ -48,9 +53,9 @@ export default async function NewPatientPage({
     <div className="space-y-6">
       <PageHeader
         back={{ href: patientsUrl, label: "patients" }}
-        breadcrumbs={[{ label: "Patients", href: patientsUrl }, { label: "New patient" }]}
-        title="New patient"
-        description="Add a new patient record to the clinic."
+        breadcrumbs={[{ label: t("patients"), href: patientsUrl }, { label: t("newPatient2") }]}
+        title={t("newPatient")}
+        description={t("addANewPatientRecordTo")}
       />
 
       <div className="max-w-2xl mx-auto rounded-xl border border-border/50 bg-card p-6">

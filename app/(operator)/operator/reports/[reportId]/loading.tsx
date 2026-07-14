@@ -1,9 +1,11 @@
 import { TableSkeleton } from "@/components/shared/data-table";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useTranslations } from "next-intl";
 
 export default function OperatorReportLoading() {
+  const t = useTranslations("operator");
   return (
-    <div className="space-y-6" role="status" aria-label="Loading operator report">
+    <div className="space-y-6" role="status" aria-label={t("loadingOperatorReport")}>
       <div className="space-y-3">
         <Skeleton className="h-11 w-36" />
         <Skeleton className="h-5 w-52" />
@@ -24,7 +26,7 @@ export default function OperatorReportLoading() {
         </div>
         <TableSkeleton columns={5} rows={8} />
       </section>
-      <span className="sr-only">Loading report filters and rows…</span>
+      <span className="sr-only">{t("loadingReportFiltersAndRows")}</span>
     </div>
   );
 }

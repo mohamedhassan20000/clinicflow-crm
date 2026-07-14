@@ -9,9 +9,9 @@ import {
   type AppointmentPaymentRowData,
   type SettlementEntry,
 } from "@/components/patients/appointment-payment-row";
-import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
 import { formatDoctorName } from "@/lib/format-doctor";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
+import { useTranslations } from "next-intl";
 
 interface Props {
   appointments: AppointmentPaymentRowData[];
@@ -19,7 +19,8 @@ interface Props {
 }
 
 export function AppointmentsReportList({ appointments, settlementsByAppt }: Props) {
-  const { formatCurrency } = useClinicSettings();
+  const t = useTranslations("patients");
+  const { formatCurrency, formatDateTime } = useClinicSettings();
   const fmtMoney = (n: number) => formatCurrency(n);
   const [openIds, setOpenIds] = useState<Set<string>>(new Set());
 
@@ -48,11 +49,9 @@ export function AppointmentsReportList({ appointments, settlementsByAppt }: Prop
     return (
       <>
         <div className="rounded-xl border border-dashed border-border/60 bg-muted/20 px-6 py-12 text-center text-sm text-muted-foreground print:hidden">
-          No appointments match the selected date range.
-        </div>
+          {t("noAppointmentsMatchTheSelectedDate")}</div>
         <p className="hidden text-sm print:block">
-          No appointments match the selected date range.
-        </p>
+          {t("noAppointmentsMatchTheSelectedDate")}</p>
       </>
     );
   }
@@ -69,8 +68,7 @@ export function AppointmentsReportList({ appointments, settlementsByAppt }: Prop
               onClick={expandAll}
             >
               <ChevronsUpDown className="h-3 w-3" />
-              Expand all
-            </Button>
+              {t("expandAll")}</Button>
             <Button
               size="sm"
               variant="outline"
@@ -78,11 +76,9 @@ export function AppointmentsReportList({ appointments, settlementsByAppt }: Prop
               onClick={collapseAll}
             >
               <ChevronsDownUp className="h-3 w-3" />
-              Collapse all
-            </Button>
+              {t("collapseAll")}</Button>
             <span className="text-xs text-muted-foreground">
-              {completedIds.length} completed appointment
-              {completedIds.length !== 1 ? "s" : ""}
+              {completedIds.length} {t("completedAppointment")}{completedIds.length !== 1 ? "s" : ""}
             </span>
           </div>
         )}
@@ -103,13 +99,13 @@ export function AppointmentsReportList({ appointments, settlementsByAppt }: Prop
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Date &amp; Time</TableHead>
-              <TableHead>Doctor</TableHead>
-              <TableHead>Department</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-end">Total</TableHead>
-              <TableHead className="text-end">Paid</TableHead>
-              <TableHead className="text-end">Outstanding</TableHead>
+              <TableHead>{t("dateTime")}</TableHead>
+              <TableHead>{t("doctor")}</TableHead>
+              <TableHead>{t("department")}</TableHead>
+              <TableHead>{t("status")}</TableHead>
+              <TableHead className="text-end">{t("total")}</TableHead>
+              <TableHead className="text-end">{t("paid")}</TableHead>
+              <TableHead className="text-end">{t("outstanding")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -124,8 +120,7 @@ export function AppointmentsReportList({ appointments, settlementsByAppt }: Prop
               return (
                 <TableRow key={a.id}>
                   <TableCell style={{ whiteSpace: "nowrap" }}>
-                    {new Date(a.scheduled_at).toLocaleString("en-GB", {
-                      timeZone: DEFAULT_TIME_ZONE,
+                    {formatDateTime(a.scheduled_at, {
                       dateStyle: "medium",
                       timeStyle: "short",
                     })}

@@ -480,7 +480,7 @@ describe("appointment status and role boundaries", () => {
     const result = await updateAppointmentStatus(APPOINTMENT_ID, "confirmed");
 
     expect(result).toEqual({
-      error: "Cannot transition from completed to confirmed.",
+      error: "Cannot transition from Completed to Confirmed.",
     });
     expect(wroteAppointments(mocks)).toBe(false);
   });

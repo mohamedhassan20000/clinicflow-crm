@@ -5,6 +5,7 @@ import { EmptyReportState, MetricGrid, ReportSectionShell } from "@/components/r
 import { formatDateRangeLabel, formatNumber, formatPercent } from "@/components/reports/report-formatters";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
+import { useTranslations } from "next-intl";
 
 export function ReceptionistPerformanceReport({
   data,
@@ -15,6 +16,7 @@ export function ReceptionistPerformanceReport({
   range: ReportDateRange;
   clinic: ClinicPrintMeta;
 }) {
+  const t = useTranslations("reports");
   const { locale } = useClinicSettings();
   const totals = data.receptionists.reduce(
     (acc, row) => ({
@@ -27,16 +29,16 @@ export function ReceptionistPerformanceReport({
   return (
     <ReportSectionShell
       section="receptionist-performance"
-      title="Receptionist Performance"
-      description="Bookings and follow-ups handled by receptionist."
+      title={t("receptionistPerformance")}
+      description={t("bookingsAndFollowUpsHandledBy")}
       rangeLabel={formatDateRangeLabel(range.from, range.to, locale)}
       clinic={clinic}
     >
       <MetricGrid
         items={[
-          { label: "Receptionists", value: formatNumber(data.receptionists.length, locale) },
-          { label: "Appointments booked", value: formatNumber(totals.appointments, locale) },
-          { label: "Follow-ups handled", value: formatNumber(totals.followups, locale) },
+          { label: t("receptionists"), value: formatNumber(data.receptionists.length, locale) },
+          { label: t("appointmentsBooked2"), value: formatNumber(totals.appointments, locale) },
+          { label: t("followUpsHandled2"), value: formatNumber(totals.followups, locale) },
         ]}
       />
 
@@ -47,17 +49,17 @@ export function ReceptionistPerformanceReport({
           <Table dense>
             <TableHeader>
               <TableRow>
-                <TableHead>Receptionist</TableHead>
-                <TableHead className="text-end">Appointments booked</TableHead>
-                <TableHead className="text-end">Appointment share</TableHead>
-                <TableHead className="text-end">Follow-ups handled</TableHead>
-                <TableHead className="text-end">Follow-up share</TableHead>
+                <TableHead>{t("receptionist")}</TableHead>
+                <TableHead className="text-end">{t("appointmentsBooked")}</TableHead>
+                <TableHead className="text-end">{t("appointmentShare")}</TableHead>
+                <TableHead className="text-end">{t("followUpsHandled")}</TableHead>
+                <TableHead className="text-end">{t("followUpShare")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {data.receptionists.map((row) => (
                 <TableRow key={row.id}>
-                  <TableCell className="font-medium">{row.name || "Unknown receptionist"}</TableCell>
+                  <TableCell className="font-medium">{row.name || t("unknownReceptionist")}</TableCell>
                   <TableCell className="text-end tabular-nums">
                     {formatNumber(row.appointmentsBooked, locale)}
                   </TableCell>

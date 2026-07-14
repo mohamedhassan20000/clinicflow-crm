@@ -1,6 +1,7 @@
 import { FileText } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { PrintButton } from "@/components/patients/print-button";
+import { useTranslations } from "next-intl";
 
 export function PatientReportHeader({
   patientHref,
@@ -17,11 +18,12 @@ export function PatientReportHeader({
   title: string;
   countLabel: string;
 }) {
+  const t = useTranslations("patients");
   return (
     <PageHeader
       back={{ href: patientHref, label: "patient" }}
       breadcrumbs={[
-        { label: "Patients", href: "/patients" },
+        { label: t("patients"), href: "/patients" },
         { label: patientName, href: patientHref },
         { label: title },
       ]}
@@ -30,8 +32,8 @@ export function PatientReportHeader({
       description={
         <div className="space-y-0.5">
           <p className="text-base font-medium text-foreground">{patientName}</p>
-          {fileNumber ? <p>File: <span className="font-mono">{fileNumber}</span></p> : null}
-          {phone ? <p>Phone: {phone}</p> : null}
+          {fileNumber ? <p>{t("file")}<span className="font-mono">{fileNumber}</span></p> : null}
+          {phone ? <p>{t("phone")}{phone}</p> : null}
           <p>{countLabel}</p>
         </div>
       }

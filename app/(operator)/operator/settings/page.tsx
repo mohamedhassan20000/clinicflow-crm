@@ -1,8 +1,10 @@
 import { updatePlatformSettings } from "@/actions/operator";
 import { OperatorActionForm } from "@/components/operator/operator-action-form";
 import { createClient } from "@/lib/supabase/server";
+import { getTranslations } from "next-intl/server";
 
 export default async function OperatorSettingsPage() {
+  const t = await getTranslations("operator");
   const supabase = await createClient();
   const { data: settings } = await supabase
     .from("platform_settings")
@@ -13,28 +15,25 @@ export default async function OperatorSettingsPage() {
   return (
     <>
       <header>
-        <h1 className="text-3xl font-bold tracking-tight">Platform settings</h1>
+        <h1 className="text-3xl font-bold tracking-tight">{t("platformSettings")}</h1>
         <p className="mt-1 text-muted-foreground">
-          Changes apply to the public registration flow immediately — no deploy required (§3.2).
-        </p>
+          {t("changesApplyToThePublicRegistration")}</p>
       </header>
 
       <section className="max-w-lg rounded-xl border bg-card p-5">
-        <OperatorActionForm action={updatePlatformSettings} submitLabel="Save settings">
+        <OperatorActionForm action={updatePlatformSettings} submitLabel={t("saveSettings")}>
           <label className="block text-sm">
-            Registration mode
-            <select
+            {t("registrationMode")}<select
               name="registrationMode"
               defaultValue={settings?.registration_mode ?? "invite_only"}
               className="mt-1 block w-full rounded-md border bg-background px-2 py-1"
             >
-              <option value="invite_only">invite only</option>
-              <option value="open">open</option>
+              <option value="invite_only">{t("inviteOnly")}</option>
+              <option value="open">{t("open")}</option>
             </select>
           </label>
           <label className="block text-sm">
-            Weekly invite limit
-            <input
+            {t("weeklyInviteLimit")}<input
               name="weeklyInviteLimit"
               type="number"
               min={1}
@@ -44,8 +43,7 @@ export default async function OperatorSettingsPage() {
             />
           </label>
           <label className="block text-sm">
-            Invitation expiry (days)
-            <input
+            {t("invitationExpiryDays")}<input
               name="invitationExpiryDays"
               type="number"
               min={1}
@@ -56,8 +54,7 @@ export default async function OperatorSettingsPage() {
           </label>
         </OperatorActionForm>
         <p className="mt-4 text-xs text-muted-foreground">
-          Last updated {settings?.updated_at ? settings.updated_at.slice(0, 16).replace("T", " ") : "—"} UTC.
-        </p>
+          {t("lastUpdated")}{settings?.updated_at ? settings.updated_at.slice(0, 16).replace("T", " ") : "—"} {t("utc")}</p>
       </section>
     </>
   );

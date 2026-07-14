@@ -53,6 +53,7 @@ import {
   restoreStaff,
 } from "@/actions/settings";
 import type { Tables } from "@/types/database";
+import { useTranslations } from "next-intl";
 
 type StaffMember = Tables<"profiles"> & {
   departments: { name: string; color?: string | null } | null;
@@ -66,10 +67,10 @@ type StaffPendingAction = {
 } | null;
 
 const ROLE_LABELS: Record<string, string> = {
-  admin: "Admin",
-  doctor: "Doctor",
-  receptionist: "Receptionist",
-  manager: "Manager",
+  admin: "admin",
+  doctor: "doctor",
+  receptionist: "receptionist",
+  manager: "manager",
 };
 
 const ROLE_VARIANTS: Record<string, "default" | "secondary" | "outline"> = {
@@ -100,6 +101,7 @@ interface StaffTableProps {
 
 
 export function StaffTable({ staff, departments, currentUserId, lastSeenMap, isAdmin }: StaffTableProps) {
+  const t = useTranslations("settings");
   const [editTarget, setEditTarget] = useState<StaffMember | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<StaffMember | null>(null);
   const [profileTarget, setProfileTarget] = useState<StaffMember | null>(null);
@@ -123,17 +125,17 @@ export function StaffTable({ staff, departments, currentUserId, lastSeenMap, isA
       if (result.error) {
         toast.error(result.error);
       } else {
-        toast.success(`"${name}" moved to recycle bin.`, {
+        toast.success(t("namedItemMovedToRecycleBin", { name }), {
           duration: 10000,
           action: {
-            label: "Undo",
+            label: t("undo"),
             onClick: () => {
               if (pendingActionRef.current) return;
               setPendingAction({ id, action: "restore" });
               restoreStaff(id)
                 .then((res) => {
                   if (res.error) toast.error(res.error);
-                  else toast.success(`"${name}" restored.`);
+                  else toast.success(t("namedItemRestored", { name }));
                 })
                 .finally(() => setPendingAction(null));
             },
@@ -184,7 +186,7 @@ export function StaffTable({ staff, departments, currentUserId, lastSeenMap, isA
       );
       if (result.error) toast.error(result.error);
       else {
-        toast.success("Temporary password set. Staff will be prompted to change it.");
+        toast.success(t("temporaryPasswordSetStaffWillBe"));
         resetPasswordDialog();
       }
       setPendingAction(null);
@@ -197,7 +199,7 @@ export function StaffTable({ staff, departments, currentUserId, lastSeenMap, isA
     startTransition(async () => {
       const result = await toggleStaffActive(id, newState);
       if (result.error) toast.error(result.error);
-      else toast.success(newState ? "Staff member reactivated." : "Staff member deactivated.");
+      else toast.success(newState ? t("staffmemberreactivated") : t("staffmemberdeactivated"));
       setPendingAction(null);
     });
   }
@@ -215,12 +217,12 @@ export function StaffTable({ staff, departments, currentUserId, lastSeenMap, isA
           </colgroup>
           <TableHeader>
             <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead className="hidden sm:table-cell">Department</TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead>Status</TableHead>
+              <TableHead>{t("name")}</TableHead>
+              <TableHead className="hidden sm:table-cell">{t("department")}</TableHead>
+              <TableHead>{t("role")}</TableHead>
+              <TableHead>{t("status")}</TableHead>
               <TableHead className="text-end">
-                <span className="sr-only">Actions</span>
+                <span className="sr-only">{t("actions")}</span>
               </TableHead>
             </TableRow>
           </TableHeader>
@@ -231,7 +233,7 @@ export function StaffTable({ staff, departments, currentUserId, lastSeenMap, isA
                   colSpan={5}
                   className="py-10 text-center text-sm text-muted-foreground"
                 >
-                  No staff members yet.
+                  {t("noStaffMembersYet")}
                 </TableCell>
               </TableRow>
             )}
@@ -268,15 +270,15 @@ export function StaffTable({ staff, departments, currentUserId, lastSeenMap, isA
                 </TableCell>
                 <TableCell>
                   <Badge variant={ROLE_VARIANTS[s.role] ?? "outline"} className="text-xs">
-                    {ROLE_LABELS[s.role] ?? s.role}
+                    {ROLE_LABELS[s.role] ? t(ROLE_LABELS[s.role]) : s.role}
                   </Badge>
                 </TableCell>
                 <TableCell>
                   <Badge
                     variant={s.is_active ? "default" : "secondary"}
-                    className={`text-xs ${s.is_active ? "bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/10 border-emerald-500/20" : ""}`}
+                    className={`text-xs ${s.is_active ? "bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-400" : ""}`}
                   >
-                    {s.is_active ? "Active" : "Inactive"}
+                    {s.is_active ? t("active") : t("inactive")}
                   </Badge>
                 </TableCell>
                 <TableCell
@@ -284,28 +286,27 @@ export function StaffTable({ staff, departments, currentUserId, lastSeenMap, isA
                   onClick={(e) => e.stopPropagation()}
                 >
                   {rowPending ? (
-                    <Loader2 className="ml-auto h-4 w-4 animate-spin text-muted-foreground" />
+                    <Loader2 className="ms-auto h-4 w-4 animate-spin text-muted-foreground" />
                   ) : (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon" className="h-7 w-7">
                           <MoreHorizontal className="h-4 w-4" />
-                          <span className="sr-only">Open menu</span>
+                          <span className="sr-only">{t("openMenu")}</span>
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem onClick={() => setProfileTarget(s)}>
-                          <FolderOpen className="mr-2 h-4 w-4" />
-                          View profile &amp; files
+                          <FolderOpen className="me-2 h-4 w-4" />
+                          {t("viewProfileAndFiles")}
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={() => setEditTarget(s)}>
-                          <Pencil className="mr-2 h-4 w-4" />
-                          Edit
-                        </DropdownMenuItem>
+                          <Pencil className="me-2 h-4 w-4" />
+                          {t("edit")}</DropdownMenuItem>
                         <DropdownMenuItem onClick={() => setPasswordTarget(s)}>
-                          <KeyRound className="mr-2 h-4 w-4" />
-                          Set temporary password
+                          <KeyRound className="me-2 h-4 w-4" />
+                          {t("setTemporaryPassword")}
                         </DropdownMenuItem>
                         {s.id !== currentUserId && (
                           <>
@@ -316,13 +317,13 @@ export function StaffTable({ staff, departments, currentUserId, lastSeenMap, isA
                             >
                               {s.is_active ? (
                                 <>
-                                  <UserX className="mr-2 h-4 w-4" />
-                                  Deactivate
+                                  <UserX className="me-2 h-4 w-4" />
+                                  {t("deactivate")}
                                 </>
                               ) : (
                                 <>
-                                  <UserCheck className="mr-2 h-4 w-4" />
-                                  Reactivate
+                                  <UserCheck className="me-2 h-4 w-4" />
+                                  {t("reactivate")}
                                 </>
                               )}
                             </DropdownMenuItem>
@@ -330,8 +331,8 @@ export function StaffTable({ staff, departments, currentUserId, lastSeenMap, isA
                               onClick={() => setDeleteTarget(s)}
                               className="text-destructive focus:text-destructive"
                             >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              Delete
+                              <Trash2 className="me-2 h-4 w-4" />
+                              {t("delete")}
                             </DropdownMenuItem>
                           </>
                         )}
@@ -359,7 +360,7 @@ export function StaffTable({ staff, departments, currentUserId, lastSeenMap, isA
       <Dialog open={!!editTarget} onOpenChange={(open) => !open && setEditTarget(null)}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Edit staff member</DialogTitle>
+            <DialogTitle>{t("editStaffMember")}</DialogTitle>
           </DialogHeader>
           {editTarget && (
             <EditStaffForm
@@ -387,15 +388,13 @@ export function StaffTable({ staff, departments, currentUserId, lastSeenMap, isA
       >
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Set temporary password</DialogTitle>
+            <DialogTitle>{t("setTemporaryPassword")}</DialogTitle>
             <DialogDescription>
-              {passwordTarget?.full_name} will be forced to change this password
-              on next login.
-            </DialogDescription>
+              {passwordTarget?.full_name} {t("willBeForcedToChangeThis")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="temporary-password">Temporary password</Label>
+              <Label htmlFor="temporary-password">{t("temporaryPassword")}</Label>
               <Input
                 id="temporary-password"
                 type="password"
@@ -403,12 +402,12 @@ export function StaffTable({ staff, departments, currentUserId, lastSeenMap, isA
                 value={temporaryPassword}
                 disabled={pendingAction?.action === "password"}
                 onChange={(e) => setTemporaryPassword(e.target.value)}
-                placeholder="Clinic@123"
+                placeholder={t("clinic123")}
               />
             </div>
             <div className="space-y-2">
               <Label htmlFor="confirm-temporary-password">
-                Confirm temporary password
+                {t("confirmTemporaryPassword")}
               </Label>
               <Input
                 id="confirm-temporary-password"
@@ -417,7 +416,7 @@ export function StaffTable({ staff, departments, currentUserId, lastSeenMap, isA
                 value={confirmTemporaryPassword}
                 disabled={pendingAction?.action === "password"}
                 onChange={(e) => setConfirmTemporaryPassword(e.target.value)}
-                placeholder="Clinic@123"
+                placeholder={t("clinic123")}
               />
             </div>
           </div>
@@ -428,7 +427,7 @@ export function StaffTable({ staff, departments, currentUserId, lastSeenMap, isA
               disabled={pendingAction?.action === "password"}
               onClick={resetPasswordDialog}
             >
-              Cancel
+              {t("cancel")}
             </Button>
             <Button
               type="button"
@@ -439,7 +438,7 @@ export function StaffTable({ staff, departments, currentUserId, lastSeenMap, isA
               {pendingAction?.action === "password" && (
                 <Loader2 className="h-4 w-4 animate-spin" />
               )}
-              Save password
+              {t("savePassword")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -452,15 +451,13 @@ export function StaffTable({ staff, departments, currentUserId, lastSeenMap, isA
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Move to recycle bin?</AlertDialogTitle>
+            <AlertDialogTitle>{t("moveToRecycleBin")}</AlertDialogTitle>
             <AlertDialogDescription>
-              <strong>{deleteTarget?.full_name}</strong> will be deactivated and
-              moved to the recycle bin. They can be restored within 30 days.
-            </AlertDialogDescription>
+              <strong>{deleteTarget?.full_name}</strong> {t("willBeDeactivatedAndMovedTo")}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={pendingAction?.action === "delete"}>
-              Cancel
+              {t("cancel")}
             </AlertDialogCancel>
             <AlertDialogAction
               disabled={pendingAction?.action === "delete"}
@@ -470,7 +467,7 @@ export function StaffTable({ staff, departments, currentUserId, lastSeenMap, isA
               }}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {pendingAction?.action === "delete" ? "Moving…" : "Move to bin"}
+              {pendingAction?.action === "delete" ? t("moving") : t("movetobin")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -42,16 +42,17 @@ import {
 import { getDoctorSchedule, upsertDoctorSchedule, getClinicWorkingHours } from "@/actions/settings";
 import type { DoctorScheduleValues, ClinicWorkingHoursValues } from "@/lib/validations/settings";
 import type { Tables } from "@/types/database";
+import { useTranslations } from "next-intl";
 
 type StaffMember = Tables<"profiles"> & {
   departments: { name: string; color?: string | null } | null;
 };
 
-const ROLE_LABELS: Record<string, string> = {
-  admin: "Admin",
-  doctor: "Doctor",
-  receptionist: "Receptionist",
-  manager: "Manager",
+const ROLE_LABEL_KEYS: Record<string, string> = {
+  admin: "roleAdmin",
+  doctor: "roleDoctor",
+  receptionist: "roleReceptionist",
+  manager: "roleManager",
 };
 
 const ROLE_COLORS: Record<string, string> = {
@@ -93,6 +94,7 @@ interface Props {
 }
 
 export function StaffProfileSheet({ staff, open, onOpenChange, lastSeen, isAdmin }: Props) {
+  const t = useTranslations("settings");
   const router = useRouter();
   const [files, setFiles] = useState<StaffFiles | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -144,7 +146,7 @@ export function StaffProfileSheet({ staff, open, onOpenChange, lastSeen, isAdmin
         if (res.error) toast.error(res.error);
         else {
           setFiles(res.data ?? null);
-          toast.success("File uploaded.");
+          toast.success(t("fileUploaded"));
           if (isPhoto) {
             setLocalAvatarUrl(res.data?.photo?.url ?? null);
             router.refresh();
@@ -162,7 +164,7 @@ export function StaffProfileSheet({ staff, open, onOpenChange, lastSeen, isAdmin
       if (res.error) toast.error(res.error);
       else {
         setFiles(res.data ?? null);
-        toast.success("File removed.");
+        toast.success(t("fileRemoved"));
         if (filePath.includes("/photo.")) {
           setLocalAvatarUrl(null);
           router.refresh();
@@ -177,11 +179,11 @@ export function StaffProfileSheet({ staff, open, onOpenChange, lastSeen, isAdmin
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>
       <SheetContent
-        side="right"
+        side="inline-end"
         className="flex w-full flex-col gap-0 p-0 sm:max-w-2xl"
       >
         {/* ── Header ── */}
-        <SheetHeader className="border-b border-border/50 px-8 py-5 pr-14">
+        <SheetHeader className="border-b border-border/50 px-8 py-5 pe-14">
           <div className="flex items-center gap-4">
             {(localAvatarUrl !== undefined ? localAvatarUrl : staff.avatar_url) ? (
               <Image
@@ -202,19 +204,19 @@ export function StaffProfileSheet({ staff, open, onOpenChange, lastSeen, isAdmin
               </SheetTitle>
               <p className="mt-0.5 text-sm text-muted-foreground">
                 {staff.role === "admin" || staff.role === "manager"
-                  ? "Management / Administration"
-                  : staff.departments?.name ?? "No department"}
+                  ? t("managementAdministration")
+                  : staff.departments?.name ?? t("noDepartment")}
               </p>
               <div className="mt-1.5 flex flex-wrap gap-1.5">
                 <span
                   className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${ROLE_COLORS[staff.role] ?? "bg-muted text-foreground border-border"}`}
                 >
-                  {ROLE_LABELS[staff.role] ?? staff.role}
+                  {ROLE_LABEL_KEYS[staff.role] ? t(ROLE_LABEL_KEYS[staff.role]) : staff.role}
                 </span>
                 <span
-                  className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${staff.is_active ? "bg-emerald-500/10 text-emerald-700 border-emerald-500/20" : "bg-muted text-muted-foreground border-border"}`}
+                  className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${staff.is_active ? "bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-400" : "bg-muted text-muted-foreground border-border"}`}
                 >
-                  {staff.is_active ? "Active" : "Inactive"}
+                  {staff.is_active ? t("active") : t("inactive")}
                 </span>
               </div>
             </div>
@@ -230,10 +232,10 @@ export function StaffProfileSheet({ staff, open, onOpenChange, lastSeen, isAdmin
           <input ref={otherRef} type="file" accept=".pdf,.doc,.docx,image/jpeg,image/png" className="hidden" />
 
           <TabsList className="mx-8 mt-4 w-fit">
-            <TabsTrigger value="profile">Profile</TabsTrigger>
-            <TabsTrigger value="documents">Documents</TabsTrigger>
+            <TabsTrigger value="profile">{t("profile")}</TabsTrigger>
+            <TabsTrigger value="documents">{t("documents")}</TabsTrigger>
             {staff.role === "doctor" && (
-              <TabsTrigger value="schedule">Schedule</TabsTrigger>
+              <TabsTrigger value="schedule">{t("schedule")}</TabsTrigger>
             )}
           </TabsList>
 
@@ -243,52 +245,52 @@ export function StaffProfileSheet({ staff, open, onOpenChange, lastSeen, isAdmin
             className="flex-1 overflow-y-auto px-8 py-5"
           >
             <div className="space-y-5">
-              <InfoRow icon={<User className="h-4 w-4" />} label="Full name" value={staff.full_name} />
-              <InfoRow icon={<User className="h-4 w-4" />} label="Role" value={ROLE_LABELS[staff.role] ?? staff.role} />
+              <InfoRow icon={<User className="h-4 w-4" />} label={t("fullName")} value={staff.full_name} />
+              <InfoRow icon={<User className="h-4 w-4" />} label={t("role")} value={ROLE_LABEL_KEYS[staff.role] ? t(ROLE_LABEL_KEYS[staff.role]) : staff.role} />
               <InfoRow
                 icon={<User className="h-4 w-4" />}
                 label={
                   staff.role === "admin" || staff.role === "manager"
-                    ? "Group"
-                    : "Department"
+                    ? t("group")
+                    : t("department")
                 }
                 value={
                   staff.role === "admin" || staff.role === "manager"
-                    ? "Management / Administration"
+                    ? t("managementAdministration")
                     : staff.departments?.name ?? "—"
                 }
               />
               {staff.phone && (
-                <InfoRow icon={<Phone className="h-4 w-4" />} label="Phone" value={staff.phone} />
+                <InfoRow icon={<Phone className="h-4 w-4" />} label={t("phone")} value={staff.phone} />
               )}
               <Separator />
               <InfoRow
                 icon={<CalendarDays className="h-4 w-4" />}
-                label="Joined"
+                label={t("joined")}
                 value={fmt(staff.created_at)}
               />
               {lastSeen !== undefined && (
                 <InfoRow
                   icon={<Clock className="h-4 w-4" />}
-                  label="Last seen"
+                  label={t("lastSeen")}
                   value={formatLastSeen(lastSeen)}
                 />
               )}
               <InfoRow
                 icon={<User className="h-4 w-4" />}
-                label="Account status"
+                label={t("accountStatus")}
                 value={
                   <Badge
                     variant={staff.is_active ? "default" : "secondary"}
-                    className={`text-xs ${staff.is_active ? "bg-emerald-500/10 text-emerald-700 border-emerald-500/20" : ""}`}
+                    className={`text-xs ${staff.is_active ? "bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-400" : ""}`}
                   >
-                    {staff.is_active ? "Active" : "Inactive"}
+                    {staff.is_active ? t("active") : t("inactive")}
                   </Badge>
                 }
               />
               {staff.must_change_password && (
                 <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-xs text-amber-700">
-                  This staff member must change their password on next login.
+                  {t("thisStaffMemberMustChangeTheir")}
                 </p>
               )}
             </div>
@@ -316,8 +318,8 @@ export function StaffProfileSheet({ staff, open, onOpenChange, lastSeen, isAdmin
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium">Profile photo</p>
-                      <p className="text-xs text-muted-foreground">JPEG, PNG, or WebP · max 2 MB</p>
+                      <p className="text-sm font-medium">{t("profilePhoto")}</p>
+                      <p className="text-xs text-muted-foreground">{t("jpegPngOrWebpMax2")}</p>
                     </div>
                     <div className="flex items-center gap-2">
                       <Button
@@ -329,7 +331,7 @@ export function StaffProfileSheet({ staff, open, onOpenChange, lastSeen, isAdmin
                         onClick={() => triggerUpload(photoRef, uploadStaffPhoto, true)}
                       >
                         <Upload className="h-3.5 w-3.5" />
-                        {files?.photo ? "Change" : "Upload"}
+                        {files?.photo ? t("change") : t("upload")}
                       </Button>
                       {files?.photo && (
                         <Button
@@ -341,7 +343,7 @@ export function StaffProfileSheet({ staff, open, onOpenChange, lastSeen, isAdmin
                           onClick={() => handleDelete(files.photo!.path)}
                         >
                           <X className="h-3.5 w-3.5" />
-                          Remove
+                          {t("remove")}
                         </Button>
                       )}
                     </div>
@@ -350,7 +352,7 @@ export function StaffProfileSheet({ staff, open, onOpenChange, lastSeen, isAdmin
                     <div className="flex items-center gap-3 rounded-lg border border-border/40 bg-muted/20 p-3">
                       <Image
                         src={files.photo.url}
-                        alt="Staff photo"
+                        alt={t("staffPhoto")}
                         width={48}
                         height={48}
                         className="h-12 w-12 rounded-full object-cover ring-2 ring-border"
@@ -364,9 +366,9 @@ export function StaffProfileSheet({ staff, open, onOpenChange, lastSeen, isAdmin
 
                 {/* Contract */}
                 <SingleFileSection
-                  title="Employment contract"
+                  title={t("employmentContract")}
                   icon={<FileText className="h-4 w-4" />}
-                  hint="PDF or Word · max 10 MB"
+                  hint={t("pdfOrWordMax10Mb")}
                   file={files?.contract ?? null}
                   isPending={isPending}
                   onUpload={() => triggerUpload(contractRef, uploadStaffContract)}
@@ -377,30 +379,30 @@ export function StaffProfileSheet({ staff, open, onOpenChange, lastSeen, isAdmin
 
                 {/* Certificates */}
                 <MultiFileSection
-                  title="University certificates"
+                  title={t("universityCertificates")}
                   icon={<GraduationCap className="h-4 w-4" />}
-                  hint="PDF or Word · max 10 MB each · multiple files allowed"
+                  hint={t("pdfOrWordMax10MbEachMultiple")}
                   files={files?.certificates ?? []}
                   isPending={isPending}
                   onAdd={() => triggerUpload(certRef, uploadStaffCertificate)}
                   onDelete={handleDelete}
-                  addLabel="Add certificate"
-                  emptyLabel="No certificates uploaded yet"
+                  addLabel={t("addCertificate")}
+                  emptyLabel={t("noCertificatesUploadedYet")}
                 />
 
                 <Separator />
 
                 {/* Other documents */}
                 <MultiFileSection
-                  title="Other documents"
+                  title={t("otherDocuments")}
                   icon={<FolderOpen className="h-4 w-4" />}
-                  hint="PDF or Word · max 10 MB each · multiple files allowed"
+                  hint={t("pdfOrWordMax10MbEachMultiple")}
                   files={files?.other ?? []}
                   isPending={isPending}
                   onAdd={() => triggerUpload(otherRef, uploadStaffOtherDoc)}
                   onDelete={handleDelete}
-                  addLabel="Add document"
-                  emptyLabel="No other documents uploaded yet"
+                  addLabel={t("addDocument")}
+                  emptyLabel={t("noOtherDocumentsUploadedYet")}
                 />
               </div>
             )}
@@ -413,7 +415,7 @@ export function StaffProfileSheet({ staff, open, onOpenChange, lastSeen, isAdmin
 
 // ── Doctor Schedule Tab ───────────────────────────────────────────────────────
 
-const SCHEDULE_DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const SCHEDULE_DAY_KEYS = ["daySunday", "dayMonday", "dayTuesday", "dayWednesday", "dayThursday", "dayFriday", "daySaturday"];
 const SCHEDULE_DAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
 // Returns true if the clinic has working hours configured and the given dow is closed.
@@ -433,6 +435,7 @@ function DoctorScheduleTab({
   open: boolean;
   isAdmin: boolean;
 }) {
+  const t = useTranslations("settings");
   const [schedule, setSchedule] = useState<DoctorScheduleValues | null>(null);
   const [clinicHours, setClinicHours] = useState<ClinicWorkingHoursValues>([]);
   const [saving, startSave] = useTransition();
@@ -497,7 +500,7 @@ function DoctorScheduleTab({
     startSave(async () => {
       const res = await upsertDoctorSchedule(doctorId, null, fd);
       if (res.error) setSaveError(res.error);
-      else toast.success("Schedule saved.");
+      else toast.success(t("scheduleSaved"));
     });
   }
 
@@ -512,7 +515,7 @@ function DoctorScheduleTab({
   return (
     <div className="space-y-4">
       <p className="text-xs text-muted-foreground">
-        Set which days this doctor works and their hours for each day.
+        {t("setWhichDaysThisDoctorWorks")}
       </p>
 
       {saveError && (
@@ -534,27 +537,29 @@ function DoctorScheduleTab({
               className={`rounded-lg border border-border/40 p-3 ${clinicClosed ? "bg-muted/10 opacity-60" : "bg-muted/20"}`}
             >
               <div className="flex items-center gap-3">
+                {/* i18n-allow: DOM id joining a doctor UUID and weekday index */}
                 <Checkbox
-                  id={`sched-${doctorId}-${dow}`}
+                  id={`sched-${doctorId}-${dow}`} // i18n-allow: technical checkbox DOM id
                   checked={day.works}
                   onCheckedChange={(v) => isAdmin && !clinicClosed && toggleDay(dow, !!v)}
                   disabled={!isAdmin || saving || clinicClosed}
                 />
+                {/* i18n-allow: htmlFor must match the technical checkbox DOM id */}
                 <Label
-                  htmlFor={`sched-${doctorId}-${dow}`}
+                  htmlFor={`sched-${doctorId}-${dow}`} // i18n-allow: technical DOM id reference
                   className="w-24 cursor-pointer text-sm font-medium select-none"
                 >
-                  {SCHEDULE_DAY_NAMES[dow]}
+                  {t(SCHEDULE_DAY_KEYS[dow] ?? "daySunday")}
                 </Label>
                 {clinicClosed ? (
-                  <span className="text-xs text-muted-foreground/60 italic">Clinic closed</span>
+                  <span className="text-xs text-muted-foreground/60 italic">{t("clinicClosed")}</span>
                 ) : !day.works ? (
-                  <span className="text-xs text-muted-foreground">Day off</span>
+                  <span className="text-xs text-muted-foreground">{t("dayOff")}</span>
                 ) : null}
               </div>
 
               {day.works && !clinicClosed && (
-                <div className="mt-3 flex items-center gap-2 pl-7">
+                <div className="mt-3 flex items-center gap-2 ps-7">
                   <input
                     type="time"
                     value={day.start_time ?? ""}
@@ -562,7 +567,7 @@ function DoctorScheduleTab({
                     onChange={(e) => updateTime(dow, "start_time", e.target.value)}
                     className="h-8 w-32 rounded-md border border-input bg-background px-2 text-sm text-foreground [color-scheme:light] dark:[color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
                   />
-                  <span className="text-xs text-muted-foreground">to</span>
+                  <span className="text-xs text-muted-foreground">{t("to")}</span>
                   <input
                     type="time"
                     value={day.end_time ?? ""}
@@ -581,7 +586,7 @@ function DoctorScheduleTab({
         <div className="flex justify-end pt-2">
           <Button onClick={onSave} disabled={saving} className="gap-2">
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            Save schedule
+            {t("saveSchedule")}
           </Button>
         </div>
       )}
@@ -674,6 +679,7 @@ function SingleFileSection({
   onUpload: () => void;
   onDelete: (path: string) => void;
 }) {
+  const t = useTranslations("settings");
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
@@ -688,7 +694,7 @@ function SingleFileSection({
           onClick={onUpload}
         >
           <Upload className="h-3.5 w-3.5" />
-          {file ? "Replace" : "Upload"}
+          {file ? t("replace") : t("upload")}
         </Button>
       </div>
       <p className="text-xs text-muted-foreground">{hint}</p>
@@ -696,7 +702,7 @@ function SingleFileSection({
         <FileRow file={file} isPending={isPending} onDelete={onDelete} />
       ) : (
         <p className="rounded-lg border border-dashed border-border/60 py-6 text-center text-xs text-muted-foreground">
-          Not uploaded yet
+          {t("notUploadedYet")}
         </p>
       )}
     </div>

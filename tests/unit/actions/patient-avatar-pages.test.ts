@@ -146,6 +146,7 @@ describe("patient avatar signed URL loading", () => {
 
     await detailPage.default({
       params: Promise.resolve({ id: PATIENT_ID }),
+      searchParams: Promise.resolve({}),
     });
 
     expect(mocks.state.storageLog).toEqual([

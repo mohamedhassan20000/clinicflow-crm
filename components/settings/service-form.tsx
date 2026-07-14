@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { ActionResult } from "@/actions/settings";
+import { useTranslations } from "next-intl";
 
 interface Department {
   id: string;
@@ -43,13 +44,14 @@ export function ServiceForm({
   submitLabel,
   onSuccess,
 }: ServiceFormProps) {
+  const t = useTranslations("settings");
   const [state, formAction, isPending] = useActionState(action, null);
 
   useEffect(() => {
     if (!state) return;
     if (state.error) toast.error(state.error);
     else if (state.success) {
-      toast.success("Saved.");
+      toast.success(t("saved"));
       onSuccess?.();
     }
   }, [state, onSuccess]);
@@ -58,7 +60,7 @@ export function ServiceForm({
     <form action={formAction} className="space-y-4">
       <div className="space-y-1.5">
         <Label htmlFor="svc-department" className="text-xs">
-          Department
+          {t("department")}
         </Label>
         <Select
           name="department_id"
@@ -66,7 +68,7 @@ export function ServiceForm({
           disabled={isPending}
         >
           <SelectTrigger id="svc-department">
-            <SelectValue placeholder="Select department" />
+            <SelectValue placeholder={t("selectDepartment")} />
           </SelectTrigger>
           <SelectContent>
             {departments.map((d) => (
@@ -87,12 +89,12 @@ export function ServiceForm({
 
       <div className="space-y-1.5">
         <Label htmlFor="svc-name" className="text-xs">
-          Service name
+          {t("serviceName")}
         </Label>
         <Input
           id="svc-name"
           name="name"
-          placeholder="e.g. Consultation"
+          placeholder={t("eGConsultation")}
           defaultValue={defaults?.name}
           disabled={isPending}
           required
@@ -103,7 +105,7 @@ export function ServiceForm({
 
       <div className="space-y-1.5">
         <Label htmlFor="svc-price" className="text-xs">
-          Price
+          {t("price")}
         </Label>
         <Input
           id="svc-price"
@@ -122,7 +124,7 @@ export function ServiceForm({
       <div className="flex justify-end">
         <Button type="submit" disabled={isPending} className="gap-2">
           {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-          {isPending ? "Saving…" : submitLabel}
+          {isPending ? t("saving") : submitLabel}
         </Button>
       </div>
     </form>

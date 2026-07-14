@@ -2,10 +2,16 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { KeyRound, ArrowLeft } from "lucide-react";
 import { ForgotPasswordForm } from "@/components/auth/forgot-password-form";
+import { useTranslations } from "next-intl";
+import { getTranslations } from "next-intl/server";
 
-export const metadata: Metadata = { title: "Forgot password" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("auth");
+  return { title: t("metadataForgotPassword") };
+}
 
 export default function ForgotPasswordPage() {
+  const t = useTranslations("auth");
   return (
     <div className="space-y-6">
       <div className="space-y-3">
@@ -14,12 +20,9 @@ export default function ForgotPasswordPage() {
         </span>
         <div className="space-y-1.5">
           <h2 className="text-2xl font-semibold tracking-tight text-foreground">
-            Forgot your password?
-          </h2>
+            {t("forgotYourPassword")}</h2>
           <p className="text-sm leading-relaxed text-muted-foreground">
-            Enter your email and we&apos;ll send you a link to reset your
-            password.
-          </p>
+            {t("enterYourEmailAndWeLl")}</p>
         </div>
       </div>
 
@@ -29,9 +32,8 @@ export default function ForgotPasswordPage() {
         href="/login"
         className="flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
       >
-        <ArrowLeft className="h-3.5 w-3.5" />
-        Back to sign in
-      </Link>
+        <ArrowLeft className="h-3.5 w-3.5 rtl:rotate-180" />
+        {t("backToSignIn")}</Link>
     </div>
   );
 }

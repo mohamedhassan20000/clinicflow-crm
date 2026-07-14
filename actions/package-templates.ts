@@ -1,5 +1,7 @@
 "use server";
 
+import { actionError } from "@/lib/i18n/action-errors";
+import { localizeZodFieldErrors } from "@/lib/validations/server";
 import { revalidatePath } from "next/cache";
 import { requireMutationRole } from "@/lib/rbac";
 import { createClinicScopedAdminClient } from "@/lib/supabase/admin";
@@ -16,23 +18,6 @@ export type PackageTemplateActionResult = {
   success?: boolean;
 };
 
-function firstError(error: unknown) {
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "message" in error &&
-    typeof error.message === "string"
-  ) {
-    return error.message;
-  }
-  return "Something went wrong. Please try again.";
-}
-
-function templateCreateError(error: unknown) {
-  const detail = firstError(error);
-  return `Failed to create template: ${detail}`;
-}
-
 async function ensureDepartmentInClinic(
   departmentId: string,
   clinicId: string,
@@ -45,10 +30,10 @@ async function ensureDepartmentInClinic(
     .eq("clinic_id", clinicId)
     .maybeSingle();
 
-  if (error) return { error: "Failed to validate department." };
+  if (error) return { error: await actionError("package-templates.failedToValidateDepartment") };
   if (!data) {
     return {
-      fieldErrors: { department_id: ["Select a department from this clinic."] },
+      fieldErrors: { department_id: [await actionError("package-templates.selectADepartmentFromThisClinic")] },
     };
   }
   return null;
@@ -87,7 +72,7 @@ export async function createPackageTemplate(
   });
 
   if (!parsed.success) {
-    return { fieldErrors: parsed.error.flatten().fieldErrors };
+    return { fieldErrors: await localizeZodFieldErrors(parsed.error) };
   }
 
   try {
@@ -110,12 +95,13 @@ export async function createPackageTemplate(
       is_active: true,
     });
 
-    if (error) return { error: templateCreateError(error) };
+    if (error) return { error: await actionError("package-templates.failedToCreateTemplate") };
 
     revalidateSettings();
     return { success: true };
   } catch (error) {
-    return { error: firstError(error) };
+    console.error("Package template creation failed", { error });
+    return { error: await actionError("package-templates.unexpected") };
   }
 }
 
@@ -136,7 +122,7 @@ export async function updatePackageTemplate(
   });
 
   if (!parsed.success) {
-    return { fieldErrors: parsed.error.flatten().fieldErrors };
+    return { fieldErrors: await localizeZodFieldErrors(parsed.error) };
   }
 
   try {
@@ -144,7 +130,7 @@ export async function updatePackageTemplate(
       parsed.data.template_id,
       user.clinicId,
     );
-    if (!existing) return { error: "Template not found." };
+    if (!existing) return { error: await actionError("package-templates.templateNotFound") };
 
     const deptError = await ensureDepartmentInClinic(
       parsed.data.department_id,
@@ -166,12 +152,13 @@ export async function updatePackageTemplate(
       .eq("id", parsed.data.template_id)
       .eq("clinic_id", user.clinicId);
 
-    if (error) return { error: "Failed to update template. Please try again." };
+    if (error) return { error: await actionError("package-templates.failedToUpdateTemplatePleaseTryAgain") };
 
     revalidateSettings();
     return { success: true };
   } catch (error) {
-    return { error: firstError(error) };
+    console.error("Package template update failed", { error });
+    return { error: await actionError("package-templates.unexpected") };
   }
 }
 
@@ -183,7 +170,7 @@ async function setTemplateActive(
 
   const parsed = templateIdSchema.safeParse({ template_id: templateId });
   if (!parsed.success) {
-    return { fieldErrors: parsed.error.flatten().fieldErrors };
+    return { fieldErrors: await localizeZodFieldErrors(parsed.error) };
   }
 
   try {
@@ -191,7 +178,7 @@ async function setTemplateActive(
       parsed.data.template_id,
       user.clinicId,
     );
-    if (!existing) return { error: "Template not found." };
+    if (!existing) return { error: await actionError("package-templates.templateNotFound") };
 
     const supabase = await createClient();
     const { error } = await supabase
@@ -203,15 +190,16 @@ async function setTemplateActive(
     if (error) {
       return {
         error: isActive
-          ? "Failed to restore template."
-          : "Failed to deactivate template.",
+          ? await actionError("package-templates.failedToRestoreTemplate")
+          : await actionError("package-templates.failedToDeactivateTemplate"),
       };
     }
 
     revalidateSettings();
     return { success: true };
   } catch (error) {
-    return { error: firstError(error) };
+    console.error("Package template status update failed", { error });
+    return { error: await actionError("package-templates.unexpected") };
   }
 }
 
@@ -234,7 +222,7 @@ export async function deletePackageTemplate(
 
   const parsed = templateIdSchema.safeParse({ template_id: templateId });
   if (!parsed.success) {
-    return { fieldErrors: parsed.error.flatten().fieldErrors };
+    return { fieldErrors: await localizeZodFieldErrors(parsed.error) };
   }
 
   try {
@@ -242,7 +230,7 @@ export async function deletePackageTemplate(
       parsed.data.template_id,
       user.clinicId,
     );
-    if (!existing) return { error: "Template not found." };
+    if (!existing) return { error: await actionError("package-templates.templateNotFound") };
 
     const supabase = await createClient();
     const { error } = await supabase
@@ -252,11 +240,12 @@ export async function deletePackageTemplate(
       .eq("clinic_id", user.clinicId)
       .eq("is_active", false);
 
-    if (error) return { error: "Failed to delete template." };
+    if (error) return { error: await actionError("package-templates.failedToDeleteTemplate") };
 
     revalidateSettings();
     return { success: true };
   } catch (error) {
-    return { error: firstError(error) };
+    console.error("Package template deletion failed", { error });
+    return { error: await actionError("package-templates.unexpected") };
   }
 }

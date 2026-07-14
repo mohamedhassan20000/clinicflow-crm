@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { formatDoctorName } from "@/lib/format-doctor";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
 import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
+import { useTranslations } from "next-intl";
 
 function formatElapsed(startIso: string, now: number) {
   const elapsedMinutes = Math.max(
@@ -44,6 +45,7 @@ export function ReceptionistInSessionBoard({
 }: {
   initialGroups: ReceptionInSessionGroup[];
 }) {
+  const t = useTranslations("dashboard");
   const [groups, setGroups] = useState(initialGroups);
   const [now, setNow] = useState(() => Date.now());
   const [isPending, startTransition] = useTransition();
@@ -84,10 +86,9 @@ export function ReceptionistInSessionBoard({
     <section className="space-y-3">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-lg font-semibold tracking-tight">Patients In Session</h2>
+          <h2 className="text-lg font-semibold tracking-tight">{t("patientsInSession")}</h2>
           <p className="text-xs text-muted-foreground">
-            {total} active session{total === 1 ? "" : "s"} across{" "}
-            {groups.length} department{groups.length === 1 ? "" : "s"}
+            {t("activeSessionsAcrossDepartments", { sessions: total, departments: groups.length })}
           </p>
         </div>
         <Button
@@ -96,8 +97,8 @@ export function ReceptionistInSessionBoard({
           size="icon-sm"
           onClick={refreshBoard}
           disabled={isPending}
-          aria-label="Refresh in-session board"
-          title="Refresh in-session board"
+          aria-label={t("refreshInSessionBoard")}
+          title={t("refreshInSessionBoard")}
         >
           <RefreshCcw className={cn("h-3.5 w-3.5", isPending && "animate-spin")} />
         </Button>
@@ -106,7 +107,7 @@ export function ReceptionistInSessionBoard({
       {total === 0 ? (
         <div className="rounded-xl border border-dashed border-border/70 bg-card px-4 py-8 text-center">
           <CalendarClock className="mx-auto mb-2 h-6 w-6 text-muted-foreground/45" />
-          <p className="text-sm text-muted-foreground">No patients are currently in session.</p>
+          <p className="text-sm text-muted-foreground">{t("noPatientsAreCurrentlyInSession")}</p>
         </div>
       ) : (
         <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
@@ -144,6 +145,7 @@ function DepartmentSessionCard({
 }
 
 function SessionRow({ item, now }: { item: ReceptionInSessionItem; now: number }) {
+  const t = useTranslations("dashboard");
   const { formatTime } = useClinicSettings();
   const elapsedMinutes = Math.max(
     0,
@@ -155,7 +157,7 @@ function SessionRow({ item, now }: { item: ReceptionInSessionItem; now: number }
     <div
       className={cn(
         "rounded-lg border border-border/60 bg-background p-3",
-        isLongRunning && "border-l-4 border-l-amber-500",
+        isLongRunning && "border-s-4 border-s-amber-500",
       )}
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -173,21 +175,21 @@ function SessionRow({ item, now }: { item: ReceptionInSessionItem; now: number }
           </div>
           <p className="truncate text-sm font-semibold">{item.patientName}</p>
           <p className="truncate text-xs text-muted-foreground">
-            {formatDoctorName(item.doctorName)} · {item.serviceName ?? "No service"}
+            {formatDoctorName(item.doctorName)} · {item.serviceName ?? t("noService")}
           </p>
           <p className="text-xs text-muted-foreground">
-            Scheduled{" "}
+            {t("scheduled")}{" "}
             <span className="font-mono tabular-nums">{formatTime(item.scheduledAt)}</span>
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
-          <Button asChild variant="outline" size="icon-sm" title="Open appointment">
-            <Link href={appointmentDayLink(item.scheduledAt)} aria-label="Open appointment">
+          <Button asChild variant="outline" size="icon-sm" title={t("openAppointment")}>
+            <Link href={appointmentDayLink(item.scheduledAt)} aria-label={t("openAppointment")}>
               <CalendarClock className="h-3.5 w-3.5" />
             </Link>
           </Button>
-          <Button asChild variant="outline" size="icon-sm" title="Open patient">
-            <Link href={`/patients/${item.patientId}`} aria-label="Open patient">
+          <Button asChild variant="outline" size="icon-sm" title={t("openPatient")}>
+            <Link href={`/patients/${item.patientId}`} aria-label={t("openPatient")}>
               <UserRound className="h-3.5 w-3.5" />
             </Link>
           </Button>

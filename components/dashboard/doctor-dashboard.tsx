@@ -17,6 +17,7 @@ import { fetchDoctorDashboardStats, type DoctorDashboardStats } from "@/actions/
 import { formatDoctorName } from "@/lib/format-doctor";
 import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
+import { useTranslations } from "next-intl";
 
 const INPUT_CLS =
   "h-8 rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground [color-scheme:light] dark:[color-scheme:dark] focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 disabled:opacity-50";
@@ -94,6 +95,7 @@ export function DoctorDashboard({
   departmentName,
   initial,
 }: DoctorDashboardProps) {
+  const t = useTranslations("dashboard");
   const { formatCurrency } = useClinicSettings();
   const fmtMoney = (n: number) =>
     formatCurrency(n, { maximumFractionDigits: 0 });
@@ -147,9 +149,9 @@ export function DoctorDashboard({
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">My Dashboard</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{t("myDashboard")}</h1>
           <p className="text-sm text-muted-foreground">
-            Welcome back, {formatDoctorName(fullName)} · {departmentName}
+            {t("welcomeBack")}{formatDoctorName(fullName)} · {departmentName}
           </p>
         </div>
       </div>
@@ -158,14 +160,14 @@ export function DoctorDashboard({
 
       {/* KPI cards */}
       <div className="grid gap-4 sm:grid-cols-3">
-        <KpiCard title="Today" value={stats.todayAppts} icon={CalendarDays} variant="primary" sub="appointments" />
-        <KpiCard title="This week" value={stats.weekAppts} icon={Clock} sub="appointments" />
-        <KpiCard title="This month" value={stats.monthAppts} icon={TrendingUp} variant="success" sub="appointments" />
+        <KpiCard title={t("today")} value={stats.todayAppts} icon={CalendarDays} variant="primary" sub="appointments" />
+        <KpiCard title={t("thisWeek")} value={stats.weekAppts} icon={Clock} sub="appointments" />
+        <KpiCard title={t("thisMonth")} value={stats.monthAppts} icon={TrendingUp} variant="success" sub="appointments" />
       </div>
 
       {/* Filter bar */}
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs font-medium text-muted-foreground">Period:</span>
+        <span className="text-xs font-medium text-muted-foreground">{t("period")}</span>
         {(["today", "week", "month", "custom"] as FilterMode[]).map((m) => (
           <button
             key={m}
@@ -176,7 +178,7 @@ export function DoctorDashboard({
                 : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
             }`}
           >
-            {m === "today" ? "Today" : m === "week" ? "This week" : m === "month" ? "This month" : "Custom"}
+            {m === "today" ? t("today2") : m === "week" ? t("thisweek2") : m === "month" ? t("thismonth2") : t("custom")}
           </button>
         ))}
         {filterMode === "custom" && (
@@ -187,7 +189,7 @@ export function DoctorDashboard({
               onChange={(e) => handleFromChange(e.target.value)}
               className={INPUT_CLS}
             />
-            <span className="text-xs text-muted-foreground">to</span>
+            <span className="text-xs text-muted-foreground">{t("to")}</span>
             <input
               type="date"
               value={rangeTo}
@@ -196,36 +198,36 @@ export function DoctorDashboard({
             />
           </>
         )}
-        {isPending && <span className="text-xs text-muted-foreground animate-pulse">Loading…</span>}
+        {isPending && <span className="text-xs text-muted-foreground animate-pulse">{t("loading")}</span>}
       </div>
 
       {/* Stats grid */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
-          label="My appointments"
+          label={t("myAppointments")}
           value={stats.myTotal}
           sub={`${stats.myCompleted} completed`}
           icon={CalendarDays}
           color="text-blue-600 dark:text-blue-400"
         />
         <StatCard
-          label="My completion rate"
+          label={t("myCompletionRate")}
           value={`${myCompletionRate}%`}
           sub={`${stats.myNoShow} no-shows`}
           icon={CheckCircle2}
           color="text-emerald-600 dark:text-emerald-400"
         />
         <StatCard
-          label="My patients (period)"
+          label={t("myPatientsPeriod")}
           value={stats.myPatients}
-          sub={`${myPatientShareOfDept}% of dept`}
+          sub={t("percentOfDepartment", { percent: myPatientShareOfDept })}
           icon={Users}
           color="text-violet-600 dark:text-violet-400"
         />
         <StatCard
-          label="My revenue"
+          label={t("myRevenue")}
           value={fmtMoney(stats.myRevenue)}
-          sub="from completed sessions"
+          sub={t("fromCompletedSessions")}
           icon={Wallet}
           color="text-amber-600 dark:text-amber-400"
         />

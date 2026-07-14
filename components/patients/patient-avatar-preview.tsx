@@ -10,6 +10,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { useTranslations } from "next-intl";
 
 interface PatientAvatarPreviewProps {
   avatarUrl: string | null;
@@ -22,6 +23,7 @@ export function PatientAvatarPreview({
   fullName,
   initials,
 }: PatientAvatarPreviewProps) {
+  const t = useTranslations("patients");
   const avatar = (
     <Avatar className="h-14 w-14 print:h-20 print:w-20">
       {avatarUrl && (
@@ -41,10 +43,10 @@ export function PatientAvatarPreview({
         <button
           type="button"
           className="group relative rounded-full outline-none transition focus-visible:ring-3 focus-visible:ring-ring/50 print:pointer-events-none"
-          aria-label={`Preview ${fullName} avatar`}
+          aria-label={t("previewNamedAvatar", { name: fullName })}
         >
           {avatar}
-          <span className="absolute -right-1 -bottom-1 flex h-5 w-5 items-center justify-center rounded-full border border-border bg-background text-muted-foreground shadow-sm transition group-hover:text-foreground print:hidden">
+          <span className="absolute -end-1 -bottom-1 flex h-5 w-5 items-center justify-center rounded-full border border-border bg-background text-muted-foreground shadow-sm transition group-hover:text-foreground print:hidden">
             <Maximize2 className="h-3 w-3" />
           </span>
         </button>
@@ -58,11 +60,10 @@ export function PatientAvatarPreview({
           id="patient-avatar-preview-description"
           className="sr-only"
         >
-          Patient photo preview
-        </DialogDescription>
+          {t("patientPhotoPreview")}</DialogDescription>
         <Image
           src={avatarUrl}
-          alt={`${fullName} full-size avatar`}
+          alt={t("fullSizeNamedAvatar", { name: fullName })}
           width={800}
           height={800}
           className="max-h-[75vh] w-full rounded-lg object-contain"

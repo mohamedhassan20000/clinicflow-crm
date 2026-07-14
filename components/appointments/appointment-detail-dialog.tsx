@@ -18,6 +18,7 @@ import type { Tables } from "@/types/database";
 import { formatDoctorName } from "@/lib/format-doctor";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
 import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
+import { useTranslations } from "next-intl";
 
 export type AppointmentForDetail = Pick<
   Tables<"appointments">,
@@ -76,6 +77,7 @@ export function AppointmentDetailDialog({
   currentUserRole,
   onDeleted,
 }: Props) {
+  const t = useTranslations("appointments");
   const { formatTime } = useClinicSettings();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [isDeleting, startDelete] = useTransition();
@@ -83,7 +85,7 @@ export function AppointmentDetailDialog({
   if (!appt) return null;
 
   const deptColor = appt.departments?.color ?? "#94a3b8";
-  const patientName = appt.patients?.full_name ?? "Unknown patient";
+  const patientName = appt.patients?.full_name ?? t("unknownPatient");
   const apptId = appt.id;
   const packageInfo = appt.patient_packages;
   const packageRemaining = packageInfo
@@ -98,10 +100,10 @@ export function AppointmentDetailDialog({
       } else {
         onOpenChange(false);
         onDeleted?.();
-        toast.success(`${patientName} moved to trash.`, {
+        toast.success(t("appointmentMovedToTrashForPatient", { patient: patientName }), {
           duration: 10000,
           action: {
-            label: "Undo",
+            label: t("undo"),
             onClick: () => {
               restoreAppointment(apptId).then((r) => {
                 if (r.error) toast.error(r.error);
@@ -121,16 +123,16 @@ export function AppointmentDetailDialog({
             <Button
               variant="ghost"
               size="icon"
-              className="absolute top-2 right-10 h-7 w-7 text-muted-foreground/40 hover:text-destructive"
+              className="absolute top-2 end-10 h-7 w-7 text-muted-foreground/40 hover:text-destructive"
               onClick={() => setConfirmOpen(true)}
               disabled={isDeleting}
-              title="Move to trash"
+              title={t("moveToTrash")}
             >
               <Trash2 className="h-4 w-4" />
             </Button>
           )}
           <DialogHeader>
-            <div className="flex items-center gap-2 pr-2">
+            <div className="flex items-center gap-2 pe-2">
               <span
                 aria-hidden
                 className="h-3 w-3 shrink-0 rounded-full"
@@ -146,8 +148,7 @@ export function AppointmentDetailDialog({
             {/* Patient info */}
             <section className="space-y-2">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Patient
-              </p>
+                {t("patient")}</p>
               <div className="rounded-lg border border-border/50 bg-muted/30 px-3 py-3 space-y-2">
                 {appt.patients?.file_number && (
                   <div className="flex items-center gap-2 text-sm">
@@ -169,8 +170,7 @@ export function AppointmentDetailDialog({
             {/* Appointment info */}
             <section className="space-y-2">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Appointment
-              </p>
+                {t("appointment")}</p>
               <div className="rounded-lg border border-border/50 bg-muted/30 px-3 py-3 space-y-2">
                 <div className="flex items-center gap-2 text-sm">
                   <Calendar className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -203,7 +203,7 @@ export function AppointmentDetailDialog({
                 {appt.duration_minutes != null && (
                   <div className="flex items-center gap-2 text-sm">
                     <Clock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                    <span className="text-muted-foreground">{appt.duration_minutes} min</span>
+                <span className="text-muted-foreground">{t("durationMinutes", { count: appt.duration_minutes })}</span>
                   </div>
                 )}
                 <div className="flex items-center gap-2">
@@ -215,8 +215,7 @@ export function AppointmentDetailDialog({
             {packageInfo && (
               <section className="space-y-2">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Package
-                </p>
+                  {t("package")}</p>
                 <div className="flex items-start gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-3 text-sm">
                   <Package className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-700 dark:text-emerald-400" />
                   <div className="min-w-0 space-y-1">
@@ -224,8 +223,7 @@ export function AppointmentDetailDialog({
                       {packageInfo.name}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      Session {appt.package_session_number ?? "—"} of{" "}
-                      {packageInfo.total_sessions} · {packageRemaining} remaining
+                  {t("packageSessionProgress", { session: appt.package_session_number ?? "—", total: packageInfo.total_sessions, remaining: packageRemaining })}
                     </p>
                   </div>
                 </div>
@@ -236,8 +234,7 @@ export function AppointmentDetailDialog({
             {appt.notes && (
               <section className="space-y-2">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Notes
-                </p>
+                  {t("notes")}</p>
                 <div className="flex items-start gap-2 rounded-lg border border-border/50 bg-muted/30 px-3 py-3">
                   <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                   <p className="text-sm text-muted-foreground leading-relaxed">

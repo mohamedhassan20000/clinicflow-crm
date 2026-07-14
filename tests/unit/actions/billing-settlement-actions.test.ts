@@ -274,7 +274,7 @@ describe("billing and settlement server actions", () => {
     );
 
     expect(result).toEqual({
-      error: "Previous settlement exceeds previous outstanding balance",
+      error: "We could not complete this request. Please try again.",
     });
   });
 
@@ -333,7 +333,9 @@ describe("billing and settlement server actions", () => {
       billingPayload() as never,
     );
 
-    expect(result).toEqual({ error: "Appointment was already completed" });
+    expect(result).toEqual({
+      error: "We could not complete this request. Please try again.",
+    });
   });
 
   it("returns previous outstanding balance in billing context", async () => {

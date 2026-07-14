@@ -3,6 +3,7 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
 import type { ClinicWorkingHoursValues } from "@/lib/validations/settings";
+import { useTranslations } from "next-intl";
 
 export const CALENDAR_HEADER_HEIGHT_PX = 32;
 
@@ -80,7 +81,7 @@ export interface CalendarNonWorkingBand {
   startMin: number;
   endMin: number;
   kind: "break" | "non-working" | "closed";
-  label: "Break" | "Non-working" | "Closed";
+  label: "break" | "non-working" | "closed";
 }
 
 /**
@@ -97,7 +98,7 @@ export function getCalendarNonWorkingBands(
 
   const day = clinicHours.find((candidate) => candidate.day_of_week === dayOfWeek);
   if (!day?.open || day.shifts.length === 0) {
-    return [{ ...bounds, kind: "closed", label: "Closed" }];
+    return [{ ...bounds, kind: "closed", label: "closed" }];
   }
 
   const shifts = [...day.shifts]
@@ -118,7 +119,7 @@ export function getCalendarNonWorkingBands(
         startMin: cursor,
         endMin: shift.startMin,
         kind: isOpeningGap ? "non-working" : "break",
-        label: isOpeningGap ? "Non-working" : "Break",
+        label: isOpeningGap ? "non-working" : "break",
       });
     }
     cursor = Math.max(cursor, shift.endMin);
@@ -129,7 +130,7 @@ export function getCalendarNonWorkingBands(
       startMin: cursor,
       endMin: bounds.endMin,
       kind: "non-working",
-      label: "Non-working",
+      label: "non-working",
     });
   }
 
@@ -145,6 +146,7 @@ export function CalendarNonWorkingBands({
   gridStartMin: number;
   hourHeightPx: number;
 }) {
+  const t = useTranslations("appointments");
   return bands.map((band) => {
     const top =
       CALENDAR_HEADER_HEIGHT_PX +
@@ -158,7 +160,9 @@ export function CalendarNonWorkingBands({
         className="calendar-non-working-band pointer-events-none absolute inset-x-0 z-0 flex items-center justify-center"
         style={{ top, height }}
       >
-        <span className={CALENDAR_STYLES.nonWorkingLabel}>{band.label}</span>
+        <span className={CALENDAR_STYLES.nonWorkingLabel}>
+          {t(band.kind === "closed" ? "calendarClosed" : band.kind === "break" ? "calendarBreak" : "calendarNonWorking")}
+        </span>
       </div>
     );
   });

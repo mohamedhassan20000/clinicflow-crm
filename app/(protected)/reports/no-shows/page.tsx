@@ -13,14 +13,19 @@ import { NoShowReport } from "@/components/reports/no-show-report";
 import { ReportPageHeader } from "@/components/reports/report-page-header";
 import { ReportSelectFilter } from "@/components/reports/report-select-filter";
 import { ReportsDateFilter } from "@/components/reports/reports-date-filter";
+import { getTranslations } from "next-intl/server";
 
-export const metadata: Metadata = { title: "No-show Report" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("protected");
+  return { title: t("metadataNoShowReport") };
+}
 
 type PageProps = {
   searchParams: Promise<ReportsSearchParams>;
 };
 
 export default async function NoShowReportPage({ searchParams }: PageProps) {
+  const t = await getTranslations("protected");
   const user = await requireRole(["admin", "manager", "receptionist"]);
   const sp = await searchParams;
   const range = resolveReportsRange(sp);
@@ -34,13 +39,13 @@ export default async function NoShowReportPage({ searchParams }: PageProps) {
 
   return (
     <div className="space-y-6">
-      <ReportPageHeader title="No-show Report" description="No-show appointments by doctor." />
+      <ReportPageHeader title={t("noShowReport")} description={t("noShowAppointmentsByDoctor")} />
       <ReportsDateFilter range={range} />
       <ReportSelectFilter
         name="doctor"
-        label="Doctor"
+        label={t("doctor")}
         value={doctorId ?? ALL_FILTER_VALUE}
-        allLabel="All doctors"
+        allLabel={t("allDoctors")}
         options={doctors}
       />
       <NoShowReport data={data} range={range} clinic={clinic} />

@@ -13,8 +13,13 @@ import { resolveReturnTo } from "@/lib/navigation/return-url";
 import { ReportDateFilter } from "@/components/patients/report-date-filter";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { MedicalNoteAttachmentItem } from "@/actions/medical-note-attachments";
+import { getTranslations } from "next-intl/server";
+import { clinicLocaleFromRow, formatClinicDate } from "@/lib/datetime";
 
-export const metadata: Metadata = { title: "Medical Notes Report" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("protected");
+  return { title: t("metadataMedicalNotesReport") };
+}
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -25,6 +30,7 @@ export default async function MedicalNotesReportPage({
   params,
   searchParams,
 }: PageProps) {
+  const t = await getTranslations("protected");
   const { id } = await params;
   const { from, to, returnTo } = await searchParams;
   const patientPath = `/patients/${id}`;
@@ -118,11 +124,12 @@ export default async function MedicalNotesReportPage({
 
   const { data: clinic } = await supabase
     .from("clinics")
-    .select("name, address, phone, logo_url")
+    .select("name, address, phone, logo_url, timezone, locale, digits")
     .eq("id", user.clinicId)
     .single();
+  const clinicLocale = clinicLocaleFromRow(clinic);
 
-  const generatedAt = new Date().toLocaleString("en-GB", {
+  const generatedAt = formatClinicDate(new Date(), clinicLocale, {
     dateStyle: "long",
     timeStyle: "short",
   });
@@ -134,7 +141,7 @@ export default async function MedicalNotesReportPage({
         clinicAddress={clinic?.address ?? null}
         clinicPhone={clinic?.phone ?? null}
         logoUrl={clinic?.logo_url ?? null}
-        documentName="Medical Notes Report"
+        documentName={t("medicalNotesReport")}
         generatedAt={generatedAt}
       />
       <PatientReportHeader
@@ -142,8 +149,8 @@ export default async function MedicalNotesReportPage({
         patientName={patient.full_name}
         fileNumber={patient.file_number}
         phone={patient.phone}
-        title="Medical Notes Report"
-        countLabel={`${notesWithAttachments.length} note${notesWithAttachments.length !== 1 ? "s" : ""}${from || to ? " (filtered)" : ""}`}
+        title={t("medicalNotesReport")}
+        countLabel={`${notesWithAttachments.length} note${notesWithAttachments.length !== 1 ? "s" : ""}${from || to ? t("filtered") : ""}`}
       />
 
       <ReportDateFilter from={from} to={to} />
@@ -169,27 +176,27 @@ export default async function MedicalNotesReportPage({
       {/* Print table — same black-border style as revenue */}
       <div className="hidden print:block">
         {notesWithAttachments.length === 0 ? (
-          <p className="text-sm">No medical notes.</p>
+          <p className="text-sm">{t("noMedicalNotes")}</p>
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Doctor</TableHead>
-                <TableHead>Note</TableHead>
+                <TableHead>{t("date")}</TableHead>
+                <TableHead>{t("doctor")}</TableHead>
+                <TableHead>{t("note")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {notesWithAttachments.map((note) => (
                 <TableRow key={note.id}>
                   <TableCell style={{ whiteSpace: "nowrap" }}>
-                    {new Date(note.created_at).toLocaleString("en-GB", {
+                    {formatClinicDate(note.created_at, clinicLocale, {
                       dateStyle: "medium",
                       timeStyle: "short",
                     })}
                   </TableCell>
                   <TableCell style={{ whiteSpace: "nowrap" }}>
-                    {note.profiles?.full_name ?? "Unknown"}
+                    {note.profiles?.full_name ?? t("unknown")}
                   </TableCell>
                   <TableCell>{note.note}</TableCell>
                 </TableRow>

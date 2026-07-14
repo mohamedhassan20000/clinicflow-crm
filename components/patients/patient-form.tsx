@@ -41,6 +41,7 @@ import { formatDoctorName } from "@/lib/format-doctor";
 import { uploadPatientAvatar } from "@/actions/patient-avatar";
 import { uploadPatientDocument } from "@/actions/patient-documents";
 import { withReturnTo } from "@/lib/navigation/return-url";
+import { useTranslations } from "next-intl";
 
 const BLOOD_TYPES = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"] as const;
 
@@ -93,6 +94,7 @@ function FileUploadRow({
   onTrigger: () => void;
   onClear: () => void;
 }) {
+  const t = useTranslations("patients");
   return (
     <div className="flex items-center justify-between gap-4 rounded-lg border border-border/40 bg-muted/20 p-3">
       <div className="flex items-center gap-3 min-w-0">
@@ -105,7 +107,7 @@ function FileUploadRow({
       <div className="flex items-center gap-2 shrink-0">
         {uploaded ? (
           <>
-            <span className="text-xs text-emerald-600 font-medium">Uploaded</span>
+            <span className="text-xs text-emerald-600 font-medium">{t("uploaded")}</span>
             <Button
               type="button"
               variant="ghost"
@@ -130,7 +132,7 @@ function FileUploadRow({
             ) : (
               <Upload className="h-3 w-3" />
             )}
-            {uploading ? "Uploading…" : "Upload"}
+            {uploading ? t("uploading") : t("upload")}
           </Button>
         )}
       </div>
@@ -148,6 +150,7 @@ function PatientFilesStep({
   autoUploadAvatar?: File | null;
   onDone: () => void;
 }) {
+  const t = useTranslations("patients");
   const avatarRef = useRef<HTMLInputElement>(null);
   const nationalIdRef = useRef<HTMLInputElement>(null);
   const insuranceRef = useRef<HTMLInputElement>(null);
@@ -169,7 +172,7 @@ function PatientFilesStep({
     uploadPatientAvatar(patientId, fd).then((res) => {
       setAvatarUploading(false);
       if (res.error) {
-        toast.error(`Photo upload failed: ${res.error}. You can retry below.`);
+        toast.error(t("photoUploadFailed", { error: res.error }));
       } else {
         setAvatarUploaded(true);
       }
@@ -222,10 +225,9 @@ function PatientFilesStep({
           <CheckCircle2 className="h-5 w-5 text-emerald-600" />
         </span>
         <div>
-          <p className="text-sm font-semibold">Patient created successfully</p>
+          <p className="text-sm font-semibold">{t("patientCreatedSuccessfully")}</p>
           <p className="text-xs text-muted-foreground">
-            Optionally upload files below, then open the patient profile.
-          </p>
+            {t("optionallyUploadFilesBelowThenOpen")}</p>
         </div>
       </div>
 
@@ -233,8 +235,8 @@ function PatientFilesStep({
 
       <div className="space-y-3">
         <FileUploadRow
-          label="Profile photo"
-          hint="JPEG, PNG, or WebP · max 2 MB"
+          label={t("profilePhoto")}
+          hint={t("jpegPngOrWebpMax2Mb")}
           fileRef={avatarRef}
           accept="image/jpeg,image/png,image/webp"
           uploading={avatarUploading}
@@ -243,8 +245,8 @@ function PatientFilesStep({
           onClear={() => setAvatarUploaded(false)}
         />
         <FileUploadRow
-          label="National ID image"
-          hint="JPEG, PNG, WebP, or PDF · max 10 MB"
+          label={t("nationalIdImage")}
+          hint={t("jpegPngWebpOrPdfMax10Mb")}
           fileRef={nationalIdRef}
           accept="image/jpeg,image/png,image/webp,application/pdf"
           uploading={nationalIdUploading}
@@ -257,8 +259,8 @@ function PatientFilesStep({
           onClear={() => setNationalIdUploaded(false)}
         />
         <FileUploadRow
-          label="Insurance card image"
-          hint="JPEG, PNG, WebP, or PDF · max 10 MB"
+          label={t("insuranceCardImage")}
+          hint={t("jpegPngWebpOrPdfMax10Mb")}
           fileRef={insuranceRef}
           accept="image/jpeg,image/png,image/webp,application/pdf"
           uploading={insuranceUploading}
@@ -273,8 +275,7 @@ function PatientFilesStep({
       </div>
 
       <Button className="w-full" onClick={onDone}>
-        Open patient profile
-      </Button>
+        {t("openPatientProfile")}</Button>
     </div>
   );
 }
@@ -291,6 +292,7 @@ export function PatientForm({
   cancelHref = "/patients",
   profileReturnTo,
 }: PatientFormProps) {
+  const t = useTranslations("patients");
   const router = useRouter();
   const [state, formAction, isPending] = useActionState(action, null);
   const [, startNav] = useTransition();
@@ -364,15 +366,15 @@ export function PatientForm({
           <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-muted overflow-hidden">
             {avatarPreview ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={avatarPreview} alt="Preview" className="h-full w-full object-cover" />
+              <img src={avatarPreview} alt={t("preview")} className="h-full w-full object-cover" />
             ) : (
               <User className="h-7 w-7 text-muted-foreground" />
             )}
           </span>
           <div className="flex flex-col gap-1.5 min-w-0">
             <p className="text-sm font-medium leading-none">
-              Profile photo{" "}
-              <span className="text-xs font-normal text-muted-foreground">(optional)</span>
+              {t("profilePhoto2")}{" "}
+              <span className="text-xs font-normal text-muted-foreground">{t("optionalSuffix")}</span>
             </p>
             <div className="flex items-center gap-2">
               <button
@@ -382,7 +384,7 @@ export function PatientForm({
                 onClick={() => avatarPickerRef.current?.click()}
               >
                 <Upload className="h-3 w-3" />
-                {selectedAvatar ? "Change" : "Choose"}
+                {selectedAvatar ? t("change") : t("choose")}
               </button>
               {selectedAvatar && (
                 <button
@@ -395,8 +397,7 @@ export function PatientForm({
                   }}
                 >
                   <X className="h-3.5 w-3.5" />
-                  Remove
-                </button>
+                  {t("remove")}</button>
               )}
             </div>
             {selectedAvatar && (
@@ -424,9 +425,9 @@ export function PatientForm({
             name="full_name"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Full name</FormLabel>
+                <FormLabel>{t("fullName")}</FormLabel>
                 <FormControl>
-                  <Input {...field} placeholder="e.g. John Smith" disabled={isPending} />
+                  <Input {...field} placeholder={t("eGJohnSmith")} disabled={isPending} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -438,11 +439,11 @@ export function PatientForm({
             name="national_id"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>National ID</FormLabel>
+                <FormLabel>{t("nationalId")}</FormLabel>
                 <FormControl>
                   <Input
                     {...field}
-                    placeholder="11 digits"
+                    placeholder={t("11Digits")}
                     disabled={isPending}
                   />
                 </FormControl>
@@ -453,7 +454,7 @@ export function PatientForm({
 
           {patient?.file_number && (
             <FormItem>
-              <FormLabel>File number</FormLabel>
+              <FormLabel>{t("fileNumber")}</FormLabel>
               <FormControl>
                 <Input value={patient.file_number} readOnly disabled className="font-mono" />
               </FormControl>
@@ -465,7 +466,7 @@ export function PatientForm({
             name="date_of_birth"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Date of birth</FormLabel>
+                <FormLabel>{t("dateOfBirth")}</FormLabel>
                 <FormControl>
                   <Input {...field} type="date" disabled={isPending} />
                 </FormControl>
@@ -479,7 +480,7 @@ export function PatientForm({
             name="blood_type"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Blood type</FormLabel>
+                <FormLabel>{t("bloodType")}</FormLabel>
                 <Select
                   value={field.value ?? undefined}
                   onValueChange={(v) => field.onChange(v)}
@@ -487,7 +488,7 @@ export function PatientForm({
                 >
                   <FormControl>
                     <SelectTrigger>
-                      <SelectValue placeholder="Select blood type" />
+                      <SelectValue placeholder={t("selectBloodType")} />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
@@ -508,7 +509,7 @@ export function PatientForm({
             name="department_id"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Department</FormLabel>
+                <FormLabel>{t("department")}</FormLabel>
                 <Select
                   value={field.value ?? "__none__"}
                   onValueChange={(v) => field.onChange(v === "__none__" ? null : v)}
@@ -516,11 +517,11 @@ export function PatientForm({
                 >
                   <FormControl>
                     <SelectTrigger>
-                      <SelectValue placeholder="Assign department" />
+                      <SelectValue placeholder={t("assignDepartment")} />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="__none__">Unassigned</SelectItem>
+                    <SelectItem value="__none__">{t("unassigned")}</SelectItem>
                     {departments.map((d) => (
                       <SelectItem key={d.id} value={d.id}>
                         <span className="inline-flex items-center gap-2">
@@ -544,7 +545,7 @@ export function PatientForm({
             name="assigned_doctor_id"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Treating doctor</FormLabel>
+                <FormLabel>{t("treatingDoctor")}</FormLabel>
                 <Select
                   value={field.value ?? "__none__"}
                   onValueChange={(v) => field.onChange(v === "__none__" ? null : v)}
@@ -552,11 +553,11 @@ export function PatientForm({
                 >
                   <FormControl>
                     <SelectTrigger>
-                      <SelectValue placeholder="Assign doctor" />
+                      <SelectValue placeholder={t("assignDoctor")} />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="__none__">Unassigned</SelectItem>
+                    <SelectItem value="__none__">{t("unassigned")}</SelectItem>
                     {filteredDoctors.map((d) => (
                       <SelectItem key={d.id} value={d.id}>
                         {formatDoctorName(d.full_name)}
@@ -574,7 +575,7 @@ export function PatientForm({
             name="insurance_provider_id"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Insurance</FormLabel>
+                <FormLabel>{t("insurance")}</FormLabel>
                 <Select
                   value={field.value ?? "__none__"}
                   onValueChange={(v) => field.onChange(v === "__none__" ? null : v)}
@@ -582,11 +583,11 @@ export function PatientForm({
                 >
                   <FormControl>
                     <SelectTrigger>
-                      <SelectValue placeholder="Select insurance" />
+                      <SelectValue placeholder={t("selectInsurance")} />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="__none__">No insurance</SelectItem>
+                    <SelectItem value="__none__">{t("noInsurance")}</SelectItem>
                     {insuranceProviders.map((provider) => (
                       <SelectItem key={provider.id} value={provider.id}>
                         {provider.name}
@@ -604,7 +605,7 @@ export function PatientForm({
             name="phone"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Phone number</FormLabel>
+                <FormLabel>{t("phoneNumber")}</FormLabel>
                 <FormControl>
                   <PatientPhoneInput
                     {...field}
@@ -623,12 +624,12 @@ export function PatientForm({
             name="email"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Email</FormLabel>
+                <FormLabel>{t("email")}</FormLabel>
                 <FormControl>
                   <Input
                     {...field}
                     type="email"
-                    placeholder="patient@example.com"
+                    placeholder={t("patientExampleCom")}
                     disabled={isPending}
                   />
                 </FormControl>
@@ -644,10 +645,9 @@ export function PatientForm({
               href={cancelHref}
               aria-disabled={isPending}
               tabIndex={isPending ? -1 : undefined}
-              className={isPending ? "pointer-events-none opacity-50" : undefined}
+              className={isPending ? t("pointerEventsNoneOpacity50") : undefined}
             >
-              Cancel
-            </Link>
+              {t("cancel")}</Link>
           </Button>
           <Button type="submit" disabled={isPending} className="gap-2">
             {isPending ? (
@@ -655,8 +655,7 @@ export function PatientForm({
             ) : (
               <Save className="h-4 w-4" />
             )}
-            Save patient
-          </Button>
+            {t("savePatient")}</Button>
         </div>
       </form>
     </Form>

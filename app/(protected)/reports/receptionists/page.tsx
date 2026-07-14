@@ -13,14 +13,19 @@ import { ReceptionistPerformanceReport } from "@/components/reports/receptionist
 import { ReportPageHeader } from "@/components/reports/report-page-header";
 import { ReportSelectFilter } from "@/components/reports/report-select-filter";
 import { ReportsDateFilter } from "@/components/reports/reports-date-filter";
+import { getTranslations } from "next-intl/server";
 
-export const metadata: Metadata = { title: "Receptionist Performance Report" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("protected");
+  return { title: t("metadataReceptionistPerformanceReport") };
+}
 
 type PageProps = {
   searchParams: Promise<ReportsSearchParams>;
 };
 
 export default async function ReceptionistPerformanceReportPage({ searchParams }: PageProps) {
+  const t = await getTranslations("protected");
   const user = await requireRole(["admin", "manager"]);
   const sp = await searchParams;
   const range = resolveReportsRange(sp);
@@ -35,15 +40,15 @@ export default async function ReceptionistPerformanceReportPage({ searchParams }
   return (
     <div className="space-y-6">
       <ReportPageHeader
-        title="Receptionist Performance Report"
-        description="Bookings and follow-ups handled by receptionist."
+        title={t("receptionistPerformanceReport")}
+        description={t("bookingsAndFollowUpsHandledBy")}
       />
       <ReportsDateFilter range={range} />
       <ReportSelectFilter
         name="receptionist"
-        label="Receptionist"
+        label={t("receptionist")}
         value={receptionistId ?? ALL_FILTER_VALUE}
-        allLabel="All receptionists"
+        allLabel={t("allReceptionists")}
         options={receptionists}
       />
       <ReceptionistPerformanceReport data={data} range={range} clinic={clinic} />

@@ -1,5 +1,6 @@
 "use server";
 
+import { actionError } from "@/lib/i18n/action-errors";
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
@@ -112,20 +113,20 @@ function isValidAttachmentPath(
   );
 }
 
-function validateFile(formData: FormData) {
+async function validateFile(formData: FormData) {
   const file = formData.get(ATTACHMENT_FIELD);
   if (!(file instanceof File) || file.size === 0) {
-    return { error: "Pick an attachment to upload." };
+    return { error: await actionError("medical-note-attachments.pickAnAttachmentToUpload") };
   }
   if (!ALLOWED_MIME.has(file.type)) {
-    return { error: "Attachment must be a PDF, JPEG, PNG, or WebP file." };
+    return { error: await actionError("medical-note-attachments.attachmentMustBeAPdfJpegPngOrWebpFile") };
   }
   if (file.size > MAX_ATTACHMENT_BYTES) {
-    return { error: "Attachment must be under 10 MB." };
+    return { error: await actionError("medical-note-attachments.attachmentMustBeUnder10Mb") };
   }
 
   const ext = extensionForMime(file.type);
-  if (!ext) return { error: "Unsupported attachment file type." };
+  if (!ext) return { error: await actionError("medical-note-attachments.unsupportedAttachmentFileType") };
 
   return {
     file,
@@ -209,7 +210,7 @@ export async function listMedicalNoteAttachments(
   const user = await requireRole(["admin", "doctor", "receptionist"]);
   const supabase = await createClient();
   const note = await getAccessibleNote(supabase, noteId, patientId);
-  if (!note) return { error: "Medical note not found." };
+  if (!note) return { error: await actionError("medical-note-attachments.medicalNoteNotFound") };
 
   const { data, error } = await supabase
     .from("medical_note_attachments")
@@ -222,7 +223,7 @@ export async function listMedicalNoteAttachments(
     .is("deleted_at", null)
     .order("created_at", { ascending: false });
 
-  if (error) return { error: "Failed to load note attachments." };
+  if (error) return { error: await actionError("medical-note-attachments.failedToLoadNoteAttachments") };
   return { data: ((data ?? []) as MedicalNoteAttachmentRow[]).map(toAttachmentItem) };
 }
 
@@ -235,9 +236,9 @@ export async function uploadMedicalNoteAttachment(
   const supabase = await createClient();
 
   const note = await getAccessibleNote(supabase, noteId, patientId);
-  if (!note) return { error: "Medical note not found." };
+  if (!note) return { error: await actionError("medical-note-attachments.medicalNoteNotFound") };
 
-  const fileResult = validateFile(formData);
+  const fileResult = await validateFile(formData);
   if ("error" in fileResult) return { error: fileResult.error };
 
   const attachmentId = randomUUID();
@@ -264,7 +265,7 @@ export async function uploadMedicalNoteAttachment(
     });
 
   if (insertError) {
-    return { error: "Failed to create attachment record." };
+    return { error: await actionError("medical-note-attachments.failedToCreateAttachmentRecord") };
   }
 
   const bytes = new Uint8Array(await fileResult.file.arrayBuffer());
@@ -284,7 +285,7 @@ export async function uploadMedicalNoteAttachment(
       .eq("patient_id", patientId)
       .eq("note_id", noteId)
       .is("deleted_at", null);
-    return { error: uploadError.message || "Failed to upload attachment." };
+    return { error: await actionError("medical-note-attachments.failedToUploadAttachment") };
   }
 
   revalidatePath(`/patients/${patientId}`);
@@ -300,7 +301,7 @@ export async function getMedicalNoteAttachmentSignedUrl(
   const supabase = await createClient();
 
   const note = await getAccessibleNote(supabase, noteId, patientId);
-  if (!note) return { error: "Medical note not found." };
+  if (!note) return { error: await actionError("medical-note-attachments.medicalNoteNotFound") };
 
   const attachment = await getActiveAttachment(
     supabase,
@@ -309,7 +310,7 @@ export async function getMedicalNoteAttachmentSignedUrl(
     noteId,
     attachmentId,
   );
-  if (!attachment) return { error: "Attachment not found." };
+  if (!attachment) return { error: await actionError("medical-note-attachments.attachmentNotFound") };
 
   if (
     !isValidAttachmentPath(
@@ -320,7 +321,7 @@ export async function getMedicalNoteAttachmentSignedUrl(
       attachment.id,
     )
   ) {
-    return { error: "Stored attachment path is not valid for this note." };
+    return { error: await actionError("medical-note-attachments.storedAttachmentPathIsNotValidForThisNote") };
   }
 
   const { data, error } = await supabase.storage
@@ -337,7 +338,7 @@ export async function getMedicalNoteAttachmentSignedUrl(
       attachmentId,
       storagePath: attachment.storage_path,
     });
-    return { error: "Attachment file is missing or unavailable." };
+    return { error: await actionError("medical-note-attachments.attachmentFileIsMissingOrUnavailable") };
   }
 
   return { data: { url: data.signedUrl } };
@@ -352,7 +353,7 @@ export async function deleteMedicalNoteAttachment(
   const supabase = await createClient();
 
   const note = await getAccessibleNote(supabase, noteId, patientId);
-  if (!note) return { error: "Medical note not found." };
+  if (!note) return { error: await actionError("medical-note-attachments.medicalNoteNotFound") };
 
   const attachment = await getActiveAttachment(
     supabase,
@@ -372,7 +373,7 @@ export async function deleteMedicalNoteAttachment(
       attachment.id,
     )
   ) {
-    return { error: "Stored attachment path is not valid for this note." };
+    return { error: await actionError("medical-note-attachments.storedAttachmentPathIsNotValidForThisNote") };
   }
 
   const { error: deleteError } = await supabase.rpc(
@@ -391,7 +392,7 @@ export async function deleteMedicalNoteAttachment(
       noteId,
       attachmentId,
     });
-    return { error: "Failed to delete attachment record." };
+    return { error: await actionError("medical-note-attachments.failedToDeleteAttachmentRecord") };
   }
 
   revalidatePath(`/patients/${patientId}`);
@@ -407,7 +408,7 @@ export async function restoreMedicalNoteAttachment(
   const supabase = await createClient();
 
   const note = await getAccessibleNote(supabase, noteId, patientId);
-  if (!note) return { error: "Medical note not found." };
+  if (!note) return { error: await actionError("medical-note-attachments.medicalNoteNotFound") };
 
   const { error } = await supabase.rpc("restore_medical_note_attachment", {
     p_attachment_id: attachmentId,
@@ -422,7 +423,7 @@ export async function restoreMedicalNoteAttachment(
       noteId,
       attachmentId,
     });
-    return { error: "Failed to restore attachment." };
+    return { error: await actionError("medical-note-attachments.failedToRestoreAttachment") };
   }
 
   revalidatePath(`/patients/${patientId}`);

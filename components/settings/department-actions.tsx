@@ -26,6 +26,7 @@ import { DepartmentForm } from "@/components/settings/department-form";
 import type { ActionResult } from "@/actions/settings";
 import { restoreDepartment } from "@/actions/settings";
 import type { Tables } from "@/types/database";
+import { useTranslations } from "next-intl";
 
 type Dept = Tables<"departments">;
 
@@ -37,6 +38,7 @@ interface DepartmentActionsProps {
 }
 
 export function DepartmentActions({ dept, updateAction, toggleAction, deleteAction }: DepartmentActionsProps) {
+  const t = useTranslations("settings");
   const [editOpen, setEditOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
@@ -49,7 +51,7 @@ export function DepartmentActions({ dept, updateAction, toggleAction, deleteActi
       const result = await toggleAction(!dept.is_active);
       if (result.error) toast.error(result.error);
       else {
-        toast.success(dept.is_active ? "Department deactivated." : "Department reactivated.");
+        toast.success(dept.is_active ? t("departmentDeactivated") : t("departmentReactivated"));
         router.refresh();
       }
       pendingRef.current = false;
@@ -64,10 +66,10 @@ export function DepartmentActions({ dept, updateAction, toggleAction, deleteActi
       if (result.error) {
         toast.error(result.error);
       } else {
-        toast.success(`"${dept.name}" moved to recycle bin.`, {
+        toast.success(t("namedItemMovedToRecycleBin", { name: dept.name }), {
           duration: 10000,
           action: {
-            label: "Undo",
+            label: t("undo"),
             onClick: () => {
               if (pendingRef.current) return;
               pendingRef.current = true;
@@ -75,7 +77,7 @@ export function DepartmentActions({ dept, updateAction, toggleAction, deleteActi
                 .then((res) => {
                   if (res.error) toast.error(res.error);
                   else {
-                    toast.success(`"${dept.name}" restored.`);
+                    toast.success(t("namedItemRestored", { name: dept.name }));
                     router.refresh();
                   }
                 })
@@ -110,12 +112,12 @@ export function DepartmentActions({ dept, updateAction, toggleAction, deleteActi
             size="icon"
             className="h-7 w-7"
             onClick={handleToggle}
-            title={dept.is_active ? "Deactivate" : "Activate"}
+            title={dept.is_active ? t("deactivate") : t("activate")}
           >
             {dept.is_active ? (
-              <ToggleRight className="h-4 w-4 text-emerald-600" />
+              <ToggleRight className="h-4 w-4 text-emerald-600 rtl:-scale-x-100" />
             ) : (
-              <ToggleLeft className="h-4 w-4 text-muted-foreground" />
+              <ToggleLeft className="h-4 w-4 text-muted-foreground rtl:-scale-x-100" />
             )}
           </Button>
           <AlertDialog>
@@ -130,15 +132,14 @@ export function DepartmentActions({ dept, updateAction, toggleAction, deleteActi
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Move to recycle bin?</AlertDialogTitle>
+                <AlertDialogTitle>{t("moveToRecycleBin")}</AlertDialogTitle>
                 <AlertDialogDescription>
-                  <strong>{dept.name}</strong> will be moved to the recycle bin and can be restored within 30 days.
-                </AlertDialogDescription>
+                  <strong>{dept.name}</strong> {t("willBeMovedToTheRecycle")}</AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
+                <AlertDialogCancel disabled={isPending}>{t("cancel")}</AlertDialogCancel>
                 <AlertDialogAction disabled={isPending} onClick={handleDelete}>
-                  Move to bin
+                  {t("moveToBin")}
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
@@ -149,7 +150,7 @@ export function DepartmentActions({ dept, updateAction, toggleAction, deleteActi
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Edit department</DialogTitle>
+            <DialogTitle>{t("editDepartment")}</DialogTitle>
           </DialogHeader>
           <DepartmentForm
             action={updateAction}
@@ -158,7 +159,7 @@ export function DepartmentActions({ dept, updateAction, toggleAction, deleteActi
               color: dept.color,
               description: dept.description,
             }}
-            submitLabel="Save changes"
+            submitLabel={t("saveChanges")}
             onSuccess={() => {
               setEditOpen(false);
               router.refresh();

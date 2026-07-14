@@ -23,32 +23,33 @@ import {
   updateFollowup,
 } from "@/actions/followups";
 import type { DoneRow, PendingRow } from "./followups-view";
+import { useTranslations } from "next-intl";
 
 type Outcome = "all_fine" | "has_problem" | "no_response";
 
 const OPTIONS: {
   value: Outcome;
-  label: string;
+  labelKey: string;
   icon: React.ComponentType<{ className?: string }>;
   className: string;
 }[] = [
   {
     value: "all_fine",
-    label: "Everything is fine",
+    labelKey: "outcomeEverythingFine",
     icon: CheckCircle2,
     className:
       "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
   },
   {
     value: "has_problem",
-    label: "Reported a problem",
+    labelKey: "outcomeReportedProblem",
     icon: AlertCircle,
     className:
       "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400",
   },
   {
     value: "no_response",
-    label: "No response",
+    labelKey: "outcomeNoResponse",
     icon: PhoneOff,
     className: "border-border bg-muted/40 text-muted-foreground",
   },
@@ -71,6 +72,7 @@ export function RecordFollowupDialog({
   onUndoReopen,
   mode = "create",
 }: Props) {
+  const t = useTranslations("followups");
   const router = useRouter();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [notes, setNotes] = useState("");
@@ -115,11 +117,11 @@ export function RecordFollowupDialog({
               notes: followup.notes,
             }
           : null;
-      toast.success(mode === "edit" ? "Follow-up updated." : "Follow-up recorded.", {
+      toast.success(mode === "edit" ? t("followupupdated") : t("followuprecorded"), {
         duration: 10000,
         action: saved
           ? {
-              label: "Undo",
+              label: t("undo"),
               onClick: async () => {
                 const res =
                   mode === "edit" && previous
@@ -160,7 +162,7 @@ export function RecordFollowupDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>
-            {mode === "edit" ? "Edit follow-up" : "Record follow-up"}
+            {mode === "edit" ? t("editfollowup") : t("recordfollowup")}
           </DialogTitle>
           <DialogDescription>
             {patientName} ·{" "}
@@ -168,7 +170,7 @@ export function RecordFollowupDialog({
               <span className="font-mono">{patientPhone}</span>
             )}
             {departmentName && (
-              <span className="ml-1">· {departmentName}</span>
+              <span className="ms-1">· {departmentName}</span>
             )}
           </DialogDescription>
         </DialogHeader>
@@ -184,9 +186,9 @@ export function RecordFollowupDialog({
           )}
 
           <div className="space-y-1.5">
-            <Label className="text-xs">Outcome</Label>
+            <Label className="text-xs">{t("outcome")}</Label>
             <div className="grid gap-1.5">
-              {OPTIONS.map(({ value, label, icon: Icon, className }) => {
+              {OPTIONS.map(({ value, labelKey, icon: Icon, className }) => {
                 const active = outcome === value;
                 return (
                   <button
@@ -195,15 +197,15 @@ export function RecordFollowupDialog({
                     disabled={isPending}
                     onClick={() => setOutcome(value)}
                     className={cn(
-                      "flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm transition-colors",
+                      "flex w-full items-center justify-between rounded-md border px-3 py-2 text-start text-sm transition-colors",
                       active
                         ? `${className} ring-2 ring-primary/30`
-                        : "border-border/60 bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground",
+                        : "border-border/60 bg-card text-muted-foreground hover:border-primary/50 hover:bg-primary/5",
                     )}
                   >
                     <span className="flex items-center gap-2">
                       <Icon className="h-4 w-4" />
-                      {label}
+                    {t(labelKey)}
                     </span>
                     <span
                       aria-hidden
@@ -220,14 +222,13 @@ export function RecordFollowupDialog({
 
           <div className="space-y-1.5">
             <Label htmlFor="followup-notes" className="text-xs">
-              Notes
-              {requiresNote && (
-                <span className="ml-1 text-destructive">*</span>
+              {t("notes")}{requiresNote && (
+                <span className="ms-1 text-destructive">*</span>
               )}
-              <span className="ml-2 font-normal text-muted-foreground">
+              <span className="ms-2 font-normal text-muted-foreground">
                 {requiresNote
-                  ? "Describe what the patient reported"
-                  : "Optional context"}
+                  ? t("describewhatthepatientreported")
+                  : t("optionalcontext")}
               </span>
             </Label>
             <Textarea
@@ -237,15 +238,15 @@ export function RecordFollowupDialog({
               maxLength={1000}
               placeholder={
                 requiresNote
-                  ? "e.g. swelling at incision site, fever 38°C…"
-                  : "e.g. Patient picking up labs Wed."
+                  ? t("egswellingatincisionsite")
+                  : t("egpatientpickinguplabs")
               }
               value={notes}
               disabled={isPending}
               onChange={(e) => setNotes(e.target.value)}
               className="resize-none text-sm"
             />
-            <p className="text-right text-[10px] text-muted-foreground">
+            <p className="text-end text-[10px] text-muted-foreground">
               {notes.length}/1000
             </p>
           </div>
@@ -257,11 +258,10 @@ export function RecordFollowupDialog({
               onClick={() => onOpenChange(false)}
               disabled={isPending}
             >
-              Cancel
-            </Button>
+              {t("cancel")}</Button>
             <Button type="submit" disabled={!canSubmit} className="gap-2">
               {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-              {mode === "edit" ? "Save changes" : "Save follow-up"}
+              {mode === "edit" ? t("savechanges") : t("savefollowup")}
             </Button>
           </DialogFooter>
         </form>

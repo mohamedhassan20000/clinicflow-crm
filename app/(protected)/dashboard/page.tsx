@@ -9,8 +9,12 @@ import { ManagerDashboard } from "@/components/dashboard/manager-dashboard";
 import { DoctorDashboard } from "@/components/dashboard/doctor-dashboard";
 import { fetchDoctorDashboardStats } from "@/actions/doctor-dashboard";
 import { fetchReceptionInSessionBoard } from "@/actions/receptionist-dashboard";
+import { getTranslations } from "next-intl/server";
 
-export const metadata: Metadata = { title: "Dashboard" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("protected");
+  return { title: t("metadataDashboard") };
+}
 
 // ── Date helpers (default clinic timezone) ──────────────────────────────────────────
 
@@ -194,6 +198,7 @@ function logAndReturn<T extends readonly unknown[]>(role: string, results: T): T
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default async function DashboardPage() {
+  const t = await getTranslations("protected");
   const user = await requireUser();
   const supabase = await createClient();
   const clinicId = user.clinicId;
@@ -575,7 +580,7 @@ export default async function DashboardPage() {
         clinicId={clinicId}
         doctorId={user.id}
         departmentId={deptId}
-        departmentName={deptInfo?.name ?? "My Department"}
+        departmentName={deptInfo?.name ?? t("myDepartment")}
         initial={initial}
       />
     );

@@ -7,18 +7,20 @@ import {
   TrendingUp,
   ShieldCheck,
 } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 const features = [
-  { icon: CalendarCheck, label: "Appointment Scheduling" },
-  { icon: Users,         label: "Patient Management"      },
-  { icon: Briefcase,     label: "Staff Workflows"         },
-  { icon: TrendingUp,    label: "Revenue Tracking"        },
-  { icon: ShieldCheck,   label: "Secure Clinic Access"    },
+  { icon: CalendarCheck, labelKey: "featureAppointmentScheduling" },
+  { icon: Users, labelKey: "featurePatientManagement" },
+  { icon: Briefcase, labelKey: "featureStaffWorkflows" },
+  { icon: TrendingUp, labelKey: "featureRevenueTracking" },
+  { icon: ShieldCheck, labelKey: "featureSecureClinicAccess" },
 ];
 
 export default function AuthLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  const t = useTranslations("auth");
   return (
     <div className="dark forced-dark-scope flex min-h-dvh bg-background text-foreground">
 
@@ -37,7 +39,7 @@ export default function AuthLayout({
           <div
             className="absolute rounded-full"
             style={{
-              right: "-20%",
+              insetInlineEnd: "-20%",
               top: "4%",
               width: "70%",
               height: "82%",
@@ -50,7 +52,7 @@ export default function AuthLayout({
           <div
             className="absolute h-3.5 w-3.5 rounded-full"
             style={{
-              right: "21%",
+              insetInlineEnd: "21%",
               top: "4.5%",
               background: "rgba(0,220,255,1)",
               boxShadow:
@@ -65,7 +67,7 @@ export default function AuthLayout({
           <div
             className="absolute rounded-full"
             style={{
-              right: "18%",
+              insetInlineEnd: "18%",
               top: "1%",
               width: "9%",
               height: "11%",
@@ -80,7 +82,7 @@ export default function AuthLayout({
             className="aurora-blob-3 absolute"
             style={{
               bottom: "-8%",
-              left: "-5%",
+              insetInlineStart: "-5%",
               width: "72%",
               height: "58%",
               borderRadius: "50%",
@@ -95,7 +97,7 @@ export default function AuthLayout({
             className="aurora-blob-2 absolute"
             style={{
               top: "28%",
-              right: "-10%",
+              insetInlineEnd: "-10%",
               width: "50%",
               height: "55%",
               borderRadius: "50%",
@@ -110,7 +112,7 @@ export default function AuthLayout({
             className="aurora-blob-1 absolute"
             style={{
               top: "-10%",
-              left: "-8%",
+              insetInlineStart: "-8%",
               width: "50%",
               height: "50%",
               borderRadius: "50%",
@@ -158,7 +160,7 @@ export default function AuthLayout({
           <Link
             href="/"
             className="flex items-center gap-3 w-fit"
-            aria-label="ClinicFlow home"
+            aria-label={t("clinicflowHome")}
           >
             <Image
               src="/brand/clinicflow-mark.png"
@@ -170,11 +172,9 @@ export default function AuthLayout({
             />
             <div>
               <p className="text-[1.4rem] font-semibold leading-none tracking-tight text-white">
-                ClinicFlow
-              </p>
+                {t("clinicflow")}</p>
               <p className="mt-1 text-[11px] font-medium tracking-[0.18em] uppercase text-white/36">
-                Clinic CRM Platform
-              </p>
+                {t("clinicCrmPlatform")}</p>
             </div>
           </Link>
 
@@ -187,7 +187,7 @@ export default function AuthLayout({
                 <span className="absolute inset-0 rounded-full bg-emerald-300 opacity-75 pulse-dot" />
                 <span className="relative h-1.5 w-1.5 rounded-full bg-emerald-300" />
               </span>
-              Online — Secure &amp; KVKK-ready
+              {t("onlineSecureKvkkReady")}
             </span>
 
             {/* Headline */}
@@ -204,27 +204,24 @@ export default function AuthLayout({
                       "radial-gradient(ellipse at center, oklch(0.85 0.18 200 / 0.28) 0%, transparent 65%)",
                   }}
                 />
-                Smart clinic management{" "}
+                {t("smartClinicManagement")}{" "}
                 <span className="block mt-1.5 font-display italic font-normal text-cyan-200">
-                  for modern medical teams
-                </span>
+                  {t("forModernMedicalTeams")}</span>
               </h1>
 
               <p
                 className="max-w-[28rem] text-[0.9375rem] leading-relaxed text-white/55 auth-stagger"
                 style={{ animationDelay: "160ms" }}
               >
-                Appointments, patient records, follow-ups, billing, and staff
-                workflows in one secure platform.
-              </p>
+                {t("appointmentsPatientRecordsFollowUpsBilling")}</p>
             </div>
 
             {/* Interactive feature list — icon + text, text doubles on hover */}
             <ul className="space-y-2">
-              {features.map(({ icon: Icon, label }, i) => (
+              {features.map(({ icon: Icon, labelKey }, i) => (
                 <li
-                  key={label}
-                  className="auth-feature-item group flex items-center gap-3 cursor-default py-1 transition-all duration-300 ease-out [will-change:transform] hover:translate-x-2"
+                  key={labelKey}
+                  className="auth-feature-item group flex items-center gap-3 cursor-default py-1 transition-all duration-300 ease-out [will-change:transform] hover:translate-x-2 rtl:hover:-translate-x-2"
                   style={{ animationDelay: `${240 + i * 75}ms` }}
                 >
                   {/* Icon — glows and scales on hover */}
@@ -234,7 +231,7 @@ export default function AuthLayout({
 
                   {/* Label — always at full size, brightens on hover */}
                   <span className="text-[1.15rem] font-medium leading-none text-white/60 transition-colors duration-300 ease-out group-hover:text-white/95 group-hover:font-semibold">
-                    {label}
+                  {t(labelKey)}
                   </span>
                 </li>
               ))}
@@ -243,8 +240,7 @@ export default function AuthLayout({
 
           {/* Bottom — copyright */}
           <p className="text-[11px] text-white/22">
-            © {new Date().getFullYear()} ClinicFlow. All rights reserved.
-          </p>
+            © {new Date().getFullYear()} {t("clinicflowAllRightsReserved")}</p>
         </div>
       </aside>
 
@@ -278,20 +274,19 @@ export default function AuthLayout({
         <Link
           href="/"
           className="relative z-10 mb-8 flex flex-col items-center gap-2 lg:hidden"
-          aria-label="ClinicFlow home"
+          aria-label={t("clinicflowHome")}
         >
           <Image
             src="/brand/clinicflow-mark.png"
-            alt="ClinicFlow"
+            alt={t("clinicflow")}
             width={47}
             height={40}
             className="h-10 w-auto object-contain drop-shadow-[0_0_14px_rgba(0,220,255,0.60)]"
             priority
           />
-          <p className="text-base font-semibold tracking-tight">ClinicFlow</p>
+          <p className="text-base font-semibold tracking-tight">{t("clinicflow")}</p>
           <p className="text-[10px] font-medium tracking-[0.16em] uppercase text-muted-foreground/50">
-            Clinic CRM Platform
-          </p>
+            {t("clinicCrmPlatform")}</p>
         </Link>
 
         {/* Auth card */}
@@ -300,8 +295,7 @@ export default function AuthLayout({
         </div>
 
         <p className="relative z-10 mt-6 text-center text-xs text-muted-foreground/55">
-          © {new Date().getFullYear()} ClinicFlow
-        </p>
+          © {new Date().getFullYear()} {t("clinicflow2")}</p>
       </main>
 
     </div>

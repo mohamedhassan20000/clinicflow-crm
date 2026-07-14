@@ -8,8 +8,12 @@ describe("RevenueReport settlement print styling", () => {
       join(process.cwd(), "components/revenue/revenue-report.tsx"),
       "utf8",
     );
+    const messages = JSON.parse(
+      readFileSync(join(process.cwd(), "messages/en.json"), "utf8"),
+    );
 
-    expect(source).toContain("Total settled");
+    expect(source).toContain('t("totalSettled2")');
+    expect(messages.revenue.totalSettled2).toBe("Total settled");
     expect(source).toContain("print:border-black");
     expect(source).not.toContain("print:[&>td]:border-t-2");
   });

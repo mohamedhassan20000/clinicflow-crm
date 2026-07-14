@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { Button } from "@/components/ui/button";
 import { sendInvitationEmail } from "@/actions/operator";
+import { useTranslations } from "next-intl";
 
 type ActionState = {
   ok?: boolean;
@@ -31,13 +32,14 @@ export function OperatorActionForm({
   className?: string;
   children?: React.ReactNode;
 }) {
+  const t = useTranslations("operator");
   const [state, formAction, pending] = useActionState(action, null);
   return (
     <div className={className ?? "space-y-3"}>
       <form action={formAction} className="space-y-3">
         {children}
         <Button type="submit" size="sm" variant={submitVariant} disabled={pending}>
-          {pending ? "Working…" : submitLabel}
+          {pending ? t("working") : submitLabel}
         </Button>
       </form>
       {state?.error ? <p className="text-sm text-destructive">{state.error}</p> : null}
@@ -48,10 +50,10 @@ export function OperatorActionForm({
             </p>
           ))
         : null}
-      {state?.ok && !state.rawToken ? <p className="text-sm text-emerald-600">Saved.</p> : null}
+      {state?.ok && !state.rawToken ? <p className="text-sm text-emerald-600">{t("saved")}</p> : null}
       {state?.rawToken ? (
         <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-700 dark:bg-amber-950">
-          <p className="font-medium">One-time invitation link — copy it now; it is not stored:</p>
+          <p className="font-medium">{t("oneTimeInvitationLinkCopyIt")}</p>
           <code className="mt-1 block break-all text-xs">{`${typeof window !== "undefined" ? window.location.origin : ""}/signup/${state.rawToken}`}</code>
           {state.invitationId && state.invitationEmail ? <InvitationEmailForm invitationId={state.invitationId} invitationEmail={state.invitationEmail} invitationLink={`${typeof window !== "undefined" ? window.location.origin : ""}/signup/${state.rawToken}`} /> : null}
         </div>
@@ -61,6 +63,7 @@ export function OperatorActionForm({
 }
 
 function InvitationEmailForm({ invitationId, invitationEmail, invitationLink }: { invitationId: string; invitationEmail: string; invitationLink: string }) {
+  const t = useTranslations("operator");
   const [state, action, pending] = useActionState(sendInvitationEmail, null);
-  return <form action={action} className="mt-3 space-y-2"><input type="hidden" name="invitationId" value={invitationId} /><input type="hidden" name="invitationEmail" value={invitationEmail} /><input type="hidden" name="invitationLink" value={invitationLink} /><Button type="submit" size="sm" disabled={pending}>{pending ? "Sending…" : "Send Invitation Email"}</Button>{state?.error ? <p className="text-destructive">{state.error}</p> : null}{state?.ok ? <p className="text-emerald-700">Invitation email sent.</p> : null}</form>;
+  return <form action={action} className="mt-3 space-y-2"><input type="hidden" name="invitationId" value={invitationId} /><input type="hidden" name="invitationEmail" value={invitationEmail} /><input type="hidden" name="invitationLink" value={invitationLink} /><Button type="submit" size="sm" disabled={pending}>{pending ? t("sending") : t("sendInvitationEmail")}</Button>{state?.error ? <p className="text-destructive">{state.error}</p> : null}{state?.ok ? <p className="text-emerald-700">{t("invitationEmailSent")}</p> : null}</form>;
 }

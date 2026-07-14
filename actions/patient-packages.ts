@@ -1,5 +1,7 @@
 "use server";
 
+import { actionError } from "@/lib/i18n/action-errors";
+import { localizeZodFieldErrors } from "@/lib/validations/server";
 import { revalidatePath } from "next/cache";
 import { requireMutationRole } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
@@ -14,18 +16,6 @@ export type PatientPackageActionResult = {
   fieldErrors?: Record<string, string[]>;
   success?: boolean;
 };
-
-function firstError(error: unknown) {
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "message" in error &&
-    typeof error.message === "string"
-  ) {
-    return error.message;
-  }
-  return "Something went wrong. Please try again.";
-}
 
 async function getPatientForClinic(patientId: string, clinicId: string) {
   const supabase = await createClient();
@@ -69,10 +59,10 @@ async function validateDepartmentAndService(input: {
       .eq("clinic_id", input.clinicId)
       .maybeSingle();
 
-    if (error) return { error: "Failed to validate department." };
+    if (error) return { error: await actionError("patient-packages.failedToValidateDepartment") };
     if (!data) {
       return {
-        fieldErrors: { department_id: ["Select a department from this clinic."] },
+        fieldErrors: { department_id: [await actionError("patient-packages.selectADepartmentFromThisClinic")] },
       };
     }
   }
@@ -88,16 +78,16 @@ async function validateDepartmentAndService(input: {
     .is("deleted_at", null)
     .maybeSingle();
 
-  if (error) return { error: "Failed to validate service." };
+  if (error) return { error: await actionError("patient-packages.failedToValidateService") };
   if (!data) {
     return {
-      fieldErrors: { service_id: ["Select an active service from this clinic."] },
+      fieldErrors: { service_id: [await actionError("patient-packages.selectAnActiveServiceFromThisClinic")] },
     };
   }
   if (input.departmentId && data.department_id !== input.departmentId) {
     return {
       fieldErrors: {
-        service_id: ["Select a service that belongs to the selected department."],
+        service_id: [await actionError("patient-packages.selectAServiceThatBelongsToTheSelectedDepartment")],
       },
     };
   }
@@ -128,12 +118,12 @@ export async function createPatientPackage(
   });
 
   if (!parsed.success) {
-    return { fieldErrors: parsed.error.flatten().fieldErrors };
+    return { fieldErrors: await localizeZodFieldErrors(parsed.error) };
   }
 
   try {
     const patient = await getPatientForClinic(parsed.data.patient_id, user.clinicId);
-    if (!patient) return { error: "Patient not found." };
+    if (!patient) return { error: await actionError("patient-packages.patientNotFound") };
 
     const referenceError = await validateDepartmentAndService({
       clinicId: user.clinicId,
@@ -157,12 +147,13 @@ export async function createPatientPackage(
       is_active: true,
     });
 
-    if (error) return { error: "Failed to create package. Please try again." };
+    if (error) return { error: await actionError("patient-packages.failedToCreatePackagePleaseTryAgain") };
 
     revalidatePatient(parsed.data.patient_id);
     return { success: true };
   } catch (error) {
-    return { error: firstError(error) };
+    console.error("Patient package creation failed", { error });
+    return { error: await actionError("patient-packages.unexpected") };
   }
 }
 
@@ -184,24 +175,24 @@ export async function updatePatientPackage(
   });
 
   if (!parsed.success) {
-    return { fieldErrors: parsed.error.flatten().fieldErrors };
+    return { fieldErrors: await localizeZodFieldErrors(parsed.error) };
   }
 
   try {
     const pkg = await getPackageForClinic(parsed.data.package_id, user.clinicId);
-    if (!pkg) return { error: "Package not found." };
+    if (!pkg) return { error: await actionError("patient-packages.packageNotFound") };
     if (parsed.data.total_sessions < pkg.used_sessions) {
       return {
         fieldErrors: {
           total_sessions: [
-            `Total sessions cannot be less than the ${pkg.used_sessions} already used.`,
+            await actionError("patient-packages.totalSessionsBelowUsed", { used: pkg.used_sessions }),
           ],
         },
       };
     }
 
     const patient = await getPatientForClinic(pkg.patient_id, user.clinicId);
-    if (!patient) return { error: "Patient not found." };
+    if (!patient) return { error: await actionError("patient-packages.patientNotFound") };
 
     const referenceError = await validateDepartmentAndService({
       clinicId: user.clinicId,
@@ -225,12 +216,13 @@ export async function updatePatientPackage(
       .eq("id", parsed.data.package_id)
       .eq("clinic_id", user.clinicId);
 
-    if (error) return { error: "Failed to update package. Please try again." };
+    if (error) return { error: await actionError("patient-packages.failedToUpdatePackagePleaseTryAgain") };
 
     revalidatePatient(pkg.patient_id);
     return { success: true };
   } catch (error) {
-    return { error: firstError(error) };
+    console.error("Patient package update failed", { error });
+    return { error: await actionError("patient-packages.unexpected") };
   }
 }
 
@@ -245,15 +237,15 @@ export async function deactivatePatientPackage(
   });
 
   if (!parsed.success) {
-    return { fieldErrors: parsed.error.flatten().fieldErrors };
+    return { fieldErrors: await localizeZodFieldErrors(parsed.error) };
   }
 
   try {
     const pkg = await getPackageForClinic(parsed.data.package_id, user.clinicId);
-    if (!pkg) return { error: "Package not found." };
+    if (!pkg) return { error: await actionError("patient-packages.packageNotFound") };
 
     const patient = await getPatientForClinic(pkg.patient_id, user.clinicId);
-    if (!patient) return { error: "Patient not found." };
+    if (!patient) return { error: await actionError("patient-packages.patientNotFound") };
 
     const supabase = await createClient();
     const { error } = await supabase
@@ -262,11 +254,12 @@ export async function deactivatePatientPackage(
       .eq("id", parsed.data.package_id)
       .eq("clinic_id", user.clinicId);
 
-    if (error) return { error: "Failed to deactivate package. Please try again." };
+    if (error) return { error: await actionError("patient-packages.failedToDeactivatePackagePleaseTryAgain") };
 
     revalidatePatient(pkg.patient_id);
     return { success: true };
   } catch (error) {
-    return { error: firstError(error) };
+    console.error("Patient package deactivation failed", { error });
+    return { error: await actionError("patient-packages.unexpected") };
   }
 }

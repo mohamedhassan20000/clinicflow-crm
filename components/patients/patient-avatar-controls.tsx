@@ -8,6 +8,7 @@ import {
   uploadPatientAvatar,
 } from "@/actions/patient-avatar";
 import { Button } from "@/components/ui/button";
+import { useTranslations } from "next-intl";
 
 interface PatientAvatarControlsProps {
   patientId: string;
@@ -18,6 +19,7 @@ export function PatientAvatarControls({
   patientId,
   hasAvatar,
 }: PatientAvatarControlsProps) {
+  const t = useTranslations("patients");
   const inputRef = useRef<HTMLInputElement>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -31,7 +33,7 @@ export function PatientAvatarControls({
     startTransition(async () => {
       const result = await uploadPatientAvatar(patientId, formData);
       if (result.error) toast.error(result.error);
-      else toast.success("Patient avatar updated.");
+      else toast.success(t("patientAvatarUpdated"));
       event.target.value = "";
     });
   }
@@ -40,7 +42,7 @@ export function PatientAvatarControls({
     startTransition(async () => {
       const result = await removePatientAvatar(patientId);
       if (result.error) toast.error(result.error);
-      else toast.success("Patient avatar removed.");
+      else toast.success(t("patientAvatarRemoved"));
     });
   }
 
@@ -66,8 +68,7 @@ export function PatientAvatarControls({
         ) : (
           <Camera className="h-3.5 w-3.5" />
         )}
-        Upload photo
-      </Button>
+        {t("uploadPhoto")}</Button>
       {hasAvatar && (
         <Button
           type="button"
@@ -78,8 +79,7 @@ export function PatientAvatarControls({
           onClick={onRemove}
         >
           <Trash2 className="h-3.5 w-3.5" />
-          Remove
-        </Button>
+          {t("remove")}</Button>
       )}
     </div>
   );

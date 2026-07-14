@@ -2,6 +2,7 @@
 
 import { Printer, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useTranslations } from "next-intl";
 
 function printWithMode(modeClass: string | null) {
   const cleanup = () => {
@@ -26,6 +27,7 @@ function printWithMode(modeClass: string | null) {
 }
 
 export function PrintButton() {
+  const t = useTranslations("revenue");
   return (
     <Button
       type="button"
@@ -35,8 +37,7 @@ export function PrintButton() {
       onClick={() => printWithMode(null)}
     >
       <Printer className="h-3.5 w-3.5" />
-      Print statement
-    </Button>
+      {t("printStatement")}</Button>
   );
 }
 
@@ -45,6 +46,7 @@ export function PrintButton() {
  * with `data-print-hide-when-settlements` for the duration of the print call.
  */
 export function PrintSettlementsButton({ disabled }: { disabled?: boolean }) {
+  const t = useTranslations("revenue");
   return (
     <Button
       type="button"
@@ -55,7 +57,6 @@ export function PrintSettlementsButton({ disabled }: { disabled?: boolean }) {
       onClick={() => printWithMode("print-settlements-only")}
     >
       <FileText className="h-3.5 w-3.5" />
-      Print settlements
-    </Button>
+      {t("printSettlements")}</Button>
   );
 }

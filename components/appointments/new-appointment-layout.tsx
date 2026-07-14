@@ -12,6 +12,7 @@ import type {
 } from "./appointment-form";
 import type { ActionResult } from "@/actions/appointments";
 import type { ClinicWorkingHoursValues } from "@/lib/validations/settings";
+import { useTranslations } from "next-intl";
 
 interface NewAppointmentLayoutProps {
   action: (prev: ActionResult | null, fd: FormData) => Promise<ActionResult>;
@@ -48,6 +49,7 @@ function PatientPreviewPanel({
   doctors: Doctor[];
   insuranceProviders: InsuranceProvider[];
 }) {
+  const t = useTranslations("appointments");
   if (!patient) {
     return (
       <div className="rounded-xl border border-border/50 bg-card p-6 flex flex-col items-center justify-center gap-3 text-center min-h-[200px]">
@@ -55,8 +57,7 @@ function PatientPreviewPanel({
           <User className="h-6 w-6 text-muted-foreground" />
         </div>
         <p className="text-sm text-muted-foreground">
-          Select a patient to preview their profile.
-        </p>
+          {t("selectAPatientToPreviewTheir")}</p>
       </div>
     );
   }
@@ -82,7 +83,7 @@ function PatientPreviewPanel({
         </div>
         <div className="min-w-0">
           <p className="font-semibold truncate">{patient.full_name}</p>
-          <p className="text-xs text-muted-foreground">Patient profile</p>
+          <p className="text-xs text-muted-foreground">{t("patientProfile")}</p>
         </div>
       </div>
 
@@ -91,37 +92,37 @@ function PatientPreviewPanel({
       <dl className="space-y-2.5">
         {patient.file_number && (
           <div>
-            <dt className="text-xs text-muted-foreground">File number</dt>
+            <dt className="text-xs text-muted-foreground">{t("fileNumber")}</dt>
             <dd className="text-sm font-mono">#{patient.file_number}</dd>
           </div>
         )}
         {patient.national_id && (
           <div>
-            <dt className="text-xs text-muted-foreground">National ID</dt>
+            <dt className="text-xs text-muted-foreground">{t("nationalId")}</dt>
             <dd className="text-sm font-mono">{patient.national_id}</dd>
           </div>
         )}
         {patient.phone && (
           <div>
-            <dt className="text-xs text-muted-foreground">Phone</dt>
+            <dt className="text-xs text-muted-foreground">{t("phone")}</dt>
             <dd className="text-sm">{patient.phone}</dd>
           </div>
         )}
         {department && (
           <div>
-            <dt className="text-xs text-muted-foreground">Department</dt>
+            <dt className="text-xs text-muted-foreground">{t("department")}</dt>
             <dd className="text-sm">{department.name}</dd>
           </div>
         )}
         {doctorName && (
           <div>
-            <dt className="text-xs text-muted-foreground">Treating doctor</dt>
+            <dt className="text-xs text-muted-foreground">{t("treatingDoctor")}</dt>
             <dd className="text-sm">{doctorName}</dd>
           </div>
         )}
         {insurance && (
           <div>
-            <dt className="text-xs text-muted-foreground">Insurance</dt>
+            <dt className="text-xs text-muted-foreground">{t("insurance")}</dt>
             <dd className="text-sm">{insurance.name}</dd>
           </div>
         )}

@@ -10,15 +10,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useTranslations } from "next-intl";
 
 const OUTCOMES = [
-  { value: "all", label: "All" },
-  { value: "all_fine", label: "All Fine" },
-  { value: "has_problem", label: "Has Problem" },
-  { value: "no_response", label: "No Response" },
+  { value: "all", labelKey: "outcomeAll" },
+  { value: "all_fine", labelKey: "outcomeAllFine" },
+  { value: "has_problem", labelKey: "outcomeHasProblem" },
+  { value: "no_response", labelKey: "outcomeNoResponse" },
 ];
 
 export function FollowupsOutcomeFilter({ value }: { value: string }) {
+  const t = useTranslations("reports");
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -37,8 +39,7 @@ export function FollowupsOutcomeFilter({ value }: { value: string }) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-sm font-medium">
           <Filter className="h-4 w-4 text-muted-foreground" aria-hidden />
-          Outcome
-        </div>
+          {t("outcome")}</div>
         <Select value={value || "all"} onValueChange={update}>
           <SelectTrigger className="w-full sm:w-56">
             <SelectValue />
@@ -46,7 +47,7 @@ export function FollowupsOutcomeFilter({ value }: { value: string }) {
           <SelectContent>
             {OUTCOMES.map((outcome) => (
               <SelectItem key={outcome.value} value={outcome.value}>
-                {outcome.label}
+                {t(outcome.labelKey)}
               </SelectItem>
             ))}
           </SelectContent>

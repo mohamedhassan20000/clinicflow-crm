@@ -28,6 +28,16 @@
 .DS_Store
 *.pem
 
+# licensed font source — founder delivery artifact, must never enter git history (P2A-G1 / P2A-L1).
+# Only the five shipped Thmanyah Sans woff2 UI faces are re-included below; every other font
+# artifact (OTF desktop faces, licence PDFs, the specimen guide, the serif subfamilies) is excluded.
+/Thmanyah-Font-Family/
+*.otf
+*.ttf
+*.woff
+*.woff2
+!/app/fonts/thmanyah/*.woff2
+
 # debug
 npm-debug.log*
 yarn-debug.log*
@@ -44,3 +54,5 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+/.p2c-messages/

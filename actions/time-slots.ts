@@ -8,7 +8,7 @@ import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
 export type SlotInfo = {
   time: string;      // "HH:MM"
   disabled: boolean;
-  label?: string;    // "Break" | "Pending – may conflict"
+  label?: "break";
 };
 
 type ShiftWindow = { start: number; end: number }; // minutes since midnight
@@ -154,7 +154,7 @@ export async function getAvailableTimeSlots(
     const timeStr = `${h}:${m}`;
 
     if (inBreak) {
-      slots.push({ time: timeStr, disabled: true, label: "Break" });
+      slots.push({ time: timeStr, disabled: true, label: "break" });
       continue;
     }
 

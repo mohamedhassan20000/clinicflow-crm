@@ -22,6 +22,7 @@ import {
   minutesInClinicTimeZone,
   useCalendarNow,
 } from "@/components/appointments/calendar-visuals";
+import { useTranslations } from "next-intl";
 
 type Appointment = AppointmentForDetail;
 
@@ -101,7 +102,8 @@ export function DayCalendar({
   clinicHours = [],
   newAppointmentHref = "/appointments/new",
 }: Props) {
-  const { formatSlotTime } = useClinicSettings();
+  const t = useTranslations("appointments");
+  const { formatSlotTime, formatDate } = useClinicSettings();
   const currentDate = useCalendarNow();
 
   const prev = addDays(date, -1);
@@ -135,12 +137,12 @@ export function DayCalendar({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <Button asChild variant="outline" size="sm" className="h-8 w-8 p-0">
-            <Link href={`/appointments?view=day&date=${fmt(prev)}`} aria-label="Previous day">
-              <ChevronLeft className="h-4 w-4" />
+            <Link href={`/appointments?view=day&date=${fmt(prev)}`} aria-label={t("previousDay")}>
+              <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
             </Link>
           </Button>
           <span className="min-w-0 text-sm font-medium">
-            {date.toLocaleDateString("en-GB", {
+            {formatDate(date, {
               weekday: "long",
               day: "numeric",
               month: "long",
@@ -148,8 +150,8 @@ export function DayCalendar({
             })}
           </span>
           <Button asChild variant="outline" size="sm" className="h-8 w-8 p-0">
-            <Link href={`/appointments?view=day&date=${fmt(next)}`} aria-label="Next day">
-              <ChevronRight className="h-4 w-4" />
+            <Link href={`/appointments?view=day&date=${fmt(next)}`} aria-label={t("nextDay")}>
+              <ChevronRight className="h-4 w-4 rtl:rotate-180" />
             </Link>
           </Button>
         </div>
@@ -157,8 +159,7 @@ export function DayCalendar({
           <Button asChild size="sm" className="shrink-0 gap-1.5">
             <Link href={newAppointmentHref}>
               <CalendarPlus className="h-4 w-4" />
-              New appointment
-            </Link>
+              {t("newAppointment")}</Link>
           </Button>
         )}
       </div>
@@ -198,7 +199,7 @@ export function DayCalendar({
                 isToday ? CALENDAR_STYLES.todayHeader : CALENDAR_STYLES.dayHeader
               }
             >
-              {date.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}
+              {formatDate(date, { weekday: "short", day: "numeric", month: "short" })}
             </div>
 
             {closed ? (
@@ -208,8 +209,7 @@ export function DayCalendar({
                 style={{ height: hourRows.length * BUCKET_H_PX }}
               >
                 <span className={CALENDAR_STYLES.nonWorkingLabel}>
-                  Closed
-                </span>
+                  {t("closed")}</span>
               </div>
             ) : (
               <>
@@ -239,8 +239,7 @@ export function DayCalendar({
                     style={{ top: CALENDAR_HEADER_HEIGHT_PX, height: hourRows.length * BUCKET_H_PX }}
                   >
                     <span className="text-xs text-foreground/70">
-                      No appointments scheduled for this day.
-                    </span>
+                      {t("noAppointmentsScheduledForThisDay")}</span>
                   </div>
                 )}
               </>
@@ -249,11 +248,11 @@ export function DayCalendar({
             {showNowLine && (
               <CalendarNowIndicator
                 top={nowTopPx}
-                label={`Current time, ${formatSlotTime(
+                label={t("currentTimeNamed", { time: formatSlotTime(
                   `${String(Math.floor(nowMin / 60)).padStart(2, "0")}:${String(
                     nowMin % 60,
                   ).padStart(2, "0")}`,
-                )}`}
+                ) })}
               />
             )}
           </div>
@@ -279,6 +278,7 @@ function DayBucketCell({
   currentUserId?: string;
   currentUserRole?: "admin" | "receptionist" | "manager" | "doctor";
 }) {
+  const t = useTranslations("appointments");
   const [showAllOpen, setShowAllOpen] = useState(false);
   const hasMore = appts.length > 3;
   const visible = hasMore ? appts.slice(0, 3) : appts;
@@ -304,7 +304,7 @@ function DayBucketCell({
           onClick={() => setShowAllOpen(true)}
           className="mt-auto shrink-0 px-1 py-0.5 text-start text-[11px] font-medium leading-none text-foreground/70 hover:text-foreground hover:underline"
         >
-          Show all ({appts.length})
+          {t("showAll")}{appts.length})
         </button>
       )}
       {showAllOpen && (

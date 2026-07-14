@@ -8,10 +8,15 @@ import { restoreStaff, deleteStaff, emptyStaffTrash } from "@/actions/settings";
 import { isPrimaryClinicAdmin } from "@/lib/primary-admin";
 import { createClinicScopedAdminClient } from "@/lib/supabase/admin";
 import { THIRTY_DAYS_MS } from "@/lib/constants";
+import { getTranslations } from "next-intl/server";
 
-export const metadata: Metadata = { title: "Staff" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("protected");
+  return { title: t("metadataStaff") };
+}
 
 export default async function StaffSettingsPage() {
+  const t = await getTranslations("protected");
   const user = await requireRole(["admin", "manager"]);
 
   const [allStaff, cachedDepts, canCustomize, lastSeenMap] = await Promise.all([
@@ -52,11 +57,9 @@ export default async function StaffSettingsPage() {
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="font-semibold">Staff members</h2>
+          <h2 className="font-semibold">{t("staffMembers")}</h2>
           <p className="text-sm text-muted-foreground">
-            {staff.length} member{staff.length !== 1 ? "s" : ""}{" "}
-            across {departments?.length ?? 0} department
-            {(departments?.length ?? 0) !== 1 ? "s" : ""}
+            {t("membersAcrossDepartments", { members: staff.length, departments: departments?.length ?? 0 })}
           </p>
         </div>
         <AddStaffDialog
@@ -80,7 +83,7 @@ export default async function StaffSettingsPage() {
 
       <SettingsTrashSection
         items={trashItems}
-        entityLabel="staff member"
+        entityLabel={t("staffMember")}
         onRestore={restoreStaff}
         onPermanentDelete={deleteStaff}
         onEmptyTrash={emptyStaffTrash}

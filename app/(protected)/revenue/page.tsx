@@ -10,8 +10,12 @@ import {
   PrintSettlementsButton,
 } from "@/components/revenue/print-button";
 import { PageHeader } from "@/components/shared/page-header";
+import { getTranslations } from "next-intl/server";
 
-export const metadata: Metadata = { title: "Revenue transactions" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("protected");
+  return { title: t("metadataRevenueTransactions") };
+}
 
 type PresetKey = "today" | "week" | "this_month" | "last_month" | "last_year" | "custom";
 const REVENUE_PAGE_SIZE = 50;
@@ -159,6 +163,7 @@ function normalizeRevenueSummary(value: unknown): RevenueSummary {
 }
 
 export default async function RevenuePage({ searchParams }: PageProps) {
+  const t = await getTranslations("protected");
   const user = await requireUser();
   if (user.role === "receptionist") redirect("/dashboard");
 
@@ -226,8 +231,8 @@ export default async function RevenuePage({ searchParams }: PageProps) {
 
   const settlementAppointmentJoin =
     filterDept || filterDoctor
-      ? "appointment:appointments!inner(id, scheduled_at, department_id, total_amount, outstanding_amount, doctor_id, profiles!doctor_id(full_name), departments(name, color))"
-      : "appointment:appointments!appointment_id(id, scheduled_at, department_id, total_amount, outstanding_amount, doctor_id, profiles!doctor_id(full_name), departments(name, color))";
+      ? t("appointmentAppointmentsInnerIdScheduledAt")
+      : t("appointmentAppointmentsAppointmentIdIdScheduled");
   let settlementsQuery = supabase
     .from("outstanding_settlements")
     .select(
@@ -287,9 +292,9 @@ export default async function RevenuePage({ searchParams }: PageProps) {
       {/* Header — hidden in print */}
       <PageHeader
         back={{ href: "/dashboard", label: "dashboard" }}
-        breadcrumbs={[{ label: "Dashboard", href: "/dashboard" }, { label: "Revenue & Transactions" }]}
-        title="Revenue & Transactions"
-        description="Review collected payments, settlements, and outstanding balances."
+        breadcrumbs={[{ label: t("dashboard"), href: "/dashboard" }, { label: t("revenueTransactions2") }]}
+        title={t("revenueTransactions")}
+        description={t("reviewCollectedPaymentsSettlementsAndOutstanding")}
         className="print:hidden"
       />
 
@@ -324,7 +329,7 @@ export default async function RevenuePage({ searchParams }: PageProps) {
         preset={preset}
         fromInput={fromInput}
         toInput={toInput}
-        clinicName={clinic?.name ?? "ClinicFlow"}
+        clinicName={clinic?.name ?? t("clinicflow")}
         clinicAddress={clinic?.address ?? null}
         clinicPhone={clinic?.phone ?? null}
         clinicLogoUrl={clinic?.logo_url ?? null}

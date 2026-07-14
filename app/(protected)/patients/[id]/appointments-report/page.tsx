@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
+import { clinicLocaleFromRow, formatClinicDate, type ClinicLocale } from "@/lib/datetime";
 import { requireUser } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
 import { StatusBadge } from "@/components/appointments/status-badge";
@@ -16,8 +16,12 @@ import type {
   AppointmentPaymentRowData,
   SettlementEntry,
 } from "@/components/patients/appointment-payment-row";
+import { getTranslations } from "next-intl/server";
 
-export const metadata: Metadata = { title: "Appointments Report" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("protected");
+  return { title: t("metadataAppointmentsReport") };
+}
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -28,6 +32,7 @@ export default async function AppointmentsReportPage({
   params,
   searchParams,
 }: PageProps) {
+  const t = await getTranslations("protected");
   const { id } = await params;
   const { from, to, returnTo } = await searchParams;
   const patientPath = `/patients/${id}`;
@@ -59,8 +64,8 @@ export default async function AppointmentsReportPage({
     .from("appointments")
     .select(
       isDoctor
-        ? "id, scheduled_at, status, cancellation_reason, cancelled_at, package_id, package_session_number, profiles!doctor_id(full_name), departments(name, color), patient_packages(name, total_sessions, used_sessions, price_per_session)"
-        : "id, scheduled_at, status, payment_method, paid_at, total_amount, paid_amount, insurance_amount, secondary_amount, deposit_amount, outstanding_amount, secondary_payment_method, payment_note, cancellation_reason, cancelled_at, package_id, package_session_number, profiles!doctor_id(full_name), departments(name, color), insurance_providers(name), patient_packages(name, total_sessions, used_sessions, price_per_session), appointment_services(id, name, price, quantity)",
+        ? t("idscheduledatstatuscancellationreason")
+        : t("idscheduledatstatuspaymentmethod"),
     )
     .eq("patient_id", id)
     .eq("clinic_id", user.clinicId)
@@ -99,15 +104,15 @@ export default async function AppointmentsReportPage({
     }
   }
 
-  const [{ data: clinic }, { data: clinicSettings }] = await Promise.all([
-    supabase.from("clinics").select("name, address, phone, logo_url").eq("id", user.clinicId).single(),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    supabase.from("clinics").select("time_format" as any).eq("id", user.clinicId).single(),
-  ]);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const timeFormat = (clinicSettings as any)?.time_format === "12h" ? "12h" as const : "24h" as const;
+  const { data: clinic } = await supabase
+    .from("clinics")
+    .select("name, address, phone, logo_url, timezone, locale, digits, time_format")
+    .eq("id", user.clinicId)
+    .single();
+  const timeFormat = clinic?.time_format === "12h" ? "12h" as const : "24h" as const;
+  const clinicLocale = clinicLocaleFromRow(clinic);
 
-  const generatedAt = new Date().toLocaleString("en-GB", {
+  const generatedAt = formatClinicDate(new Date(), clinicLocale, {
     dateStyle: "long",
     timeStyle: "short",
   });
@@ -119,7 +124,7 @@ export default async function AppointmentsReportPage({
         clinicAddress={clinic?.address ?? null}
         clinicPhone={clinic?.phone ?? null}
         logoUrl={clinic?.logo_url ?? null}
-        documentName="Appointments Report"
+        documentName={t("appointmentsReport")}
         generatedAt={generatedAt}
       />
       <PatientReportHeader
@@ -127,8 +132,8 @@ export default async function AppointmentsReportPage({
         patientName={patient.full_name}
         fileNumber={patient.file_number}
         phone={patient.phone}
-        title="Appointments Report"
-        countLabel={`${appts.length} appointment${appts.length !== 1 ? "s" : ""}${from || to ? " (filtered)" : ""}`}
+        title={t("appointmentsReport")}
+        countLabel={`${appts.length} appointment${appts.length !== 1 ? "s" : ""}${from || to ? t("filtered") : ""}`}
       />
 
       <ReportDateFilter from={from} to={to} />
@@ -136,7 +141,7 @@ export default async function AppointmentsReportPage({
       {/* Screen view */}
       {isDoctor ? (
         <div className="print:hidden">
-          <DoctorApptList appts={appts} timeFormat={timeFormat} />
+          <DoctorApptList appts={appts} timeFormat={timeFormat} clinicLocale={clinicLocale} />
         </div>
       ) : (
         <div>
@@ -150,9 +155,9 @@ export default async function AppointmentsReportPage({
       {/* Print table — same black-border style as revenue */}
       <div className="hidden print:block">
         {isDoctor && appts.length === 0 ? (
-          <p className="text-sm">No appointments match the selected date range.</p>
+          <p className="text-sm">{t("noAppointmentsMatchTheSelectedDate")}</p>
         ) : isDoctor ? (
-          <DoctorApptPrintTable appts={appts} />
+          <DoctorApptPrintTable appts={appts} clinicLocale={clinicLocale} />
         ) : null}
       </div>
     </div>
@@ -184,20 +189,23 @@ function formatPackagePrintLine(a: {
   return `Package: ${pkg.name} (${details.join(" · ")})`;
 }
 
-function DoctorApptPrintTable({
+async function DoctorApptPrintTable({
   appts,
+  clinicLocale,
 }: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   appts: any[];
+  clinicLocale: ClinicLocale;
 }) {
+  const t = await getTranslations("protected");
   return (
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Date &amp; Time</TableHead>
-          <TableHead>Doctor</TableHead>
-          <TableHead>Department</TableHead>
-          <TableHead>Status</TableHead>
+          <TableHead>{t("dateTime")}</TableHead>
+          <TableHead>{t("doctor")}</TableHead>
+          <TableHead>{t("department")}</TableHead>
+          <TableHead>{t("status")}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -207,8 +215,7 @@ function DoctorApptPrintTable({
           return (
             <TableRow key={a.id}>
               <TableCell style={{ whiteSpace: "nowrap" }}>
-                {new Date(a.scheduled_at).toLocaleString("en-GB", {
-                  timeZone: DEFAULT_TIME_ZONE,
+                    {formatClinicDate(a.scheduled_at, clinicLocale, {
                   dateStyle: "medium",
                   timeStyle: "short",
                 })}
@@ -240,19 +247,21 @@ function DoctorApptPrintTable({
   );
 }
 
-function DoctorApptList({
+async function DoctorApptList({
   appts,
   timeFormat,
+  clinicLocale,
 }: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   appts: any[];
   timeFormat: "12h" | "24h";
+  clinicLocale: ClinicLocale;
 }) {
+  const t = await getTranslations("protected");
   if (appts.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-border/60 bg-muted/20 px-6 py-12 text-center text-sm text-muted-foreground">
-        No appointments match the selected date range.
-      </div>
+        {t("noAppointmentsMatchTheSelectedDate")}</div>
     );
   }
 
@@ -276,13 +285,12 @@ function DoctorApptList({
             >
               <div className="min-w-0 flex-1 space-y-0.5">
                 <div className="text-sm font-medium">
-                  {new Date(a.scheduled_at).toLocaleDateString("en-GB", {
-                    timeZone: DEFAULT_TIME_ZONE,
+                    {formatClinicDate(a.scheduled_at, clinicLocale, {
                     day: "2-digit",
                     month: "short",
                     year: "numeric",
                   })}
-                  <span className="ml-1 font-normal text-muted-foreground">
+                  <span className="ms-1 font-normal text-muted-foreground">
                     {formatTime(a.scheduled_at, timeFormat)}
                   </span>
                 </div>

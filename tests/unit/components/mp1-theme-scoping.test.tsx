@@ -9,7 +9,6 @@ import {
   MARKETING_SECTION_TONES,
   MarketingPage,
 } from "@/components/marketing/marketing-page";
-import { marketingCopy } from "@/lib/marketing-copy";
 
 function expectForcedScope(
   element: Element | null,
@@ -46,7 +45,7 @@ describe("Post-Pre-P2 MP1 theme scoping", () => {
     expectPublicScope(marketing.container.firstElementChild, "dark");
     marketing.unmount();
 
-    const legal = render(<LegalPage content={marketingCopy.legal.privacy} />);
+    const legal = render(<LegalPage document="privacy" />);
     expectPublicScope(legal.container.firstElementChild, "light");
     expect(surfaceOwnedClasses(legal.container)).toContain("dark:");
   });
@@ -54,6 +53,8 @@ describe("Post-Pre-P2 MP1 theme scoping", () => {
   it("keeps the marketing section rhythm in one exported tone map", () => {
     expect(MARKETING_SECTION_TONES).toEqual({
       hero: "bg-[var(--m-paper)]",
+      // P2C: the statistics band sits between the hero and the cohort proof.
+      stats: "bg-[var(--m-panel)]",
       proof: "bg-[var(--m-panel)]",
       product: "bg-[var(--m-paper)]",
       features: "bg-[var(--m-warm)]",

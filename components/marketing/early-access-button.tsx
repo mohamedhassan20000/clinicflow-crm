@@ -6,7 +6,7 @@ import { useState } from "react";
 import { ArrowUpRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { marketingCopy as copy } from "@/lib/marketing-copy";
+import { useTranslations } from "next-intl";
 
 const EarlyAccessDialog = dynamic(
   () => import("@/components/marketing/early-access-dialog").then((module) => module.EarlyAccessDialog),
@@ -16,22 +16,27 @@ const EarlyAccessDialog = dynamic(
 export function EarlyAccessButton({
   registrationMode,
   className,
-  label = copy.earlyAccess.button,
-  openLabel = copy.earlyAccess.openButton,
+  label,
+  openLabel,
 }: {
   registrationMode: string;
   className?: string;
+  /** Overridden by the hero, which uses its own stronger call to action. */
   label?: string;
   openLabel?: string;
 }) {
+  const t = useTranslations("marketing.earlyAccess");
   const [dialogOpen, setDialogOpen] = useState(false);
+
+  const requestLabel = label ?? t("button");
+  const createLabel = openLabel ?? t("openButton");
 
   if (registrationMode === "open") {
     return (
       <Button asChild className={cn("min-h-11", className)}>
         <Link href="/signup">
-          {openLabel}
-          <ArrowUpRight className="size-4" />
+          {createLabel}
+          <ArrowUpRight className="size-4 rtl:-scale-x-100" />
         </Link>
       </Button>
     );
@@ -45,8 +50,8 @@ export function EarlyAccessButton({
         aria-expanded={dialogOpen}
         onClick={() => setDialogOpen(true)}
       >
-        {label}
-        <ArrowUpRight className="size-4" />
+        {requestLabel}
+        <ArrowUpRight className="size-4 rtl:-scale-x-100" />
       </Button>
       {dialogOpen ? (
         <EarlyAccessDialog open={dialogOpen} onOpenChange={setDialogOpen} />

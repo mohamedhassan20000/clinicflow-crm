@@ -290,9 +290,7 @@ describe("auth and RBAC boundaries", () => {
 
     const result = await changePassword(null, form);
 
-    expect(result.error).toMatch(
-      /forced-password flag clear failed: Managers cannot update protected staff profile fields/,
-    );
+    expect(result.error).toBe("We could not complete this request. Please try again.");
     expect(mocks.state.rpc).toHaveBeenCalledWith(
       "clear_own_must_change_password",
     );

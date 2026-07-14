@@ -1,5 +1,8 @@
 import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
+import createNextIntlPlugin from "next-intl/plugin";
+
+const withNextIntl = createNextIntlPlugin("./i18n/request.ts");
 
 function supabaseHostname(): string {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -59,11 +62,13 @@ const nextConfig: NextConfig = {
   },
 };
 
+const intlConfig = withNextIntl(nextConfig);
+
 // Sentry is a no-op if NEXT_PUBLIC_SENTRY_DSN is not set.
 export default process.env.NEXT_PUBLIC_SENTRY_DSN
-  ? withSentryConfig(nextConfig, {
+  ? withSentryConfig(intlConfig, {
       silent: true,
       disableLogger: true,
       widenClientFileUpload: true,
     })
-  : nextConfig;
+  : intlConfig;

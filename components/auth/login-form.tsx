@@ -19,6 +19,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { signIn } from "@/actions/auth";
+import { useTranslations } from "next-intl";
 
 const loginSchema = z.object({
   email: z.string().min(1, "Email is required").email("Enter a valid email"),
@@ -28,6 +29,7 @@ const loginSchema = z.object({
 type LoginValues = z.infer<typeof loginSchema>;
 
 export function LoginForm() {
+  const t = useTranslations("auth");
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [isSigningIn, setIsSigningIn] = useState(false);
@@ -78,7 +80,7 @@ export function LoginForm() {
       setIsSigningIn(false);
     } catch (err) {
       console.error("Sign-in failed:", err);
-      toast.error("Something went wrong. Please try again.");
+      toast.error(t("somethingWentWrongPleaseTryAgain"));
       setIsSigningIn(false);
     }
   }
@@ -92,13 +94,13 @@ export function LoginForm() {
           name="email"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Email address</FormLabel>
+              <FormLabel>{t("emailAddress")}</FormLabel>
               <FormControl>
                 <Input
                   {...field}
                   type="email"
                   autoComplete="email"
-                  placeholder="name@clinic.com"
+                  placeholder={t("nameClinicCom")}
                   disabled={isSubmitting}
                   className="h-11 rounded-lg transition-all duration-200 focus-visible:ring-4 focus-visible:ring-primary/15 focus-visible:border-primary/60"
                 />
@@ -115,14 +117,13 @@ export function LoginForm() {
           render={({ field }) => (
             <FormItem>
               <div className="flex items-center justify-between">
-                <FormLabel>Password</FormLabel>
+                <FormLabel>{t("password")}</FormLabel>
                 <a
                   href="/forgot-password"
                   className="text-xs font-medium text-primary transition-colors hover:text-primary/80 focus-visible:outline-none focus-visible:underline"
                   tabIndex={0}
                 >
-                  Forgot password?
-                </a>
+                  {t("forgotPassword")}</a>
               </div>
               <FormControl>
                 <div className="relative">
@@ -132,14 +133,14 @@ export function LoginForm() {
                     autoComplete="current-password"
                     placeholder="••••••••"
                     disabled={isSubmitting}
-                    className="h-11 rounded-lg pr-10 transition-all duration-200 focus-visible:ring-4 focus-visible:ring-primary/15 focus-visible:border-primary/60"
+                    className="h-11 rounded-lg pe-10 transition-all duration-200 focus-visible:ring-4 focus-visible:ring-primary/15 focus-visible:border-primary/60"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword((v) => !v)}
                     disabled={isSubmitting}
-                    aria-label={showPassword ? "Hide password" : "Show password"}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer text-muted-foreground/60 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none"
+                    aria-label={showPassword ? t("hidePassword") : t("showPassword")}
+                    className="absolute end-3 top-1/2 -translate-y-1/2 cursor-pointer text-muted-foreground/60 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none"
                   >
                     {showPassword ? (
                       <EyeOff className="h-4 w-4" />
@@ -163,20 +164,17 @@ export function LoginForm() {
           {isSubmitting ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" />
-              Signing in…
-            </>
+              {t("signingIn")}</>
           ) : (
             <>
-              <LogIn className="h-4 w-4" />
-              Sign in
-            </>
+              <LogIn className="h-4 w-4 rtl:rotate-180" />
+              {t("signIn")}</>
           )}
         </Button>
 
         {/* Divider / hint */}
         <p className="pt-1 text-center text-xs text-muted-foreground">
-          Access is restricted to authorised clinic staff.
-        </p>
+          {t("accessIsRestrictedToAuthorisedClinic")}</p>
       </form>
     </Form>
   );

@@ -20,16 +20,14 @@ export function MarketingLogo({
         className,
       )}
     >
-      <span className="grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl bg-[#13c7d8] shadow-[inset_0_0_0_1px_rgba(255,255,255,.3)]">
-        <Image
-          src="/brand/clinicflow-mark.png"
-          alt=""
-          width={34}
-          height={30}
-          className="h-8 w-auto object-contain"
-          sizes="34px"
-        />
-      </span>
+      <Image
+        src="/brand/clinicflow-mark.png"
+        alt=""
+        width={34}
+        height={30}
+        className="h-8 w-auto shrink-0 object-contain"
+        sizes="34px"
+      />
       <span className="text-[1.05rem] font-bold tracking-[-0.035em]">{copy.brand}</span>
     </Link>
   );

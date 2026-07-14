@@ -47,6 +47,18 @@ const navigation = [
   ["#faq", copy.nav.faq],
 ] as const;
 
+export const MARKETING_SECTION_TONES = {
+  hero: "bg-[var(--m-paper)]",
+  proof: "bg-[var(--m-panel)]",
+  product: "bg-[var(--m-paper)]",
+  features: "bg-[var(--m-warm)]",
+  security: "bg-[#073846]",
+  pricing: "bg-[var(--m-paper)]",
+  earlyAccess: "bg-[var(--m-panel)]",
+  faq: "bg-[var(--m-warm)]",
+  footer: "bg-[#073846]",
+} as const;
+
 const featureIcons = [
   CalendarDays,
   FileHeart,
@@ -72,7 +84,7 @@ function CohortProgress({ status }: { status: RegistrationStatus }) {
     <div className="rounded-2xl border border-[var(--m-line)] bg-[var(--m-paper)] p-5">
       <div className="flex items-end justify-between gap-4">
         <span className="text-sm font-semibold">{copy.proof.progress(safeAccepted, safeLimit)}</span>
-        <span className="font-mono text-sm text-[#087f7b] dark:text-[#77ddd5]">{percentage}%</span>
+        <span className="font-mono text-sm text-[#087f7b]">{percentage}%</span>
       </div>
       <div
         className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--m-soft)]"
@@ -122,7 +134,7 @@ export function MarketingPage(props: Props) {
   }
 
   return (
-    <main className="marketing-page min-h-dvh overflow-hidden bg-[var(--m-paper)] text-[var(--m-ink)]">
+    <main className="light forced-light-scope marketing-page min-h-dvh overflow-hidden bg-[var(--m-paper)] text-[var(--m-ink)]">
       <header className="sticky top-0 z-40 border-b border-[var(--m-line)] bg-[color-mix(in_oklab,var(--m-paper)_88%,transparent)] backdrop-blur-xl">
         <div className="mx-auto flex h-[4.5rem] max-w-[90rem] items-center justify-between px-5 lg:px-10">
           <MarketingLogo />
@@ -141,7 +153,7 @@ export function MarketingPage(props: Props) {
             <Button asChild variant="ghost" className="h-11 rounded-full px-5 text-[var(--m-ink)] hover:bg-[var(--m-soft)]">
               <Link href="/login">{copy.nav.login}</Link>
             </Button>
-            <Button asChild className="h-11 rounded-full bg-[#087f7b] px-5 text-white hover:bg-[#076e6b]">
+            <Button asChild className="marketing-cta h-11 rounded-full bg-[#087f7b] px-5 text-white hover:bg-[#076e6b]">
               <Link href="#early-access">{copy.nav.earlyAccess}</Link>
             </Button>
           </div>
@@ -149,19 +161,19 @@ export function MarketingPage(props: Props) {
         </div>
       </header>
 
-      <section className="relative mx-auto grid min-h-[calc(100dvh-4.5rem)] max-w-[90rem] items-center gap-12 px-5 py-12 md:py-20 lg:grid-cols-[.82fr_1.18fr] lg:px-10">
+      <section className={`${MARKETING_SECTION_TONES.hero} relative mx-auto grid min-h-[calc(100dvh-4.5rem)] max-w-[90rem] items-center gap-12 px-5 py-12 md:py-20 lg:grid-cols-[.82fr_1.18fr] lg:px-10`}>
         <div className="marketing-hero-copy relative z-10 max-w-2xl">
-          <p className="marketing-eyebrow">
+          <p className="marketing-eyebrow marketing-hero-eyebrow">
             <span className="size-1.5 rounded-full bg-[#12b8c8]" aria-hidden="true" />
             {copy.hero.eyebrow}
           </p>
-          <h1 className="mt-6 max-w-3xl font-display text-[clamp(3.25rem,7.2vw,7.4rem)] font-normal leading-[.88] tracking-[-.06em] text-balance">
+          <h1 className="marketing-hero-title mt-6 max-w-3xl font-display text-[clamp(3.05rem,6.2vw,6.65rem)] font-normal leading-[.93] tracking-[-.042em] text-balance">
             {copy.hero.title}
           </h1>
-          <p className="mt-7 max-w-xl text-lg leading-8 text-[var(--m-muted)] sm:text-xl">
+          <p className="marketing-hero-body mt-7 max-w-xl text-lg leading-8 text-[var(--m-muted)] sm:text-xl">
             {copy.hero.body}
           </p>
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+          <div className="marketing-hero-actions mt-8 flex flex-col gap-3 sm:flex-row">
             {statusPromise ? (
               <Suspense
                 fallback={(
@@ -169,7 +181,7 @@ export function MarketingPage(props: Props) {
                     registrationMode={fallbackStatus.registrationMode}
                     label={copy.hero.primary}
                     openLabel={copy.hero.openPrimary}
-                    className="h-12 rounded-full bg-[#087f7b] px-7 text-base text-white shadow-[0_14px_30px_-18px_rgba(8,127,123,.7)] hover:bg-[#076e6b]"
+                    className="marketing-cta h-12 rounded-full bg-[#087f7b] px-7 text-base text-white shadow-[0_14px_30px_-18px_rgba(8,127,123,.7)] hover:bg-[#076e6b]"
                   />
                 )}
               >
@@ -177,7 +189,7 @@ export function MarketingPage(props: Props) {
                   statusPromise={statusPromise}
                   label={copy.hero.primary}
                   openLabel={copy.hero.openPrimary}
-                  className="h-12 rounded-full bg-[#087f7b] px-7 text-base text-white shadow-[0_14px_30px_-18px_rgba(8,127,123,.7)] hover:bg-[#076e6b]"
+                  className="marketing-cta h-12 rounded-full bg-[#087f7b] px-7 text-base text-white shadow-[0_14px_30px_-18px_rgba(8,127,123,.7)] hover:bg-[#076e6b]"
                 />
               </Suspense>
             ) : (
@@ -185,20 +197,20 @@ export function MarketingPage(props: Props) {
                 registrationMode={status.registrationMode}
                 label={copy.hero.primary}
                 openLabel={copy.hero.openPrimary}
-                className="h-12 rounded-full bg-[#087f7b] px-7 text-base text-white shadow-[0_14px_30px_-18px_rgba(8,127,123,.7)] hover:bg-[#076e6b]"
+                className="marketing-cta h-12 rounded-full bg-[#087f7b] px-7 text-base text-white shadow-[0_14px_30px_-18px_rgba(8,127,123,.7)] hover:bg-[#076e6b]"
               />
             )}
-            <Button asChild variant="outline" className="h-12 rounded-full border-[var(--m-line-strong)] bg-[var(--m-panel)] px-7 text-base text-[var(--m-ink)] hover:bg-[var(--m-soft)]">
+            <Button asChild variant="outline" className="marketing-cta h-12 rounded-full border-[var(--m-line-strong)] bg-[var(--m-panel)] px-7 text-base text-[var(--m-ink)] hover:bg-[var(--m-soft)]">
               <Link href="#product">
                 {copy.hero.secondary}
                 <ArrowDown className="size-4" />
               </Link>
             </Button>
           </div>
-          <ul className="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-sm text-[var(--m-muted)]" aria-label="Early-access assurances">
+          <ul className="marketing-hero-assurances mt-8 flex flex-wrap gap-x-6 gap-y-2 text-sm text-[var(--m-muted)]" aria-label="Early-access assurances">
             {copy.hero.assurances.map((item) => (
               <li key={item} className="flex items-center gap-2">
-                <span className="grid size-5 place-items-center rounded-full bg-[#d6f3ee] text-[#087f7b] dark:bg-[#0d5b61] dark:text-[#9ce8df]">
+                <span className="grid size-5 place-items-center rounded-full bg-[#d6f3ee] text-[#087f7b]">
                   <Check className="size-3" aria-hidden="true" />
                 </span>
                 {item}
@@ -223,10 +235,10 @@ export function MarketingPage(props: Props) {
         <div className="marketing-care-path pointer-events-none absolute inset-0 -z-10 opacity-70" aria-hidden="true" />
       </section>
 
-      <section className="border-y border-[var(--m-line)] bg-[var(--m-panel)] px-5 py-10 lg:px-10" aria-labelledby="cohort-title">
+      <section className={`${MARKETING_SECTION_TONES.proof} border-y border-[var(--m-line)] px-5 py-10 lg:px-10`} aria-labelledby="cohort-title">
         <div className="mx-auto grid max-w-[90rem] items-center gap-8 md:grid-cols-[1fr_minmax(18rem,.72fr)]">
           <div>
-            <p className="font-mono text-xs font-semibold uppercase tracking-[.16em] text-[#087f7b] dark:text-[#77ddd5]">
+            <p className="font-mono text-xs font-semibold uppercase tracking-[.16em] text-[#087f7b]">
               {copy.proof.eyebrow}
             </p>
             <h2 id="cohort-title" className="mt-2 text-2xl font-semibold tracking-[-.035em] sm:text-3xl">
@@ -244,12 +256,12 @@ export function MarketingPage(props: Props) {
         </div>
       </section>
 
-      <section id="product" className="scroll-mt-24 px-5 py-24 lg:px-10 lg:py-32" aria-labelledby="product-title">
+      <section id="product" className={`${MARKETING_SECTION_TONES.product} scroll-mt-24 px-5 py-24 lg:px-10 lg:py-32`} aria-labelledby="product-title">
         <div className="mx-auto max-w-[90rem]">
           <div className="marketing-scroll-reveal grid gap-8 border-b border-[var(--m-line)] pb-14 lg:grid-cols-[.7fr_1.3fr]">
             <p className="marketing-section-label">{copy.product.eyebrow}</p>
             <div>
-              <h2 id="product-title" className="font-display text-5xl font-normal leading-[.96] tracking-[-.045em] text-balance sm:text-6xl lg:text-7xl">
+              <h2 id="product-title" className="font-display text-[clamp(2.8rem,5vw,4.75rem)] font-normal leading-[.99] tracking-[-.032em] text-balance">
                 {copy.product.title}
               </h2>
               <p className="mt-6 max-w-3xl text-lg leading-8 text-[var(--m-muted)]">{copy.product.body}</p>
@@ -265,7 +277,7 @@ export function MarketingPage(props: Props) {
               <article key={workflow.title} className="marketing-scroll-reveal grid items-center gap-10 lg:grid-cols-2 lg:gap-16">
                 <div className={index % 2 === 1 ? "lg:order-2" : undefined}>
                   <div className="flex items-center gap-4">
-                    <span className="font-mono text-xs font-semibold tracking-[.16em] text-[#087f7b] dark:text-[#77ddd5]">{workflow.time}</span>
+                    <span className="font-mono text-xs font-semibold tracking-[.16em] text-[#087f7b]">{workflow.time}</span>
                     <span className="h-px w-10 bg-[var(--m-line-strong)]" aria-hidden="true" />
                     <span className="text-sm font-semibold text-[var(--m-muted)]">{workflow.label}</span>
                   </div>
@@ -276,7 +288,7 @@ export function MarketingPage(props: Props) {
                   <ul className="mt-7 grid gap-3">
                     {workflow.bullets.map((bullet) => (
                       <li key={bullet} className="flex items-start gap-3 text-sm font-medium">
-                        <ClipboardCheck className="mt-0.5 size-4 shrink-0 text-[#087f7b] dark:text-[#77ddd5]" aria-hidden="true" />
+                        <ClipboardCheck className="mt-0.5 size-4 shrink-0 text-[#087f7b]" aria-hidden="true" />
                         {bullet}
                       </li>
                     ))}
@@ -294,11 +306,11 @@ export function MarketingPage(props: Props) {
         </div>
       </section>
 
-      <section id="features" className="scroll-mt-24 border-y border-[var(--m-line)] bg-[var(--m-panel)] px-5 py-24 lg:px-10 lg:py-28" aria-labelledby="features-title">
+      <section id="features" className={`${MARKETING_SECTION_TONES.features} scroll-mt-24 border-y border-[var(--m-line)] px-5 py-24 lg:px-10 lg:py-28`} aria-labelledby="features-title">
         <div className="mx-auto max-w-[90rem]">
           <div className="marketing-scroll-reveal max-w-3xl">
             <p className="marketing-section-label">{copy.features.eyebrow}</p>
-            <h2 id="features-title" className="mt-4 font-display text-5xl font-normal leading-none tracking-[-.045em] sm:text-6xl">
+            <h2 id="features-title" className="mt-4 font-display text-[clamp(2.75rem,4.5vw,4rem)] font-normal leading-[1.01] tracking-[-.03em] text-balance">
               {copy.features.title}
             </h2>
             <p className="mt-5 text-lg leading-8 text-[var(--m-muted)]">{copy.features.body}</p>
@@ -308,7 +320,7 @@ export function MarketingPage(props: Props) {
               const Icon = featureIcons[index];
               return (
                 <article key={item.title} className="marketing-card min-h-64 bg-[var(--m-paper)] p-7 sm:p-8">
-                  <span className="grid size-11 place-items-center rounded-xl bg-[var(--m-soft)] text-[#087f7b] dark:text-[#77ddd5]">
+                  <span className="grid size-11 place-items-center rounded-xl bg-[var(--m-soft)] text-[#087f7b]">
                     <Icon className="size-5" aria-hidden="true" />
                   </span>
                   <h3 className="mt-10 text-xl font-semibold tracking-[-.025em]">{item.title}</h3>
@@ -320,12 +332,12 @@ export function MarketingPage(props: Props) {
         </div>
       </section>
 
-      <section id="security" className="scroll-mt-24 bg-[#073846] px-5 py-24 text-white lg:px-10 lg:py-32" aria-labelledby="security-title">
+      <section id="security" className={`${MARKETING_SECTION_TONES.security} scroll-mt-24 px-5 py-24 text-white lg:px-10 lg:py-32`} aria-labelledby="security-title">
         <div className="mx-auto max-w-[90rem]">
           <div className="marketing-scroll-reveal grid gap-10 lg:grid-cols-[.9fr_1.1fr]">
             <div>
-              <p className="font-mono text-xs font-semibold uppercase tracking-[.17em] text-[#6ee7dc]">{copy.security.eyebrow}</p>
-              <h2 id="security-title" className="mt-5 max-w-2xl font-display text-5xl font-normal leading-[.96] tracking-[-.045em] text-balance sm:text-6xl">
+              <p className="marketing-section-label marketing-section-label-inverse">{copy.security.eyebrow}</p>
+              <h2 id="security-title" className="mt-5 max-w-2xl font-display text-[clamp(2.75rem,4.5vw,4rem)] font-normal leading-[1.01] tracking-[-.03em] text-balance">
                 {copy.security.title}
               </h2>
               <p className="mt-6 max-w-xl text-lg leading-8 text-[#c3dde0]">{copy.security.body}</p>
@@ -350,30 +362,30 @@ export function MarketingPage(props: Props) {
         </div>
       </section>
 
-      <section id="pricing" className="scroll-mt-24 px-5 py-24 lg:px-10 lg:py-28" aria-labelledby="pricing-title">
+      <section id="pricing" className={`${MARKETING_SECTION_TONES.pricing} scroll-mt-24 px-5 py-24 lg:px-10 lg:py-28`} aria-labelledby="pricing-title">
         <div className="mx-auto max-w-[90rem]">
           <div className="marketing-scroll-reveal max-w-3xl">
             <p className="marketing-section-label">{copy.pricing.eyebrow}</p>
-            <h2 id="pricing-title" className="mt-4 font-display text-5xl font-normal leading-none tracking-[-.045em] sm:text-6xl">
+            <h2 id="pricing-title" className="mt-4 font-display text-[clamp(2.75rem,4.5vw,4rem)] font-normal leading-[1.01] tracking-[-.03em] text-balance">
               {copy.pricing.title}
             </h2>
             <p className="mt-5 text-lg leading-8 text-[var(--m-muted)]">{copy.pricing.body}</p>
           </div>
           <div className="mt-12 grid gap-5 lg:grid-cols-3">
             {copy.pricing.tiers.map((tier, index) => (
-              <article key={tier.name} className={`marketing-card flex min-h-[23rem] flex-col rounded-[1.75rem] border p-7 ${index === 1 ? "border-[#0d9488] bg-[#e5f7f4] dark:bg-[#0a4b51]" : "border-[var(--m-line)] bg-[var(--m-panel)]"}`}>
-                <p className="font-mono text-[11px] font-semibold uppercase tracking-[.16em] text-[#066d6a] dark:text-[#89e5dc]">{copy.pricing.pending}</p>
+              <article key={tier.name} className={`marketing-card flex min-h-[23rem] flex-col rounded-[1.75rem] border p-7 ${index === 1 ? "border-[#0d9488] bg-[var(--m-soft)]" : "border-[var(--m-line)] bg-[var(--m-panel)]"}`}>
+                <p className="font-mono text-[11px] font-semibold uppercase tracking-[.16em] text-[#066d6a]">{copy.pricing.pending}</p>
                 <h3 className="mt-6 text-3xl font-semibold tracking-[-.04em]">{tier.name}</h3>
                 <p className="mt-3 leading-7 text-[var(--m-muted)]">{tier.description}</p>
                 <ul className="mt-8 grid gap-3">
                   {tier.highlights.map((highlight) => (
                     <li key={highlight} className="flex items-center gap-2.5 text-sm font-medium">
-                      <Check className="size-4 text-[#087f7b] dark:text-[#89e5dc]" aria-hidden="true" />
+                      <Check className="size-4 text-[#087f7b]" aria-hidden="true" />
                       {highlight}
                     </li>
                   ))}
                 </ul>
-                <Button asChild variant="outline" className="mt-auto h-11 rounded-full border-[var(--m-line-strong)] bg-[var(--m-paper)] text-[var(--m-ink)] hover:bg-[var(--m-soft)]">
+                <Button asChild variant="outline" className="marketing-cta mt-auto h-11 rounded-full border-[var(--m-line-strong)] bg-[var(--m-paper)] text-[var(--m-ink)] hover:bg-[var(--m-soft)]">
                   <Link href="#early-access">{copy.pricing.cta}</Link>
                 </Button>
               </article>
@@ -382,16 +394,16 @@ export function MarketingPage(props: Props) {
         </div>
       </section>
 
-      <section id="early-access" className="scroll-mt-20 px-5 pb-24 lg:px-10 lg:pb-32" aria-labelledby="early-access-title">
-        <div className="marketing-scroll-reveal relative mx-auto grid max-w-[90rem] overflow-hidden rounded-[2rem] bg-[#0a4653] px-7 py-12 text-white sm:px-12 lg:grid-cols-[1fr_auto] lg:items-end lg:px-16 lg:py-16">
+      <section id="early-access" className={`${MARKETING_SECTION_TONES.earlyAccess} scroll-mt-20 px-5 py-24 lg:px-10 lg:py-32`} aria-labelledby="early-access-title">
+        <div className="marketing-scroll-reveal relative mx-auto grid max-w-[90rem] overflow-hidden rounded-[2rem] border border-[var(--m-line)] bg-[var(--m-soft)] px-7 py-12 text-[var(--m-ink)] sm:px-12 lg:grid-cols-[1fr_auto] lg:items-end lg:px-16 lg:py-16">
           <div className="absolute inset-block-start-0 inset-inline-end-0 size-80 -translate-y-1/2 rounded-full bg-[#18c7d5]/20 blur-3xl" aria-hidden="true" />
           <div className="relative">
-            <p className="font-mono text-xs font-semibold uppercase tracking-[.17em] text-[#79e8df]">{copy.earlyAccess.eyebrow}</p>
-            <h2 id="early-access-title" className="mt-4 max-w-3xl font-display text-5xl font-normal leading-[.96] tracking-[-.045em] text-balance sm:text-6xl">
+            <p className="font-mono text-xs font-semibold uppercase tracking-[.17em] text-[#066d6a]">{copy.earlyAccess.eyebrow}</p>
+            <h2 id="early-access-title" className="mt-4 max-w-3xl font-display text-[clamp(2.75rem,4.5vw,4rem)] font-normal leading-[1.01] tracking-[-.03em] text-balance">
               {copy.earlyAccess.title}
             </h2>
-            <p className="mt-5 max-w-2xl text-lg leading-8 text-[#c5e0e3]">{copy.earlyAccess.body}</p>
-            <p className="mt-6 font-mono text-xs text-[#9ed4d7]">
+            <p className="mt-5 max-w-2xl text-lg leading-8 text-[var(--m-muted)]">{copy.earlyAccess.body}</p>
+            <p className="mt-6 font-mono text-xs text-[var(--m-muted)]">
               {statusPromise ? (
                 <Suspense fallback={<CohortText status={fallbackStatus} />}>
                   <LiveCohortText statusPromise={statusPromise} />
@@ -406,29 +418,29 @@ export function MarketingPage(props: Props) {
               fallback={(
                 <EarlyAccessButton
                   registrationMode={fallbackStatus.registrationMode}
-                  className="relative mt-8 h-12 rounded-full bg-white px-7 text-base text-[#073846] hover:bg-[#e6fbf8] lg:mt-0"
+                  className="marketing-cta relative mt-8 h-12 rounded-full bg-[#087f7b] px-7 text-base text-white hover:bg-[#076e6b] lg:mt-0"
                 />
               )}
             >
               <LiveEarlyAccessButton
                 statusPromise={statusPromise}
-                className="relative mt-8 h-12 rounded-full bg-white px-7 text-base text-[#073846] hover:bg-[#e6fbf8] lg:mt-0"
+                className="marketing-cta relative mt-8 h-12 rounded-full bg-[#087f7b] px-7 text-base text-white hover:bg-[#076e6b] lg:mt-0"
               />
             </Suspense>
           ) : (
             <EarlyAccessButton
               registrationMode={status.registrationMode}
-              className="relative mt-8 h-12 rounded-full bg-white px-7 text-base text-[#073846] hover:bg-[#e6fbf8] lg:mt-0"
+              className="marketing-cta relative mt-8 h-12 rounded-full bg-[#087f7b] px-7 text-base text-white hover:bg-[#076e6b] lg:mt-0"
             />
           )}
         </div>
       </section>
 
-      <section id="faq" className="scroll-mt-24 border-t border-[var(--m-line)] bg-[var(--m-panel)] px-5 py-24 lg:px-10 lg:py-28" aria-labelledby="faq-title">
+      <section id="faq" className={`${MARKETING_SECTION_TONES.faq} scroll-mt-24 border-t border-[var(--m-line)] px-5 py-24 lg:px-10 lg:py-28`} aria-labelledby="faq-title">
         <div className="mx-auto grid max-w-[90rem] gap-12 lg:grid-cols-[.68fr_1.32fr]">
           <div className="marketing-scroll-reveal">
             <p className="marketing-section-label">{copy.faq.eyebrow}</p>
-            <h2 id="faq-title" className="mt-4 max-w-xl font-display text-5xl font-normal leading-[.96] tracking-[-.045em] sm:text-6xl">
+            <h2 id="faq-title" className="mt-4 max-w-xl font-display text-[clamp(2.75rem,4.5vw,4rem)] font-normal leading-[1.01] tracking-[-.03em] text-balance">
               {copy.faq.title}
             </h2>
           </div>
@@ -437,7 +449,7 @@ export function MarketingPage(props: Props) {
               <details key={question} className="group py-1">
                 <summary className="flex min-h-16 cursor-pointer list-none items-center justify-between gap-5 rounded-lg py-4 text-lg font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0d9488]">
                   {question}
-                  <span className="grid size-8 shrink-0 place-items-center rounded-full border border-[var(--m-line)] text-[#087f7b] transition-transform group-open:rotate-45 dark:text-[#77ddd5]" aria-hidden="true">
+                  <span className="grid size-8 shrink-0 place-items-center rounded-full border border-[var(--m-line)] text-[#087f7b] transition-transform group-open:rotate-45" aria-hidden="true">
                     {copy.faq.expand}
                   </span>
                 </summary>
@@ -448,7 +460,7 @@ export function MarketingPage(props: Props) {
         </div>
       </section>
 
-      <footer id="contact" className="bg-[#073846] px-5 py-12 text-white lg:px-10">
+      <footer id="contact" className={`${MARKETING_SECTION_TONES.footer} px-5 py-12 text-white lg:px-10`}>
         <div className="mx-auto grid max-w-[90rem] gap-10 md:grid-cols-[1fr_auto] md:items-end">
           <div>
             <MarketingLogo inverse />

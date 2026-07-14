@@ -11,24 +11,27 @@ exports[`DashboardShell > persists, snapshots, and restores collapsed state 1`] 
       data-testid="dashboard-sidebar"
     >
       <div
-        class="relative flex h-18 shrink-0 items-center border-b border-sidebar-border justify-center px-3"
+        class="flex h-[var(--shell-header-h)] shrink-0 border-b border-border"
+        data-testid="sidebar-brand-row"
       >
-        <img
-          alt="ClinicFlow"
-          class="h-9 w-auto shrink-0 object-contain"
-          height="34"
-          src="/brand/clinicflow-mark.png"
-          width="38"
-        />
         <button
+          aria-controls="dashboard-navigation"
           aria-expanded="false"
-          aria-label="Expand sidebar"
-          class="absolute inset-e-0 top-1/2 z-40 flex size-7 translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-sidebar-border bg-sidebar text-sidebar-foreground shadow-sm transition-colors before:absolute before:-inset-2.5 before:content-[''] hover:bg-sidebar-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sidebar-ring rtl:-translate-x-1/2"
+          aria-label="Expand navigation"
+          class="group relative flex h-full w-full items-center transition-colors hover:bg-sidebar-accent/60 focus-visible:bg-sidebar-accent/60 focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-sidebar-ring justify-center px-3"
+          title="Expand navigation"
           type="button"
         >
+          <img
+            alt="ClinicFlow"
+            class="h-9 w-auto shrink-0 object-contain"
+            height="34"
+            src="/brand/clinicflow-mark.png"
+            width="38"
+          />
           <svg
             aria-hidden="true"
-            class="lucide lucide-chevron-right size-4 rtl:rotate-180"
+            class="lucide lucide-chevron-right absolute inset-e-1.5 top-1/2 size-4 -translate-y-1/2 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 rtl:rotate-180"
             fill="none"
             height="24"
             stroke="currentColor"
@@ -48,6 +51,7 @@ exports[`DashboardShell > persists, snapshots, and restores collapsed state 1`] 
       <nav
         aria-label="ClinicFlow navigation"
         class="flex-1 space-y-1 overflow-y-auto py-5 px-3"
+        id="dashboard-navigation"
       >
         <a
           aria-current="page"
@@ -138,7 +142,7 @@ exports[`DashboardShell > persists, snapshots, and restores collapsed state 1`] 
       class="flex min-w-0 flex-1 flex-col"
     >
       <header
-        class="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 border-b bg-card/95 px-4 backdrop-blur md:px-6"
+        class="sticky top-0 z-30 flex h-[var(--shell-header-h)] shrink-0 items-center gap-3 border-b bg-card/95 px-4 backdrop-blur md:px-6"
         data-testid="dashboard-header"
       >
         <button
@@ -278,29 +282,32 @@ exports[`DashboardShell > renders the header utilities and expanded navigation 1
       data-testid="dashboard-sidebar"
     >
       <div
-        class="relative flex h-18 shrink-0 items-center border-b border-sidebar-border gap-3 px-5"
+        class="flex h-[var(--shell-header-h)] shrink-0 border-b border-border"
+        data-testid="sidebar-brand-row"
       >
-        <img
-          alt="ClinicFlow"
-          class="h-9 w-auto shrink-0 object-contain"
-          height="34"
-          src="/brand/clinicflow-mark.png"
-          width="38"
-        />
-        <span
-          class="truncate text-lg font-semibold tracking-tight"
-        >
-          ClinicFlow
-        </span>
         <button
+          aria-controls="dashboard-navigation"
           aria-expanded="true"
-          aria-label="Collapse sidebar"
-          class="absolute inset-e-0 top-1/2 z-40 flex size-7 translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-sidebar-border bg-sidebar text-sidebar-foreground shadow-sm transition-colors before:absolute before:-inset-2.5 before:content-[''] hover:bg-sidebar-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sidebar-ring rtl:-translate-x-1/2"
+          aria-label="Collapse navigation"
+          class="group relative flex h-full w-full items-center transition-colors hover:bg-sidebar-accent/60 focus-visible:bg-sidebar-accent/60 focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-sidebar-ring gap-3 px-5"
+          title="Collapse navigation"
           type="button"
         >
+          <img
+            alt="ClinicFlow"
+            class="h-9 w-auto shrink-0 object-contain"
+            height="34"
+            src="/brand/clinicflow-mark.png"
+            width="38"
+          />
+          <span
+            class="truncate text-lg font-semibold tracking-tight"
+          >
+            ClinicFlow
+          </span>
           <svg
             aria-hidden="true"
-            class="lucide lucide-chevron-left size-4 rtl:rotate-180"
+            class="lucide lucide-chevron-left ms-auto size-4 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 rtl:rotate-180"
             fill="none"
             height="24"
             stroke="currentColor"
@@ -320,6 +327,7 @@ exports[`DashboardShell > renders the header utilities and expanded navigation 1
       <nav
         aria-label="ClinicFlow navigation"
         class="flex-1 space-y-1 overflow-y-auto py-5 px-4"
+        id="dashboard-navigation"
       >
         <a
           aria-current="page"
@@ -414,7 +422,7 @@ exports[`DashboardShell > renders the header utilities and expanded navigation 1
       class="flex min-w-0 flex-1 flex-col"
     >
       <header
-        class="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 border-b bg-card/95 px-4 backdrop-blur md:px-6"
+        class="sticky top-0 z-30 flex h-[var(--shell-header-h)] shrink-0 items-center gap-3 border-b bg-card/95 px-4 backdrop-blur md:px-6"
         data-testid="dashboard-header"
       >
         <button

@@ -54,6 +54,22 @@ export function Sidebar({
 }: SidebarProps) {
   const pathname = usePathname();
   const isCollapsed = mode === "sidebar" && collapsed;
+  const navigationId = mode === "sidebar" ? "dashboard-navigation" : "mobile-navigation";
+  const toggleLabel = isCollapsed ? "Expand navigation" : "Collapse navigation";
+
+  const brandContents = (
+    <>
+      <Image src="/brand/clinicflow-mark.png" alt="ClinicFlow" width={38} height={34} className="h-9 w-auto shrink-0 object-contain" priority />
+      {isCollapsed ? null : <span className="truncate text-lg font-semibold tracking-tight">{brandLabel}</span>}
+      {mode === "sidebar" ? (
+        isCollapsed ? (
+          <ChevronRight aria-hidden="true" className="absolute inset-e-1.5 top-1/2 size-4 -translate-y-1/2 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 rtl:rotate-180" />
+        ) : (
+          <ChevronLeft aria-hidden="true" className="ms-auto size-4 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 rtl:rotate-180" />
+        )
+      ) : null}
+    </>
+  );
 
   return (
     <aside
@@ -61,30 +77,32 @@ export function Sidebar({
       data-collapsed={isCollapsed}
       className={cn(
         "flex h-full shrink-0 flex-col border-e border-sidebar-border bg-sidebar text-sidebar-foreground",
-        // z-40: sticky positioning creates a stacking context, so the collapse
-        // toggle's overhang would otherwise be painted over by the content
-        // column's sticky header (z-30).
         mode === "sidebar" && "sticky top-0 z-40 hidden h-dvh self-start md:flex transition-[width] duration-200 ease-out",
         mode === "sidebar" && (isCollapsed ? "w-20" : "w-72"),
       )}
     >
-      <div className={cn("relative flex h-18 shrink-0 items-center border-b border-sidebar-border", isCollapsed ? "justify-center px-3" : "gap-3 px-5")}>
-        <Image src="/brand/clinicflow-mark.png" alt="ClinicFlow" width={38} height={34} className="h-9 w-auto shrink-0 object-contain" priority />
-        {isCollapsed ? null : <span className="truncate text-lg font-semibold tracking-tight">{brandLabel}</span>}
+      <div data-testid="sidebar-brand-row" className="flex h-[var(--shell-header-h)] shrink-0 border-b border-border">
         {mode === "sidebar" ? (
           <button
             type="button"
             onClick={() => onCollapsedChange?.(!collapsed)}
-            aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-label={toggleLabel}
             aria-expanded={!isCollapsed}
-            className="absolute inset-e-0 top-1/2 z-40 flex size-7 translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-sidebar-border bg-sidebar text-sidebar-foreground shadow-sm transition-colors before:absolute before:-inset-2.5 before:content-[''] hover:bg-sidebar-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sidebar-ring rtl:-translate-x-1/2"
+            aria-controls={navigationId}
+            title={toggleLabel}
+            className={cn(
+              "group relative flex h-full w-full items-center transition-colors hover:bg-sidebar-accent/60 focus-visible:bg-sidebar-accent/60 focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-sidebar-ring",
+              isCollapsed ? "justify-center px-3" : "gap-3 px-5",
+            )}
           >
-            {isCollapsed ? <ChevronRight className="size-4 rtl:rotate-180" /> : <ChevronLeft className="size-4 rtl:rotate-180" />}
+            {brandContents}
           </button>
-        ) : null}
+        ) : (
+          <div className="flex h-full w-full items-center gap-3 px-5">{brandContents}</div>
+        )}
       </div>
 
-      <nav aria-label={`${brandLabel} navigation`} className={cn("flex-1 space-y-1 overflow-y-auto py-5", isCollapsed ? "px-3" : "px-4")}>
+      <nav id={navigationId} aria-label={`${brandLabel} navigation`} className={cn("flex-1 space-y-1 overflow-y-auto py-5", isCollapsed ? "px-3" : "px-4")}>
         {items.map((item) => {
           const { href, label } = item;
           const Icon = resolveIcon(item);

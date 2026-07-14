@@ -7,7 +7,7 @@ type LegalContent = typeof copy.legal.privacy | typeof copy.legal.terms;
 
 export function LegalPage({ content }: { content: LegalContent }) {
   return (
-    <main className="marketing-page min-h-dvh bg-[var(--m-paper)] text-[var(--m-ink)]">
+    <main className="light forced-light-scope marketing-page min-h-dvh bg-[var(--m-paper)] text-[var(--m-ink)]">
       <header className="border-b border-[var(--m-line)]">
         <div className="mx-auto flex h-[4.5rem] max-w-5xl items-center justify-between px-5">
           <MarketingLogo />
@@ -31,7 +31,7 @@ export function LegalPage({ content }: { content: LegalContent }) {
         </header>
 
         <aside
-          className="mt-12 flex items-start gap-4 rounded-2xl border border-[#ce8b34]/30 bg-[#fff3d9] p-5 text-[#5d3a0b] dark:border-[#f1c474]/25 dark:bg-[#473211] dark:text-[#ffe7b6]"
+          className="mt-12 flex items-start gap-4 rounded-2xl border border-[#ce8b34]/30 bg-[#fff3d9] p-5 text-[#5d3a0b]"
           aria-labelledby="legal-review-notice"
         >
           <AlertCircle className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
@@ -44,7 +44,7 @@ export function LegalPage({ content }: { content: LegalContent }) {
         <div className="mt-14 divide-y divide-[var(--m-line)] border-y border-[var(--m-line)]">
           {content.sections.map((section, index) => (
             <section key={section.title} className="grid gap-4 py-8 sm:grid-cols-[3rem_1fr] sm:gap-7" aria-labelledby={`legal-section-${index}`}>
-              <span className="font-mono text-xs font-semibold text-[#087f7b] dark:text-[#77ddd5]" aria-hidden="true">
+              <span className="font-mono text-xs font-semibold text-[#087f7b]" aria-hidden="true">
                 {String(index + 1).padStart(2, "0")}
               </span>
               <div>

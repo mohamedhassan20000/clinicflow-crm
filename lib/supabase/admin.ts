@@ -376,7 +376,7 @@ function auditPayload(payload: Database["public"]["Tables"]["platform_audit_logs
     : {};
 }
 
-function safeAuditSummary(row: {
+export function safeAuditSummary(row: {
   id: string;
   action: string;
   target_type: string;

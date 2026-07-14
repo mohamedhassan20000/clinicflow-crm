@@ -2,15 +2,15 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-@custom-variant dark (&:is(.dark *));
+@custom-variant dark (&:is(.dark *):not(:is(.light *)));
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-dm-sans);
-  --font-heading: var(--font-dm-sans);
-  --font-display: var(--font-instrument);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-plex-sans), "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --font-heading: var(--font-plex-sans), "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --font-display: var(--font-plex-serif), Georgia, "Times New Roman", serif;
+  --font-mono: var(--font-geist-mono), "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -57,6 +57,8 @@
 
 /* ─── ClinicFlow Design Tokens — Healthcare Teal ─── */
 :root {
+  --shell-header-h: 4rem;
+
   /* Primary: #0891B2 → oklch */
   --primary: oklch(0.6 0.14 208);
   --primary-foreground: oklch(0.98 0.015 200);
@@ -119,6 +121,7 @@
 }
 
 .dark {
+  color-scheme: dark;
   --background: oklch(0.18 0.04 230);
   --foreground: oklch(0.97 0.01 205);
   --card: oklch(0.22 0.04 228);
@@ -163,6 +166,51 @@
   --scrollbar-thumb-hover: oklch(0.58 0.1 205);
 }
 
+.light {
+  color-scheme: light;
+  --primary: oklch(0.6 0.14 208);
+  --primary-foreground: oklch(0.98 0.015 200);
+  --background: oklch(0.987 0.006 210);
+  --foreground: oklch(0.2 0.06 222);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.2 0.06 222);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.2 0.06 222);
+  --secondary: oklch(0.96 0.018 205);
+  --secondary-foreground: oklch(0.28 0.06 220);
+  --muted: oklch(0.965 0.012 210);
+  --muted-foreground: oklch(0.52 0.04 225);
+  --accent: oklch(0.78 0.13 205);
+  --accent-foreground: oklch(0.15 0.05 230);
+  --destructive: oklch(0.62 0.23 27);
+  --warning: oklch(0.78 0.16 75);
+  --warning-foreground: oklch(0.25 0.05 80);
+  --success: oklch(0.66 0.18 160);
+  --success-foreground: oklch(0.98 0.02 160);
+  --border: oklch(0.91 0.015 215);
+  --input: oklch(0.91 0.015 215);
+  --ring: oklch(0.6 0.14 208);
+  --calendar-grid: oklch(0.84 0.018 215);
+  --calendar-grid-strong: oklch(0.74 0.025 215);
+  --calendar-non-working: oklch(0.94 0.012 215);
+  --chart-1: oklch(0.6 0.14 208);
+  --chart-2: oklch(0.78 0.13 205);
+  --chart-3: oklch(0.78 0.16 75);
+  --chart-4: oklch(0.66 0.18 160);
+  --chart-5: oklch(0.62 0.22 27);
+  --sidebar: oklch(0.22 0.07 232);
+  --sidebar-foreground: oklch(0.95 0.015 205);
+  --sidebar-primary: oklch(0.72 0.13 200);
+  --sidebar-primary-foreground: oklch(0.15 0.04 235);
+  --sidebar-accent: oklch(0.3 0.06 228);
+  --sidebar-accent-foreground: oklch(0.96 0.01 205);
+  --sidebar-border: oklch(0.3 0.06 228);
+  --sidebar-ring: oklch(0.72 0.13 200);
+  --scrollbar-track: oklch(0.94 0.01 215);
+  --scrollbar-thumb: oklch(0.74 0.03 220);
+  --scrollbar-thumb-hover: oklch(0.6 0.06 208);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -178,6 +226,82 @@
     font-family: var(--font-heading);
     letter-spacing: -0.02em;
     font-weight: 600;
+  }
+}
+
+/* MP5: fixed country-picker rhythm without changing the shared combobox shell. */
+.phone-cc-trigger {
+  display: grid;
+  min-width: 0;
+  flex: 1 1 0%;
+  grid-template-columns: 1.5rem minmax(0, 1fr);
+  align-items: center;
+  gap: .375rem;
+}
+
+.phone-cc-grid {
+  display: grid;
+  min-width: 0;
+  flex: 1 1 0%;
+  grid-template-columns: 1.5rem minmax(0, 1fr) 5rem;
+  align-items: center;
+  gap: .5rem;
+}
+
+.phone-cc-trigger > :first-child,
+.phone-cc-grid > :first-child { text-align: center; }
+
+.phone-cc-trigger > :last-child,
+.phone-cc-grid > :nth-child(2) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.phone-cc-trigger > :last-child,
+.phone-cc-grid > :last-child { font-variant-numeric: tabular-nums; }
+
+.phone-cc-grid > :nth-child(3) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+  color: var(--muted-foreground);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: .75rem;
+  line-height: 1rem;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.phone-cc-grid > :last-child {
+  width: 100%;
+  color: var(--muted-foreground);
+  font-size: .75rem;
+  line-height: 1rem;
+  text-align: end;
+}
+
+@media (min-width: 320px) {
+  .phone-cc-grid {
+    grid-template-columns: 1.5rem minmax(0, 1fr) 2.75rem 5rem;
+  }
+
+  .phone-cc-grid > :nth-child(3) {
+    position: static;
+    width: auto;
+    height: auto;
+    padding: 0;
+    margin: 0;
+    overflow: visible;
+    clip: auto;
+    white-space: normal;
   }
 }
 
@@ -287,25 +411,16 @@
   color-scheme: light;
   --m-paper: #f5fbfb;
   --m-panel: #ffffff;
+  --m-warm: #edf0e9;
   --m-soft: #e1f4f2;
   --m-ink: #082f3c;
   --m-muted: #436873;
   --m-faint: #66838b;
   --m-line: rgb(8 65 77 / 12%);
   --m-line-strong: rgb(8 65 77 / 24%);
-  font-family: var(--font-dm-sans), system-ui, sans-serif;
-}
-
-.dark .marketing-page {
-  color-scheme: dark;
-  --m-paper: #061f28;
-  --m-panel: #092a34;
-  --m-soft: #0d3a43;
-  --m-ink: #effcfc;
-  --m-muted: #b2cfd3;
-  --m-faint: #8eb3b8;
-  --m-line: rgb(197 240 239 / 12%);
-  --m-line-strong: rgb(197 240 239 / 24%);
+  --m-motion-ease: cubic-bezier(.2, .8, .2, 1);
+  --m-motion-spring: cubic-bezier(.16, 1, .3, 1);
+  font-family: var(--font-plex-sans), "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
 }
 
 .marketing-eyebrow {
@@ -326,6 +441,11 @@
 }
 
 .marketing-section-label {
+  display: grid;
+  width: fit-content;
+  grid-template-columns: max-content minmax(2rem, 4rem);
+  align-items: center;
+  gap: .75rem;
   color: #066d6a;
   font-family: var(--font-geist-mono), monospace;
   font-size: .72rem;
@@ -334,7 +454,17 @@
   text-transform: uppercase;
 }
 
-.dark .marketing-section-label { color: #77ddd5; }
+.marketing-section-label::after {
+  height: 1px;
+  background: currentColor;
+  content: "";
+  opacity: .45;
+  transform: scaleX(1);
+}
+
+.marketing-section-label-inverse {
+  color: #6ee7dc;
+}
 
 .marketing-care-path {
   background:
@@ -342,9 +472,9 @@
     radial-gradient(circle at 88% 72%, rgb(8 127 123 / 10%), transparent 25rem);
 }
 
-@keyframes marketing-hero-in {
-  from { opacity: 0; transform: translateY(22px); }
-  to { opacity: 1; transform: translateY(0); }
+@keyframes marketing-hero-step-in {
+  from { transform: translateY(14px) scale(.992); }
+  to { transform: translateY(0) scale(1); }
 }
 
 @keyframes marketing-float {
@@ -353,41 +483,87 @@
 }
 
 @keyframes marketing-section-in {
-  from { transform: translateY(24px); }
-  to { transform: translateY(0); }
+  from { transform: translateY(28px) scale(.985); }
+  to { transform: translateY(0) scale(1); }
 }
 
-.marketing-hero-copy { animation: marketing-hero-in 700ms cubic-bezier(.22,1,.36,1) 80ms both; }
-.marketing-float { animation: marketing-hero-in 760ms cubic-bezier(.22,1,.36,1) 180ms both, marketing-float 8s ease-in-out 1s infinite; }
-.marketing-card,
-.marketing-product-frame {
-  transition: transform 240ms ease, box-shadow 240ms ease, border-color 240ms ease;
+@keyframes marketing-edge-draw {
+  from { opacity: .15; transform: scaleX(0); }
+  to { opacity: .45; transform: scaleX(1); }
 }
-.marketing-card:hover { transform: translateY(-4px); box-shadow: 0 24px 50px -38px rgb(8 65 77 / 48%); }
-.marketing-product-frame:hover { transform: translateY(-3px); box-shadow: 0 38px 86px -44px rgb(4 47 60 / 58%); }
+
+@keyframes marketing-frame-parallax {
+  from { transform: translateY(10px) scale(1.012); }
+  to { transform: translateY(-10px) scale(1.012); }
+}
+
+.marketing-hero-eyebrow,
+.marketing-hero-title,
+.marketing-hero-body,
+.marketing-hero-actions,
+.marketing-hero-assurances {
+  animation: marketing-hero-step-in 680ms var(--m-motion-spring) both;
+}
+.marketing-hero-eyebrow { animation-delay: 60ms; }
+.marketing-hero-title { animation-delay: 130ms; }
+.marketing-hero-body { animation-delay: 205ms; }
+.marketing-hero-actions { animation-delay: 280ms; }
+.marketing-hero-assurances { animation-delay: 355ms; }
+.marketing-float { animation: marketing-float 9s ease-in-out 4s infinite; }
+.marketing-card,
+.marketing-product-frame,
+.marketing-cta {
+  transition: transform 280ms var(--m-motion-ease), box-shadow 280ms var(--m-motion-ease), border-color 280ms var(--m-motion-ease), background-color 280ms var(--m-motion-ease);
+}
+.marketing-card:hover { transform: translateY(-5px) scale(1.006); box-shadow: 0 26px 54px -38px rgb(8 65 77 / 52%); }
+.marketing-product-frame:hover { transform: translateY(-4px) scale(1.004); box-shadow: 0 40px 90px -44px rgb(4 47 60 / 60%); }
+.marketing-cta:hover { transform: translateY(-2px) scale(1.01); }
+.marketing-cta:active { transform: translateY(0) scale(.985); }
 
 @supports (animation-timeline: view()) {
   .marketing-scroll-reveal {
     animation: marketing-section-in linear both;
     animation-timeline: view();
-    animation-range: entry 8% cover 28%;
+    animation-range: entry 6% cover 30%;
+  }
+
+  .marketing-section-label::after {
+    animation: marketing-edge-draw linear both;
+    animation-timeline: view();
+    animation-range: entry 8% cover 24%;
+  }
+
+  .marketing-scroll-reveal .marketing-product-frame > picture {
+    display: block;
+    animation: marketing-frame-parallax linear both;
+    animation-timeline: view();
+    animation-range: entry 0% exit 100%;
   }
 }
 
 @media (max-width: 767px) {
-  .marketing-hero-copy,
   .marketing-float { animation: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .marketing-page { scroll-behavior: auto; }
   .marketing-hero-copy,
+  .marketing-hero-eyebrow,
+  .marketing-hero-title,
+  .marketing-hero-body,
+  .marketing-hero-actions,
+  .marketing-hero-assurances,
   .marketing-float,
-  .marketing-scroll-reveal { animation: none; }
+  .marketing-scroll-reveal,
+  .marketing-section-label::after,
+  .marketing-scroll-reveal .marketing-product-frame > picture { animation: none; }
   .marketing-card,
-  .marketing-product-frame { transition: none; }
+  .marketing-product-frame,
+  .marketing-cta { transition: none; }
   .marketing-card:hover,
-  .marketing-product-frame:hover { transform: none; }
+  .marketing-product-frame:hover,
+  .marketing-cta:hover,
+  .marketing-cta:active { transform: none; }
 }
 
 .auth-right-panel {
@@ -398,6 +574,21 @@
 .dark .auth-right-panel {
   background:
     radial-gradient(ellipse 90% 60% at top, oklch(0.24 0.04 220) 0%, var(--background) 60%);
+}
+
+/* Portaled toasts live outside route scopes, so mirror the active forced surface. */
+body:has(.forced-light-scope) .toaster {
+  color-scheme: light;
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.2 0.06 222);
+  --border: oklch(0.91 0.015 215);
+}
+
+body:has(.forced-dark-scope) .toaster {
+  color-scheme: dark;
+  --popover: oklch(0.22 0.04 228);
+  --popover-foreground: oklch(0.97 0.01 205);
+  --border: oklch(1 0 0 / 10%);
 }
 
 @media (prefers-reduced-motion: reduce) {

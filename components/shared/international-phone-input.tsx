@@ -51,24 +51,23 @@ function CountryCombobox({
       emptyMessage="No country found."
       disabled={disabled}
       triggerClassName="w-[132px] shrink-0 gap-1 px-3"
-      contentClassName="w-[280px]"
+      contentClassName="w-[min(280px,calc(100vw-2rem))]"
       filter={(value, search) =>
         value.toLowerCase().includes(search.toLowerCase()) ? 1 : 0
       }
       renderTrigger={(active) => (
-        <span className="flex min-w-0 items-center gap-1.5">
+        <span className="phone-cc-trigger">
           <span aria-hidden>{active?.flag}</span>
-          <span className="truncate tabular-nums">{active?.dialCode}</span>
+          <span>{active?.dialCode}</span>
         </span>
       )}
       renderItem={(item) => (
-        <>
+        <span className="phone-cc-grid">
           <span aria-hidden>{item.flag}</span>
-          <span className="truncate">{item.name}</span>
-          <span className="ms-auto text-xs tabular-nums text-muted-foreground">
-            {item.dialCode}
-          </span>
-        </>
+          <span>{item.name}</span>
+          <span>{item.code}</span>
+          <span>{item.dialCode}</span>
+        </span>
       )}
     />
   );

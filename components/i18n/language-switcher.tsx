@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Languages } from "lucide-react";
 import { toast } from "sonner";
@@ -45,6 +45,18 @@ export function LanguageSwitcher({
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
 
+  useEffect(() => {
+    if (scope !== "marketing") return;
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("landingLocale")) return;
+    url.searchParams.delete("landingLocale");
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${url.pathname}${url.search}${url.hash}`,
+    );
+  }, [locale, scope]);
+
   function change(next: string) {
     if (next === locale) return;
     const target = next as Locale;
@@ -53,12 +65,14 @@ export function LanguageSwitcher({
       try {
         if (scope === "account") {
           await updateOwnLocale(target);
+          router.refresh();
         } else {
           await setMarketingLocale(target);
+          // Carry the selected landing locale in this single client navigation. The landing page
+          // removes the query parameter after rendering, so a later hard reload has no override and
+          // returns to Arabic, while /login continues reading the durable locale cookie.
+          router.replace(`/?landingLocale=${target}`, { scroll: false });
         }
-        // Re-render the tree: the root layout re-resolves `lang`/`dir` and the font stack from the
-        // new value. No sign-out and no full reload.
-        router.refresh();
         toast.success(labels.updated);
       } catch {
         toast.error(labels.updateFailed);

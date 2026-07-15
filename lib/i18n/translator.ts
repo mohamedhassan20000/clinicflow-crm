@@ -18,4 +18,5 @@
 export type MessageTranslator = {
   (key: string, values?: Record<string, string>): string;
   raw: <T>(key: string) => T;
+  has?: (key: string) => boolean;
 };

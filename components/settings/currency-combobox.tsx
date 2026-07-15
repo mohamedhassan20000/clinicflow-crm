@@ -60,7 +60,10 @@ export function CurrencyCombobox({ value }: { value: string }) {
           <span className="truncate text-center font-medium text-foreground">
             {item.symbol}
           </span>
-          <span className="min-w-0 truncate">{item.currencyName}</span>
+          <span className="min-w-0 truncate">
+            <span className="me-1.5" aria-hidden>{item.flag}</span>
+            {item.currencyName}
+          </span>
           <span className="text-center font-mono text-xs uppercase text-muted-foreground">
             {item.countryCode}
           </span>

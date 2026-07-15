@@ -1,15 +1,281 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+
+async function ensureEnglishLanding(page: Page) {
+  if (await page.locator("html").getAttribute("lang") !== "en") {
+    await page.getByTestId("language-switcher-marketing").click();
+    await page.getByRole("option", { name: "English" }).click();
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+    const closeToast = page.getByRole("button", { name: "Close toast" }).last();
+    if (await closeToast.isVisible()) {
+      await closeToast.click();
+      await expect(closeToast).toBeHidden();
+    }
+  }
+}
+
+async function openEnglishLanding(page: Page) {
+  const response = await page.goto("/");
+  await ensureEnglishLanding(page);
+  return response;
+}
+
+test.beforeEach(async ({ page }, testInfo) => {
+  await page.context().addCookies([
+    {
+      name: "cf_marketing_locale",
+      value: "en",
+      url: testInfo.project.use.baseURL as string,
+    },
+  ]);
+});
+
+test("landing reloads to Arabic while login preserves selected English", async ({ page }) => {
+  await page.context().clearCookies();
+
+  await page.goto("/login");
+  await expect(page.locator("html")).toHaveAttribute("lang", "ar");
+  await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
+  await expect(page.locator(".forced-dark-scope")).toHaveCSS("color-scheme", "dark");
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("lang", "ar");
+  await expect(page.locator(".forced-dark-scope")).toHaveCSS("color-scheme", "dark");
+
+  await page.goto("/");
+  await expect(page.locator("html")).toHaveAttribute("lang", "ar");
+  await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
+  await expect(page.locator("main.marketing-page")).toHaveClass(/\blight\b/);
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("lang", "ar");
+  await expect(page.locator("main.marketing-page")).toHaveClass(/\blight\b/);
+
+  await page.getByTestId("language-switcher-marketing").click();
+  await page.getByRole("option", { name: "English" }).click();
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await expect.poll(() => new URL(page.url()).searchParams.has("landingLocale")).toBe(false);
+  await page.getByRole("link", { name: "Log in" }).first().click();
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
+  await expect(page.locator(".forced-dark-scope")).toHaveCSS("color-scheme", "dark");
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await expect(page.locator(".forced-dark-scope")).toHaveCSS("color-scheme", "dark");
+
+  await Promise.all([
+    page.waitForURL((url) => url.pathname === "/"),
+    page.getByRole("link", { name: "ClinicFlow home" }).filter({ visible: true }).click(),
+  ]);
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await expect.poll(() => new URL(page.url()).searchParams.has("landingLocale")).toBe(false);
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("lang", "ar");
+  await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
+  await expect(page.locator("main.marketing-page")).toHaveClass(/\blight\b/);
+});
 
 test("anonymous root renders the marketing site", async ({ page }) => {
-  const response = await page.goto("/");
+  const response = await openEnglishLanding(page);
   expect(response?.ok()).toBeTruthy();
-  await expect(page.getByRole("heading", { level: 1, name: /a clearer clinic day/i })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /everything you need to manage your clinic/i })).toBeVisible();
   await expect(page.locator("#early-access")).toBeVisible();
   await expect(page.getByRole("link", { name: "Log in" }).first()).toHaveAttribute("href", "/login");
   await expect(page.getByAltText(/administrator dashboard showing daily appointments/i)).toBeVisible();
   await expect(page.getByRole("link", { name: "Privacy Policy" })).toHaveAttribute("href", "/privacy");
   await expect(page.getByRole("link", { name: "Terms of Service" })).toHaveAttribute("href", "/terms");
+  await expect(page.locator(".marketing-hero-eyebrow")).toHaveCount(0);
+  const englishHeroLineHeight = await page.locator(".marketing-hero-title").evaluate((heading) => {
+    const style = getComputedStyle(heading);
+    return Number.parseFloat(style.lineHeight) / Number.parseFloat(style.fontSize);
+  });
+  expect(englishHeroLineHeight).toBeCloseTo(1.25, 1);
+  await expect(page.getByText("4 of 10 clinic spots taken this week").first()).toBeVisible();
+  await expect(page.getByRole("progressbar", { name: "Weekly early-access cohort progress" })).toHaveAttribute("aria-valuenow", "4");
+  await expect(page.getByRole("progressbar", { name: "Weekly early-access cohort progress" })).toHaveAttribute("aria-valuemax", "10");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+});
+
+test("FAQ keeps at most one answer open in both locales", async ({ page }, testInfo) => {
+  for (const locale of ["en", "ar"] as const) {
+    await page.context().addCookies([
+      {
+        name: "cf_marketing_locale",
+        value: locale,
+        url: testInfo.project.use.baseURL as string,
+      },
+    ]);
+    if (locale === "en") {
+      await openEnglishLanding(page);
+    } else {
+      await page.goto("/");
+    }
+
+    const faqItems = page.locator("#faq [data-marketing-faq-item]");
+    await expect(faqItems).toHaveCount(locale === "ar" ? 8 : 9);
+
+    const firstButton = faqItems.nth(0).getByRole("button");
+    const secondButton = faqItems.nth(1).getByRole("button");
+    const firstPanel = faqItems.nth(0).locator("[data-marketing-faq-panel]");
+
+    await firstButton.click();
+    await expect(firstButton).toHaveAttribute("aria-expanded", "true");
+    await expect(firstPanel).toHaveCSS("transition-duration", "0.5s");
+    await expect(page.locator('#faq button[aria-expanded="true"]')).toHaveCount(1);
+
+    await secondButton.click();
+    await expect(firstButton).toHaveAttribute("aria-expanded", "false");
+    await expect(secondButton).toHaveAttribute("aria-expanded", "true");
+    await expect(page.locator('#faq button[aria-expanded="true"]')).toHaveCount(1);
+  }
+});
+
+test("Arabic marketing typography uses only Thmanyah at the intended weights", async ({ page }, testInfo) => {
+  await page.context().addCookies([
+    {
+      name: "cf_marketing_locale",
+      value: "ar",
+      url: testInfo.project.use.baseURL as string,
+    },
+  ]);
+  await page.goto("/");
+  await expect(page.locator("html")).toHaveAttribute("lang", "ar");
+  await page.evaluate(() => document.fonts.ready);
+  await expect(page.getByText("٤ من ١٠ عيادات انضمت إلينا هذا الأسبوع").first()).toBeVisible();
+  await expect(page.getByRole("progressbar", { name: "التقدم الأسبوعي لمجموعة الوصول المبكر" })).toHaveAttribute("aria-valuenow", "4");
+  await expect(page.getByRole("progressbar", { name: "التقدم الأسبوعي لمجموعة الوصول المبكر" })).toHaveAttribute("aria-valuemax", "10");
+  await expect(page.locator(".marketing-hero source")).toHaveAttribute(
+    "srcset",
+    "/marketing/dashboard-ar-mobile.avif",
+  );
+  await expect(page.locator(".marketing-hero img")).toHaveAttribute(
+    "src",
+    /dashboard-ar-desktop\.avif/,
+  );
+
+  const styles = await page.evaluate(() => {
+    const read = (selector: string) => {
+      const element = document.querySelector(selector);
+      if (!(element instanceof HTMLElement)) throw new Error(`Missing typography probe: ${selector}`);
+      const style = getComputedStyle(element);
+      return {
+        family: style.fontFamily,
+        lineHeight: Number.parseFloat(style.lineHeight),
+        size: Number.parseFloat(style.fontSize),
+        weight: Number(style.fontWeight),
+      };
+    };
+
+    return {
+      body: read(".marketing-hero-body"),
+      button: read(".marketing-hero-actions a"),
+      hero: read(".marketing-hero-title"),
+      sectionHeading: read("#product-title"),
+    };
+  });
+
+  for (const style of Object.values(styles)) {
+    expect(style.family.toLowerCase()).toContain("thmanyah");
+    expect(style.family.toLowerCase()).not.toContain("plex");
+  }
+  expect(styles.hero.weight).toBe(700);
+  expect(styles.sectionHeading.weight).toBe(700);
+  expect(styles.button.weight).toBeGreaterThanOrEqual(500);
+  expect(styles.button.weight).toBeLessThanOrEqual(700);
+  expect(styles.body.weight).toBe(400);
+  expect(styles.hero.lineHeight / styles.hero.size).toBeCloseTo(1.4, 1);
+
+  const aiPlanGap = await page.locator("#pricing article").filter({ hasText: "خطة Pro + AI" }).evaluate((card) => {
+    const lastFeature = card.querySelector("li:last-child");
+    const cta = card.querySelector("a");
+    if (!lastFeature || !cta) throw new Error("Arabic AI plan spacing probes are missing");
+    return cta.getBoundingClientRect().top - lastFeature.getBoundingClientRect().bottom;
+  });
+  expect(aiPlanGap).toBeGreaterThanOrEqual(30);
+  const pricingCardHeights = await page.locator("#pricing article").evaluateAll((cards) =>
+    cards.map((card) => card.getBoundingClientRect().height),
+  );
+  expect(Math.max(...pricingCardHeights) - Math.min(...pricingCardHeights)).toBeLessThanOrEqual(1);
+
+  if (process.env.ARABIC_TYPOGRAPHY_VISUALS === "1") {
+    await page.screenshot({
+      path: testInfo.outputPath("arabic-marketing-typography.png"),
+      animations: "disabled",
+      fullPage: true,
+    });
+  }
+});
+
+test("hero descender stays inside ordinary text bounds at every acceptance width and theme", async ({ page }) => {
+  test.setTimeout(90_000);
+  const widths = [320, 360, 390, 430, 768, 1024, 1440, 1920, 2560];
+
+  for (const width of widths) {
+    await page.setViewportSize({ width, height: width < 768 ? 844 : 960 });
+    await openEnglishLanding(page);
+    await page.waitForLoadState("networkidle");
+
+    for (const theme of ["light", "dark"] as const) {
+      if (theme === "dark") {
+        await page.getByRole("button", { name: "Switch marketing pages to dark mode" }).click();
+        await expect(page.locator("main.marketing-page")).toHaveClass(/\bdark\b/);
+      }
+
+      const geometry = await page.locator(".marketing-hero-title .marketing-accent").evaluate((accent) => {
+        const text = accent.firstChild;
+        const heading = accent.closest("h1");
+        if (!(text instanceof Text) || !heading) throw new Error("Hero accent text is missing");
+
+        const yIndex = text.data.lastIndexOf("y");
+        if (yIndex < 0) throw new Error("Hero descender glyph is missing");
+
+        const range = document.createRange();
+        range.setStart(text, yIndex);
+        range.setEnd(text, yIndex + 1);
+
+        const glyphBox = range.getBoundingClientRect();
+        const accentBox = accent.getBoundingClientRect();
+        const headingBox = heading.getBoundingClientRect();
+        const accentStyle = getComputedStyle(accent);
+        const headingStyle = getComputedStyle(heading);
+        const paddingBottom = Number.parseFloat(accentStyle.paddingBlockEnd);
+
+        let nearestClipBottom = Number.POSITIVE_INFINITY;
+        for (let ancestor = accent.parentElement; ancestor; ancestor = ancestor.parentElement) {
+          const style = getComputedStyle(ancestor);
+          if (["hidden", "clip"].includes(style.overflowY)) {
+            nearestClipBottom = Math.min(nearestClipBottom, ancestor.getBoundingClientRect().bottom);
+          }
+        }
+
+        return {
+          accentBottom: accentBox.bottom,
+          backgroundClip: accentStyle.backgroundClip,
+          backgroundImage: accentStyle.backgroundImage,
+          glyphBottom: glyphBox.bottom,
+          glyphLeft: glyphBox.left,
+          glyphRight: glyphBox.right,
+          headingBottom: headingBox.bottom,
+          headingLeft: headingBox.left,
+          headingOverflow: headingStyle.overflow,
+          headingRight: headingBox.right,
+          nearestClipBottom,
+          paddingBottom,
+          textColor: accentStyle.color,
+          textFillColor: accentStyle.webkitTextFillColor,
+        };
+      });
+
+      expect(geometry.backgroundImage).toBe("none");
+      expect(geometry.backgroundClip).toBe("border-box");
+      expect(geometry.textFillColor).toBe(geometry.textColor);
+      expect(geometry.paddingBottom).toBeGreaterThan(0);
+      expect(geometry.headingOverflow).toBe("visible");
+      expect(geometry.glyphLeft).toBeGreaterThanOrEqual(geometry.headingLeft);
+      expect(geometry.glyphRight).toBeLessThanOrEqual(geometry.headingRight);
+      // A Range box is taller than the painted glyph, so keeping the entire range plus the safety
+      // padding inside both boxes proves the visible descender cannot be clipped at block-end.
+      expect(geometry.glyphBottom + geometry.paddingBottom).toBeLessThanOrEqual(geometry.accentBottom + 0.5);
+      expect(geometry.glyphBottom + geometry.paddingBottom).toBeLessThan(geometry.nearestClipBottom);
+    }
+  }
 });
 
 test("marketing layout stays contained and legible at the responsive acceptance widths", async ({ page }, testInfo) => {
@@ -17,13 +283,13 @@ test("marketing layout stays contained and legible at the responsive acceptance 
   const widths = [320, 360, 390, 430, 768, 1024, 1440, 1920, 2560];
 
   await page.setViewportSize({ width: widths[0], height: 844 });
-  await page.goto("/");
+  await openEnglishLanding(page);
   await page.waitForLoadState("networkidle");
 
   for (const width of widths) {
     await page.setViewportSize({ width, height: width < 768 ? 844 : 960 });
     await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
-    await expect(page.getByRole("heading", { level: 1, name: /a clearer clinic day/i })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: /everything you need to manage your clinic/i })).toBeVisible();
 
     const header = page.locator("header").first();
     const headerRow = header.locator(":scope > div");
@@ -180,7 +446,8 @@ test("mobile marketing screenshots remain fully contained at the phone capture s
     await page.waitForLoadState("networkidle");
 
     for (const asset of ["dashboard", "reports"]) {
-      const picture = page.locator(`source[srcset="/marketing/${asset}-mobile.avif"]`).locator("xpath=..");
+      const sourceAsset = `${asset}-ar`;
+      const picture = page.locator(`source[srcset="/marketing/${sourceAsset}-mobile.avif"]`).locator("xpath=..");
       const image = picture.locator("img");
       await image.scrollIntoViewIfNeeded();
       await expect.poll(() => image.evaluate((element) => {
@@ -201,7 +468,7 @@ test("mobile marketing screenshots remain fully contained at the phone capture s
           objectFit: getComputedStyle(rendered).objectFit,
         };
       });
-      expect(geometry.currentSrc).toContain(`/marketing/${asset}-mobile.avif`);
+      expect(geometry.currentSrc).toContain(`/marketing/${sourceAsset}-mobile.avif`);
       expect(geometry.naturalWidth).toBe(390);
       expect(geometry.naturalHeight).toBe(844);
       expect(geometry.left).toBeGreaterThanOrEqual(0);
@@ -216,7 +483,7 @@ test("mobile marketing screenshots remain fully contained at the phone capture s
 
 test("landing-page back-to-top control is accessible and returns focus users to the top", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/");
+  await openEnglishLanding(page);
 
   const backToTop = page.getByRole("button", { name: "Back to top", includeHidden: true });
   await expect(backToTop).toBeHidden();
@@ -240,11 +507,12 @@ test("landing-page back-to-top control is accessible and returns focus users to 
 
 test("MP5 calling-code columns stay aligned on a 320px light surface", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 800 });
-  await page.goto("/");
+  await openEnglishLanding(page);
   await page.context().addCookies([
     { name: "theme", value: "dark", url: new URL(page.url()).origin },
   ]);
   await page.reload();
+  await ensureEnglishLanding(page);
 
   const earlyAccessButton = page
     .getByRole("button", { name: "Request early access" })
@@ -306,7 +574,7 @@ test("MP5 calling-code columns stay aligned on a 320px light surface", async ({ 
 test("marketing logo stays unbadged and aligned on both backgrounds", async ({ page }) => {
   for (const width of [320, 360, 768, 1024, 1440]) {
     await page.setViewportSize({ width, height: 960 });
-    await page.goto("/");
+    await openEnglishLanding(page);
 
     const logos = page.getByRole("link", { name: "ClinicFlow home" });
     await expect(logos).toHaveCount(2);
@@ -349,7 +617,7 @@ test("marketing logo stays unbadged and aligned on both backgrounds", async ({ p
 
 test("marketing page honors reduced motion", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.goto("/");
+  await openEnglishLanding(page);
 
   await expect(page.locator(".marketing-float")).toHaveCSS("animation-name", "none");
   await expect(page.locator(".marketing-card").first()).toHaveCSS("transition-duration", "0s");
@@ -358,14 +626,15 @@ test("marketing page honors reduced motion", async ({ page }) => {
 });
 
 test("marketing and legal pages default light and toggle independently of the dashboard cookie", async ({ page }) => {
-  await page.goto("/");
+  await openEnglishLanding(page);
   await page.context().addCookies([{ name: "theme", value: "dark", url: new URL(page.url()).origin }]);
   await page.reload();
+  await ensureEnglishLanding(page);
 
   await expect(page.locator("html")).toHaveClass(/dark/);
   await expect(page.locator("main.marketing-page")).toHaveClass(/\blight\b/);
   await expect(page.locator("main.marketing-page")).toHaveCSS("color-scheme", "light");
-  await expect(page.getByRole("heading", { level: 1, name: /a clearer clinic day/i })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /everything you need to manage your clinic/i })).toBeVisible();
 
   await page.getByRole("button", { name: "Switch marketing pages to dark mode" }).click();
   await expect(page.locator("main.marketing-page")).toHaveClass(/\bdark\b/);
@@ -378,18 +647,20 @@ test("marketing and legal pages default light and toggle independently of the da
   await expect(page.locator("main.marketing-page")).toHaveCSS("color-scheme", "light");
 });
 
-test("marketing legal placeholders carry the legal-review notice", async ({ page }) => {
+test("marketing legal pages carry their document-specific notices", async ({ page }) => {
   await page.goto("/privacy");
   await expect(page.getByRole("heading", { level: 1, name: "Privacy Policy" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Pending legal review" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "About ClinicFlow’s role" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Pending legal review" })).toHaveCount(0);
   await page.goto("/terms");
   await expect(page.getByRole("heading", { level: 1, name: "Terms of Service" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Pending legal review" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Service limits and clinical responsibility" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Pending legal review" })).toHaveCount(0);
 });
 
 test("mobile marketing navigation is keyboard accessible", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/");
+  await openEnglishLanding(page);
 
   const menu = page.getByRole("button", { name: "Open navigation menu" });
   await menu.focus();
@@ -408,6 +679,7 @@ test("login page renders brand and form", async ({ page }) => {
   await expect(page.getByLabel(/email/i)).toBeVisible();
   await expect(page.locator('input[type="password"]')).toBeVisible();
   await expect(page.getByRole("button", { name: /sign in/i })).toBeVisible();
+  await expect(page.locator("aside .pulse-dot")).toHaveCount(0);
 });
 
 test("the login brand lockup opens the marketing landing page", async ({ page }) => {
@@ -422,7 +694,7 @@ test("the login brand lockup opens the marketing landing page", async ({ page })
     await lockup.click();
     await page.waitForURL("**/");
     expect(new URL(page.url()).pathname).toBe("/");
-    await expect(page.getByRole("heading", { level: 1, name: /a clearer clinic day/i })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: /everything you need to manage your clinic/i })).toBeVisible();
   }
 });
 

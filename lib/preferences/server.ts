@@ -38,7 +38,7 @@ export const loadUiPreferences = cache(async (): Promise<UiPreferences | null> =
   };
 });
 
-/** The active UI language for this request. Authenticated: stored row -> 'en'. Anonymous: marketing cookie -> 'en'. */
+/** The active UI language for this request. Authenticated: stored row -> 'en'. Anonymous: marketing cookie -> 'ar'. */
 export async function resolveLocale(): Promise<Locale> {
   const [preferences, cookieStore] = await Promise.all([loadUiPreferences(), cookies()]);
   return resolveLocaleFrom({

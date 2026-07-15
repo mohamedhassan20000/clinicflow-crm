@@ -40,15 +40,20 @@ describe("P2A typography — Thmanyah mapping (§4.3)", () => {
     expect(css).toContain("--font-sans: var(--font-manrope)");
   });
 
-  it("applies the Arabic stack only under lang=ar, so English renders unchanged", () => {
+  it("uses only Thmanyah for Arabic while leaving English unchanged", () => {
     expect(css).toContain('html[lang="ar"]');
-    expect(css).toContain(
-      '--font-sans: var(--font-thmanyah), var(--font-plex-arabic), "Segoe UI", system-ui, sans-serif;',
-    );
-    // The fallback tier from §4.3 is present and ordered after the licensed face.
-    expect(fonts).toContain("IBM_Plex_Sans_Arabic");
-    expect(css.indexOf("var(--font-thmanyah)")).toBeLessThan(
-      css.indexOf("var(--font-plex-arabic)"),
-    );
+    for (const role of ["sans", "heading", "display", "mono"]) {
+      expect(css).toContain(`--font-${role}: var(--font-thmanyah), sans-serif;`);
+    }
+    expect(fonts).not.toContain("IBM_Plex_Sans_Arabic");
+    expect(css).not.toContain("--font-plex-arabic");
+  });
+
+  it("maps Arabic roles to the shipped premium weights", () => {
+    expect(css).toMatch(/html\[lang="ar"\] :is\(h1, h2, h3, h4, h5, h6\)[\s\S]*?font-weight: 700/);
+    expect(css).toMatch(/html\[lang="ar"\] :is\(button, label, \[role="button"\]\)[\s\S]*?font-weight: 500/);
+    expect(css).toContain(".font-medium:not(:is(h1, h2, h3, h4, h5, h6))");
+    expect(css).toMatch(/html\[lang="ar"\] \.font-medium[\s\S]*?font-weight: 500/);
+    expect(css).toMatch(/html\[lang="ar"\] \.marketing-hero-title[\s\S]*?font-weight: 700/);
   });
 });

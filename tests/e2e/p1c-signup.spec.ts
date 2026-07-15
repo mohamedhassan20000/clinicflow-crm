@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
 
@@ -21,7 +21,24 @@ let expiredSessionRequestId: string | null = null;
 let userId: string | null = null;
 let clinicId: string | null = null;
 
+async function ensureEnglishMarketing(page: Page) {
+  if (await page.locator("html").getAttribute("lang") === "en") return;
+  await page.getByTestId("language-switcher-marketing").click();
+  await page.getByRole("option", { name: "English" }).click();
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+}
+
 test.describe.configure({ mode: "serial" });
+
+test.beforeEach(async ({ page }, testInfo) => {
+  await page.context().addCookies([
+    {
+      name: "cf_marketing_locale",
+      value: "en",
+      url: testInfo.project.use.baseURL as string,
+    },
+  ]);
+});
 
 test.afterAll(async () => {
   if (userId) {
@@ -39,6 +56,7 @@ test("request → issued invite → verified signup → onboarding → dashboard
 
   await page.goto("/early-access");
   await expect(page).toHaveURL(/\/#early-access$/);
+  await ensureEnglishMarketing(page);
   await page.getByRole("button", { name: "Request an invitation" }).click();
   await page.getByLabel("Clinic name").fill(`P1C E2E Clinic ${suffix}`);
   await page.getByLabel("Owner name").fill("P1C E2E Owner");
@@ -80,7 +98,11 @@ test("request → issued invite → verified signup → onboarding → dashboard
     if (confirmation.error) throw confirmation.error;
   }
 
+  const publicOrigin = new URL(page.url()).origin;
   await page.context().clearCookies();
+  await page.context().addCookies([
+    { name: "cf_marketing_locale", value: "en", url: publicOrigin },
+  ]);
   await page.goto("/login");
   await page.getByLabel(/email/i).fill(email);
   await page.locator('input[type="password"]').fill(password);
@@ -108,6 +130,7 @@ test("expired-subscription user can submit the public root dialog", async ({ pag
   if (expired.error) throw expired.error;
 
   await page.goto("/");
+  await ensureEnglishMarketing(page);
   await page.waitForLoadState("networkidle");
   const requestInvitation = page.getByRole("button", {
     name: "Request an invitation",

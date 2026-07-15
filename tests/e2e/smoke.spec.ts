@@ -442,6 +442,16 @@ test.beforeAll(async () => {
   await seedSmokeData();
 });
 
+test.beforeEach(async ({ page }, testInfo) => {
+  await page.context().addCookies([
+    {
+      name: "cf_marketing_locale",
+      value: "en",
+      url: testInfo.project.use.baseURL as string,
+    },
+  ]);
+});
+
 test.afterAll(async () => {
   await cleanup();
   await deleteAuthUsers();
@@ -481,11 +491,11 @@ test("dashboard shell renders on a deep protected page and signs out", async ({ 
     expect(brandBox, "sidebar brand-row bounding box").not.toBeNull();
     expect(headerBox, "dashboard header bounding box").not.toBeNull();
     expect(Math.abs((brandBox!.y + brandBox!.height) - (headerBox!.y + headerBox!.height))).toBeLessThan(0.1);
-    const [brandBorder, headerBorder] = await Promise.all([
+    const [brandBorder, sidebarBorder] = await Promise.all([
       brandRow.evaluate((element) => getComputedStyle(element).borderBottomColor),
-      header.evaluate((element) => getComputedStyle(element).borderBottomColor),
+      sidebar.evaluate((element) => getComputedStyle(element).borderInlineEndColor),
     ]);
-    expect(brandBorder).toBe(headerBorder);
+    expect(brandBorder).toBe(sidebarBorder);
   };
 
   await expect(toggle).toBeVisible();
@@ -1249,8 +1259,6 @@ test("P2A: the language switcher really switches, and one account's language rea
 test("P2A: the anonymous marketing locale is independent of every account", async ({ page, browser }) => {
   // An anonymous visitor reads the marketing site in Arabic...
   await page.goto("/");
-  await page.getByTestId("language-switcher-marketing").click();
-  await page.getByRole("option", { name: "العربية" }).click();
   await expect(page.locator("html")).toHaveAttribute("lang", "ar");
   await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
 
@@ -1264,7 +1272,7 @@ test("P2A: the anonymous marketing locale is independent of every account", asyn
   const anonContext = await browser.newContext();
   const anonPage = await anonContext.newPage();
   await anonPage.goto("/");
-  await expect(anonPage.locator("html")).toHaveAttribute("lang", "en"); // a fresh browser has no cookie
+  await expect(anonPage.locator("html")).toHaveAttribute("lang", "ar"); // a fresh browser has no cookie
   await anonContext.close();
 });
 
@@ -1284,12 +1292,13 @@ async function setAccountLocale(page: Page, locale: "en" | "ar") {
   await page.getByTestId("language-switcher-account").click();
   await page.getByRole("option", { name: locale === "ar" ? "العربية" : "English" }).click();
   await expect(page.locator("html")).toHaveAttribute("lang", locale);
+  await expect(page.locator('[data-sonner-toast][data-type="error"]')).toHaveCount(0);
 }
 
 /** The five highest-traffic clinic surfaces (§8, P2B "spot-check RTL rendering"). */
 const RTL_PAGES = ["/dashboard", "/patients", "/appointments", "/settings/staff", "/revenue"] as const;
 
-test("P2C: Arabic locale renders translated staff copy and keeps the authenticated session", async ({ page }) => {
+test("P2C: Arabic locale renders translated staff copy and keeps the authenticated session", async ({ page }, testInfo) => {
   await login(page, emails.receptionist);
   await setAccountLocale(page, "ar");
   await page.goto("/dashboard");
@@ -1298,6 +1307,40 @@ test("P2C: Arabic locale renders translated staff copy and keeps the authenticat
   await expect(page.getByText("حجز موعد", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Book appointment", { exact: true })).toHaveCount(0);
   await expect(page.getByTestId("dashboard-sidebar")).toBeVisible();
+
+  await page.evaluate(() => document.fonts.ready);
+  const typography = await page.evaluate(() => {
+    const heading = document.querySelector("main h1");
+    const action = Array.from(document.querySelectorAll("a, button")).find(
+      (element) => element.textContent?.trim() === "حجز موعد",
+    );
+    if (!(heading instanceof HTMLElement) || !(action instanceof HTMLElement)) {
+      throw new Error("Arabic dashboard typography probes are missing");
+    }
+    const headingStyle = getComputedStyle(heading);
+    const actionStyle = getComputedStyle(action);
+    return {
+      actionFamily: actionStyle.fontFamily,
+      actionWeight: Number(actionStyle.fontWeight),
+      headingFamily: headingStyle.fontFamily,
+      headingWeight: Number(headingStyle.fontWeight),
+    };
+  });
+  expect(typography.headingFamily.toLowerCase()).toContain("thmanyah");
+  expect(typography.actionFamily.toLowerCase()).toContain("thmanyah");
+  expect(typography.headingFamily.toLowerCase()).not.toContain("plex");
+  expect(typography.actionFamily.toLowerCase()).not.toContain("plex");
+  expect(typography.headingWeight).toBe(700);
+  expect(typography.actionWeight).toBeGreaterThanOrEqual(500);
+  expect(typography.actionWeight).toBeLessThanOrEqual(700);
+
+  if (process.env.ARABIC_TYPOGRAPHY_VISUALS === "1") {
+    await page.screenshot({
+      path: testInfo.outputPath("arabic-dashboard-typography.png"),
+      animations: "disabled",
+      fullPage: true,
+    });
+  }
 
   await setAccountLocale(page, "en");
   await page.goto("/dashboard");
@@ -1454,6 +1497,8 @@ test("P2B: the mobile nav drawer opens from the inline start in both directions"
 
 test("P2B: the marketing site is direction-safe for an anonymous visitor", async ({ page }) => {
   await page.goto("/");
+  await page.getByTestId("language-switcher-marketing").click();
+  await page.getByRole("option", { name: "English" }).click();
   await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
   const ltrOverflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,

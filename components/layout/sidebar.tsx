@@ -85,7 +85,7 @@ export function Sidebar({
         mode === "sidebar" && (isCollapsed ? "w-20" : "w-72"),
       )}
     >
-      <div data-testid="sidebar-brand-row" className="flex h-[var(--shell-header-h)] shrink-0 border-b border-border">
+      <div data-testid="sidebar-brand-row" className="flex h-[var(--shell-header-h)] shrink-0 border-b border-sidebar-border">
         {mode === "sidebar" ? (
           <button
             type="button"

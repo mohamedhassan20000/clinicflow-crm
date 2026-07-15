@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/server";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("marketing");
+  const socialImage = "/marketing/dashboard-ar-desktop.avif";
   return {
     metadataBase: new URL(MARKETING_SITE_URL),
     title: t("seo.title"),
@@ -22,7 +23,7 @@ export async function generateMetadata(): Promise<Metadata> {
       title: t("seo.socialTitle"),
       description: t("seo.socialDescription"),
       images: [{
-        url: "/marketing/dashboard-desktop.avif",
+        url: socialImage,
         width: 1440,
         height: 960,
         alt: t("seo.imageAlt"),
@@ -32,7 +33,7 @@ export async function generateMetadata(): Promise<Metadata> {
       card: "summary_large_image",
       title: t("seo.socialTitle"),
       description: t("seo.twitterDescription"),
-      images: ["/marketing/dashboard-desktop.avif"],
+      images: [socialImage],
     },
   };
 }

@@ -1,8 +1,9 @@
 /**
  * P2A — i18n configuration (AI_AGENT_PLAN.md §4, §4.1).
  *
- * English is the default language everywhere: marketing, login, new clinic users, and new platform
- * admins. Arabic is the second supported locale.
+ * Arabic is the default for anonymous/public surfaces. Signed-in accounts with no saved preference
+ * retain the English application default, so changing the public first impression does not silently
+ * change a user's dashboard language.
  *
  * Isomorphic on purpose — imported by both server resolution and client switchers, so it must not
  * pull in `server-only`.
@@ -13,6 +14,7 @@ export const LOCALES = ["en", "ar"] as const;
 export type Locale = (typeof LOCALES)[number];
 
 export const DEFAULT_LOCALE: Locale = "en";
+export const ANONYMOUS_DEFAULT_LOCALE: Locale = "ar";
 
 /**
  * The anonymous/marketing locale cookie. It is deliberately NOT the source of an authenticated

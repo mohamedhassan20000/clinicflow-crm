@@ -47,6 +47,7 @@ describe("shared searchable combobox consumers", () => {
       "grid-cols-[2.75rem_minmax(0,1fr)_2.5rem_3.25rem]",
     );
     expect(symbol).toHaveTextContent("$");
+    expect(name).toHaveTextContent("🇺🇸");
     expect(name).toHaveTextContent("US Dollar");
     expect(countryCode).toHaveTextContent("US");
     expect(currencyCode).toHaveTextContent("USD");

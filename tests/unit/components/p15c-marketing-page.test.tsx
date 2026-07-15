@@ -2,18 +2,19 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { MarketingPage } from "@/components/marketing/marketing-page";
+import en from "@/messages/en.json";
 
 describe("WS9 marketing page", () => {
   it("renders the approved information architecture, real brand, and fictional product screens", () => {
     render(<MarketingPage registrationMode="invite_only" weeklyLimit={20} acceptedThisWeek={7} />);
 
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("A clearer clinic day");
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(en.marketing.hero.title.trim());
     for (const id of ["product", "features", "security", "pricing", "early-access", "faq", "contact"]) {
       expect(document.getElementById(id)).toBeTruthy();
     }
     expect(screen.getAllByRole("link", { name: "ClinicFlow home" })).toHaveLength(2);
-    expect(screen.getAllByText("7 of 20 clinic spots taken this week")).toHaveLength(2);
-    expect(screen.getByRole("progressbar", { name: "Weekly early-access cohort progress" })).toHaveAttribute("aria-valuenow", "7");
+    expect(screen.getAllByText("10 of 10 clinic spots taken this week")).toHaveLength(2);
+    expect(screen.getByRole("progressbar", { name: "Weekly early-access cohort progress" })).toHaveAttribute("aria-valuenow", "10");
     expect(screen.getAllByText("Product screens show fictional demo data only.")).toHaveLength(1);
     expect(screen.getByAltText(/administrator dashboard showing daily appointments/i)).toBeInTheDocument();
     expect(screen.getByAltText(/week calendar showing fictional appointments/i)).toBeInTheDocument();

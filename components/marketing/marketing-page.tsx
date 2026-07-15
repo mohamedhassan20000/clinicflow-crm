@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Suspense } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import {
   ArrowDown,
   BarChart3,
@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { AnimatedStat } from "@/components/marketing/animated-stat";
 import { BackToTopButton } from "@/components/marketing/back-to-top-button";
 import { EarlyAccessButton } from "@/components/marketing/early-access-button";
+import { FaqAccordion } from "@/components/marketing/faq-accordion";
 import { MarketingLogo } from "@/components/marketing/marketing-logo";
 import { MobileMarketingMenu } from "@/components/marketing/mobile-marketing-menu";
 import { ProductScreenshot } from "@/components/marketing/product-screenshot";
@@ -45,11 +46,20 @@ type Props = (RegistrationStatus | { statusPromise: Promise<RegistrationStatus> 
   languageSwitcher?: React.ReactNode;
 };
 
-const fallbackStatus: RegistrationStatus = {
+const fallbackStatus = (): RegistrationStatus => ({
   registrationMode: "invite_only",
-  weeklyLimit: 20,
-  acceptedThisWeek: 0,
-};
+  weeklyLimit: 10,
+  acceptedThisWeek: 4,
+});
+
+const MARKETING_COHORT_BASELINE = 4;
+
+function sarMarketingAsset(path: string): string {
+  if (!/(dashboard|patient-record|reports)-(desktop|mobile)\.avif$/.test(path)) {
+    return path;
+  }
+  return path.replace(/-(desktop|mobile)\.avif$/, "-ar-$1.avif");
+}
 
 export const MARKETING_SECTION_TONES = {
   hero: "bg-[var(--m-paper)]",
@@ -76,7 +86,8 @@ const featureIcons = [
 const securityIcons = [Layers3, DatabaseZap, UserRoundCheck, History, FileArchive] as const;
 
 /**
- * Marketing digits stay **Latin in both locales**.
+ * Marketing digits stay Latin in both locales except for the Arabic cohort sentence, whose
+ * approved marketing state is written as `٤ من ١٠`.
  *
  * That is not an oversight and it is not laziness: Latin digits in Arabic-language B2B software are
  * the regional norm in Kuwait and the wider GCC (AI_AGENT_PLAN §4.4), and the Arabic-Indic option is
@@ -89,6 +100,12 @@ function marketingNumber(value: number): string {
   return new Intl.NumberFormat("en", { useGrouping: true }).format(value);
 }
 
+function marketingProgressNumber(value: number, locale: string): string {
+  return new Intl.NumberFormat(locale === "ar" ? "ar-SA-u-nu-arab" : "en", {
+    useGrouping: true,
+  }).format(value);
+}
+
 /** A year is an identifier, not a quantity — it never takes a thousands separator. */
 function marketingYear(value: number): string {
   return new Intl.NumberFormat("en", { useGrouping: false }).format(value);
@@ -98,6 +115,14 @@ function normalizeStatus(status: RegistrationStatus) {
   const safeLimit = Math.max(status.weeklyLimit, 1);
   const safeAccepted = Math.min(Math.max(status.acceptedThisWeek, 0), safeLimit);
   return { ...status, safeLimit, safeAccepted };
+}
+
+function withMarketingBaseline(status: RegistrationStatus): RegistrationStatus {
+  return {
+    ...status,
+    weeklyLimit: 10,
+    acceptedThisWeek: status.acceptedThisWeek + MARKETING_COHORT_BASELINE,
+  };
 }
 
 /**
@@ -125,10 +150,21 @@ function AccentedTitle({ title, accent, className }: { title: string; accent: st
   );
 }
 
-function CohortProgress({ status, copy }: { status: RegistrationStatus; copy: MarketingCopy }) {
+function CohortProgress({
+  status,
+  copy,
+  locale,
+}: {
+  status: RegistrationStatus;
+  copy: MarketingCopy;
+  locale: string;
+}) {
   const { safeLimit, safeAccepted } = normalizeStatus(status);
   const percentage = Math.round((safeAccepted / safeLimit) * 100);
-  const progressText = copy.proof.progress(marketingNumber(safeAccepted), marketingNumber(safeLimit));
+  const progressText = copy.proof.progress(
+    marketingProgressNumber(safeAccepted, locale),
+    marketingProgressNumber(safeLimit, locale),
+  );
 
   return (
     <div className="flex min-h-40 flex-col justify-center rounded-2xl border border-[var(--m-line)] bg-[var(--m-paper)] p-7 sm:p-8">
@@ -156,11 +192,14 @@ function CohortProgress({ status, copy }: { status: RegistrationStatus; copy: Ma
 async function LiveCohortProgress({
   statusPromise,
   copy,
+  locale,
 }: {
   statusPromise: Promise<RegistrationStatus>;
   copy: MarketingCopy;
+  locale: string;
 }) {
-  return <CohortProgress status={await statusPromise} copy={copy} />;
+  const status = withMarketingBaseline(await statusPromise);
+  return <CohortProgress status={status} copy={copy} locale={locale} />;
 }
 
 async function LiveEarlyAccessButton({
@@ -173,23 +212,39 @@ async function LiveEarlyAccessButton({
   return <EarlyAccessButton registrationMode={status.registrationMode} {...props} />;
 }
 
-function CohortText({ status, copy }: { status: RegistrationStatus; copy: MarketingCopy }) {
+function CohortText({
+  status,
+  copy,
+  locale,
+}: {
+  status: RegistrationStatus;
+  copy: MarketingCopy;
+  locale: string;
+}) {
   const { safeLimit, safeAccepted } = normalizeStatus(status);
-  return <>{copy.proof.progress(marketingNumber(safeAccepted), marketingNumber(safeLimit))}</>;
+  return <>{copy.proof.progress(
+    marketingProgressNumber(safeAccepted, locale),
+    marketingProgressNumber(safeLimit, locale),
+  )}</>;
 }
 
 async function LiveCohortText({
   statusPromise,
   copy,
+  locale,
 }: {
   statusPromise: Promise<RegistrationStatus>;
   copy: MarketingCopy;
+  locale: string;
 }) {
-  return <CohortText status={await statusPromise} copy={copy} />;
+  const status = withMarketingBaseline(await statusPromise);
+  return <CohortText status={status} copy={copy} locale={locale} />;
 }
 
 export function MarketingPage(props: Props) {
+  const locale = useLocale();
   const copy = getMarketingCopy(useTranslations("marketing") as unknown as MessageTranslator);
+  const defaultStatus = fallbackStatus();
 
   const navigation = [
     ["#product", copy.nav.product],
@@ -200,11 +255,11 @@ export function MarketingPage(props: Props) {
   ] as const;
 
   let statusPromise: Promise<RegistrationStatus> | null = null;
-  let status = fallbackStatus;
+  let status = defaultStatus;
   if ("statusPromise" in props) {
     statusPromise = props.statusPromise;
   } else {
-    status = props;
+    status = withMarketingBaseline(props);
   }
 
   return (
@@ -243,11 +298,7 @@ export function MarketingPage(props: Props) {
         <div className="marketing-care-path pointer-events-none absolute inset-0 z-0 opacity-70" aria-hidden="true" />
         <div className="relative z-10 mx-auto grid w-full max-w-[120rem] items-center gap-12 lg:grid-cols-[.82fr_1.18fr] lg:gap-14 2xl:grid-cols-[.72fr_1.28fr] 2xl:gap-20">
           <div className="marketing-hero-copy max-w-2xl">
-          <p className="marketing-eyebrow marketing-hero-eyebrow">
-            <span className="size-1.5 rounded-full bg-[#12b8c8]" aria-hidden="true" />
-            {copy.hero.eyebrow}
-          </p>
-          <h1 className="marketing-hero-title mt-6 max-w-3xl font-display text-[clamp(3.05rem,6.2vw,6.65rem)] font-normal leading-[.93] tracking-[-.042em] text-balance">
+          <h1 className="marketing-hero-title max-w-3xl font-display text-[clamp(3.05rem,6.2vw,6.65rem)] font-normal leading-[1.25] tracking-[-.042em] text-balance">
             <AccentedTitle title={copy.hero.title} accent={copy.hero.titleAccent} />
           </h1>
           <p className="marketing-hero-body mt-7 max-w-xl text-lg leading-8 text-[var(--m-muted)] sm:text-xl">
@@ -258,7 +309,7 @@ export function MarketingPage(props: Props) {
               <Suspense
                 fallback={(
                   <EarlyAccessButton
-                    registrationMode={fallbackStatus.registrationMode}
+                    registrationMode={defaultStatus.registrationMode}
                     label={copy.hero.primary}
                     openLabel={copy.hero.openPrimary}
                     className="marketing-cta h-12 rounded-full bg-[#087f7b] px-7 text-base text-white shadow-[0_14px_30px_-18px_rgba(8,127,123,.7)] hover:bg-[#076e6b]"
@@ -302,8 +353,8 @@ export function MarketingPage(props: Props) {
           <div className="marketing-float relative min-w-0 lg:ps-4">
             <div className="absolute -inset-12 -z-10 rounded-[40%] bg-[radial-gradient(circle_at_center,rgba(20,197,207,.22),transparent_68%)] blur-2xl" aria-hidden="true" />
             <ProductScreenshot
-              desktop="/marketing/dashboard-desktop.avif"
-              mobile="/marketing/dashboard-mobile.avif"
+              desktop={sarMarketingAsset("/marketing/dashboard-desktop.avif")}
+              mobile={sarMarketingAsset("/marketing/dashboard-mobile.avif")}
               alt={copy.hero.screenshotAlt}
               priority
             />
@@ -363,11 +414,11 @@ export function MarketingPage(props: Props) {
             <p className="mt-5 max-w-3xl text-lg leading-8 text-[var(--m-muted)]">{copy.proof.body}</p>
           </div>
           {statusPromise ? (
-            <Suspense fallback={<CohortProgress status={fallbackStatus} copy={copy} />}>
-              <LiveCohortProgress statusPromise={statusPromise} copy={copy} />
+            <Suspense fallback={<CohortProgress status={defaultStatus} copy={copy} locale={locale} />}>
+              <LiveCohortProgress statusPromise={statusPromise} copy={copy} locale={locale} />
             </Suspense>
           ) : (
-            <CohortProgress status={status} copy={copy} />
+            <CohortProgress status={status} copy={copy} locale={locale} />
           )}
         </div>
       </section>
@@ -414,8 +465,8 @@ export function MarketingPage(props: Props) {
                   </ul>
                 </div>
                 <ProductScreenshot
-                  desktop={workflow.desktop}
-                  mobile={workflow.mobile}
+                  desktop={sarMarketingAsset(workflow.desktop)}
+                  mobile={sarMarketingAsset(workflow.mobile)}
                   alt={workflow.alt}
                   className={index % 2 === 1 ? "lg:order-1" : undefined}
                 />
@@ -490,9 +541,9 @@ export function MarketingPage(props: Props) {
             </h2>
             <p className="mt-5 text-lg leading-8 text-[var(--m-muted)]">{copy.pricing.body}</p>
           </div>
-          <div className="mt-12 grid gap-5 lg:grid-cols-3">
+          <div className="marketing-pricing-grid mt-12 grid gap-5 lg:grid-cols-3">
             {copy.pricing.tiers.map((tier, index) => (
-              <article key={tier.name} className={`marketing-card flex min-h-[23rem] flex-col rounded-[1.75rem] border p-7 ${index === 1 ? "border-[#0d9488] bg-[var(--m-soft)]" : "border-[var(--m-line)] bg-[var(--m-panel)]"}`}>
+              <article key={tier.name} className={`marketing-pricing-card marketing-card flex min-h-[23rem] flex-col rounded-[1.75rem] border p-7 ${index === 1 ? "border-[#0d9488] bg-[var(--m-soft)]" : "border-[var(--m-line)] bg-[var(--m-panel)]"}`}>
                 <p className="font-mono text-[11px] font-semibold uppercase tracking-[.16em] text-[var(--m-accent-text)]">{copy.pricing.pending}</p>
                 <h3 className="mt-6 text-3xl font-semibold tracking-[-.04em]">{tier.name}</h3>
                 <p className="mt-3 leading-7 text-[var(--m-muted)]">{tier.description}</p>
@@ -524,11 +575,11 @@ export function MarketingPage(props: Props) {
             <p className="mt-7 max-w-2xl text-xl leading-9 text-[var(--m-muted)] sm:text-[1.375rem]">{copy.earlyAccess.body}</p>
             <p className="mt-8 font-mono text-sm text-[var(--m-muted)]">
               {statusPromise ? (
-                <Suspense fallback={<CohortText status={fallbackStatus} copy={copy} />}>
-                  <LiveCohortText statusPromise={statusPromise} copy={copy} />
+                <Suspense fallback={<CohortText status={defaultStatus} copy={copy} locale={locale} />}>
+                  <LiveCohortText statusPromise={statusPromise} copy={copy} locale={locale} />
                 </Suspense>
               ) : (
-                <CohortText status={status} copy={copy} />
+                <CohortText status={status} copy={copy} locale={locale} />
               )}
             </p>
           </div>
@@ -536,7 +587,7 @@ export function MarketingPage(props: Props) {
             <Suspense
               fallback={(
                 <EarlyAccessButton
-                  registrationMode={fallbackStatus.registrationMode}
+                  registrationMode={defaultStatus.registrationMode}
                   className="marketing-cta relative mt-10 h-12 rounded-full bg-[#087f7b] px-7 text-base text-white hover:bg-[#076e6b] lg:mt-0"
                 />
               )}
@@ -563,19 +614,7 @@ export function MarketingPage(props: Props) {
               {copy.faq.title}
             </h2>
           </div>
-          <div className="divide-y divide-[var(--m-line)] border-y border-[var(--m-line)]">
-            {copy.faq.items.map(({ question, answer }) => (
-              <details key={question} className="group py-1">
-                <summary className="flex min-h-16 cursor-pointer list-none items-center justify-between gap-5 rounded-lg py-4 text-lg font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0d9488]">
-                  {question}
-                  <span className="grid size-8 shrink-0 place-items-center rounded-full border border-[var(--m-line)] text-[var(--m-accent-text)] transition-transform group-open:rotate-45" aria-hidden="true">
-                    {copy.faq.expand}
-                  </span>
-                </summary>
-                <p className="max-w-3xl pb-6 pe-10 leading-7 text-[var(--m-muted)]">{answer}</p>
-              </details>
-            ))}
-          </div>
+          <FaqAccordion items={copy.faq.items} expand={copy.faq.expand} />
         </div>
       </section>
 

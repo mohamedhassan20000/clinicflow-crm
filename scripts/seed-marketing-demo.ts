@@ -19,7 +19,7 @@ export const MARKETING_DEMO = {
   patientIds: Array.from({ length: 8 }, (_, index) =>
     `92000000-0000-4000-8000-${String(index + 301).padStart(12, "0")}`,
   ),
-  appointmentIds: Array.from({ length: 12 }, (_, index) =>
+  appointmentIds: Array.from({ length: 18 }, (_, index) =>
     `92000000-0000-4000-8000-${String(index + 401).padStart(12, "0")}`,
   ),
   adminEmail: "ws9-demo-admin@clinicflow.example.invalid",
@@ -29,6 +29,27 @@ export const MARKETING_DEMO = {
   ],
   receptionistEmail: "ws9-demo-reception@clinicflow.example.invalid",
   password: "ClinicFlowDemo123!",
+} as const;
+
+type MarketingDemoMarket = "kw" | "sa";
+
+const MARKET_SETTINGS = {
+  kw: {
+    country: "KW",
+    currency: "KWD",
+    timezone: "Asia/Kuwait",
+    clinicPhone: "+96550000000",
+    patientPhonePrefix: "+9655",
+    patientPhoneDigits: 7,
+  },
+  sa: {
+    country: "SA",
+    currency: "SAR",
+    timezone: "Asia/Riyadh",
+    clinicPhone: "+966500000000",
+    patientPhonePrefix: "+9665",
+    patientPhoneDigits: 8,
+  },
 } as const;
 
 function requireLocalService() {
@@ -59,6 +80,18 @@ function clinicDate(offsetDays = 0) {
 
 function atClinicTime(offsetDays: number, time: string) {
   return `${clinicDate(offsetDays)}T${time}:00+03:00`;
+}
+
+function atPriorClinicMonth(offsetMonths: number, time = "12:00") {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Riyadh",
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(new Date());
+  const year = Number(parts.find((item) => item.type === "year")?.value);
+  const month = Number(parts.find((item) => item.type === "month")?.value);
+  const target = new Date(Date.UTC(year, month - 1 + offsetMonths, 15));
+  return `${target.getUTCFullYear()}-${String(target.getUTCMonth() + 1).padStart(2, "0")}-15T${time}:00+03:00`;
 }
 
 async function assertResult(label: string, result: PromiseLike<{ error: { message: string } | null }>) {
@@ -139,8 +172,9 @@ async function uploadDemoAvatars(
   return { adminAvatarUrl: adminPublicAvatar.publicUrl, patientAvatarPaths };
 }
 
-export async function seedMarketingDemo() {
+export async function seedMarketingDemo(market: MarketingDemoMarket = "kw") {
   const service = requireLocalService();
+  const marketSettings = MARKET_SETTINGS[market];
   const probe = await service.from("clinics").select("id").limit(1);
   if (probe.error) throw new Error(`Local Supabase unavailable: ${probe.error.message}`);
 
@@ -160,12 +194,12 @@ export async function seedMarketingDemo() {
       id: MARKETING_DEMO.clinicId,
       name: "Harbor Family Clinic — Demo",
       address: "Fictional clinic for product screenshots",
-      country: "KW",
-      currency: "KWD",
+      country: marketSettings.country,
+      currency: marketSettings.currency,
       locale: "en",
-      timezone: "Asia/Kuwait",
+      timezone: marketSettings.timezone,
       week_start: 6,
-      phone: "+96550000000",
+      phone: marketSettings.clinicPhone,
       phone_e164_valid: true,
       onboarding_completed_at: new Date().toISOString(),
       working_hours_start: "08:00",
@@ -198,7 +232,7 @@ export async function seedMarketingDemo() {
   await assertResult(
     "Insert profiles",
     service.from("profiles").upsert([
-      { id: adminId, clinic_id: MARKETING_DEMO.clinicId, full_name: "Nadia Faris", role: "admin", must_change_password: false, display_currency: "KWD", avatar_url: adminAvatarUrl },
+      { id: adminId, clinic_id: MARKETING_DEMO.clinicId, full_name: "Nadia Faris", role: "admin", must_change_password: false, display_currency: marketSettings.currency, avatar_url: adminAvatarUrl },
       { id: doctorOneId, clinic_id: MARKETING_DEMO.clinicId, department_id: MARKETING_DEMO.departmentIds[0], full_name: "Dr. Sami Nasser", role: "doctor", must_change_password: false },
       { id: doctorTwoId, clinic_id: MARKETING_DEMO.clinicId, department_id: MARKETING_DEMO.departmentIds[1], full_name: "Dr. Leila Haddad", role: "doctor", must_change_password: false },
       { id: receptionistId, clinic_id: MARKETING_DEMO.clinicId, full_name: "Rana Saleh", role: "receptionist", must_change_password: false },
@@ -253,7 +287,7 @@ export async function seedMarketingDemo() {
     created_by: receptionistId,
     full_name: fullName,
     date_of_birth: `${1985 + index}-0${(index % 8) + 1}-12`,
-    phone: `+9655${String(index + 1).padStart(7, "0")}`,
+    phone: `${marketSettings.patientPhonePrefix}${String(index + 1).padStart(marketSettings.patientPhoneDigits, "0")}`,
     phone_e164_valid: true,
     email: `fictional-patient-${index + 1}@clinicflow.example.invalid`,
     file_number: `DEMO-${String(index + 1).padStart(4, "0")}`,
@@ -266,7 +300,7 @@ export async function seedMarketingDemo() {
   await assertResult("Insert patients", service.from("patients").upsert(patients));
 
   const now = new Date().toISOString();
-  const appointments: TablesInsert<"appointments">[] = [
+  const currentAppointments = [
     [0, 0, "08:30", "confirmed", doctorOneId, 24],
     [1, 0, "09:15", "arrived", doctorTwoId, 32],
     [2, 0, "10:00", "in_session", doctorOneId, 24],
@@ -279,7 +313,19 @@ export async function seedMarketingDemo() {
     [1, -2, "11:30", "completed", doctorTwoId, 2785.25],
     [2, -4, "09:30", "completed", doctorOneId, 3615],
     [3, -7, "15:00", "completed", doctorTwoId, 2940.75],
-  ].map(([patientIndex, offset, time, status, doctorId, amount], index) => {
+  ] as const;
+  const historicalRevenue = [18_250, 21_900, 19_750, 25_600, 28_900, 31_400];
+  const historicalAppointments = market === "sa"
+    ? historicalRevenue.map((amount, index) => ({
+        patientIndex: index % MARKETING_DEMO.patientIds.length,
+        scheduledAt: atPriorClinicMonth(index - 6),
+        paidAt: atPriorClinicMonth(index - 6),
+        doctorId: index % 2 === 0 ? doctorOneId : doctorTwoId,
+        amount,
+      }))
+    : [];
+
+  const currentAppointmentRows: TablesInsert<"appointments">[] = currentAppointments.map(([patientIndex, offset, time, status, doctorId, amount], index): TablesInsert<"appointments"> => {
     const completed = status === "completed";
     const numericPatientIndex = Number(patientIndex);
     const numericAmount = Number(amount);
@@ -309,6 +355,28 @@ export async function seedMarketingDemo() {
       no_show_reason: status === "no_show" ? "Unable to reach patient" : null,
     };
   });
+  const historicalAppointmentRows: TablesInsert<"appointments">[] = historicalAppointments.map((appointment, historicalIndex): TablesInsert<"appointments"> => {
+    const doctorIsOne = appointment.doctorId === doctorOneId;
+    return {
+      id: MARKETING_DEMO.appointmentIds[currentAppointments.length + historicalIndex],
+      clinic_id: MARKETING_DEMO.clinicId,
+      patient_id: MARKETING_DEMO.patientIds[appointment.patientIndex],
+      doctor_id: appointment.doctorId,
+      department_id: doctorIsOne ? MARKETING_DEMO.departmentIds[0] : MARKETING_DEMO.departmentIds[1],
+      service_id: doctorIsOne ? MARKETING_DEMO.serviceIds[0] : MARKETING_DEMO.serviceIds[1],
+      scheduled_at: appointment.scheduledAt,
+      duration_minutes: 30,
+      status: "completed",
+      created_by: receptionistId,
+      notes: "Fictional historical product-demo appointment",
+      total_amount: appointment.amount,
+      paid_amount: appointment.amount,
+      outstanding_amount: 0,
+      payment_method: historicalIndex % 2 === 0 ? "credit_card" : "cash",
+      paid_at: appointment.paidAt,
+    };
+  });
+  const appointments = [...currentAppointmentRows, ...historicalAppointmentRows];
   await assertResult("Insert appointments", service.from("appointments").upsert(appointments));
 
   const completedAppointments = appointments.filter((appointment) => appointment.status === "completed");
@@ -399,7 +467,7 @@ export async function seedMarketingDemo() {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  seedMarketingDemo()
+  seedMarketingDemo(process.env.MARKETING_DEMO_MARKET === "sa" ? "sa" : "kw")
     .then(({ clinicId }) => {
       process.stdout.write(`Seeded local fictional marketing demo clinic ${clinicId}.\n`);
     })

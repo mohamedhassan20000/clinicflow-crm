@@ -238,9 +238,10 @@
     Arabic headings (Arabic letterforms connect — negative tracking damages the joins).
   */
   html[lang="ar"] {
-    --font-sans: var(--font-thmanyah), var(--font-plex-arabic), "Segoe UI", system-ui, sans-serif;
-    --font-heading: var(--font-thmanyah), var(--font-plex-arabic), "Segoe UI", system-ui, sans-serif;
-    --font-display: var(--font-thmanyah), var(--font-plex-arabic), "Segoe UI", system-ui, sans-serif;
+    --font-sans: var(--font-thmanyah), sans-serif;
+    --font-heading: var(--font-thmanyah), sans-serif;
+    --font-display: var(--font-thmanyah), sans-serif;
+    --font-mono: var(--font-thmanyah), sans-serif;
   }
   html[lang="ar"] h1,
   html[lang="ar"] h2,
@@ -250,6 +251,61 @@
   html[lang="ar"] h6 {
     letter-spacing: normal;
   }
+}
+
+/*
+  Arabic type contract. This is deliberately outside Tailwind's cascade layers so locale-specific
+  typography wins over generated font utilities without changing any English class or component.
+  Thmanyah is the sole declared Arabic family; the generic family is only the browser's last-resort
+  glyph fallback.
+*/
+html[lang="ar"] body,
+html[lang="ar"] body :where(*) {
+  font-family: var(--font-thmanyah), sans-serif;
+}
+
+html[lang="ar"] body {
+  font-weight: 400;
+  line-height: 1.65;
+}
+
+html[lang="ar"] :is(h1, h2, h3, h4, h5, h6) {
+  font-weight: 700;
+  line-height: 1.35;
+  letter-spacing: normal;
+}
+
+html[lang="ar"] :is(button, label, [role="button"]) {
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+/* Preserve intentional emphasis while collapsing unsupported or overly thin Arabic utility weights. */
+html[lang="ar"] :is(.font-thin, .font-extralight, .font-light, .font-normal):not(:is(h1, h2, h3, h4, h5, h6)) {
+  font-weight: 400;
+}
+
+html[lang="ar"] .font-medium:not(:is(h1, h2, h3, h4, h5, h6)) {
+  font-weight: 500;
+}
+
+html[lang="ar"] :is(.font-semibold, .font-bold, .font-extrabold, .font-black, strong, b) {
+  font-weight: 700;
+}
+
+html[lang="ar"] .marketing-hero-title {
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: normal;
+}
+
+/* Keep the Arabic pricing row equal-height while retaining the roomier AI-card CTA gap. */
+html[lang="ar"] .marketing-pricing-grid {
+  align-items: stretch;
+}
+
+html[lang="ar"] .marketing-pricing-card {
+  min-height: 25rem;
 }
 
 /* MP5: fixed country-picker rhythm without changing the shared combobox shell. */
@@ -444,7 +500,7 @@
   --m-line-strong: rgb(8 65 77 / 24%);
   --m-motion-ease: cubic-bezier(.2, .8, .2, 1);
   --m-motion-spring: cubic-bezier(.16, 1, .3, 1);
-  font-family: var(--font-manrope), "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  font-family: var(--font-sans);
 }
 
 .marketing-page.dark {
@@ -474,23 +530,6 @@
   mask-image: radial-gradient(ellipse at 62% 44%, black 10%, rgb(0 0 0 / 78%) 60%, rgb(0 0 0 / 50%) 100%);
   opacity: .07;
   pointer-events: none;
-}
-
-.marketing-eyebrow {
-  display: inline-flex;
-  min-height: 2rem;
-  align-items: center;
-  gap: .55rem;
-  border: 1px solid var(--m-line);
-  border-radius: 999px;
-  background: var(--m-panel);
-  padding: .35rem .75rem;
-  color: var(--m-muted);
-  font-family: var(--font-mono);
-  font-size: .68rem;
-  font-weight: 600;
-  letter-spacing: .12em;
-  text-transform: uppercase;
 }
 
 .marketing-section-label {
@@ -550,14 +589,12 @@
   to { transform: translateY(-10px) scale(1.012); }
 }
 
-.marketing-hero-eyebrow,
 .marketing-hero-title,
 .marketing-hero-body,
 .marketing-hero-actions,
 .marketing-hero-assurances {
   animation: marketing-hero-step-in 680ms var(--m-motion-spring) both;
 }
-.marketing-hero-eyebrow { animation-delay: 60ms; }
 .marketing-hero-title { animation-delay: 130ms; }
 .marketing-hero-body { animation-delay: 205ms; }
 .marketing-hero-actions { animation-delay: 280ms; }
@@ -601,7 +638,6 @@
 @media (prefers-reduced-motion: reduce) {
   .marketing-page { scroll-behavior: auto; }
   .marketing-hero-copy,
-  .marketing-hero-eyebrow,
   .marketing-hero-title,
   .marketing-hero-body,
   .marketing-hero-actions,
@@ -648,6 +684,22 @@
 
 .marketing-page.dark .marketing-accent {
   background-image: linear-gradient(to bottom, #8ff3e6 0%, #6ee7dc 55%, #4fd4cd 100%);
+}
+
+/*
+  Keep the hero headline as ordinary editable text. The shared accent treatment uses a transparent
+  text fill plus background clipping, but that non-standard paint path can make the flat terminal
+  of a large Latin descender look cut off. The hero does not need that effect: currentColor follows
+  the existing light/dark accent token, and inline block-end padding gives the glyph paint a safe
+  logical margin without changing line wrapping or layout metrics.
+*/
+.marketing-page .marketing-hero-title .marketing-accent {
+  padding-block-end: 0.08em;
+  color: var(--m-accent-text);
+  background-image: none;
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+  -webkit-text-fill-color: currentcolor;
 }
 
 @supports not (background-clip: text) {

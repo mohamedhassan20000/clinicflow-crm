@@ -1,4 +1,9 @@
-import { DEFAULT_LOCALE, isLocale, type Locale } from "@/lib/i18n/config";
+import {
+  ANONYMOUS_DEFAULT_LOCALE,
+  DEFAULT_LOCALE,
+  isLocale,
+  type Locale,
+} from "@/lib/i18n/config";
 
 export type Theme = "light" | "dark";
 
@@ -6,7 +11,7 @@ export type Theme = "light" | "dark";
  * Locale resolution (AI_AGENT_PLAN.md §4.1 as amended 2026-07-14).
  *
  *   authenticated:  user_ui_preferences.locale -> 'en'
- *   anonymous:      marketing cookie           -> 'en'
+ *   anonymous:      marketing cookie           -> 'ar'
  *
  * There is deliberately **no clinic tier**. `clinics.locale` is formatting metadata only (§13-Q11)
  * and may never resolve a user's UI language — there is no clinic language, ever.
@@ -25,7 +30,9 @@ export function resolveLocaleFrom(input: {
   if (input.isAuthenticated) {
     return isLocale(input.storedLocale) ? input.storedLocale : DEFAULT_LOCALE;
   }
-  return isLocale(input.marketingCookie) ? input.marketingCookie : DEFAULT_LOCALE;
+  return isLocale(input.marketingCookie)
+    ? input.marketingCookie
+    : ANONYMOUS_DEFAULT_LOCALE;
 }
 
 /**

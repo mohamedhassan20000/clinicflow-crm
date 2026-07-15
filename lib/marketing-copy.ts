@@ -78,7 +78,6 @@ export function getMarketingCopy(t: MessageTranslator) {
       earlyAccess: t("nav.earlyAccess"),
     },
     hero: {
-      eyebrow: t("hero.eyebrow"),
       title: t("hero.title"),
       /** The clause the hero sets in the accent face. Must be a literal substring of `hero.title`. */
       titleAccent: t("hero.titleAccent"),
@@ -167,22 +166,26 @@ export function getMarketingCopy(t: MessageTranslator) {
   };
 }
 
-/** The `/privacy` and `/terms` outlines. Still pending professional review — see AI_AGENT_PLAN §3.7. */
+/** Localized legal-page copy. Each locale can carry the legal text appropriate to that surface. */
 export function getLegalCopy(t: MessageTranslator) {
+  const privacyHasDedicatedNotice = t.has?.("privacy.noticeTitle") && t.has("privacy.noticeBody");
+
   return {
     back: t("back"),
-    noticeTitle: t("noticeTitle"),
-    noticeBody: t("noticeBody"),
     privacy: {
       title: t("privacy.title"),
       description: t("privacy.description"),
       updated: t("privacy.updated"),
+      noticeTitle: privacyHasDedicatedNotice ? t("privacy.noticeTitle") : t("noticeTitle"),
+      noticeBody: privacyHasDedicatedNotice ? t("privacy.noticeBody") : t("noticeBody"),
       sections: t.raw<{ title: string; body: string }[]>("privacy.sections"),
     },
     terms: {
       title: t("terms.title"),
       description: t("terms.description"),
       updated: t("terms.updated"),
+      noticeTitle: t("noticeTitle"),
+      noticeBody: t("noticeBody"),
       sections: t.raw<{ title: string; body: string }[]>("terms.sections"),
     },
   };

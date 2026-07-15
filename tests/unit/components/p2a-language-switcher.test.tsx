@@ -5,12 +5,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const updateOwnLocale = vi.fn<(locale: string) => Promise<void>>(async () => {});
 const setMarketingLocale = vi.fn<(locale: string) => Promise<void>>(async () => {});
 const refresh = vi.fn();
+const replace = vi.fn();
 
 vi.mock("@/actions/locale", () => ({
   updateOwnLocale: (locale: string) => updateOwnLocale(locale),
   setMarketingLocale: (locale: string) => setMarketingLocale(locale),
 }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh, replace }) }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 import { LanguageSwitcher } from "@/components/i18n/language-switcher";
@@ -25,6 +26,7 @@ beforeEach(() => {
   updateOwnLocale.mockClear();
   setMarketingLocale.mockClear();
   refresh.mockClear();
+  replace.mockClear();
 });
 
 describe("P2A language switcher (§6.A)", () => {
@@ -58,6 +60,8 @@ describe("P2A language switcher (§6.A)", () => {
 
     expect(setMarketingLocale).toHaveBeenCalledWith("ar");
     expect(updateOwnLocale).not.toHaveBeenCalled();
+    expect(replace).toHaveBeenCalledWith("/?landingLocale=ar", { scroll: false });
+    expect(refresh).not.toHaveBeenCalled();
   });
 
   it("reflects the active locale and does not re-write it when reselected", async () => {

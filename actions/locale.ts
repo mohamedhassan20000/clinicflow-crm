@@ -3,7 +3,11 @@
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { MARKETING_LOCALE_COOKIE, isLocale, type Locale } from "@/lib/i18n/config";
+import {
+  MARKETING_LOCALE_COOKIE,
+  isLocale,
+  type Locale,
+} from "@/lib/i18n/config";
 
 /**
  * P2A — the two locale writes (§4.1, §4.5). They are deliberately separate mechanisms because they

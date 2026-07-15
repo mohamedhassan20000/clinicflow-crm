@@ -11,6 +11,8 @@ const externalBaseUrl = process.env.MARKETING_BASE_URL;
 const baseUrl = externalBaseUrl ?? "http://127.0.0.1:3105";
 const outputDir = resolve("public/marketing");
 const rawDir = resolve(".tmp/marketing-screenshots");
+const assetLocale = process.env.MARKETING_CAPTURE_ASSET_LOCALE;
+const demoMarket = process.env.MARKETING_DEMO_MARKET === "kw" ? "kw" : "sa";
 
 const captures = [
   { name: "dashboard", path: "/dashboard" },
@@ -252,7 +254,10 @@ async function captureViewport(
   await page.waitForTimeout(150);
   const avatarRegions = await collectVisibleAvatarRegions(page, name, viewport);
   const rawPath = resolve(rawDir, `${name}-${suffix}.png`);
-  const outputPath = resolve(outputDir, `${name}-${suffix}.avif`);
+  const outputPath = resolve(
+    outputDir,
+    `${name}-${assetLocale ? `${assetLocale}-` : ""}${suffix}.avif`,
+  );
   await page.screenshot({ path: rawPath, fullPage: false, animations: "disabled" });
   await sharp(rawPath)
     .avif({ quality: suffix === "desktop" ? 62 : 58, effort: 6 })
@@ -352,7 +357,9 @@ async function main() {
   );
   const selectedCaptures = captures.filter((capture) => requestedNames.includes(capture.name));
 
-  await seedMarketingDemo();
+  if (process.env.SKIP_MARKETING_SEED !== "1") {
+    await seedMarketingDemo(demoMarket);
+  }
   const server = externalBaseUrl ? null : await startProductionServer();
   await mkdir(outputDir, { recursive: true });
   await rm(rawDir, { recursive: true, force: true });

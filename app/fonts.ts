@@ -1,4 +1,4 @@
-import { Manrope, IBM_Plex_Sans_Arabic } from "next/font/google";
+import { Manrope } from "next/font/google";
 import localFont from "next/font/local";
 
 /**
@@ -37,16 +37,4 @@ export const thmanyah = localFont({
   ],
 });
 
-/**
- * Arabic fallback tier (§4.3): free/OFL, and the metric-compatible degradation target for
- * environments that never receive the licensed face.
- */
-export const plexArabic = IBM_Plex_Sans_Arabic({
-  variable: "--font-plex-arabic",
-  subsets: ["arabic"],
-  display: "swap",
-  weight: ["300", "400", "500", "600", "700"],
-  style: "normal",
-});
-
-export const fontVariables = `${manrope.variable} ${thmanyah.variable} ${plexArabic.variable}`;
+export const fontVariables = `${manrope.variable} ${thmanyah.variable}`;

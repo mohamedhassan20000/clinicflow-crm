@@ -180,16 +180,6 @@ export default function AuthLayout({
 
           {/* Center — hero marketing block */}
           <div className="space-y-9">
-
-            {/* Live status pill */}
-            <span className="inline-flex items-center gap-2 rounded-full border border-white/[0.15] bg-white/[0.07] px-3.5 py-1.5 text-[11px] font-medium tracking-wide text-white/80 backdrop-blur-sm">
-              <span className="relative flex h-1.5 w-1.5 shrink-0">
-                <span className="absolute inset-0 rounded-full bg-emerald-300 opacity-75 pulse-dot" />
-                <span className="relative h-1.5 w-1.5 rounded-full bg-emerald-300" />
-              </span>
-              {t("onlineSecureKvkkReady")}
-            </span>
-
             {/* Headline */}
             <div className="space-y-3">
               <h1

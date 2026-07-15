@@ -49,8 +49,8 @@ export function LegalPage({ document }: { document: "privacy" | "terms" }) {
         >
           <AlertCircle className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
           <div>
-            <h2 id="legal-review-notice" className="text-base font-bold tracking-normal">{legal.noticeTitle}</h2>
-            <p className="mt-1 text-sm leading-6">{legal.noticeBody}</p>
+            <h2 id="legal-review-notice" className="text-base font-bold tracking-normal">{content.noticeTitle}</h2>
+            <p className="mt-1 text-sm leading-6">{content.noticeBody}</p>
           </div>
         </aside>
 

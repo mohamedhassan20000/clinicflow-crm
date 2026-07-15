@@ -11,7 +11,7 @@ exports[`DashboardShell > persists, snapshots, and restores collapsed state 1`] 
       data-testid="dashboard-sidebar"
     >
       <div
-        class="flex h-[var(--shell-header-h)] shrink-0 border-b border-border"
+        class="flex h-[var(--shell-header-h)] shrink-0 border-b border-sidebar-border"
         data-testid="sidebar-brand-row"
       >
         <button
@@ -282,7 +282,7 @@ exports[`DashboardShell > renders the header utilities and expanded navigation 1
       data-testid="dashboard-sidebar"
     >
       <div
-        class="flex h-[var(--shell-header-h)] shrink-0 border-b border-border"
+        class="flex h-[var(--shell-header-h)] shrink-0 border-b border-sidebar-border"
         data-testid="sidebar-brand-row"
       >
         <button

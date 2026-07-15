@@ -53,10 +53,9 @@
       "home": "ClinicFlow home"
     },
     "hero": {
-      "titleAccent": "A clearer clinic day",
+      "titleAccent": "Everything you need to manage your clinic...",
       "assurancesLabel": "ClinicFlow assurances",
-      "eyebrow": "Clinic operations, without the operational noise",
-      "title": "A clearer clinic day, from first booking to final report.",
+      "title": "Everything you need to manage your clinic... in one platform. ",
       "body": "ClinicFlow brings scheduling, patient context, billing, follow-ups, and team workflows into one calm workspace for private clinics.",
       "primary": "Request early access",
       "openPrimary": "Create your clinic",
@@ -307,73 +306,6 @@
       "copyright": "© {year} ClinicFlow"
     },
     "backToTop": "Back to top",
-    "legal": {
-      "back": "Back to ClinicFlow",
-      "noticeTitle": "Pending legal review",
-      "noticeBody": "This page is a product-stage outline, not final legal text. It describes current intent only and does not create definitive commitments, retention periods, certifications, or contractual terms.",
-      "privacy": {
-        "title": "Privacy Policy",
-        "description": "A plain-language outline of ClinicFlow’s intended data-handling approach.",
-        "updated": "Draft outline — July 2026",
-        "sections": [
-          {
-            "title": "Purpose and scope",
-            "body": "The final policy is intended to explain what information ClinicFlow processes when clinics evaluate or use the service, why it is needed, and which parties are involved."
-          },
-          {
-            "title": "Early-access requests",
-            "body": "Early-access requests currently ask for clinic and owner contact details so the team can review and respond to the request. The final policy will describe the lawful basis and handling period after legal review."
-          },
-          {
-            "title": "Clinic data and access",
-            "body": "The product is designed around tenant isolation, database row-level security, and role-based access. Clinic administrators control staff access within their clinic."
-          },
-          {
-            "title": "Service providers and locations",
-            "body": "The final policy will identify approved infrastructure and service providers, processing locations, and any required transfer safeguards before real clinic data is onboarded in a market."
-          },
-          {
-            "title": "Choices and requests",
-            "body": "Clinic administrators have a guarded data-export workflow. Final access, correction, deletion, and contact procedures remain subject to legal and operational review."
-          },
-          {
-            "title": "Contact",
-            "body": "Questions about this draft or the upcoming final policy can be sent to hello@clinicflow.app."
-          }
-        ]
-      },
-      "terms": {
-        "title": "Terms of Service",
-        "description": "A non-binding outline of topics planned for ClinicFlow’s service terms.",
-        "updated": "Draft outline — July 2026",
-        "sections": [
-          {
-            "title": "Service overview",
-            "body": "The final terms are intended to describe access to ClinicFlow’s clinic-operations software, supported features, account responsibilities, and service boundaries."
-          },
-          {
-            "title": "Early-access stage",
-            "body": "ClinicFlow is currently onboarding a limited cohort. Product behavior, availability, and plan structure may continue to evolve before general availability."
-          },
-          {
-            "title": "Clinic responsibilities",
-            "body": "Final terms are expected to address authorized users, accurate account information, lawful handling of clinic and patient data, and responsible use of the service."
-          },
-          {
-            "title": "Plans and payment",
-            "body": "Prices, billing arrangements, renewal rules, and cancellation terms have not been finalized and are not stated or implied by this outline."
-          },
-          {
-            "title": "Availability and changes",
-            "body": "Any final commitments about uptime, support, warranties, liability, or service changes will be added only after professional legal and commercial review."
-          },
-          {
-            "title": "Contact",
-            "body": "Questions about this draft or the upcoming final terms can be sent to hello@clinicflow.app."
-          }
-        ]
-      }
-    },
     "seo": {
       "title": "ClinicFlow — A clearer operating system for private clinics",
       "description": "Run appointments, patient records, billing, follow-ups, reports, and clinic operations from one calm, role-aware workspace.",
@@ -395,67 +327,205 @@
   },
   "legal": {
     "back": "Back to ClinicFlow",
-    "noticeTitle": "Pending legal review",
-    "noticeBody": "This page is a product-stage outline, not final legal text. It describes current intent only and does not create definitive commitments, retention periods, certifications, or contractual terms.",
+    "noticeTitle": "Service limits and clinical responsibility",
+    "noticeBody": "ClinicFlow is clinic-management software. It is not a healthcare provider and does not diagnose patients or make medical decisions. Healthcare professionals and clinics remain responsible for clinical assessment, treatment decisions, and patient care.",
     "privacy": {
       "title": "Privacy Policy",
-      "description": "A plain-language outline of ClinicFlow’s intended data-handling approach.",
-      "updated": "Draft outline — July 2026",
+      "description": "This policy explains the data ClinicFlow processes, why it is used, who may access it, and the choices available to clinics, users, and people whose patient data is recorded.",
+      "updated": "Last updated: July 15, 2026",
       "sections": [
         {
-          "title": "Purpose and scope",
-          "body": "The final policy is intended to explain what information ClinicFlow processes when clinics evaluate or use the service, why it is needed, and which parties are involved."
+          "title": "Scope of this policy",
+          "body": "This policy describes how ClinicFlow handles data when someone visits the public website, requests access, creates a clinic, or uses a clinic workspace. The service supports clinic staff accounts, patient records, appointments, medical notes, follow-ups, operational billing, reports, and files. This policy does not cover a clinic’s activities outside ClinicFlow or independent services that a clinic connects to outside the application."
         },
         {
-          "title": "Early-access requests",
-          "body": "Early-access requests currently ask for clinic and owner contact details so the team can review and respond to the request. The final policy will describe the lawful basis and handling period after legal review."
+          "title": "Roles and responsibilities",
+          "body": "When a clinic enters patient or staff data and determines how that data is used and who may access it, ClinicFlow acts as a service provider that processes the data for the clinic and on its instructions. The clinic remains responsible for lawfully collecting patient records, keeping them accurate, giving required notices, and deciding who may view them. ClinicFlow determines the purposes of processing for public-site visitor data, access requests, user account administration, and platform security to the extent necessary to operate the service. This policy does not determine ownership of medical records, which depends on applicable law and the relationship between the clinic and the patient."
         },
         {
-          "title": "Clinic data and access",
-          "body": "The product is designed around tenant isolation, database row-level security, and role-based access. Clinic administrators control staff access within their clinic."
+          "title": "Visitor and access-request data",
+          "body": "The access-request form collects the clinic name, the name of the owner or responsible contact, a telephone number, and an email address. The system uses the Internet Protocol address associated with a request to rate-limit login attempts, password-recovery requests, access requests, and clinic creation; when the rate-limiting service is configured, this identifier is sent to that service. Clinic invitations include a hashed token, invitation status, issue and expiry dates, acceptance or cancellation details, and an email-delivery record."
         },
         {
-          "title": "Service providers and locations",
-          "body": "The final policy will identify approved infrastructure and service providers, processing locations, and any required transfer safeguards before real clinic data is onboarded in a market."
+          "title": "Account and user data",
+          "body": "The service processes email addresses and authentication data through Supabase Auth, together with a user’s name, telephone number, job role, department, account status, last login time, and preferences for language, appearance, and display currency. Clinic administrators and managers can create staff accounts, assign roles, suspend or delete accounts, and upload a profile image, contract, certificate, or employment document. Application components do not store passwords as plain text in clinic database tables; credentials and sessions are managed by Supabase Auth."
         },
         {
-          "title": "Choices and requests",
-          "body": "Clinic administrators have a guarded data-export workflow. Final access, correction, deletion, and contact procedures remain subject to legal and operational review."
+          "title": "Clinic data",
+          "body": "Clinic workspace data includes the clinic’s name, telephone number, address, logo, country, time zone, currency, number and time settings, working hours, departments, doctors and their schedules, services and prices, insurers, treatment packages, and permission settings. The system also records plan data, trial or manually administered subscription information, coupons, recorded usage limits, and onboarding status. ClinicFlow does not currently integrate with a payment processor for its own subscriptions and does not collect a clinic’s payment-card numbers."
+        },
+        {
+          "title": "Patient data",
+          "body": "Clinic staff create patient records that may include a full name, file number, national identification number, date of birth, telephone number, email address, blood type, insurer, department, treating doctor, and patient photograph. Patients are not registered ClinicFlow users and do not have accounts for signing in to the service. The clinic decides what information to enter and is responsible for having a lawful basis to obtain and use it."
+        },
+        {
+          "title": "Care, operations, and billing data",
+          "body": "The service records appointment details, including date, time, duration, doctor, department, status, appointment notes, and reasons for cancellation or non-attendance. It also processes medical notes and attachments, follow-up history and outcomes, patient packages and sessions, and services delivered. Billing data includes service charges, amounts paid, insurance coverage, outstanding balances, deposits, settlements, payment method, and related notes. ClinicFlow records the type of payment method and the relevant amounts, but does not collect card numbers, security codes, or bank-account details to execute a payment."
+        },
+        {
+          "title": "Files and documents",
+          "body": "The service allows users to upload patient photographs, identity and insurance documents, other patient documents, and medical-note attachments as images or PDF files, subject to the file-type and size limits applied by the application. These files are stored in a non-public Supabase Storage bucket and are made available according to user permissions or through time-limited signed links. Clinic logos, user profile images, and staff contracts, certificates, and employment documents can also be uploaded to designated storage areas. User profile images and clinic logos are intended to be displayed through file URLs, so public image fields should not be used to store health records or identity documents."
+        },
+        {
+          "title": "Technical and activity records",
+          "body": "The service retains account, clinic, and session identifiers; creation and update timestamps; login status; and interface settings. The database records selected changes to patients, appointments, medical notes, patient documents, note attachments, and packages. An audit record may include the previous and new values, the user responsible, and the time of the action. The platform separately records system-operator actions such as managing invitations, plans, coupons, and features. When Sentry is enabled, application errors and technical performance data are sent to Sentry, and a session replay is captured when an error occurs under the configured settings. Staff should therefore avoid entering information in note fields unless it is necessary for clinical work."
+        },
+        {
+          "title": "How we use data",
+          "body": "We use data to create and verify accounts; manage sessions and permissions; operate patient records, appointments, follow-ups, notes, billing, and reports; store and retrieve files; send clinic invitations, email confirmations, and password-recovery messages; apply user preferences; calculate operational metrics; provide exports; prevent abuse; diagnose failures; and document administrative activity. External exchange rates are used only to display approximate currency conversions, and no clinic or patient data is sent with an exchange-rate request."
+        },
+        {
+          "title": "Legal bases",
+          "body": "Where applicable law requires a legal basis for processing, ClinicFlow relies on steps requested before entering into a contract and performance of its relationship with the clinic for account and access-request data; legitimate interests for service security, abuse prevention, and reliability; and compliance with a legal obligation where required. ClinicFlow processes patient data for the clinic. Each clinic is responsible for identifying the appropriate legal basis for care, record administration, billing, and communications, and for obtaining consent where the law requires it."
+        },
+        {
+          "title": "Access within the clinic and platform",
+          "body": "The clinic controls its staff accounts and the pages they are permitted to use. The system applies administrator, manager, receptionist, and doctor roles, with additional restrictions tied to the clinic, department, treating doctor, and author of a medical note. Clinic administrators and certain managers may access operational information or audit records under database policies. ClinicFlow’s operator interface is used to administer platform data, clinic metadata, subscriptions, and invitations; it does not query patient or medical-note tables for display in the operator dashboard."
+        },
+        {
+          "title": "Sharing data and service providers",
+          "body": "ClinicFlow shares data as necessary with Supabase for authentication, the database, file storage, and authentication email; and with Vercel to host the application and process its requests. Resend is used to send clinic-invitation emails, Upstash Redis provides rate limiting when configured, Sentry monitors errors and performance when enabled, and Open Exchange Rates supplies exchange rates without receiving personal data. Account-confirmation and password-recovery email depend on the mail configuration connected to the Supabase Auth project. ClinicFlow does not sell patient data, use it for advertising, send it to artificial-intelligence models in the current application, or integrate marketing or advertising analytics tools."
+        },
+        {
+          "title": "Security and access controls",
+          "body": "The service uses Supabase Auth sessions, clinic-data isolation through PostgreSQL row-level security policies, role checks in routes and server-side actions, storage-specific permissions, signed links for patient documents, file-type and size limits, and rate limits for selected requests. HTTP headers are also configured to prevent framing, prevent content-type sniffing, control referrer and browser permissions, enforce HSTS, and apply a Content Security Policy. No technical measure can eliminate every risk. Clinics should protect their accounts, use strong passwords, and revoke a staff member’s access when it is no longer needed. These controls do not constitute a compliance certification or security accreditation."
+        },
+        {
+          "title": "Retention, archiving, and deletion",
+          "body": "The service does not apply one uniform retention period to clinic data, patient records, or audit logs. Deleting a patient through the interface is a soft deletion; a clinic administrator can then restore the record or move it to the archive, and there is no self-service workflow for permanently deleting it. Medical notes, patient documents, and note attachments are also soft-deleted, and their files remain recoverable. Appointments moved to the trash can be permanently deleted manually. When an authorized user opens the appointments page, the system removes trashed appointments deleted more than 30 days earlier, except displaced appointments. An authorized administrator can permanently delete a staff account, but there is no self-service workflow for deleting the clinic owner’s account or the entire clinic workspace. Access requests and invitation records remain after an invitation link expires unless removed through an administrative action."
+        },
+        {
+          "title": "Exports and data-subject requests",
+          "body": "A clinic administrator can download a ZIP archive containing CSV tables for patient data, appointments, medical-note metadata, billing, and patient documents, with document links signed for 24 hours. The export does not include the text or attachments of medical notes and may omit notes associated with a soft-deleted patient. A separate appointment export is available to administrators and managers. Users can update their profile, password, language, appearance, and display currency. A patient should first submit a request for access, correction, deletion, or restriction to the clinic that manages the record. ClinicFlow will coordinate with the clinic on legally binding requests within the capabilities of the available permissions and records."
+        },
+        {
+          "title": "Cookies and browser storage",
+          "body": "The service uses session cookies managed by Supabase for authentication and session renewal. It also uses the cf_page_visibility cookie for one hour to store the pages available to a user; this cookie is configured with HttpOnly, Secure, and SameSite=Lax attributes. The cf_marketing_locale cookie retains the language of public pages for one year, and the theme cookie retains the selected appearance hint for one year. A registered user’s persistent language and appearance preferences are stored in the database rather than local browser storage. The service does not use localStorage, sessionStorage, or advertising cookies. Browser settings can block cookies, but blocking session cookies prevents users from signing in."
+        },
+        {
+          "title": "Data about minors",
+          "body": "The service is intended for clinics and their staff, not for children to create accounts. A clinic can nevertheless create a patient record for a minor because the system accepts a patient’s date of birth without imposing a minimum age. The clinic is responsible for confirming the authority of a parent or guardian or another appropriate legal basis, providing any required notice, and restricting access to a minor’s data as required by applicable law."
+        },
+        {
+          "title": "Processing locations and data transfers",
+          "body": "The service operates through Vercel, Supabase, and the other providers identified above. This policy does not commit to storing data in a particular country because the actual processing location depends on the production-project configuration and the region selected for each provider, and those settings are not displayed to users in the application. A clinic subject to health-data localization or transfer restrictions should request confirmation of processing locations and contractual arrangements before entering regulated data."
+        },
+        {
+          "title": "Changes to this policy",
+          "body": "We publish the current version of this policy on this page and revise the last-updated date shown above. The application does not currently provide a separate mechanism for notifying every patient of policy changes. The clinic is therefore responsible for notifying its patients when a change affects the privacy notice it provides to them or when applicable law requires notice."
         },
         {
           "title": "Contact",
-          "body": "Questions about this draft or the upcoming final policy can be sent to hello@clinicflow.app."
+          "body": "For questions about this policy or ClinicFlow’s processing of account and platform data, email hello@clinicflow.app. If a request concerns a patient record, contact the clinic that created the record first and provide enough information for the clinic to identify it without sending unnecessary health information by email. The email address above is the contact channel designated by this policy."
         }
-      ]
+      ],
+      "noticeTitle": "About ClinicFlow’s role",
+      "noticeBody": "This policy reflects how ClinicFlow currently processes data. Regulatory and legal obligations may vary depending on the country where the service is used and the nature of the clinic’s activities."
     },
     "terms": {
       "title": "Terms of Service",
-      "description": "A non-binding outline of topics planned for ClinicFlow’s service terms.",
-      "updated": "Draft outline — July 2026",
+      "description": "These Terms govern the creation and use of a ClinicFlow clinic workspace and explain the limits of the service and the responsibilities of clinics and their users.",
+      "updated": "Last updated: July 15, 2026",
       "sections": [
         {
-          "title": "Service overview",
-          "body": "The final terms are intended to describe access to ClinicFlow’s clinic-operations software, supported features, account responsibilities, and service boundaries."
+          "title": "Acceptance and scope",
+          "body": "These Terms govern requests to join ClinicFlow, the creation of a clinic workspace, and access to and use of the service. By creating an account, accepting a clinic invitation, or using a workspace, the user and the clinic the user represents agree to these Terms. If you are not authorized to accept these Terms on behalf of a clinic, you must not create or administer its workspace."
         },
         {
-          "title": "Early-access stage",
-          "body": "ClinicFlow is currently onboarding a limited cohort. Product behavior, availability, and plan structure may continue to evolve before general availability."
+          "title": "The service",
+          "body": "ClinicFlow is a web-based system for private-clinic staff. It supports patient records, appointments, follow-ups, medical notes and attachments, services, operational billing, deposits, settlements, treatment-session packages, reports, and clinic and staff settings. Patients exist as records within the system; the application does not provide patient login accounts or a separate patient portal."
         },
         {
-          "title": "Clinic responsibilities",
-          "body": "Final terms are expected to address authorized users, accurate account information, lawful handling of clinic and patient data, and responsible use of the service."
+          "title": "Eligibility and authority",
+          "body": "A user account may be created only for a person with legal capacity who is authorized by the clinic to perform the relevant duties through the service. Anyone who creates a clinic workspace or accepts an invitation represents that the clinic details, contact information, and stated role are accurate and that the person has authority to administer the workspace or has been authorized by someone who does. The labels “owner” and “responsible contact” in the registration flow do not establish legal ownership of the clinic or its medical records."
         },
         {
-          "title": "Plans and payment",
-          "body": "Prices, billing arrangements, renewal rules, and cancellation terms have not been finalized and are not stated or implied by this outline."
+          "title": "Account registration and security",
+          "body": "Accounts use an email address and password, and authentication and sessions are managed through Supabase Auth. Each user must use the account assigned to that user, keep login credentials confidential, choose a strong password, and avoid sharing a password or active session. The clinic is responsible for keeping staff details current, revoking access when it is no longer required, and contacting ClinicFlow if it suspects unauthorized account access."
         },
         {
-          "title": "Availability and changes",
-          "body": "Any final commitments about uptime, support, warranties, liability, or service changes will be added only after professional legal and commercial review."
+          "title": "Clinic workspace administration",
+          "body": "Operational data is associated with one clinic workspace and is isolated from other clinic workspaces. The person who creates the clinic becomes its first administrator. Authorized users can manage clinic details, working hours, departments, services and prices, insurers, and staff. The clinic is responsible for appointing administrators and managers carefully and reviewing the permissions granted to them. The current interface does not provide a self-service transfer of the primary-administrator role or self-service deletion of an entire clinic workspace."
+        },
+        {
+          "title": "User roles and permissions",
+          "body": "ClinicFlow supports administrator, manager, receptionist, and doctor roles. Available pages, actions, patient records, medical notes, and reports vary according to the user’s role, clinic, department, treating-doctor relationship, and authorship of a note. The primary administrator may narrow access to pages already available to a role; page-visibility settings do not expand the role’s underlying permissions. The clinic is responsible for assigning an appropriate role to each user and reviewing access regularly."
+        },
+        {
+          "title": "Access requests and invitations",
+          "body": "An access request collects the clinic name, the name of the owner or responsible contact, a telephone number, and an email address so the request can be reviewed and the clinic contacted. Submitting a request does not guarantee that an invitation will be issued or that the clinic will be accepted. When invitation-only registration is in effect, a signup link is bound to the invited email address, expires, can be used only once, and may be revoked before acceptance. When open registration is enabled, the service permits clinic creation without an invitation token under the controls shown in the signup flow."
+        },
+        {
+          "title": "Trial and subscription access",
+          "body": "Each newly created clinic receives a 14-day trial on the Basic plan, beginning when the clinic workspace is created. Signup does not require a payment card, and the current application has no self-service checkout page or payment-processor integration for ClinicFlow subscriptions. When a trial expires, or a subscription is cancelled or otherwise inactive, protected pages and data-changing operations are blocked, while the dashboard remains available as a limited landing page for access-status information. Subscription states and grants are administered manually by the platform. These Terms do not create prices, renewals, refunds, or automatic payment obligations."
+        },
+        {
+          "title": "Acceptable use",
+          "body": "You must not use the service for unlawful activity; access another clinic’s data or another user’s account; bypass permissions or subscription controls; probe for vulnerabilities or disrupt the service without authorization; upload malicious software; submit content you have no right to process; or use the platform to harm a patient, employee, or other person."
+        },
+        {
+          "title": "Patient data responsibilities",
+          "body": "The clinic decides what patient information to enter, why it is used, and who may access it. The clinic remains responsible for collecting that information lawfully, keeping it accurate and current, providing required notices, obtaining consent or another lawful basis where required, responding to patient rights, and applying retention periods required by law or professional practice. Clinics should avoid entering information that is not necessary for care or operations and should limit access to staff whose duties require it."
+        },
+        {
+          "title": "Medical disclaimer",
+          "body": "ClinicFlow is clinic-management software. It does not provide a medical diagnosis, treatment recommendation, or clinical decision; verify the accuracy of a medical note or the suitability of treatment; or replace the professional judgment of a healthcare practitioner. The clinic, its doctors, and other care providers remain solely responsible for examining, diagnosing, and treating patients, for the accuracy of the medical record, for clinical safety, and for continuity of care."
+        },
+        {
+          "title": "Clinic Content",
+          "body": "“Clinic Content” includes patient and staff data, appointments, notes, files, logos, services, prices, and other information submitted by users. These Terms do not transfer ownership of Clinic Content to ClinicFlow. By submitting Clinic Content, the clinic authorizes ClinicFlow to host, process, transmit, and display it only as necessary to operate the service, apply the clinic’s settings, and protect the platform. The clinic represents that it has the right to submit the content and make it available to the users it designates."
+        },
+        {
+          "title": "File uploads and storage",
+          "body": "The service accepts specified file types and sizes for patient images and documents, medical-note attachments, user profile images, clinic logos, and staff documents, and may reject files that do not meet those technical limits. Patient documents and medical-note attachments are stored in non-public storage and made available through access controls or time-limited signed links. Public image locations intended for profile images and clinic logos must not be used for identity documents or health information. The clinic is responsible for the contents of uploaded files, ensuring that it is appropriate to upload them, and keeping them free of malicious software."
+        },
+        {
+          "title": "Records, reports, and audit trails",
+          "body": "The system produces operational reports on appointments, cancellations, no-shows, doctor and receptionist performance, follow-ups, and revenue from information entered into the service. It also records selected changes involving patients, appointments, medical notes, files, billing, packages, and platform-operator actions. These outputs are administrative tools and are not, by themselves, certified accounting records or certified medical records. The clinic is responsible for reviewing them and correcting source data where necessary."
+        },
+        {
+          "title": "Export and data portability",
+          "body": "A clinic administrator can download a ZIP archive containing CSV files for data supported by the current export, including patients, appointments, medical-note metadata, billing, and patient documents, with document links valid for 24 hours. The self-service export does not include medical-note text or attachments, may omit notes associated with a soft-deleted patient, and is subject to a technical archive-size limit. Administrators and managers also have a separate appointment export. The export is therefore not a complete copy of all Clinic Content and does not replace any backup or recordkeeping required by law."
+        },
+        {
+          "title": "Archiving, deletion, and retention",
+          "body": "Deleting a patient through the interface is a recoverable soft deletion; the record can then be restored or moved to the archive, and there is no self-service workflow for permanently deleting it. Medical notes, patient documents, and medical-note attachments are also soft-deleted and remain recoverable subject to permissions. Appointments in the trash can be permanently deleted. When an authorized user opens the appointments page, the system removes appointments that have been in the trash for more than 30 days, except displaced appointments. An authorized user can permanently delete a staff account, but there is no self-service deletion of the clinic owner’s account or the entire clinic workspace. The service does not apply one uniform retention period to all clinic data or audit records."
+        },
+        {
+          "title": "Service availability",
+          "body": "The service is provided as available, without an uptime commitment, response-time guarantee, or service-level agreement. Access may be affected by maintenance, security updates, software errors, internet connectivity, or third-party infrastructure. The clinic must maintain procedures that allow it to continue patient care and reach critical information when the service is unavailable and must not rely on ClinicFlow as the only means of responding to a medical emergency."
+        },
+        {
+          "title": "Third-party services and infrastructure",
+          "body": "ClinicFlow relies on Supabase for authentication, database services, file storage, and authentication email, and on Vercel to host and run the application. Resend is used for clinic-invitation email, and Open Exchange Rates supplies approximate display exchange rates. Upstash Redis provides rate limiting and Sentry provides error and performance monitoring when those services are configured. These functions also depend on the availability and terms of their providers. Display exchange rates are not accounting rates or transaction-execution rates."
+        },
+        {
+          "title": "Intellectual property and licensing",
+          "body": "Source code made available with the project is governed by the accompanying MIT License, which defines the rights to copy, modify, and distribute that code and the warranty disclaimer that applies to it. Use of the service does not grant rights in the ClinicFlow name, logo, domain names, or materials not covered by the MIT License; those rights remain with their respective owners under applicable law. Copyright and attribution notices required by the license must not be removed."
+        },
+        {
+          "title": "Access restrictions and ending use",
+          "body": "Access to service functions ends when a trial has expired, a subscription is inactive, an authorized administrator disables or deletes a staff account, or the authentication session ends. ClinicFlow may also restrict an account or request where necessary to protect the service or clinic data, prevent use that violates these Terms, or comply with a binding legal request. A clinic may stop using the service at any time, but stopping use does not itself delete the clinic owner’s account, the clinic workspace, or its data. Assistance must be requested through the available contact channel."
+        },
+        {
+          "title": "Disclaimer of warranties",
+          "body": "To the fullest extent permitted by law, ClinicFlow provides the service and the licensed source code as is and as available, without an express or implied warranty that they will be uninterrupted or error-free, fit for a particular medical, regulatory, or commercial purpose, or that reports and user-entered data will be complete or accurate. The service’s security controls do not constitute HIPAA, GDPR, PDPL, ISO, or SOC 2 certification, medical certification, or regulatory approval."
+        },
+        {
+          "title": "Limitation of liability",
+          "body": "To the extent permitted by law, ClinicFlow and contributors to the source code are not liable for indirect or consequential loss, lost revenue, business interruption, or loss of data arising from use of, or inability to use, the service. ClinicFlow is not responsible for clinical decisions or patient care; the unlawfulness of data submitted by a clinic; user error; shared login credentials; or a clinic’s reliance on an incomplete export or an approximate exchange rate. No exclusion or limitation applies to the extent it is prohibited by applicable law."
+        },
+        {
+          "title": "Changes to the service and these Terms",
+          "body": "ClinicFlow may modify, limit, or discontinue service functions to address operational, security, or infrastructure requirements. The current version of these Terms is published on this page with a revised last-updated date. Continued use after an update constitutes acceptance to the extent permitted by law. Where applicable law requires express consent to a change, those legal requirements apply."
+        },
+        {
+          "title": "Applicable law and disputes",
+          "body": "These Terms do not select one country’s law or one court as exclusively governing the relationship. The relationship is subject to mandatory rules and to the law identified by the applicable rules on jurisdiction and conflicts of laws, taking into account the parties and the place where the service is provided. Disputes must be brought before a court or authority with jurisdiction under those rules. Nothing in these Terms removes a protection that cannot lawfully be waived."
         },
         {
           "title": "Contact",
-          "body": "Questions about this draft or the upcoming final terms can be sent to hello@clinicflow.app."
+          "body": "For questions about these Terms, an account, or access to clinic data, contact ClinicFlow at hello@clinicflow.app. If a request concerns a patient record, the patient should first contact the clinic that created the record because the clinic manages its content and access permissions. Unnecessary health information should not be sent by email."
         }
       ]
     }
@@ -1035,7 +1105,6 @@
     "smartClinicManagement": "Smart clinic management",
     "clinicflowAllRightsReserved": "ClinicFlow. All rights reserved.",
     "clinicflow2": "ClinicFlow",
-    "onlineSecureKvkkReady": "Online — Secure & KVKK-ready",
     "welcomeBack": "Welcome back",
     "signInToYourClinicflowAccount": "Sign in to your ClinicFlow account",
     "passwordUpdatedSignInAgainWith": "Password updated. Sign in again with your new password.",

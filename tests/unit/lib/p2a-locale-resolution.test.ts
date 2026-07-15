@@ -1,11 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_LOCALE, isLocale, localeDirection, LOCALES } from "@/lib/i18n/config";
+import {
+  ANONYMOUS_DEFAULT_LOCALE,
+  DEFAULT_LOCALE,
+  isLocale,
+  localeDirection,
+  LOCALES,
+} from "@/lib/i18n/config";
 import { resolveLocaleFrom, resolveThemeFrom } from "@/lib/i18n/resolve";
 
 describe("P2A locale resolution (AI_AGENT_PLAN.md §4.1)", () => {
-  it("defaults to English everywhere", () => {
+  it("defaults public visitors to Arabic while preserving the authenticated English fallback", () => {
     expect(DEFAULT_LOCALE).toBe("en");
-    expect(resolveLocaleFrom({ isAuthenticated: false })).toBe("en");
+    expect(ANONYMOUS_DEFAULT_LOCALE).toBe("ar");
+    expect(resolveLocaleFrom({ isAuthenticated: false })).toBe("ar");
     expect(resolveLocaleFrom({ isAuthenticated: true })).toBe("en");
   });
 
@@ -39,8 +46,8 @@ describe("P2A locale resolution (AI_AGENT_PLAN.md §4.1)", () => {
 
   it("rejects unknown or malformed locale values instead of trusting them", () => {
     expect(resolveLocaleFrom({ isAuthenticated: true, storedLocale: "fr" })).toBe("en");
-    expect(resolveLocaleFrom({ isAuthenticated: false, marketingCookie: "../../etc/passwd" })).toBe("en");
-    expect(resolveLocaleFrom({ isAuthenticated: false, marketingCookie: "" })).toBe("en");
+    expect(resolveLocaleFrom({ isAuthenticated: false, marketingCookie: "../../etc/passwd" })).toBe("ar");
+    expect(resolveLocaleFrom({ isAuthenticated: false, marketingCookie: "" })).toBe("ar");
     expect(isLocale("ar")).toBe(true);
     expect(isLocale("de")).toBe(false);
   });

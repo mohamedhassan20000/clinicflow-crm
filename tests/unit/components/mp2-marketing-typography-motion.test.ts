@@ -3,9 +3,8 @@ import { describe, expect, it } from "vitest";
 
 const css = readFileSync("app/globals.css", "utf8");
 // P2A moved the font declarations out of `app/layout.tsx` into `app/fonts.ts`, because the app now
-// loads three families (Manrope, Thmanyah, and the IBM Plex Sans Arabic fallback tier) rather than
-// one. MP2's contract is unchanged and still asserted below: Manrope is the primary English face,
-// and no other family touches an English surface.
+// loads Manrope and Thmanyah rather than one family. MP2's contract is unchanged and still asserted
+// below: Manrope is the primary English face, and no other family touches an English surface.
 const fonts = readFileSync("app/fonts.ts", "utf8");
 const marketingPage = readFileSync(
   "components/marketing/marketing-page.tsx",
@@ -32,13 +31,12 @@ describe("Post-Pre-P2 MP2 marketing typography and motion", () => {
     expect(css).not.toMatch(/Geist_Mono|DM_Sans|Instrument_Serif/);
   });
 
-  it("confines the Arabic faces to lang=ar (P2A §4.3)", () => {
+  it("confines the sole Arabic face to lang=ar (P2A §4.3)", () => {
     expect(arabicScope).toContain("var(--font-thmanyah)");
-    expect(arabicScope).toContain("var(--font-plex-arabic)");
-    // Thmanyah is the primary Arabic face and IBM Plex Sans Arabic is only the fallback tier.
-    expect(arabicScope.indexOf("var(--font-thmanyah)")).toBeLessThan(
-      arabicScope.indexOf("var(--font-plex-arabic)"),
-    );
+    expect(arabicScope).not.toContain("var(--font-plex-arabic)");
+    expect(fonts).not.toContain("IBM_Plex_Sans_Arabic");
+    expect(css).toContain(".marketing-page {\n");
+    expect(css).toContain("font-family: var(--font-sans);");
   });
 
   it("keeps marketing motion CSS-first, transform-based, and centrally timed", () => {
@@ -59,7 +57,6 @@ describe("Post-Pre-P2 MP2 marketing typography and motion", () => {
 
   it("stages the hero without changing its copy or information architecture", () => {
     for (const className of [
-      "marketing-hero-eyebrow",
       "marketing-hero-title",
       "marketing-hero-body",
       "marketing-hero-actions",
@@ -67,10 +64,15 @@ describe("Post-Pre-P2 MP2 marketing typography and motion", () => {
     ]) {
       expect(marketingPage).toContain(className);
     }
+    expect(marketingPage).not.toContain("marketing-hero-eyebrow");
 
     expect(marketingPage).toContain(
       "text-[clamp(3.05rem,6.2vw,6.65rem)]",
     );
+    // Keep a conservative line box as a second line of defence for the shipped font metrics. The
+    // actual descender paint-path regression is covered separately by the browser geometry test.
+    expect(marketingPage).toContain("leading-[1.25]");
+    expect(marketingPage).not.toContain("leading-[.93]");
     expect(marketingPage).toContain("{copy.hero.title}");
     expect(marketingPage).toContain("{copy.hero.body}");
   });

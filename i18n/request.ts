@@ -5,8 +5,7 @@ import { resolveLocale } from "@/lib/preferences/server";
  * P2A — next-intl request configuration.
  *
  * There is no `[locale]` URL segment and no locale prefix: language is a property of the *account*
- * (or, anonymously, of a cookie), not of the URL. Every existing route keeps its current path, which
- * is what lets P2A land the machinery while the app still renders identically in English.
+ * (or, anonymously, of a cookie), not of the URL. Every existing route keeps its current path.
  */
 export default getRequestConfig(async () => {
   const locale = await resolveLocale();

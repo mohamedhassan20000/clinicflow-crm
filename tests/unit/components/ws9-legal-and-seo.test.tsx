@@ -23,19 +23,19 @@ describe("WS9 legal and SEO surfaces", () => {
 
   it("indexes only the public marketing/legal surfaces and publishes canonical URLs", async () => {
     const robotRules = robots();
-    expect(robotRules.sitemap).toBe("https://clinicflow.fit/sitemap.xml");
+    expect(robotRules.sitemap).toBe("https://www.clinicflow.fit/sitemap.xml");
     expect(JSON.stringify(robotRules.rules)).toContain("/operator");
 
     const urls = sitemap().map((entry) => entry.url);
     expect(urls).toEqual([
-      "https://clinicflow.fit",
-      "https://clinicflow.fit/privacy",
-      "https://clinicflow.fit/terms",
+      "https://www.clinicflow.fit",
+      "https://www.clinicflow.fit/privacy",
+      "https://www.clinicflow.fit/terms",
     ]);
     // P2C: metadata is resolved per-request now, so the title and description follow the
     // reader's locale rather than being frozen English at build time.
-    expect((await privacyMetadata()).alternates?.canonical).toBe("https://clinicflow.fit/privacy");
-    expect((await termsMetadata()).alternates?.canonical).toBe("https://clinicflow.fit/terms");
+    expect((await privacyMetadata()).alternates?.canonical).toBe("https://www.clinicflow.fit/privacy");
+    expect((await termsMetadata()).alternates?.canonical).toBe("https://www.clinicflow.fit/terms");
   });
 
   it("ships semantically aligned English and Arabic production privacy policies", () => {

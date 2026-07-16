@@ -58,6 +58,7 @@ import { getAvailableTimeSlots, type SlotInfo } from "@/actions/time-slots";
 import type { Tables } from "@/types/database";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
 import { CALENDAR_STYLES } from "@/components/appointments/calendar-visuals";
+import { UnsavedChangesGuard } from "@/components/shared/unsaved-changes-guard";
 import { useTranslations } from "next-intl";
 
 export type Patient = Pick<
@@ -172,6 +173,7 @@ export function AppointmentForm({
   cancelHref = "/appointments",
 }: AppointmentFormProps) {
   const t = useTranslations("appointments");
+  const tProtected = useTranslations("protected");
   const closedDays = clinicWorkingHours ? getClosedDaysOfWeek(clinicWorkingHours) : new Set<number>();
   const { formatCurrency, formatSlotTime } = useClinicSettings();
   const [state, formAction, isPending] = useActionState(action, null);
@@ -179,6 +181,7 @@ export function AppointmentForm({
   const [sameDayWarning, setSameDayWarning] = useState(false);
   const [pendingFd, setPendingFd] = useState<FormData | null>(null);
   const [checkingDay, setCheckingDay] = useState(false);
+  const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
   // Initialize refs to true when URL defaults are provided so that applyPatientDefaults
   // (triggered by defaultPatientId) does not overwrite the pre-filled values.
   const departmentChangedRef = useRef(!!defaultDepartmentId);
@@ -200,24 +203,24 @@ export function AppointmentForm({
     },
   });
 
-  function applyPatientDefaults(patient: Patient) {
+  function applyPatientDefaults(patient: Patient, shouldDirty = true) {
     if (!departmentChangedRef.current) {
       form.setValue("department_id", patient.department_id ?? null, {
-        shouldDirty: true,
+        shouldDirty,
         shouldValidate: true,
       });
     }
 
     if (!doctorChangedRef.current) {
       form.setValue("doctor_id", patient.assigned_doctor_id ?? "", {
-        shouldDirty: true,
+        shouldDirty,
         shouldValidate: true,
       });
     }
 
     if (!insuranceChangedRef.current) {
       form.setValue("insurance_provider_id", patient.insurance_provider_id ?? null, {
-        shouldDirty: true,
+        shouldDirty,
         shouldValidate: true,
       });
     }
@@ -230,7 +233,7 @@ export function AppointmentForm({
     const p = patients.find((x) => x.id === defaultPatientId);
     if (!p) return;
     queueMicrotask(() => {
-      applyPatientDefaults(p);
+      applyPatientDefaults(p, false);
       onPatientChange?.(p);
     });
     // Run once on mount; patients list is stable for the lifetime of the page.
@@ -372,6 +375,14 @@ export function AppointmentForm({
 
   return (
     <Form {...form}>
+      <UnsavedChangesGuard
+        when={
+          form.formState.isDirty &&
+          !form.formState.isSubmitting &&
+          !isPending &&
+          !checkingDay
+        }
+      />
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
         {state?.error && (
           <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
@@ -834,15 +845,27 @@ export function AppointmentForm({
         />
 
         <div className="flex justify-end gap-3 pt-2">
-          <Button asChild type="button" variant="outline">
-            <Link
-              href={cancelHref}
-              aria-disabled={isPending}
-              tabIndex={isPending ? -1 : undefined}
-              className={isPending ? "pointer-events-none opacity-50" : undefined}
+          {form.formState.isDirty ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isPending || checkingDay}
+              onClick={() => setDiscardDialogOpen(true)}
             >
-              {t("cancel")}</Link>
-          </Button>
+              {t("cancel")}
+            </Button>
+          ) : (
+            <Button asChild type="button" variant="outline">
+              <Link
+                href={cancelHref}
+                aria-disabled={isPending}
+                tabIndex={isPending ? -1 : undefined}
+                className={isPending ? "pointer-events-none opacity-50" : undefined}
+              >
+                {t("cancel")}
+              </Link>
+            </Button>
+          )}
           <Button type="submit" disabled={isPending || checkingDay} className="gap-2">
             {isPending || checkingDay ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -870,6 +893,23 @@ export function AppointmentForm({
               }}
             >
               {t("continueBooking")}</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={discardDialogOpen} onOpenChange={setDiscardDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{tProtected("discardChangesTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {tProtected("discardChangesDescription")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{tProtected("keepEditing")}</AlertDialogCancel>
+            <AlertDialogAction asChild>
+              <Link href={cancelHref}>{tProtected("discardChanges")}</Link>
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

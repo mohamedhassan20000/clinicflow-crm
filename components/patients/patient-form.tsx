@@ -34,6 +34,17 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { UnsavedChangesGuard } from "@/components/shared/unsaved-changes-guard";
 import { patientSchema, type PatientFormValues } from "@/lib/validations/patient";
 import type { ActionResult } from "@/actions/patients";
 import type { Tables } from "@/types/database";
@@ -293,12 +304,14 @@ export function PatientForm({
   profileReturnTo,
 }: PatientFormProps) {
   const t = useTranslations("patients");
+  const tProtected = useTranslations("protected");
   const router = useRouter();
   const [state, formAction, isPending] = useActionState(action, null);
   const [, startNav] = useTransition();
 
   const [selectedAvatar, setSelectedAvatar] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
   const avatarPickerRef = useRef<HTMLInputElement>(null);
 
   // When patientId is set the creation succeeded — show the file upload step
@@ -354,6 +367,9 @@ export function PatientForm({
 
   return (
     <Form {...form}>
+      <UnsavedChangesGuard
+        when={form.formState.isDirty && !form.formState.isSubmitting && !isPending}
+      />
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
         {state?.error && (
           <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
@@ -640,15 +656,27 @@ export function PatientForm({
         </div>
 
         <div className="flex justify-end gap-3 pt-2">
-          <Button asChild type="button" variant="outline">
-            <Link
-              href={cancelHref}
-              aria-disabled={isPending}
-              tabIndex={isPending ? -1 : undefined}
-              className={isPending ? t("pointerEventsNoneOpacity50") : undefined}
+          {form.formState.isDirty ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isPending}
+              onClick={() => setDiscardDialogOpen(true)}
             >
-              {t("cancel")}</Link>
-          </Button>
+              {t("cancel")}
+            </Button>
+          ) : (
+            <Button asChild type="button" variant="outline">
+              <Link
+                href={cancelHref}
+                aria-disabled={isPending}
+                tabIndex={isPending ? -1 : undefined}
+                className={isPending ? t("pointerEventsNoneOpacity50") : undefined}
+              >
+                {t("cancel")}
+              </Link>
+            </Button>
+          )}
           <Button type="submit" disabled={isPending} className="gap-2">
             {isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -658,6 +686,23 @@ export function PatientForm({
             {t("savePatient")}</Button>
         </div>
       </form>
+
+      <AlertDialog open={discardDialogOpen} onOpenChange={setDiscardDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{tProtected("discardChangesTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {tProtected("discardChangesDescription")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{tProtected("keepEditing")}</AlertDialogCancel>
+            <AlertDialogAction asChild>
+              <Link href={cancelHref}>{tProtected("discardChanges")}</Link>
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Form>
   );
 }

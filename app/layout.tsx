@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages, getTranslations } from "next-intl/server";
 import { NuqsAdapter } from "nuqs/adapters/next/app";
+import { NetworkStatusToast } from "@/components/shared/network-status-toast";
 import { Toaster } from "@/components/ui/sonner";
 import { fontVariables } from "@/app/fonts";
 import { localeDirection, type Locale } from "@/lib/i18n/config";
@@ -40,6 +41,7 @@ export default async function RootLayout({
       <body className="min-h-full flex flex-col bg-background text-foreground antialiased">
         <NextIntlClientProvider locale={locale} messages={messages}>
           <NuqsAdapter>{children}</NuqsAdapter>
+          <NetworkStatusToast />
           <Toaster richColors closeButton position="top-right" />
         </NextIntlClientProvider>
       </body>

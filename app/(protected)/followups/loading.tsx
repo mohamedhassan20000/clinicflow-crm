@@ -1,8 +1,10 @@
 import { Skeleton } from "@/components/ui/skeleton";
+import { useTranslations } from "next-intl";
 
 export default function FollowupsLoading() {
+  const t = useTranslations("protected");
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" role="status" aria-label={t("loadingContent")}>
       {/* Header */}
       <div className="space-y-1">
         <Skeleton className="h-7 w-28" />

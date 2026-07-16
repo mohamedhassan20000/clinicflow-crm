@@ -1,8 +1,10 @@
 import { Skeleton } from "@/components/ui/skeleton";
+import { useTranslations } from "next-intl";
 
 export default function ReportsLoading() {
+  const t = useTranslations("protected");
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" role="status" aria-label={t("loadingContent")}>
       <div className="flex items-center justify-between gap-4">
         <div className="space-y-2">
           <Skeleton className="h-8 w-40" />

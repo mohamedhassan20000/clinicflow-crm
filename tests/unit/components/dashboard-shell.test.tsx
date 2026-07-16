@@ -29,6 +29,9 @@ describe("DashboardShell", () => {
     expect(screen.getByRole("button", { name: "Collapse navigation" })).toHaveAttribute("aria-controls", "dashboard-navigation");
     expect(screen.getByRole("button", { name: "Collapse navigation" })).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByRole("link", { name: /Patients/ })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Skip to content" })).toHaveAttribute("href", "#main-content");
+    expect(container.querySelector("main")).toHaveAttribute("id", "main-content");
+    expect(container.querySelector("main")).toHaveAttribute("tabindex", "-1");
     expect(container).toMatchSnapshot();
   });
 

@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { MarketingPage } from "@/components/marketing/marketing-page";
 import en from "@/messages/en.json";
 
@@ -79,11 +79,37 @@ describe("WS9 marketing page", () => {
     render(<MarketingPage registrationMode="invite_only" weeklyLimit={20} acceptedThisWeek={0} />);
 
     expect(screen.queryByLabelText("Clinic name")).not.toBeInTheDocument();
-    await user.click(screen.getAllByRole("button", { name: "Request early access" })[0]);
+    await user.click(screen.getByRole("button", { name: "Request an invitation" }));
 
     expect(await screen.findByLabelText("Clinic name", {}, { timeout: 10_000 })).toBeEnabled();
     expect(screen.getByLabelText("Phone")).toBeEnabled();
     expect(screen.getByRole("button", { name: "Request invitation" })).toBeEnabled();
+  });
+
+  it("keeps the product CTA separate while invitation CTAs scroll without changing browser history", async () => {
+    const user = userEvent.setup();
+    render(<MarketingPage registrationMode="invite_only" weeklyLimit={20} acceptedThisWeek={0} />);
+
+    const target = document.getElementById("early-access");
+    expect(target).not.toBeNull();
+    const scrollIntoView = vi.spyOn(target!, "scrollIntoView");
+    const initialUrl = window.location.href;
+    const initialHistoryLength = window.history.length;
+    expect(screen.getByRole("link", { name: "See the product" })).toHaveAttribute("href", "#product");
+    const controls = [
+      screen.getByRole("button", { name: "Request early access" }),
+      ...screen.getAllByRole("button", { name: "Join the early cohort" }),
+    ];
+
+    for (const control of controls) {
+      control.focus();
+      await user.keyboard("{Enter}");
+    }
+
+    expect(scrollIntoView).toHaveBeenCalledTimes(controls.length);
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
+    expect(window.location.href).toBe(initialUrl);
+    expect(window.history.length).toBe(initialHistoryLength);
   });
 
   it("links both legal placeholders from the footer", () => {

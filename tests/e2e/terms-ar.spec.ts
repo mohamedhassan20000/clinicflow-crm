@@ -24,7 +24,7 @@ test("English terms are complete, responsive, and theme-aware", async ({
   await expect(page.getByText("Last updated: July 15, 2026")).toBeVisible();
   await expect(
     page.getByRole("heading", {
-      name: "Service limits and clinical responsibility",
+      name: "ClinicFlow Liability Limitations",
     }),
   ).toBeVisible();
   await expect(page.locator("article section")).toHaveCount(25);
@@ -75,7 +75,7 @@ test("Arabic terms are complete, RTL, responsive, and theme-aware", async ({
   ).toBeVisible();
   await expect(page.getByText("آخر تحديث: 15 يوليو 2026")).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "حدود الخدمة والمسؤولية السريرية" }),
+    page.getByRole("heading", { name: "حدود مسؤولية ClinicFlow" }),
   ).toBeVisible();
   await expect(page.locator("article section")).toHaveCount(25);
   await expect(page.getByText("إخلاء المسؤولية الطبية")).toBeVisible();

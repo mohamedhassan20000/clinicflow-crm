@@ -654,7 +654,7 @@ test("marketing legal pages carry their document-specific notices", async ({ pag
   await expect(page.getByRole("heading", { name: "Pending legal review" })).toHaveCount(0);
   await page.goto("/terms");
   await expect(page.getByRole("heading", { level: 1, name: "Terms of Service" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Service limits and clinical responsibility" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "ClinicFlow Liability Limitations" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Pending legal review" })).toHaveCount(0);
 });
 

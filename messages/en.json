@@ -549,7 +549,8 @@
     "myProfile": "My profile",
     "preferences": "Preferences",
     "signOut": "Sign out",
-    "navigationMenu": "Navigation menu"
+    "navigationMenu": "Navigation menu",
+    "skipToContent": "Skip to content"
   },
   "nav": {
     "tenant": {
@@ -1382,6 +1383,7 @@
     "scopetoday": "scopeToday"
   },
   "operator": {
+    "loadingOperatorContent": "Loading operator content",
     "monthCount": "{count, plural, one {# month} other {# months}}",
     "unbounded": "Unbounded",
     "enabled": "Enabled",
@@ -1877,6 +1879,13 @@
     "jpegPngWebpOrPdfMax10Mb": "JPEG, PNG, WebP, or PDF · max 10 MB"
   },
   "protected": {
+    "loadingSettings": "Loading settings",
+    "loadingPatientDetails": "Loading patient details",
+    "loadingContent": "Loading content",
+    "discardChangesTitle": "Discard unsaved changes?",
+    "discardChangesDescription": "Your unsaved changes will be lost if you leave this form.",
+    "keepEditing": "Keep editing",
+    "discardChanges": "Discard changes",
     "appointmentRecordCount": "{count, plural, one {# record} other {# records}}",
     "followupRecordCount": "{count, plural, one {# record} other {# records}}",
     "medicalNoteCount": "{count, plural, one {# note} other {# notes}}",
@@ -2102,7 +2111,8 @@
     "confirmYourEmailAddressThenSign": "Confirm your email address, then sign in to finish clinic setup.",
     "goToSignIn": "Go to sign in",
     "clinicflow": "ClinicFlow",
-    "createYourClinic": "Create your clinic"
+    "createYourClinic": "Create your clinic",
+    "thisPageHitAnUnexpectedError": "This page hit an unexpected error while loading. Try again, or return to the ClinicFlow home page."
   },
   "reports": {
     "cancellationReport": "Cancellation report",
@@ -2308,7 +2318,9 @@
     "clearAll": "Clear all",
     "backToNamed": "Back to {label}",
     "countryCallingCode": "Country calling code",
-    "searchCountryOrCode": "Search country or code…"
+    "searchCountryOrCode": "Search country or code…",
+    "youAreOffline": "You're offline.",
+    "backOnline": "Back online."
   },
   "layout": {
     "switchToLightMode": "Switch to light mode",

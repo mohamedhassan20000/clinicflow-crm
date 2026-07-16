@@ -28,6 +28,7 @@ import { MarketingLogo } from "@/components/marketing/marketing-logo";
 import { MobileMarketingMenu } from "@/components/marketing/mobile-marketing-menu";
 import { ProductScreenshot } from "@/components/marketing/product-screenshot";
 import { PublicThemeShell, PublicThemeToggle } from "@/components/marketing/public-theme";
+import { ScrollToSectionButton } from "@/components/marketing/scroll-to-section-button";
 import { getMarketingCopy, type MarketingCopy } from "@/lib/marketing-copy";
 import { MARKETING_STATS } from "@/lib/marketing-stats";
 import type { MessageTranslator } from "@/lib/i18n/translator";
@@ -312,6 +313,7 @@ export function MarketingPage(props: Props) {
                     registrationMode={defaultStatus.registrationMode}
                     label={copy.hero.primary}
                     openLabel={copy.hero.openPrimary}
+                    scrollTargetId="early-access"
                     className="marketing-cta h-12 rounded-full bg-[#087f7b] px-7 text-base text-white shadow-[0_14px_30px_-18px_rgba(8,127,123,.7)] hover:bg-[#076e6b]"
                   />
                 )}
@@ -320,6 +322,7 @@ export function MarketingPage(props: Props) {
                   statusPromise={statusPromise}
                   label={copy.hero.primary}
                   openLabel={copy.hero.openPrimary}
+                  scrollTargetId="early-access"
                   className="marketing-cta h-12 rounded-full bg-[#087f7b] px-7 text-base text-white shadow-[0_14px_30px_-18px_rgba(8,127,123,.7)] hover:bg-[#076e6b]"
                 />
               </Suspense>
@@ -328,6 +331,7 @@ export function MarketingPage(props: Props) {
                 registrationMode={status.registrationMode}
                 label={copy.hero.primary}
                 openLabel={copy.hero.openPrimary}
+                scrollTargetId="early-access"
                 className="marketing-cta h-12 rounded-full bg-[#087f7b] px-7 text-base text-white shadow-[0_14px_30px_-18px_rgba(8,127,123,.7)] hover:bg-[#076e6b]"
               />
             )}
@@ -555,9 +559,9 @@ export function MarketingPage(props: Props) {
                     </li>
                   ))}
                 </ul>
-                <Button asChild variant="outline" className="marketing-cta mt-auto h-11 rounded-full border-[var(--m-line-strong)] bg-[var(--m-paper)] text-[var(--m-ink)] hover:bg-[var(--m-soft)]">
-                  <Link href="#early-access">{copy.pricing.cta}</Link>
-                </Button>
+                <ScrollToSectionButton targetId="early-access" variant="outline" className="marketing-cta mt-auto h-11 rounded-full border-[var(--m-line-strong)] bg-[var(--m-paper)] text-[var(--m-ink)] hover:bg-[var(--m-soft)]">
+                  {copy.pricing.cta}
+                </ScrollToSectionButton>
               </article>
             ))}
           </div>

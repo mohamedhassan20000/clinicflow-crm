@@ -253,7 +253,7 @@
       "eyebrow": "الوصول المبكر",
       "openButton": "أنشئ عيادتك",
       "dialogTitle": "طلب الوصول المبكر",
-      "button": "اطلب دعوة",
+      "button": "احصل على دعوتك الآن",
       "body": "أخبرنا عن عيادتك، وسنتواصل معك لتجهيز حسابك ومساعدتك في بدء استخدام ClinicFlow.",
       "title": "ابدأ اليوم، واجعل إدارة عيادتك أبسط.",
       "dialogDescription": "شاركنا ببعض التفاصيل حول عيادتك. سيتم التواصل معك بعد دراسة الطلب."
@@ -261,7 +261,7 @@
     "faq": {
       "items": [
         {
-          "question": "من هو ClinicFlow؟",
+          "question": "ما هو ClinicFlow؟",
           "answer": "ClinicFlow هو نظام CRM متكامل للعيادات الخاصة، يساعدك على إدارة المرضى، والمواعيد، والفواتير، وسير العمل اليومي من منصة واحدة."
         },
         {
@@ -277,7 +277,7 @@
           "question": "هل بطاقة الدفع مطلوبة؟"
         },
         {
-          "question": "هل يمكننا نقل بياناتنا للخارج؟",
+          "question": "هل يمكننا تصدير بياناتنا ؟",
           "answer": "نعم، يمكنك تصدير بيانات العيادة بسهولة من خلال أدوات التصدير المتاحة في النظام."
         },
         {
@@ -545,7 +545,8 @@
     "openUserMenu": "فتح قائمة المستخدم",
     "preferences": "التفضيلات",
     "signOut": "تسجيل الخروج",
-    "navigationMenu": "قائمة التنقل"
+    "navigationMenu": "قائمة التنقل",
+    "skipToContent": "تخطَّ إلى المحتوى"
   },
   "nav": {
     "tenant": {
@@ -1378,6 +1379,7 @@
     "scopetoday": "نطاق اليوم"
   },
   "operator": {
+    "loadingOperatorContent": "جارٍ تحميل محتوى المشغّل",
     "monthCount": "{count, plural, one {شهر واحد} two {شهران} few {# أشهر} many {# شهرًا} other {# شهر}}",
     "unbounded": "بلا حد زمني",
     "enabled": "مفعّل",
@@ -1873,6 +1875,13 @@
     "jpegPngWebpOrPdfMax10Mb": "JPEG أو PNG أو WebP أو PDF · بحد أقصى 10 ميجابايت"
   },
   "protected": {
+    "loadingSettings": "جارٍ تحميل الإعدادات",
+    "loadingPatientDetails": "جارٍ تحميل تفاصيل المريض",
+    "loadingContent": "جارٍ تحميل المحتوى",
+    "discardChangesTitle": "هل تريد تجاهل التغييرات غير المحفوظة؟",
+    "discardChangesDescription": "ستفقد التغييرات غير المحفوظة إذا غادرت هذا النموذج.",
+    "keepEditing": "متابعة التعديل",
+    "discardChanges": "تجاهل التغييرات",
     "appointmentRecordCount": "{count, plural, zero {لا سجلات} one {سجل واحد} two {سجلان} few {# سجلات} many {# سجلًا} other {# سجل}}",
     "followupRecordCount": "{count, plural, zero {لا سجلات} one {سجل واحد} two {سجلان} few {# سجلات} many {# سجلًا} other {# سجل}}",
     "medicalNoteCount": "{count, plural, zero {لا ملاحظات} one {ملاحظة واحدة} two {ملاحظتان} few {# ملاحظات} many {# ملاحظة} other {# ملاحظة}}",
@@ -2098,7 +2107,8 @@
     "completeYourOwnerAccountToAccept": "أكمل حساب المالك الخاص بك لقبول الدعوة.",
     "clinicflow": "كلينيك فلو",
     "createYourClinic": "أنشئ عيادتك",
-    "welcomeToClinicflow": "مرحبا بكم في كلينيك فلو"
+    "welcomeToClinicflow": "مرحبا بكم في كلينيك فلو",
+    "thisPageHitAnUnexpectedError": "واجهت هذه الصفحة خطأ غير متوقع أثناء التحميل. حاول مرة أخرى، أو ارجع إلى صفحة كلينيك فلو الرئيسية."
   },
   "reports": {
     "cancelledAppointmentsByDoctorAndReason": "المواعيد الملغاة من قبل الطبيب والسبب.",
@@ -2304,7 +2314,9 @@
     "noCountryFound": "لم يتم العثور على أي دولة.",
     "backToNamed": "العودة إلى {label}",
     "countryCallingCode": "رمز الاتصال بالدولة",
-    "searchCountryOrCode": "ابحث عن دولة أو رمز…"
+    "searchCountryOrCode": "ابحث عن دولة أو رمز…",
+    "youAreOffline": "أنت غير متصل بالإنترنت.",
+    "backOnline": "عاد الاتصال بالإنترنت."
   },
   "layout": {
     "switchToDarkMode": "التبديل إلى الوضع المظلم",

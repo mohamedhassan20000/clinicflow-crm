@@ -80,6 +80,12 @@ export function DashboardShell({ children, navItems, user, theme, surface, brand
 
   return (
     <div className="flex min-h-dvh bg-background">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:start-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-background focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-foreground focus:shadow-lg focus:outline-none focus:ring-2 focus:ring-ring"
+      >
+        {t("skipToContent")}
+      </a>
       <Sidebar items={navItems} collapsed={collapsed} onCollapsedChange={updateCollapsed} brandLabel={brandLabel} />
       <div className="flex min-w-0 flex-1 flex-col">
         <header data-testid="dashboard-header" className="flex h-[var(--shell-header-h)] shrink-0 items-center gap-3 border-b bg-card/95 px-4 backdrop-blur md:px-6">
@@ -112,7 +118,7 @@ export function DashboardShell({ children, navItems, user, theme, surface, brand
             </DropdownMenuContent>
           </DropdownMenu>
         </header>
-        <main className={`flex-1 overflow-x-hidden ${contentClassName}`}>{children}</main>
+        <main id="main-content" tabIndex={-1} className={`flex-1 overflow-x-hidden ${contentClassName}`}>{children}</main>
       </div>
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetContent side="inline-start" className="w-72 p-0"><SheetTitle className="sr-only">{t("navigationMenu")}</SheetTitle><div className="h-full" onClick={() => setMobileOpen(false)}><Sidebar mode="sheet" items={navItems} collapsed={false} brandLabel={brandLabel} /></div></SheetContent>

@@ -5,6 +5,12 @@ exports[`DashboardShell > persists, snapshots, and restores collapsed state 1`] 
   <div
     class="flex min-h-dvh bg-background"
   >
+    <a
+      class="sr-only focus:not-sr-only focus:fixed focus:start-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-background focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-foreground focus:shadow-lg focus:outline-none focus:ring-2 focus:ring-ring"
+      href="#main-content"
+    >
+      Skip to content
+    </a>
     <aside
       class="shrink-0 flex-col border-e border-sidebar-border bg-sidebar text-sidebar-foreground sticky top-0 z-40 hidden h-dvh self-start md:flex transition-[width] duration-200 ease-out w-20"
       data-collapsed="true"
@@ -263,6 +269,8 @@ exports[`DashboardShell > persists, snapshots, and restores collapsed state 1`] 
       </header>
       <main
         class="flex-1 overflow-x-hidden px-5 py-6 lg:px-10 lg:py-8"
+        id="main-content"
+        tabindex="-1"
       >
         Content
       </main>
@@ -276,6 +284,12 @@ exports[`DashboardShell > renders the header utilities and expanded navigation 1
   <div
     class="flex min-h-dvh bg-background"
   >
+    <a
+      class="sr-only focus:not-sr-only focus:fixed focus:start-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-background focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-foreground focus:shadow-lg focus:outline-none focus:ring-2 focus:ring-ring"
+      href="#main-content"
+    >
+      Skip to content
+    </a>
     <aside
       class="shrink-0 flex-col border-e border-sidebar-border bg-sidebar text-sidebar-foreground sticky top-0 z-40 hidden h-dvh self-start md:flex transition-[width] duration-200 ease-out w-72"
       data-collapsed="false"
@@ -543,6 +557,8 @@ exports[`DashboardShell > renders the header utilities and expanded navigation 1
       </header>
       <main
         class="flex-1 overflow-x-hidden px-5 py-6 lg:px-10 lg:py-8"
+        id="main-content"
+        tabindex="-1"
       >
         <h1>
           Content

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { ArrowUpRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ScrollToSectionButton } from "@/components/marketing/scroll-to-section-button";
 import { cn } from "@/lib/utils";
 import { useTranslations } from "next-intl";
 
@@ -18,12 +19,14 @@ export function EarlyAccessButton({
   className,
   label,
   openLabel,
+  scrollTargetId,
 }: {
   registrationMode: string;
   className?: string;
   /** Overridden by the hero, which uses its own stronger call to action. */
   label?: string;
   openLabel?: string;
+  scrollTargetId?: string;
 }) {
   const t = useTranslations("marketing.earlyAccess");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -39,6 +42,15 @@ export function EarlyAccessButton({
           <ArrowUpRight className="size-4 rtl:-scale-x-100" />
         </Link>
       </Button>
+    );
+  }
+
+  if (scrollTargetId) {
+    return (
+      <ScrollToSectionButton targetId={scrollTargetId} className={cn("min-h-11", className)}>
+        {requestLabel}
+        <ArrowUpRight className="size-4 rtl:-scale-x-100" />
+      </ScrollToSectionButton>
     );
   }
 

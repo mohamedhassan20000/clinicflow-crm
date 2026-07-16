@@ -1,11 +1,65 @@
+import { readFile, stat } from "node:fs/promises";
+import { resolve } from "node:path";
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
-import PrivacyPage, { generateMetadata as privacyMetadata } from "@/app/privacy/page";
-import TermsPage, { generateMetadata as termsMetadata } from "@/app/terms/page";
+import type { Metadata } from "next";
+import { createTranslator } from "next-intl";
+import sharp from "sharp";
+import { describe, expect, it, vi } from "vitest";
+import PrivacyPage from "@/app/privacy/page";
+import TermsPage from "@/app/terms/page";
 import robots from "@/app/robots";
 import sitemap from "@/app/sitemap";
 import arMessages from "@/messages/ar.json";
 import enMessages from "@/messages/en.json";
+
+type PublicLocale = "en" | "ar";
+
+async function loadLocalizedMetadata(locale: PublicLocale) {
+  const messages = locale === "en" ? enMessages : arMessages;
+
+  vi.resetModules();
+  vi.doMock("next-intl/server", () => ({
+    getLocale: async () => locale,
+    getMessages: async () => messages,
+    getTranslations: async (namespace?: string) =>
+      createTranslator({ locale, messages, namespace: namespace as never }),
+  }));
+  vi.doMock("next/font/google", () => ({
+    Manrope: () => ({ variable: "--font-manrope" }),
+  }));
+  vi.doMock("next/font/local", () => ({
+    default: () => ({ variable: "--font-thmanyah" }),
+  }));
+
+  const [root, home, privacy, terms] = await Promise.all([
+    import("@/app/layout"),
+    import("@/app/page"),
+    import("@/app/privacy/page"),
+    import("@/app/terms/page"),
+  ]);
+
+  return {
+    root: await root.generateMetadata(),
+    home: await home.generateMetadata(),
+    privacy: await privacy.generateMetadata(),
+    terms: await terms.generateMetadata(),
+  };
+}
+
+function absoluteTitle(metadata: Metadata) {
+  if (!metadata.title || typeof metadata.title === "string" || !("absolute" in metadata.title)) {
+    throw new Error("Expected an absolute metadata title");
+  }
+  return metadata.title.absolute;
+}
+
+function canonicalUrl(metadata: Metadata, metadataBase: string | URL) {
+  const canonical = metadata.alternates?.canonical;
+  if (typeof canonical !== "string" && !(canonical instanceof URL)) {
+    throw new Error("Expected a canonical URL");
+  }
+  return new URL(canonical.toString(), metadataBase).toString();
+}
 
 describe("WS9 legal and SEO surfaces", () => {
   it("renders production notices for both legal documents", () => {
@@ -16,12 +70,12 @@ describe("WS9 legal and SEO surfaces", () => {
 
     render(<TermsPage />);
     expect(screen.getByRole("heading", { level: 1, name: "Terms of Service" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Service limits and clinical responsibility" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "ClinicFlow Liability Limitations" })).toBeInTheDocument();
     expect(screen.getByText(/does not diagnose patients or make medical decisions/i)).toBeInTheDocument();
     expect(screen.queryByText(/pending legal review/i)).not.toBeInTheDocument();
   });
 
-  it("indexes only the public marketing/legal surfaces and publishes canonical URLs", async () => {
+  it("indexes only the public marketing/legal surfaces and publishes canonical URLs", () => {
     const robotRules = robots();
     expect(robotRules.sitemap).toBe("https://www.clinicflow.fit/sitemap.xml");
     expect(JSON.stringify(robotRules.rules)).toContain("/operator");
@@ -32,11 +86,120 @@ describe("WS9 legal and SEO surfaces", () => {
       "https://www.clinicflow.fit/privacy",
       "https://www.clinicflow.fit/terms",
     ]);
-    // P2C: metadata is resolved per-request now, so the title and description follow the
-    // reader's locale rather than being frozen English at build time.
-    expect((await privacyMetadata()).alternates?.canonical).toBe("https://www.clinicflow.fit/privacy");
-    expect((await termsMetadata()).alternates?.canonical).toBe("https://www.clinicflow.fit/terms");
   });
+
+  it.each([
+    {
+      locale: "en" as const,
+      brand: "ClinicFlow",
+      titles: [
+        "ClinicFlow | Clinic Management Software",
+        "Privacy Policy | ClinicFlow",
+        "Terms of Service | ClinicFlow",
+      ],
+    },
+    {
+      locale: "ar" as const,
+      brand: "كلينيك فلو",
+      titles: [
+        "كلينيك فلو | نظام إدارة العيادات",
+        "سياسة الخصوصية | كلينيك فلو",
+        "شروط الخدمة | كلينيك فلو",
+      ],
+    },
+  ])("resolves $locale public titles, canonicals, and indexing metadata", async ({ locale, brand, titles }) => {
+    const metadata = await loadLocalizedMetadata(locale);
+    const metadataBase = metadata.root.metadataBase;
+
+    expect(metadataBase).toEqual(new URL("https://www.clinicflow.fit"));
+    expect(metadata.root.title).toEqual({ default: "ClinicFlow", template: "%s · ClinicFlow" });
+    expect(metadata.root.robots).toMatchObject({ index: false });
+
+    const publicPages = [metadata.home, metadata.privacy, metadata.terms];
+    expect(publicPages.map(absoluteTitle)).toEqual(titles);
+    for (const title of publicPages.map(absoluteTitle)) {
+      expect(title.split(brand)).toHaveLength(2);
+      expect(title).not.toContain("·");
+    }
+
+    expect(publicPages.map((page) => canonicalUrl(page, metadataBase!))).toEqual([
+      "https://www.clinicflow.fit/",
+      "https://www.clinicflow.fit/privacy",
+      "https://www.clinicflow.fit/terms",
+    ]);
+    for (const page of publicPages) {
+      expect(page.robots).toMatchObject({ index: true, follow: true });
+    }
+  });
+
+  it("keeps localized metadata-title keys aligned across both catalogs", () => {
+    expect(enMessages.marketing.seo.title).toBe("ClinicFlow | Clinic Management Software");
+    expect(arMessages.marketing.seo.title).toBe("كلينيك فلو | نظام إدارة العيادات");
+    expect(enMessages.legal.privacy.metadataTitle).toBe("Privacy Policy | ClinicFlow");
+    expect(arMessages.legal.privacy.metadataTitle).toBe("سياسة الخصوصية | كلينيك فلو");
+    expect(enMessages.legal.terms.metadataTitle).toBe("Terms of Service | ClinicFlow");
+    expect(arMessages.legal.terms.metadataTitle).toBe("شروط الخدمة | كلينيك فلو");
+  });
+
+  it.each([
+    { path: "app/icon.png", width: 32, height: 32 },
+    { path: "app/apple-icon.png", width: 180, height: 180 },
+    { path: "public/brand/icon-192.png", width: 192, height: 192 },
+    { path: "public/brand/icon-512.png", width: 512, height: 512 },
+    { path: "public/brand/opengraph-image.png", width: 1200, height: 630 },
+  ])("ships $path as a valid PNG at $width×$height", async ({ path, width, height }) => {
+    const assetPath = resolve(path);
+    const [file, metadata] = await Promise.all([stat(assetPath), sharp(assetPath).metadata()]);
+
+    expect(file.size).toBeGreaterThan(0);
+    expect(metadata.format).toBe("png");
+    expect(metadata.width).toBe(width);
+    expect(metadata.height).toBe(height);
+  });
+
+  it("ships a non-empty multi-size ClinicFlow favicon", async () => {
+    const favicon = await readFile(resolve("app/favicon.ico"));
+
+    expect(favicon.byteLength).toBeGreaterThan(0);
+    expect(favicon.readUInt16LE(0)).toBe(0);
+    expect(favicon.readUInt16LE(2)).toBe(1);
+    expect(favicon.readUInt16LE(4)).toBe(3);
+    expect([0, 1, 2].map((index) => favicon[6 + (index * 16)])).toEqual([16, 32, 48]);
+  });
+
+  it.each(["en", "ar"] as const)(
+    "publishes localized %s Open Graph and Twitter image metadata",
+    async (locale) => {
+      const metadata = await loadLocalizedMetadata(locale);
+      const messages = locale === "en" ? enMessages : arMessages;
+      const image = {
+        url: "/brand/opengraph-image.png",
+        width: 1200,
+        height: 630,
+        alt: messages.marketing.seo.imageAlt,
+      };
+      const pages = [metadata.home, metadata.privacy, metadata.terms];
+
+      for (const page of pages) {
+        expect(page.openGraph?.images).toEqual([image]);
+        expect(page.twitter).toMatchObject({
+          card: "summary_large_image",
+          images: [image],
+        });
+      }
+
+      expect(metadata.privacy.openGraph).toMatchObject({
+        url: "https://www.clinicflow.fit/privacy",
+        title: messages.legal.privacy.metadataTitle,
+        description: messages.legal.privacy.description,
+      });
+      expect(metadata.terms.openGraph).toMatchObject({
+        url: "https://www.clinicflow.fit/terms",
+        title: messages.legal.terms.metadataTitle,
+        description: messages.legal.terms.description,
+      });
+    },
+  );
 
   it("ships semantically aligned English and Arabic production privacy policies", () => {
     const arabicPrivacy = arMessages.legal.privacy;
@@ -93,8 +256,8 @@ describe("WS9 legal and SEO surfaces", () => {
     expect(englishTerms.sections).toHaveLength(arabicTerms.sections.length);
     expect(arabicTerms.updated).toBe("آخر تحديث: 15 يوليو 2026");
     expect(englishTerms.updated).toBe("Last updated: July 15, 2026");
-    expect(arMessages.legal.noticeTitle).toBe("حدود الخدمة والمسؤولية السريرية");
-    expect(enMessages.legal.noticeTitle).toBe("Service limits and clinical responsibility");
+    expect(arMessages.legal.noticeTitle).toBe("حدود مسؤولية ClinicFlow");
+    expect(enMessages.legal.noticeTitle).toBe("ClinicFlow Liability Limitations");
     expect(arMessages.marketing).not.toHaveProperty("legal");
     expect(enMessages.marketing).not.toHaveProperty("legal");
 

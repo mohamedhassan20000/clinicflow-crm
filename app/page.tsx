@@ -3,16 +3,20 @@ import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { MarketingPage } from "@/components/marketing/marketing-page";
 import { LanguageSwitcher } from "@/components/i18n/language-switcher";
-import { MARKETING_SITE_URL } from "@/lib/marketing-copy";
+import { getMarketingCopy } from "@/lib/marketing-copy";
+import type { MessageTranslator } from "@/lib/i18n/translator";
 import { resolveLocale } from "@/lib/preferences/server";
+import {
+  buildHomepageStructuredData,
+  serializeStructuredData,
+} from "@/lib/seo/structured-data";
 import { createClient } from "@/lib/supabase/server";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("marketing");
-  const socialImage = "/marketing/dashboard-ar-desktop.avif";
+  const socialImage = "/brand/opengraph-image.png";
   return {
-    metadataBase: new URL(MARKETING_SITE_URL),
-    title: t("seo.title"),
+    title: { absolute: t("seo.title") },
     description: t("seo.description"),
     alternates: { canonical: "/" },
     robots: { index: true, follow: true },
@@ -24,8 +28,8 @@ export async function generateMetadata(): Promise<Metadata> {
       description: t("seo.socialDescription"),
       images: [{
         url: socialImage,
-        width: 1440,
-        height: 960,
+        width: 1200,
+        height: 630,
         alt: t("seo.imageAlt"),
       }],
     },
@@ -33,7 +37,12 @@ export async function generateMetadata(): Promise<Metadata> {
       card: "summary_large_image",
       title: t("seo.socialTitle"),
       description: t("seo.twitterDescription"),
-      images: [socialImage],
+      images: [{
+        url: socialImage,
+        width: 1200,
+        height: 630,
+        alt: t("seo.imageAlt"),
+      }],
     },
   };
 }
@@ -76,7 +85,18 @@ export default async function Home({ searchParams }: PageProps) {
 
   // P2A: the marketing switcher writes the anonymous locale cookie only — it touches no account,
   // and an authenticated user's stored language never reads from it (§4.1).
-  const [locale, t] = await Promise.all([resolveLocale(), getTranslations("language")]);
+  const [locale, t, marketingTranslations] = await Promise.all([
+    resolveLocale(),
+    getTranslations("language"),
+    getTranslations("marketing"),
+  ]);
+  const marketingCopy = getMarketingCopy(
+    marketingTranslations as unknown as MessageTranslator,
+  );
+  const structuredData = buildHomepageStructuredData({
+    description: marketingTranslations("seo.description"),
+    faqItems: marketingCopy.faq.items,
+  });
   const languageSwitcher = (
     <LanguageSwitcher
       locale={locale}
@@ -99,6 +119,10 @@ export default async function Home({ searchParams }: PageProps) {
         dangerouslySetInnerHTML={{
           __html: `(function(){try{var h=window.location.hash||"";if(h.indexOf("access_token=")!==-1||h.indexOf("token_hash=")!==-1){window.location.replace("/auth/confirm"+h)}}catch(e){}})();`,
         }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: serializeStructuredData(structuredData) }}
       />
       <MarketingPage statusPromise={registrationStatus} languageSwitcher={languageSwitcher} />
     </>

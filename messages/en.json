@@ -10,6 +10,12 @@
     "en": "English",
     "ar": "العربية"
   },
+  "notFound": {
+    "eyebrow": "404 error",
+    "title": "We couldn’t find that page.",
+    "description": "The link may be incorrect or the page may have moved. You can return to the ClinicFlow home page.",
+    "home": "Back to home"
+  },
   "validation": {
     "required": "This field is required.",
     "invalidType": "This value is not valid.",
@@ -307,7 +313,7 @@
     },
     "backToTop": "Back to top",
     "seo": {
-      "title": "ClinicFlow — A clearer operating system for private clinics",
+      "title": "ClinicFlow | Clinic Management Software",
       "description": "Run appointments, patient records, billing, follow-ups, reports, and clinic operations from one calm, role-aware workspace.",
       "socialTitle": "ClinicFlow — A clearer clinic day",
       "socialDescription": "One connected workspace for private-clinic scheduling, patient records, billing, follow-ups, and reports.",
@@ -327,10 +333,11 @@
   },
   "legal": {
     "back": "Back to ClinicFlow",
-    "noticeTitle": "Service limits and clinical responsibility",
+    "noticeTitle": "ClinicFlow Liability Limitations",
     "noticeBody": "ClinicFlow is clinic-management software. It is not a healthcare provider and does not diagnose patients or make medical decisions. Healthcare professionals and clinics remain responsible for clinical assessment, treatment decisions, and patient care.",
     "privacy": {
       "title": "Privacy Policy",
+      "metadataTitle": "Privacy Policy | ClinicFlow",
       "description": "This policy explains the data ClinicFlow processes, why it is used, who may access it, and the choices available to clinics, users, and people whose patient data is recorded.",
       "updated": "Last updated: July 15, 2026",
       "sections": [
@@ -424,6 +431,7 @@
     },
     "terms": {
       "title": "Terms of Service",
+      "metadataTitle": "Terms of Service | ClinicFlow",
       "description": "These Terms govern the creation and use of a ClinicFlow clinic workspace and explain the limits of the service and the responsibilities of clinics and their users.",
       "updated": "Last updated: July 15, 2026",
       "sections": [

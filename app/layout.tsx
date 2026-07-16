@@ -5,12 +5,14 @@ import { NuqsAdapter } from "nuqs/adapters/next/app";
 import { Toaster } from "@/components/ui/sonner";
 import { fontVariables } from "@/app/fonts";
 import { localeDirection, type Locale } from "@/lib/i18n/config";
+import { MARKETING_SITE_URL } from "@/lib/marketing-copy";
 import { resolveTheme } from "@/lib/preferences/server";
 import "./globals.css";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("shell");
   return {
+    metadataBase: new URL(MARKETING_SITE_URL),
     title: { default: "ClinicFlow", template: "%s · ClinicFlow" },
     description: t("metadataDescription"),
     robots: { index: false },

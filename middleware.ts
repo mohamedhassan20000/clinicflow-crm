@@ -24,7 +24,10 @@ export default async function middleware(request: NextRequest) {
     // A full landing-page load always starts in Arabic. When the browser still carries English
     // from the login flow, make that reset explicit with a one-hop redirect; mutating the incoming
     // request cookie alone is not sufficient for Next.js' already-created intl request store.
-    if (request.cookies.get(MARKETING_LOCALE_COOKIE)?.value !== ANONYMOUS_DEFAULT_LOCALE) {
+    if (
+      request.cookies.has(MARKETING_LOCALE_COOKIE) &&
+      request.cookies.get(MARKETING_LOCALE_COOKIE)?.value !== ANONYMOUS_DEFAULT_LOCALE
+    ) {
       const url = request.nextUrl.clone();
       url.searchParams.set("landingLocale", ANONYMOUS_DEFAULT_LOCALE);
       const response = NextResponse.redirect(url);
@@ -50,6 +53,6 @@ export const config = {
      * - favicon.ico, sitemap.xml, robots.txt
      * - public assets with file extensions
      */
-    "/((?!_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt|.*\\.(?:svg|png|jpg|jpeg|gif|webp|avif|webmanifest|ico|xml|txt)$).*)",
   ],
 };

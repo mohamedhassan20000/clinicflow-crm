@@ -1,6 +1,6 @@
 import type { MessageTranslator } from "@/lib/i18n/translator";
 
-export const MARKETING_SITE_URL = "https://clinicflow.fit";
+export const MARKETING_SITE_URL = "https://www.clinicflow.fit";
 
 /**
  * P2C — the marketing copy, now sourced from `messages/{en,ar}.json` under the `marketing` and

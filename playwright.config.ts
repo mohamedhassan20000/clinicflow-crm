@@ -4,6 +4,7 @@ const PORT = Number(process.env.PORT ?? 3000);
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:${PORT}`;
 const localSupabaseUrl =
   process.env.LOCAL_SUPABASE_URL ?? "http://127.0.0.1:54321";
+const reuseExistingServer = process.env.PLAYWRIGHT_REUSE_EXISTING_SERVER === "1";
 function requireLocalKey(name: string): string {
   const v = process.env[name];
   if (!v) throw new Error(`${name} must be set in .env.local for local E2E runs.`);
@@ -32,7 +33,7 @@ export default defineConfig({
     : [{
         command: "pnpm tsx tests/e2e/rate-limit-server.ts",
         url: "http://127.0.0.1:3011/health",
-        reuseExistingServer: !process.env.CI,
+        reuseExistingServer,
         timeout: 30_000,
       }, {
         command: "pnpm build && pnpm start",
@@ -43,9 +44,11 @@ export default defineConfig({
           SUPABASE_SERVICE_ROLE_KEY: requireLocalKey("LOCAL_SUPABASE_SECRET_KEY"),
           UPSTASH_REDIS_REST_URL: "http://127.0.0.1:3011",
           UPSTASH_REDIS_REST_TOKEN: "playwright-test-token",
+          DIALOG360_API_BASE_URL: "http://127.0.0.1:3011",
+          MESSAGING_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
         },
         url: baseURL,
-        reuseExistingServer: !process.env.CI,
+        reuseExistingServer,
         timeout: 180_000,
       }],
 });

@@ -112,6 +112,270 @@ export async function requestClinicInvitation(input: {
 }
 
 /**
+ * Reviewed service-role boundary for the atomic increment_usage RPC (P1A).
+ * The messaging send path (lib/messaging/send.ts) counts every successful
+ * send here; the RPC itself resolves the plan-limit snapshot server-side and
+ * rejects non-service callers.
+ */
+export async function incrementClinicUsage(
+  clinicId: string,
+  metric: Database["public"]["Enums"]["usage_metric"],
+  amount = 1,
+) {
+  return createAdminClient().rpc("increment_usage", {
+    p_clinic_id: clinicId,
+    p_metric: metric,
+    p_amount: amount,
+  });
+}
+
+/** Atomic webhook boundary: one inbound event creates/repairs one sender thread. */
+export async function persistWhatsAppInbound(input: {
+  clinicId: string;
+  sender: string;
+  body: string;
+  providerMessageId: string;
+  receivedAt: string;
+}) {
+  return createAdminClient().rpc("persist_whatsapp_inbound", {
+    p_clinic_id: input.clinicId,
+    p_sender: input.sender,
+    p_body: input.body,
+    p_provider_message_id: input.providerMessageId,
+    p_received_at: input.receivedAt,
+  });
+}
+
+/** Atomic inbox-triage boundary; null is a durable explicit unlink decision. */
+export async function setInboxConversationPatient(input: {
+  clinicId: string;
+  conversationId: string;
+  patientId: string | null;
+}) {
+  return createAdminClient().rpc("set_conversation_patient", {
+    p_clinic_id: input.clinicId,
+    p_conversation_id: input.conversationId,
+    p_patient_id: input.patientId,
+  });
+}
+
+/** Persists provider acceptance/failure and conversation activity together. */
+export async function finalizeOutboundMessage(input: {
+  clinicId: string;
+  outboundMessageId: string;
+  status: "sent" | "failed";
+  providerMessageId: string | null;
+  error: string | null;
+  costMicro: number | null;
+  occurredAt: string;
+}) {
+  return createAdminClient().rpc("finalize_outbound_message", {
+    p_clinic_id: input.clinicId,
+    p_outbound_message_id: input.outboundMessageId,
+    p_status: input.status,
+    p_provider_message_id: input.providerMessageId,
+    p_error: input.error,
+    p_cost_micro: input.costMicro,
+    p_occurred_at: input.occurredAt,
+  });
+}
+
+/** Monotonic delivery callback boundary with opaque-reference correlation repair. */
+export async function advanceOutboundMessageStatus(input: {
+  provider: Database["public"]["Enums"]["messaging_provider"];
+  providerMessageId: string;
+  clientReference: string | null;
+  expectedClinicId: string | null;
+  status: Database["public"]["Enums"]["outbound_message_status"];
+  error: string | null;
+  occurredAt: string | null;
+}) {
+  return createAdminClient().rpc("advance_outbound_message_status", {
+    p_provider: input.provider,
+    p_provider_message_id: input.providerMessageId,
+    p_client_reference: input.clientReference,
+    p_expected_clinic_id: input.expectedClinicId,
+    p_status: input.status,
+    p_error: input.error,
+    p_occurred_at: input.occurredAt,
+  });
+}
+
+/**
+ * Reviewed cross-tenant lookup for public provider callbacks. The untrusted
+ * sender identity is used only to locate one channel; callers must decrypt
+ * that row and authenticate the webhook before processing any event.
+ */
+export async function findClinicChannelForWebhook(
+  provider: Database["public"]["Enums"]["messaging_provider"],
+  senderIdentity: string,
+) {
+  return createAdminClient()
+    .from("clinic_channels")
+    .select(
+      "id, clinic_id, channel, provider, credentials_encrypted, sender_identity, status, connected_at, created_at, updated_at",
+    )
+    .eq("provider", provider)
+    .eq("sender_identity", senderIdentity)
+    .eq("status", "active")
+    .maybeSingle();
+}
+
+/** Preflight for provider configuration so a tenant cannot claim another channel's identity. */
+export async function findClinicChannelIdentityOwner(
+  provider: Database["public"]["Enums"]["messaging_provider"],
+  senderIdentity: string,
+) {
+  return createAdminClient()
+    .from("clinic_channels")
+    .select("id, clinic_id")
+    .eq("provider", provider)
+    .eq("sender_identity", senderIdentity)
+    .maybeSingle();
+}
+
+/** Status callbacks do not carry clinic identity; provider ids are globally unique. */
+export async function findOutboundMessageForWebhook(
+  provider: Database["public"]["Enums"]["messaging_provider"],
+  providerMessageId: string,
+) {
+  return createAdminClient()
+    .from("outbound_messages")
+    .select("id, clinic_id")
+    .eq("provider", provider)
+    .eq("provider_message_id", providerMessageId)
+    .maybeSingle();
+}
+
+/**
+ * Reviewed cross-tenant read for the P3D reminders cron. The RPC restricts
+ * the bounded window to appointments with at least one actionable offset
+ * (due, unsent, not under a fresh claim), so fully-reminded rows can never
+ * starve later eligible appointments (P3-H2). All subsequent reads/writes go
+ * through createClinicScopedAdminClient.
+ */
+export async function listReminderCandidateAppointments(
+  nowIso: string,
+  horizonIso: string,
+) {
+  return createAdminClient().rpc("list_reminder_candidates", {
+    p_now: nowIso,
+    p_horizon: horizonIso,
+  });
+}
+
+/** Reviewed cross-tenant read for the P3D invoice follow-up cron. */
+export async function listDueFollowupSequences(nowIso: string) {
+  return createAdminClient()
+    .from("followup_sequences")
+    .select("id, clinic_id, appointment_id, step, next_run_at, status, created_at")
+    .eq("status", "active")
+    .lte("next_run_at", nowIso)
+    .order("next_run_at", { ascending: true })
+    .limit(500);
+}
+
+/**
+ * Reviewed read of one clinic's messaging-relevant settings for cron sends.
+ * The clinics table has no clinic_id column, so the scoped wrapper cannot
+ * express it; this helper stays metadata-only.
+ */
+export async function getClinicReminderSettings(clinicId: string) {
+  return createAdminClient()
+    .from("clinics")
+    .select(
+      "id, name, timezone, locale, time_format, digits, reminder_offsets",
+    )
+    .eq("id", clinicId)
+    .maybeSingle();
+}
+
+/**
+ * Atomic claim-before-send lease for one (appointment, offset) — §7.2
+ * idempotency. Stale claims (crashed runs) become re-claimable after the
+ * lease window; only finalizeAppointmentReminder records a real send.
+ */
+export async function claimAppointmentReminder(input: {
+  clinicId: string;
+  appointmentId: string;
+  offsetHours: number;
+  claimedAt: string;
+}) {
+  return createAdminClient().rpc("claim_appointment_reminder", {
+    p_clinic_id: input.clinicId,
+    p_appointment_id: input.appointmentId,
+    p_offset_hours: input.offsetHours,
+    p_claimed_at: input.claimedAt,
+  });
+}
+
+/** Terminal sent marker, written only after a successful dispatch. */
+export async function finalizeAppointmentReminder(input: {
+  clinicId: string;
+  appointmentId: string;
+  offsetHours: number;
+  sentAt: string;
+}) {
+  return createAdminClient().rpc("finalize_appointment_reminder", {
+    p_clinic_id: input.clinicId,
+    p_appointment_id: input.appointmentId,
+    p_offset_hours: input.offsetHours,
+    p_sent_at: input.sentAt,
+  });
+}
+
+/** Compensation when a claimed reminder send fails: the next run retries it. */
+export async function releaseAppointmentReminder(input: {
+  clinicId: string;
+  appointmentId: string;
+  offsetHours: number;
+}) {
+  return createAdminClient().rpc("release_appointment_reminder", {
+    p_clinic_id: input.clinicId,
+    p_appointment_id: input.appointmentId,
+    p_offset_hours: input.offsetHours,
+  });
+}
+
+/**
+ * Atomic notification fan-out (§7.5). The RPC inserts one row per recipient
+ * with ON CONFLICT DO NOTHING against the partial unique
+ * (recipient_id, dedupe_key) WHERE read_at IS NULL index, so concurrent
+ * emitters cannot double-insert (P3-M2). The composite recipient FK rejects
+ * recipients outside the clinic.
+ */
+export async function emitClinicNotificationRows(input: {
+  clinicId: string;
+  recipientIds: readonly string[];
+  type: string;
+  link: string | null;
+  data: Record<string, string>;
+  dedupeKey: string | null;
+}) {
+  return createAdminClient().rpc("emit_clinic_notifications", {
+    p_clinic_id: input.clinicId,
+    p_recipient_ids: [...input.recipientIds],
+    p_type: input.type,
+    p_link: input.link,
+    p_data: input.data,
+    p_dedupe_key: input.dedupeKey,
+  });
+}
+
+/**
+ * Template callbacks may omit phone_number_id. Meta template ids are global,
+ * so this reviewed helper resolves exactly one owning clinic before a scoped
+ * update is made.
+ */
+export async function findMessageTemplateForWebhook(providerTemplateId: string) {
+  return createAdminClient()
+    .from("message_templates")
+    .select("id, clinic_id")
+    .eq("provider_template_id", providerTemplateId)
+    .maybeSingle();
+}
+
+/**
  * Detail lists in the operator panel are explicitly bounded; headline totals
  * use the exact count returned alongside so they never depend on row-array
  * length (PostgREST caps each response at max_rows).
@@ -631,14 +895,21 @@ const CLINIC_SCOPED_TABLES = new Set([
   "appointment_services",
   "appointments",
   "audit_logs",
+  "clinic_channels",
   "clinic_working_hours",
   "clinic_feature_overrides",
+  "conversations",
   "coupon_redemptions",
   "departments",
   "doctor_schedules",
   "follow_ups",
+  "followup_sequences",
+  "inbound_messages",
   "insurance_providers",
   "medical_note_attachments",
+  "message_templates",
+  "notifications",
+  "outbound_messages",
   "outstanding_settlements",
   "package_templates",
   "patient_deposits",

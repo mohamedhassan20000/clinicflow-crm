@@ -1,0 +1,20 @@
+{
+  "object": "whatsapp_business_account",
+  "entry": [{
+    "id": "waba-1",
+    "changes": [{
+      "field": "messages",
+      "value": {
+        "messaging_product": "whatsapp",
+        "metadata": { "display_phone_number": "+96550000001", "phone_number_id": "109876543210" },
+        "messages": [{
+          "from": "96551111111",
+          "id": "wamid.inbound-1",
+          "timestamp": "1784278800",
+          "type": "text",
+          "text": { "body": "Please confirm my appointment" }
+        }]
+      }
+    }]
+  }]
+}

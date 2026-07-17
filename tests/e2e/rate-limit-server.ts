@@ -7,6 +7,10 @@ const server = createServer((request, response) => {
     response.end(JSON.stringify({ ok: true }));
     return;
   }
+  if (request.url === "/messages" && request.method === "POST") {
+    response.end(JSON.stringify({ messages: [{ id: "wamid.p3c-e2e-reply" }] }));
+    return;
+  }
   response.end(JSON.stringify({ result: [1, 1, Date.now()] }));
 });
 
@@ -17,4 +21,3 @@ function close() {
 }
 process.on("SIGTERM", close);
 process.on("SIGINT", close);
-

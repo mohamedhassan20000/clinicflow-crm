@@ -95,6 +95,7 @@ export type Database = {
           payment_method: Database["public"]["Enums"]["payment_method"] | null
           payment_note: string | null
           reminder_sent_at: string | null
+          reminders_sent: Json
           scheduled_at: string
           secondary_amount: number
           secondary_payment_method:
@@ -136,6 +137,7 @@ export type Database = {
           payment_method?: Database["public"]["Enums"]["payment_method"] | null
           payment_note?: string | null
           reminder_sent_at?: string | null
+          reminders_sent?: Json
           scheduled_at: string
           secondary_amount?: number
           secondary_payment_method?:
@@ -177,6 +179,7 @@ export type Database = {
           payment_method?: Database["public"]["Enums"]["payment_method"] | null
           payment_note?: string | null
           reminder_sent_at?: string | null
+          reminders_sent?: Json
           scheduled_at?: string
           secondary_amount?: number
           secondary_payment_method?:
@@ -322,6 +325,53 @@ export type Database = {
           },
           {
             foreignKeyName: "audit_logs_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      clinic_channels: {
+        Row: {
+          channel: Database["public"]["Enums"]["message_channel"]
+          clinic_id: string
+          connected_at: string | null
+          created_at: string
+          credentials_encrypted: string | null
+          id: string
+          provider: Database["public"]["Enums"]["messaging_provider"]
+          sender_identity: string
+          status: Database["public"]["Enums"]["clinic_channel_status"]
+          updated_at: string
+        }
+        Insert: {
+          channel: Database["public"]["Enums"]["message_channel"]
+          clinic_id: string
+          connected_at?: string | null
+          created_at?: string
+          credentials_encrypted?: string | null
+          id?: string
+          provider: Database["public"]["Enums"]["messaging_provider"]
+          sender_identity: string
+          status?: Database["public"]["Enums"]["clinic_channel_status"]
+          updated_at?: string
+        }
+        Update: {
+          channel?: Database["public"]["Enums"]["message_channel"]
+          clinic_id?: string
+          connected_at?: string | null
+          created_at?: string
+          credentials_encrypted?: string | null
+          id?: string
+          provider?: Database["public"]["Enums"]["messaging_provider"]
+          sender_identity?: string
+          status?: Database["public"]["Enums"]["clinic_channel_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clinic_channels_clinic_id_fkey"
             columns: ["clinic_id"]
             isOneToOne: false
             referencedRelation: "clinics"
@@ -483,6 +533,7 @@ export type Database = {
           phone: string | null
           phone_e164_valid: boolean
           reminder_lead_hours: number
+          reminder_offsets: number[]
           time_format: string
           timezone: string
           updated_at: string
@@ -505,6 +556,7 @@ export type Database = {
           phone?: string | null
           phone_e164_valid?: boolean
           reminder_lead_hours?: number
+          reminder_offsets?: number[]
           time_format?: string
           timezone?: string
           updated_at?: string
@@ -527,6 +579,7 @@ export type Database = {
           phone?: string | null
           phone_e164_valid?: boolean
           reminder_lead_hours?: number
+          reminder_offsets?: number[]
           time_format?: string
           timezone?: string
           updated_at?: string
@@ -535,6 +588,90 @@ export type Database = {
           working_hours_start?: string | null
         }
         Relationships: []
+      }
+      conversations: {
+        Row: {
+          assigned_to: string | null
+          channel: Database["public"]["Enums"]["message_channel"]
+          clinic_id: string
+          created_at: string
+          id: string
+          last_message_at: string | null
+          patient_id: string | null
+          participant_address: string | null
+          patient_link_status: string
+          status: Database["public"]["Enums"]["conversation_status"]
+          status_updated_at: string
+          updated_at: string
+          window_expires_at: string | null
+        }
+        Insert: {
+          assigned_to?: string | null
+          channel: Database["public"]["Enums"]["message_channel"]
+          clinic_id: string
+          created_at?: string
+          id?: string
+          last_message_at?: string | null
+          patient_id?: string | null
+          participant_address?: string | null
+          patient_link_status?: string
+          status?: Database["public"]["Enums"]["conversation_status"]
+          status_updated_at?: string
+          updated_at?: string
+          window_expires_at?: string | null
+        }
+        Update: {
+          assigned_to?: string | null
+          channel?: Database["public"]["Enums"]["message_channel"]
+          clinic_id?: string
+          created_at?: string
+          id?: string
+          last_message_at?: string | null
+          patient_id?: string | null
+          participant_address?: string | null
+          patient_link_status?: string
+          status?: Database["public"]["Enums"]["conversation_status"]
+          status_updated_at?: string
+          updated_at?: string
+          window_expires_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversations_assignee_clinic_fkey"
+            columns: ["assigned_to", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id", "clinic_id"]
+          },
+          {
+            foreignKeyName: "conversations_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversations_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversations_patient_clinic_fkey"
+            columns: ["patient_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id", "clinic_id"]
+          },
+          {
+            foreignKeyName: "conversations_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       coupon_redemptions: {
         Row: {
@@ -844,6 +981,60 @@ export type Database = {
           },
         ]
       }
+      followup_sequences: {
+        Row: {
+          appointment_id: string
+          clinic_id: string
+          created_at: string
+          id: string
+          last_sent_at: string | null
+          next_run_at: string | null
+          status: string
+          step: number
+          stopped_reason: string | null
+          updated_at: string
+        }
+        Insert: {
+          appointment_id: string
+          clinic_id: string
+          created_at?: string
+          id?: string
+          last_sent_at?: string | null
+          next_run_at?: string | null
+          status?: string
+          step?: number
+          stopped_reason?: string | null
+          updated_at?: string
+        }
+        Update: {
+          appointment_id?: string
+          clinic_id?: string
+          created_at?: string
+          id?: string
+          last_sent_at?: string | null
+          next_run_at?: string | null
+          status?: string
+          step?: number
+          stopped_reason?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "followup_sequences_appointment_clinic_fkey"
+            columns: ["appointment_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "appointments"
+            referencedColumns: ["id", "clinic_id"]
+          },
+          {
+            foreignKeyName: "followup_sequences_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       fx_rates: {
         Row: {
           base_currency: string
@@ -873,6 +1064,74 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      inbound_messages: {
+        Row: {
+          body: string
+          channel: Database["public"]["Enums"]["message_channel"]
+          clinic_id: string
+          conversation_id: string
+          created_at: string
+          id: string
+          patient_id: string | null
+          provider_message_id: string | null
+          received_at: string
+          sender: string
+        }
+        Insert: {
+          body: string
+          channel: Database["public"]["Enums"]["message_channel"]
+          clinic_id: string
+          conversation_id: string
+          created_at?: string
+          id?: string
+          patient_id?: string | null
+          provider_message_id?: string | null
+          received_at?: string
+          sender: string
+        }
+        Update: {
+          body?: string
+          channel?: Database["public"]["Enums"]["message_channel"]
+          clinic_id?: string
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          patient_id?: string | null
+          provider_message_id?: string | null
+          received_at?: string
+          sender?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inbound_messages_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inbound_messages_conversation_clinic_fkey"
+            columns: ["conversation_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id", "clinic_id"]
+          },
+          {
+            foreignKeyName: "inbound_messages_patient_clinic_fkey"
+            columns: ["patient_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id", "clinic_id"]
+          },
+          {
+            foreignKeyName: "inbound_messages_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       insurance_providers: {
         Row: {
@@ -1038,6 +1297,189 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "patients"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      message_templates: {
+        Row: {
+          approval_status: Database["public"]["Enums"]["template_approval_status"]
+          body: string
+          channel: Database["public"]["Enums"]["message_channel"]
+          clinic_id: string
+          created_at: string
+          id: string
+          language: string
+          name: string
+          provider_template_id: string | null
+          updated_at: string
+          variables: Json
+        }
+        Insert: {
+          approval_status?: Database["public"]["Enums"]["template_approval_status"]
+          body: string
+          channel: Database["public"]["Enums"]["message_channel"]
+          clinic_id: string
+          created_at?: string
+          id?: string
+          language: string
+          name: string
+          provider_template_id?: string | null
+          updated_at?: string
+          variables?: Json
+        }
+        Update: {
+          approval_status?: Database["public"]["Enums"]["template_approval_status"]
+          body?: string
+          channel?: Database["public"]["Enums"]["message_channel"]
+          clinic_id?: string
+          created_at?: string
+          id?: string
+          language?: string
+          name?: string
+          provider_template_id?: string | null
+          updated_at?: string
+          variables?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_templates_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notifications: {
+        Row: {
+          body: string | null
+          clinic_id: string
+          created_at: string
+          data: Json
+          dedupe_key: string | null
+          id: string
+          link: string | null
+          read_at: string | null
+          recipient_id: string | null
+          title: string | null
+          type: string
+        }
+        Insert: {
+          body?: string | null
+          clinic_id: string
+          created_at?: string
+          data?: Json
+          dedupe_key?: string | null
+          id?: string
+          link?: string | null
+          read_at?: string | null
+          recipient_id?: string | null
+          title?: string | null
+          type: string
+        }
+        Update: {
+          body?: string | null
+          clinic_id?: string
+          created_at?: string
+          data?: Json
+          dedupe_key?: string | null
+          id?: string
+          link?: string | null
+          read_at?: string | null
+          recipient_id?: string | null
+          title?: string | null
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_recipient_clinic_fkey"
+            columns: ["recipient_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id", "clinic_id"]
+          },
+          {
+            foreignKeyName: "notifications_recipient_id_fkey"
+            columns: ["recipient_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      outbound_messages: {
+        Row: {
+          body_preview: string | null
+          channel: Database["public"]["Enums"]["message_channel"]
+          clinic_id: string
+          cost_micro: number | null
+          created_at: string
+          error: string | null
+          id: string
+          provider: Database["public"]["Enums"]["messaging_provider"]
+          provider_message_id: string | null
+          recipient: string
+          related_id: string | null
+          related_type: Database["public"]["Enums"]["outbound_related_type"]
+          status: Database["public"]["Enums"]["outbound_message_status"]
+          status_updated_at: string
+          template_id: string | null
+        }
+        Insert: {
+          body_preview?: string | null
+          channel: Database["public"]["Enums"]["message_channel"]
+          clinic_id: string
+          cost_micro?: number | null
+          created_at?: string
+          error?: string | null
+          id?: string
+          provider: Database["public"]["Enums"]["messaging_provider"]
+          provider_message_id?: string | null
+          recipient: string
+          related_id?: string | null
+          related_type: Database["public"]["Enums"]["outbound_related_type"]
+          status?: Database["public"]["Enums"]["outbound_message_status"]
+          status_updated_at?: string
+          template_id?: string | null
+        }
+        Update: {
+          body_preview?: string | null
+          channel?: Database["public"]["Enums"]["message_channel"]
+          clinic_id?: string
+          cost_micro?: number | null
+          created_at?: string
+          error?: string | null
+          id?: string
+          provider?: Database["public"]["Enums"]["messaging_provider"]
+          provider_message_id?: string | null
+          recipient?: string
+          related_id?: string | null
+          related_type?: Database["public"]["Enums"]["outbound_related_type"]
+          status?: Database["public"]["Enums"]["outbound_message_status"]
+          status_updated_at?: string
+          template_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "outbound_messages_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "outbound_messages_template_clinic_fkey"
+            columns: ["template_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "message_templates"
+            referencedColumns: ["id", "clinic_id"]
           },
         ]
       }
@@ -2041,6 +2483,18 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      advance_outbound_message_status: {
+        Args: {
+          p_client_reference: string | null
+          p_error: string | null
+          p_expected_clinic_id: string | null
+          p_occurred_at: string | null
+          p_provider: Database["public"]["Enums"]["messaging_provider"]
+          p_provider_message_id: string
+          p_status: Database["public"]["Enums"]["outbound_message_status"]
+        }
+        Returns: boolean
+      }
       auth_clinic_id: { Args: never; Returns: string }
       auth_department_id: { Args: never; Returns: string }
       auth_profile: {
@@ -2054,6 +2508,15 @@ export type Database = {
       auth_role: {
         Args: never
         Returns: Database["public"]["Enums"]["user_role"]
+      }
+      claim_appointment_reminder: {
+        Args: {
+          p_appointment_id: string
+          p_claimed_at: string
+          p_clinic_id: string
+          p_offset_hours: number
+        }
+        Returns: boolean
       }
       clear_own_must_change_password: { Args: never; Returns: undefined }
       complete_appointment_billing: {
@@ -2109,12 +2572,44 @@ export type Database = {
         }
         Returns: string
       }
+      emit_clinic_notifications: {
+        Args: {
+          p_clinic_id: string
+          p_data: Json
+          p_dedupe_key: string | null
+          p_link: string | null
+          p_recipient_ids: string[]
+          p_type: string
+        }
+        Returns: number
+      }
+      finalize_appointment_reminder: {
+        Args: {
+          p_appointment_id: string
+          p_clinic_id: string
+          p_offset_hours: number
+          p_sent_at: string
+        }
+        Returns: boolean
+      }
       find_resumable_clinic_owner: {
         Args: { p_email: string }
         Returns: {
           email_confirmed: boolean
           user_id: string
         }[]
+      }
+      finalize_outbound_message: {
+        Args: {
+          p_clinic_id: string
+          p_cost_micro: number | null
+          p_error: string | null
+          p_occurred_at: string
+          p_outbound_message_id: string
+          p_provider_message_id: string | null
+          p_status: Database["public"]["Enums"]["outbound_message_status"]
+        }
+        Returns: boolean
       }
       get_cancellation_report: {
         Args: { p_end: string; p_start: string }
@@ -2137,6 +2632,25 @@ export type Database = {
           p_start: string
         }
         Returns: Json
+      }
+      get_inbox_conversation_summaries: {
+        Args: {
+          p_limit?: number
+          p_requested_conversation_id?: string | null
+        }
+        Returns: {
+          assigned_to: string | null
+          channel: Database["public"]["Enums"]["message_channel"]
+          id: string
+          last_inbound_at: string | null
+          last_message_at: string | null
+          participant_address: string | null
+          patient_id: string | null
+          preview: string
+          status: Database["public"]["Enums"]["conversation_status"]
+          unread_count: number
+          window_expires_at: string | null
+        }[]
       }
       get_no_show_report: {
         Args: { p_end: string; p_start: string }
@@ -2174,6 +2688,21 @@ export type Database = {
         Returns: number
       }
       is_platform_admin: { Args: never; Returns: boolean }
+      list_reminder_candidates: {
+        Args: {
+          p_horizon: string
+          p_limit?: number
+          p_now: string
+        }
+        Returns: {
+          clinic_id: string
+          doctor_id: string
+          id: string
+          patient_id: string
+          reminders_sent: Json
+          scheduled_at: string
+        }[]
+      }
       log_platform_audit_event: {
         Args: {
           p_action: string
@@ -2189,10 +2718,31 @@ export type Database = {
         Returns: string
       }
       platform_week_start: { Args: { p_at?: string }; Returns: string }
+      persist_whatsapp_inbound: {
+        Args: {
+          p_body: string
+          p_clinic_id: string
+          p_provider_message_id: string
+          p_received_at: string
+          p_sender: string
+        }
+        Returns: {
+          conversation_id: string
+          inserted: boolean
+        }[]
+      }
       record_own_last_login: { Args: never; Returns: boolean }
       redeem_coupon: {
         Args: { p_clinic_id: string; p_code: string; p_invitation_id?: string }
         Returns: Json
+      }
+      release_appointment_reminder: {
+        Args: {
+          p_appointment_id: string
+          p_clinic_id: string
+          p_offset_hours: number
+        }
+        Returns: boolean
       }
       request_clinic_invitation: {
         Args: {
@@ -2226,6 +2776,14 @@ export type Database = {
           p_secondary_payment_method?: string
         }
         Returns: undefined
+      }
+      set_conversation_patient: {
+        Args: {
+          p_clinic_id: string
+          p_conversation_id: string
+          p_patient_id: string | null
+        }
+        Returns: boolean
       }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
@@ -2264,6 +2822,10 @@ export type Database = {
         Args: { p_appointment_id: string; p_target_status: string }
         Returns: undefined
       }
+      valid_reminder_offsets: {
+        Args: { p_offsets: number[] }
+        Returns: boolean
+      }
       validate_clinic_signup: {
         Args: { p_token_hash?: string }
         Returns: {
@@ -2286,9 +2848,15 @@ export type Database = {
         | "cancelled"
         | "no_show"
       blood_type: "A+" | "A-" | "B+" | "B-" | "AB+" | "AB-" | "O+" | "O-"
+      clinic_channel_status: "pending" | "active" | "error"
       clinic_invitation_status: "pending" | "accepted" | "revoked" | "expired"
+      conversation_status: "open" | "closed"
       coupon_kind: "lifetime_free" | "months_free" | "percent_discount"
       follow_up_outcome: "all_fine" | "has_problem" | "no_response"
+      message_channel: "whatsapp" | "email"
+      messaging_provider: "dialog360" | "meta" | "resend"
+      outbound_message_status: "queued" | "sent" | "delivered" | "read" | "failed"
+      outbound_related_type: "appointment" | "invoice" | "agent" | "manual"
       patient_document_category: "national_id" | "insurance" | "other"
       payment_method:
         | "cash"
@@ -2298,6 +2866,7 @@ export type Database = {
         | "insurance"
       registration_mode: "invite_only" | "open"
       subscription_status: "trialing" | "active" | "past_due" | "cancelled"
+      template_approval_status: "draft" | "submitted" | "approved" | "rejected"
       usage_metric: "ai_messages" | "wa_messages" | "sms_messages" | "emails"
       user_role: "admin" | "receptionist" | "manager" | "doctor"
     }
@@ -2437,9 +3006,15 @@ export const Constants = {
         "no_show",
       ],
       blood_type: ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"],
+      clinic_channel_status: ["pending", "active", "error"],
       clinic_invitation_status: ["pending", "accepted", "revoked", "expired"],
+      conversation_status: ["open", "closed"],
       coupon_kind: ["lifetime_free", "months_free", "percent_discount"],
       follow_up_outcome: ["all_fine", "has_problem", "no_response"],
+      message_channel: ["whatsapp", "email"],
+      messaging_provider: ["dialog360", "meta", "resend"],
+      outbound_message_status: ["queued", "sent", "delivered", "read", "failed"],
+      outbound_related_type: ["appointment", "invoice", "agent", "manual"],
       patient_document_category: ["national_id", "insurance", "other"],
       payment_method: [
         "cash",
@@ -2450,6 +3025,7 @@ export const Constants = {
       ],
       registration_mode: ["invite_only", "open"],
       subscription_status: ["trialing", "active", "past_due", "cancelled"],
+      template_approval_status: ["draft", "submitted", "approved", "rejected"],
       usage_metric: ["ai_messages", "wa_messages", "sms_messages", "emails"],
       user_role: ["admin", "receptionist", "manager", "doctor"],
     },

@@ -11,6 +11,8 @@ const SETTINGS_LABELS: Record<string, string> = {
   "/settings/packages": "packages",
   "/settings/insurance": "insurance",
   "/settings/clinic": "clinic",
+  "/settings/messaging": "messaging",
+  "/settings/templates": "templates",
   "/settings/customize": "customize",
 };
 

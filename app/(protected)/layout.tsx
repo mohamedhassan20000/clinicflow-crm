@@ -3,6 +3,8 @@ import { requireUser } from "@/lib/rbac";
 import { resolveTheme } from "@/lib/preferences/server";
 import { createClient } from "@/lib/supabase/server";
 import { DashboardShell } from "@/components/layout/dashboard-shell";
+import { NotificationBell } from "@/components/notifications/notification-bell";
+import { getUnreadNotificationCount } from "@/lib/notifications/queries";
 import { getVisiblePageSlugs } from "@/lib/server-page-permissions";
 import { getTenantShellNavigation } from "@/lib/dashboard-navigation";
 import { ClinicSettingsProvider } from "@/contexts/clinic-settings-context";
@@ -44,9 +46,13 @@ export default async function ProtectedLayout({
   const { displayCurrency: preferred, rates } = await loadDisplayContext(user.id);
   const displayCurrency = preferred ?? clinicLocale.currency;
 
+  // P3D (§7.5): the clinic header's slot carries the notification bell. The
+  // operator surface keeps its slot for the Operator Language Switcher.
+  const unreadNotifications = await getUnreadNotificationCount();
+
   return (
     <ClinicSettingsProvider timeFormat={timeFormat} locale={clinicLocale} displayCurrency={displayCurrency} fxRates={rates}>
-      <DashboardShell navItems={navItems} user={{ fullName: user.fullName, email: user.email, roleLabel: user.role, avatarUrl: user.avatarUrl, profileHref: "/profile" }} theme={theme} surface="clinic">
+      <DashboardShell navItems={navItems} user={{ fullName: user.fullName, email: user.email, roleLabel: user.role, avatarUrl: user.avatarUrl, profileHref: "/profile" }} theme={theme} surface="clinic" headerSlot={<NotificationBell unreadCount={unreadNotifications} />}>
         {children}
       </DashboardShell>
     </ClinicSettingsProvider>

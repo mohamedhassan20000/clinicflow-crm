@@ -15,11 +15,11 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function NewPatientPage({
   searchParams,
 }: {
-  searchParams: Promise<{ returnTo?: string }>;
+  searchParams: Promise<{ returnTo?: string; phone?: string }>;
 }) {
   const t = await getTranslations("protected");
-  const { returnTo } = await searchParams;
-  const patientsUrl = resolveReturnTo(returnTo, "/patients", ["/patients"]);
+  const { returnTo, phone } = await searchParams;
+  const patientsUrl = resolveReturnTo(returnTo, "/patients", ["/patients", "/inbox"]);
   const user = await requireRole(["admin", "receptionist"]);
   const supabase = await createClient();
   const [
@@ -61,6 +61,7 @@ export default async function NewPatientPage({
       <div className="max-w-2xl mx-auto rounded-xl border border-border/50 bg-card p-6">
         <PatientForm
           action={createPatient}
+          defaultValues={phone ? { phone } : undefined}
           departments={departments ?? []}
           doctors={doctors ?? []}
           insuranceProviders={insuranceProviders ?? []}

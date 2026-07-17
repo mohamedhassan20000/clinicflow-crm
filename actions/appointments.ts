@@ -18,6 +18,7 @@ import {
 } from "@/lib/validations/appointment";
 import type { Database, TablesUpdate } from "@/types/database";
 import { getPatientAccountBalance } from "@/actions/patients";
+import { ensureInvoiceFollowupSequence } from "@/lib/messaging/followups";
 import { getClinicWorkingHours } from "@/actions/settings";
 import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
 
@@ -492,6 +493,14 @@ export async function updateAppointmentStatus(
         : await supabase.rpc("complete_appointment_billing", baseBillingArgs);
 
     if (error) return { error: await actionError("appointments.weCouldNotCompleteThisRequestPleaseTryAgain") };
+
+    // P3D (§7.3): an invoice that completes with an outstanding balance enters
+    // the follow-up sequence (D0 → D+3 → D+7). Registration is idempotent and
+    // best-effort — it never fails billing.
+    if (total - collected > 0.001) {
+      await ensureInvoiceFollowupSequence(user.clinicId, id);
+    }
+
     revalidatePath("/appointments");
     revalidatePath(`/patients/${appt.patient_id}`);
     return {};

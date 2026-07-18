@@ -25,6 +25,7 @@
     "test:all": "vitest run"
   },
   "dependencies": {
+    "@ai-sdk/react": "^3.0.232",
     "@hookform/resolvers": "^5.2.2",
     "@radix-ui/react-label": "^2.1.8",
     "@radix-ui/react-slot": "^1.2.4",
@@ -32,6 +33,7 @@
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.103.3",
     "@tanstack/react-table": "^8.21.3",
+    "ai": "^6.0.230",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",

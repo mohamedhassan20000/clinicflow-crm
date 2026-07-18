@@ -12,6 +12,7 @@ const PROTECTED_PREFIXES = [
   "/dashboard",
   "/patients",
   "/appointments",
+  "/assistant",
   "/inbox",
   "/followups",
   "/notifications",

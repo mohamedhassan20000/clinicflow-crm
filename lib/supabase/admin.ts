@@ -121,11 +121,57 @@ export async function incrementClinicUsage(
   clinicId: string,
   metric: Database["public"]["Enums"]["usage_metric"],
   amount = 1,
+  periodStart?: string,
 ) {
   return createAdminClient().rpc("increment_usage", {
     p_clinic_id: clinicId,
     p_metric: metric,
     p_amount: amount,
+    p_period_start: periodStart,
+  });
+}
+
+/**
+ * Service-role compensation for a usage unit reserved before an AI stream.
+ * The database decrement is atomic; callers must still make their local
+ * release path idempotent so one request cannot release another turn's unit.
+ */
+export async function releaseClinicUsage(
+  clinicId: string,
+  metric: Database["public"]["Enums"]["usage_metric"],
+  amount = 1,
+  periodStart?: string,
+) {
+  return createAdminClient().rpc("release_usage", {
+    p_clinic_id: clinicId,
+    p_metric: metric,
+    p_amount: amount,
+    p_period_start: periodStart,
+  });
+}
+
+/**
+ * Reviewed service-role boundary for the log_agent_tool_call RPC (P4A, §6.6).
+ * Every AI tool invocation is audited here. The RPC is service-role only and
+ * writes a redacted summary into audit_logs; clinic admins read it through the
+ * existing audit_logs_select_admin_manager policy. Raw note bodies and direct
+ * identifiers never reach this boundary — callers pass a redacted summary.
+ */
+export async function logAgentToolCall(input: {
+  clinicId: string;
+  actorId: string | null;
+  tool: string;
+  tableName?: string | null;
+  recordId?: string | null;
+  summary?: Record<string, unknown>;
+}) {
+  return createAdminClient().rpc("log_agent_tool_call", {
+    p_clinic_id: input.clinicId,
+    p_tool: input.tool,
+    p_actor_id: input.actorId ?? undefined,
+    p_table_name: input.tableName ?? undefined,
+    p_record_id: input.recordId ?? undefined,
+    p_summary: (input.summary ?? {}) as Database["public"]["Tables"]["audit_logs"]["Row"]["new_data"],
   });
 }
 

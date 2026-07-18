@@ -87,6 +87,12 @@ describe("P1B atomic coupon redemption", () => {
       p_clinic_id: clinicIds[0], p_code: `P1B${suffix}NOPE`,
     });
     expect(result.error).not.toBeNull();
+    const release = await caller.rpc("release_usage", {
+      p_clinic_id: clinicIds[0],
+      p_metric: "ai_messages",
+      p_amount: 1,
+    });
+    expect(release.error).not.toBeNull();
     await service.from("profiles").delete().eq("id", created.data.user.id);
     await service.auth.admin.deleteUser(created.data.user.id);
   });
@@ -317,5 +323,19 @@ describe("P1B usage limit resolution and atomic reservation", () => {
       .eq("metric", "ai_messages")
       .single();
     expect(persisted.data).toEqual({ used: 1000, limit_snapshot: 1000 });
+
+    const released = await service.rpc("release_usage", {
+      p_clinic_id: clinicId,
+      p_metric: "ai_messages",
+      p_amount: 1,
+    });
+    expect(released).toMatchObject({ data: 999, error: null });
+    const compensated = await service
+      .from("usage_counters")
+      .select("used, limit_snapshot")
+      .eq("clinic_id", clinicId)
+      .eq("metric", "ai_messages")
+      .single();
+    expect(compensated.data).toEqual({ used: 999, limit_snapshot: 1000 });
   });
 });

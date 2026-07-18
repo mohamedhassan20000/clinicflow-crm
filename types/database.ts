@@ -9,6 +9,112 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      agent_conversations: {
+        Row: {
+          clinic_id: string
+          created_at: string
+          id: string
+          locale: string
+          patient_id: string | null
+          persona: Database["public"]["Enums"]["agent_persona"]
+          status: string
+          title: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          clinic_id: string
+          created_at?: string
+          id?: string
+          locale?: string
+          patient_id?: string | null
+          persona?: Database["public"]["Enums"]["agent_persona"]
+          status?: string
+          title?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          clinic_id?: string
+          created_at?: string
+          id?: string
+          locale?: string
+          patient_id?: string | null
+          persona?: Database["public"]["Enums"]["agent_persona"]
+          status?: string
+          title?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_conversations_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_conversations_patient_clinic_fkey"
+            columns: ["patient_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id", "clinic_id"]
+          },
+          {
+            foreignKeyName: "agent_conversations_user_clinic_fkey"
+            columns: ["user_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id", "clinic_id"]
+          },
+        ]
+      }
+      agent_messages: {
+        Row: {
+          clinic_id: string
+          content: string
+          conversation_id: string
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["agent_message_role"]
+          tool_name: string | null
+        }
+        Insert: {
+          clinic_id: string
+          content?: string
+          conversation_id: string
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["agent_message_role"]
+          tool_name?: string | null
+        }
+        Update: {
+          clinic_id?: string
+          content?: string
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["agent_message_role"]
+          tool_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_messages_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_messages_conversation_clinic_fkey"
+            columns: ["conversation_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "agent_conversations"
+            referencedColumns: ["id", "clinic_id"]
+          },
+        ]
+      }
       appointment_services: {
         Row: {
           appointment_id: string
@@ -372,6 +478,50 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "clinic_channels_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      clinic_faq: {
+        Row: {
+          answer: string
+          clinic_id: string
+          created_at: string
+          id: string
+          is_active: boolean
+          language: string
+          question: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          answer: string
+          clinic_id: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          language?: string
+          question: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          answer?: string
+          clinic_id?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          language?: string
+          question?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clinic_faq_clinic_id_fkey"
             columns: ["clinic_id"]
             isOneToOne: false
             referencedRelation: "clinics"
@@ -2761,6 +2911,15 @@ export type Database = {
         }
         Returns: number
       }
+      release_usage: {
+        Args: {
+          p_amount?: number
+          p_clinic_id: string
+          p_metric: Database["public"]["Enums"]["usage_metric"]
+          p_period_start?: string
+        }
+        Returns: number
+      }
       is_platform_admin: { Args: never; Returns: boolean }
       list_daily_reminder_candidates: {
         Args: {
@@ -2810,6 +2969,17 @@ export type Database = {
           reminders_sent: Json
           scheduled_at: string
         }[]
+      }
+      log_agent_tool_call: {
+        Args: {
+          p_actor_id?: string
+          p_clinic_id: string
+          p_record_id?: string
+          p_summary?: Json
+          p_table_name?: string
+          p_tool: string
+        }
+        Returns: string
       }
       log_platform_audit_event: {
         Args: {
@@ -2947,6 +3117,8 @@ export type Database = {
       }
     }
     Enums: {
+      agent_message_role: "user" | "assistant" | "tool"
+      agent_persona: "doctor" | "patient"
       appointment_status:
         | "pending"
         | "confirmed"
@@ -3104,6 +3276,8 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      agent_message_role: ["user", "assistant", "tool"],
+      agent_persona: ["doctor", "patient"],
       appointment_status: [
         "pending",
         "confirmed",

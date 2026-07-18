@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
-  DEFAULT_TIME_ZONE,
   clinicLocaleFromRow,
   formatClinicDate,
 } from "@/lib/datetime";
@@ -40,6 +39,10 @@ import { formatDoctorName } from "@/lib/format-doctor";
 import { PageHeader } from "@/components/shared/page-header";
 import { resolveReturnTo, withReturnTo } from "@/lib/navigation/return-url";
 import { getTranslations } from "next-intl/server";
+import { PatientAssistantLauncher } from "@/components/assistant/patient-assistant-launcher";
+import { loadLatestDoctorConversation } from "@/lib/ai/conversations";
+import type { DoctorAssistantUIMessage } from "@/lib/ai/doctor-agent";
+import { getDoctorAssistantSurfaceAccess } from "@/lib/ai/surface";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("protected");
@@ -156,6 +159,16 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
     (!!user.departmentId && patient.department_id === user.departmentId);
 
   if (isDoctor && !doctorCanAccessPatient) notFound();
+
+  const assistantPromise = canManageMedicalNotes && !patient.is_deleted
+    ? (async () => {
+        const access = await getDoctorAssistantSurfaceAccess(user);
+        const conversation = access.state === "available"
+          ? await loadLatestDoctorConversation({ supabase, user, patientId: patient.id })
+          : null;
+        return { access, conversation };
+      })()
+    : null;
 
   let avatarUrl: string | null = null;
   if (patient.avatar_path) {
@@ -383,6 +396,7 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
   const doctorName = patient.assigned_doctor?.full_name ?? null;
   const deptInfo = patient.departments;
   const insuranceProviderName = patient.insurance_providers?.name ?? null;
+  const assistant = assistantPromise ? await assistantPromise : null;
   const initials = patient.full_name
     .split(/\s+/)
     .filter(Boolean)
@@ -428,6 +442,15 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
         }
         actions={
           <>
+            {assistant ? (
+              <PatientAssistantLauncher
+                patient={{ id: patient.id, name: patient.full_name }}
+                access={assistant.access}
+                initialConversationId={assistant.conversation?.id ?? crypto.randomUUID()}
+                initialMessages={(assistant.conversation?.messages ?? []) as DoctorAssistantUIMessage[]}
+                historyTruncated={assistant.conversation?.historyTruncated ?? false}
+              />
+            ) : null}
             {!isDoctor && !patient.is_deleted ? (
               <Button asChild size="sm" className="gap-1.5">
                 <Link href={withReturnTo(`/appointments/new?patient_id=${id}`, patientUrl)}>

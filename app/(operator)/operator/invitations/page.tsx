@@ -4,6 +4,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { TableEmptyState } from "@/components/shared/data-table";
 import { issueInvitationForm, revokeInvitationForm } from "@/actions/operator";
 import { OperatorActionForm } from "@/components/operator/operator-action-form";
+import { InvitationStatusBadge } from "@/components/operator/invitation-status-badge";
 import { InternationalPhoneField } from "@/components/shared/international-phone-input";
 import { createClient } from "@/lib/supabase/server";
 import { getTranslations } from "next-intl/server";
@@ -83,8 +84,8 @@ export default async function OperatorInvitationsPage() {
                   <TableCell>{row.owner_name}</TableCell>
                   <TableCell>{row.email}</TableCell>
                   <TableCell>
-                    {row.status === "pending" && !row.token_hash ? "requested" : row.status}
-                    {row.accepted_at ? ` (${row.accepted_at.slice(0, 10)})` : ""}
+                    <InvitationStatusBadge status={row.status} hasToken={Boolean(row.token_hash)} />
+                    {row.accepted_at ? <span className="ms-2 text-xs text-muted-foreground">{row.accepted_at.slice(0, 10)}</span> : null}
                   </TableCell>
                   <TableCell className="text-muted-foreground">{row.expires_at ? row.expires_at.slice(0, 10) : "—"}{row.email_sent_at ? <span className="mt-1 block text-xs text-emerald-700">{t("emailSent")}{row.email_sent_at.slice(0, 10)}</span> : null}</TableCell>
                   <TableCell>

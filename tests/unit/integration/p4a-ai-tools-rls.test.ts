@@ -516,7 +516,8 @@ describe("P4A log_agent_tool_call audit boundary (§6.6)", () => {
       .from("audit_logs")
       .select("action, clinic_id, actor_id")
       .eq("clinic_id", clinicA)
-      .eq("action", "agent_tool:get_patient_summary");
+      .eq("action", "agent_tool:get_patient_summary")
+      .eq("actor_id", doctorAId);
     expect(seen.error).toBeNull();
     expect(seen.data?.length).toBeGreaterThan(0);
     expect(seen.data?.[0]).toMatchObject({ actor_id: doctorAId, clinic_id: clinicA });

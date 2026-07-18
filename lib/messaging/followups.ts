@@ -10,25 +10,33 @@ import {
   patientCopyLocale,
   FOLLOWUP_TEMPLATE_NAME,
 } from "@/lib/messaging/patient-copy";
-import { sendAutomatedPatientMessage } from "@/lib/messaging/automated-send";
+import {
+  dispatchPatientMessage,
+  anyChannelSent,
+} from "@/lib/messaging/automated-send";
+import { hasActiveWhatsAppChannel } from "@/lib/messaging/channel-management";
 import { emitClinicNotification } from "@/lib/notifications/emit";
 
 /**
- * Invoice follow-up sequence (§7.3): D0 notice → D+3 gentle reminder → D+7
- * final reminder, stopping on settlement, cancellation, opt-out, or after the
- * third message.
+ * Overdue-invoice dunning follow-up (§7.3b; 2026-07-19 flow revision).
  *
- * The row is created when billing completes with an outstanding amount
- * (actions/appointments.ts hook) and only this cron advances it. A step is
- * claimed with a conditional update before the send, so overlapping runs
- * cannot double-send; a failed send counts as the attempt (bounded messages
- * beat guaranteed delivery for dunning) and notifies the clinic admins once.
+ * Two reminders whose timing, on/off, and copy are **per-clinic configurable**
+ * (`clinics.invoice_followup_*`): a first reminder X days after the invoice and
+ * a second Y days after, using the clinic's own `invoice_followup` WhatsApp
+ * template and its configured email subject/body (falling back to built-in
+ * copy). Advanced only by the daily morning cron.
+ *
+ * Each message is dispatched on Email and WhatsApp independently and is
+ * idempotent per channel (dedupe_key `invoice_followup:<appt>:step<n>`), so no
+ * duplicate is ever sent. The sequence step advances on attempt (dunning is
+ * bounded-messages-first); a run where no channel reaches the patient alerts
+ * the clinic admins once.
  */
 
 const DAY_MS = 86_400_000;
-/** Message schedule anchored on sequence creation (the invoice date). */
-const STEP_DUE_OFFSETS_DAYS = [0, 3, 7] as const;
-export const MAX_FOLLOWUP_MESSAGES = 3;
+export const MAX_FOLLOWUP_MESSAGES = 2;
+const DEFAULT_FIRST_DAYS = 3;
+const DEFAULT_SECOND_DAYS = 7;
 
 export type FollowupRunSummary = {
   due: number;
@@ -41,21 +49,25 @@ export type FollowupRunSummary = {
 /**
  * Registers an appointment for the invoice follow-up sequence. Idempotent:
  * one sequence per appointment, ever. Called from the billing-completion
- * action; failures are reported but never fail billing.
+ * action; failures are reported but never fail billing. The first reminder is
+ * due at the clinic's configured `invoice_followup_first_days`.
  */
 export async function ensureInvoiceFollowupSequence(
   clinicId: string,
   appointmentId: string,
 ): Promise<void> {
   try {
+    const settings = await getClinicReminderSettings(clinicId);
+    const firstDays = settings.data?.invoice_followup_first_days ?? DEFAULT_FIRST_DAYS;
     const client = createClinicScopedAdminClient(clinicId);
+    const firstDueAt = new Date(Date.now() + firstDays * DAY_MS).toISOString();
     const result = await client.from("followup_sequences").upsert(
       {
         clinic_id: clinicId,
         appointment_id: appointmentId,
         step: 0,
         status: "active",
-        next_run_at: new Date().toISOString(),
+        next_run_at: firstDueAt,
       },
       { onConflict: "appointment_id", ignoreDuplicates: true },
     );
@@ -140,10 +152,29 @@ export async function runInvoiceFollowups(
       continue;
     }
 
+    const settings = await getClinicReminderSettings(sequence.clinic_id);
+    if (settings.error || !settings.data) {
+      summary.skipped += 1;
+      continue;
+    }
+    // Clinic paused overdue reminders: leave the sequence intact so it resumes
+    // if re-enabled — do not advance or send.
+    if (!settings.data.invoice_followups_enabled) {
+      summary.skipped += 1;
+      continue;
+    }
+
+    const secondDays =
+      settings.data.invoice_followup_second_days ?? DEFAULT_SECOND_DAYS;
+    const stepDueDays = [
+      settings.data.invoice_followup_first_days ?? DEFAULT_FIRST_DAYS,
+      secondDays,
+    ] as const;
+
     const nextStep = sequence.step + 1;
     const isFinal = nextStep >= MAX_FOLLOWUP_MESSAGES;
     // The schedule is anchored on sequence creation (the invoice date), so a
-    // delayed run does not push the remaining steps later than D+3/D+7.
+    // delayed run does not push the remaining steps later than configured.
     const anchor = new Date(sequence.created_at).getTime();
     const claim = await client
       .from("followup_sequences")
@@ -152,9 +183,7 @@ export async function runInvoiceFollowups(
         last_sent_at: now.toISOString(),
         next_run_at: isFinal
           ? null
-          : new Date(
-              anchor + STEP_DUE_OFFSETS_DAYS[nextStep as 1 | 2] * DAY_MS,
-            ).toISOString(),
+          : new Date(anchor + stepDueDays[nextStep as 1] * DAY_MS).toISOString(),
         ...(isFinal ? { status: "stopped", stopped_reason: "completed" } : {}),
       })
       .eq("id", sequence.id)
@@ -167,8 +196,7 @@ export async function runInvoiceFollowups(
       continue;
     }
 
-    const [settings, patient, templates] = await Promise.all([
-      getClinicReminderSettings(sequence.clinic_id),
+    const [patient, templates, whatsappActive] = await Promise.all([
       client
         .from("patients")
         .select("id, full_name, phone, email")
@@ -180,41 +208,43 @@ export async function runInvoiceFollowups(
         .eq("channel", "whatsapp")
         .eq("approval_status", "approved")
         .eq("name", FOLLOWUP_TEMPLATE_NAME),
+      hasActiveWhatsAppChannel(sequence.clinic_id),
     ]);
 
-    const locale = patientCopyLocale(settings.data?.locale);
-    const clinicName = settings.data?.name ?? "";
-    const copy = patient.data
-      ? followupCopy({
+    const locale = patientCopyLocale(settings.data.locale);
+    const clinicName = settings.data.name;
+    const copy = followupCopy({
+      locale,
+      patientName: patient.data?.full_name ?? "",
+      clinicName,
+      step: sequence.step as 0 | 1,
+    });
+    // Per-clinic email subject/body override the built-in dunning copy.
+    const subject =
+      settings.data.invoice_followup_email_subject?.trim() || copy.subject;
+    const body = settings.data.invoice_followup_email_body?.trim() || copy.body;
+
+    const result = patient.data
+      ? await dispatchPatientMessage({
+          clinicId: sequence.clinic_id,
+          dedupeKey: `invoice_followup:${sequence.appointment_id}:step${sequence.step}`,
+          recipient: { phone: patient.data.phone, email: patient.data.email },
           locale,
-          patientName: patient.data.full_name,
-          clinicName,
-          step: sequence.step as 0 | 1 | 2,
+          whatsappActive,
+          whatsappTemplates: templates.data ?? [],
+          templateValues: {
+            patient_name: patient.data.full_name,
+            clinic_name: clinicName,
+            doctor_name: clinicName,
+          },
+          subject,
+          body,
+          relatedType: "invoice",
+          relatedId: sequence.appointment_id,
         })
       : null;
 
-    const result =
-      patient.data && copy && settings.data
-        ? await sendAutomatedPatientMessage({
-            clinicId: sequence.clinic_id,
-            recipient: { phone: patient.data.phone, email: patient.data.email },
-            locale,
-            whatsappTemplates: templates.data ?? [],
-            templateValues: {
-              patient_name: patient.data.full_name,
-              clinic_name: clinicName,
-              doctor_name: clinicName,
-              appointment_date: "",
-              appointment_time: "",
-            },
-            subject: copy.subject,
-            body: copy.body,
-            relatedType: "invoice",
-            relatedId: sequence.appointment_id,
-          })
-        : ({ ok: false, code: "NO_USABLE_CHANNEL" } as const);
-
-    if (result.ok) {
+    if (result && anyChannelSent(result)) {
       summary.sent += 1;
       continue;
     }

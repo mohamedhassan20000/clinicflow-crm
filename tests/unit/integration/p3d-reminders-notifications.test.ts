@@ -73,6 +73,7 @@ const allClinics = [clinicA, clinicB, clinicC];
 
 async function cleanup() {
   await service.from("notifications").delete().in("clinic_id", allClinics);
+  await service.from("message_dispatches").delete().in("clinic_id", allClinics);
   await service.from("followup_sequences").delete().in("clinic_id", allClinics);
   await service.from("appointments").delete().in("clinic_id", allClinics);
   await service.from("patients").delete().in("clinic_id", allClinics);
@@ -397,6 +398,140 @@ describe("reminder claim → finalize → release lease (P3-H3)", () => {
   });
 });
 
+describe("message_dispatches per-channel idempotency (2026-07-19 flow revision)", () => {
+  const key = `invoice:${appointmentA}`;
+  async function clearDispatch() {
+    await service
+      .from("message_dispatches")
+      .delete()
+      .eq("clinic_id", clinicA)
+      .eq("dedupe_key", key);
+  }
+
+  it("claims a channel once, blocks a concurrent claim, and finalizes to sent", async () => {
+    await clearDispatch();
+    const first = await service.rpc("claim_message_dispatch", {
+      p_clinic_id: clinicA,
+      p_dedupe_key: key,
+      p_channel: "email",
+      p_now: new Date().toISOString(),
+    });
+    expect(first.error).toBeNull();
+    expect(first.data).toBe(true);
+
+    const concurrent = await service.rpc("claim_message_dispatch", {
+      p_clinic_id: clinicA,
+      p_dedupe_key: key,
+      p_channel: "email",
+      p_now: new Date().toISOString(),
+    });
+    expect(concurrent.data).toBe(false);
+
+    const finalized = await service.rpc("finalize_message_dispatch", {
+      p_clinic_id: clinicA,
+      p_dedupe_key: key,
+      p_channel: "email",
+      p_sent_at: new Date().toISOString(),
+      // RPC accepts NULL; the generated type over-narrows to string.
+      p_outbound_message_id: null as unknown as string,
+    });
+    expect(finalized.data).toBe(true);
+
+    // A sent channel can never be reclaimed → no duplicate.
+    const reclaim = await service.rpc("claim_message_dispatch", {
+      p_clinic_id: clinicA,
+      p_dedupe_key: key,
+      p_channel: "email",
+      p_now: new Date().toISOString(),
+    });
+    expect(reclaim.data).toBe(false);
+  });
+
+  it("treats Email and WhatsApp as independent channels for the same message", async () => {
+    await clearDispatch();
+    const email = await service.rpc("claim_message_dispatch", {
+      p_clinic_id: clinicA,
+      p_dedupe_key: key,
+      p_channel: "email",
+      p_now: new Date().toISOString(),
+    });
+    expect(email.data).toBe(true);
+    // WhatsApp is a separate ledger row — one channel never blocks the other.
+    const whatsapp = await service.rpc("claim_message_dispatch", {
+      p_clinic_id: clinicA,
+      p_dedupe_key: key,
+      p_channel: "whatsapp",
+      p_now: new Date().toISOString(),
+    });
+    expect(whatsapp.data).toBe(true);
+  });
+
+  it("released (failed) channel is reclaimable, so only the failed channel retries", async () => {
+    await clearDispatch();
+    await service.rpc("claim_message_dispatch", {
+      p_clinic_id: clinicA,
+      p_dedupe_key: key,
+      p_channel: "whatsapp",
+      p_now: new Date().toISOString(),
+    });
+    const released = await service.rpc("release_message_dispatch", {
+      p_clinic_id: clinicA,
+      p_dedupe_key: key,
+      p_channel: "whatsapp",
+    });
+    expect(released.data).toBe(true);
+    const reclaim = await service.rpc("claim_message_dispatch", {
+      p_clinic_id: clinicA,
+      p_dedupe_key: key,
+      p_channel: "whatsapp",
+      p_now: new Date().toISOString(),
+    });
+    expect(reclaim.data).toBe(true);
+  });
+
+  it("refuses an authenticated caller (service-role only)", async () => {
+    const authenticated = await adminA.rpc("claim_message_dispatch", {
+      p_clinic_id: clinicA,
+      p_dedupe_key: key,
+      p_channel: "email",
+      p_now: new Date().toISOString(),
+    });
+    expect(authenticated.error).not.toBeNull();
+  });
+});
+
+describe("daily reminder candidate selection", () => {
+  it("excludes a reminders-disabled clinic from candidates", async () => {
+    try {
+      const disabled = await service
+        .from("clinics")
+        .update({ reminders_enabled: false })
+        .eq("id", clinicA);
+      expect(disabled.error).toBeNull();
+
+      const candidates = await service.rpc("list_daily_reminder_candidates", {
+        p_now: new Date().toISOString(),
+        p_horizon: new Date(Date.now() + 2 * 86_400_000).toISOString(),
+      });
+      expect(candidates.error).toBeNull();
+      expect(
+        (candidates.data ?? []).some((row) => row.id === appointmentA),
+      ).toBe(false);
+    } finally {
+      await service.from("clinics").update({ reminders_enabled: true }).eq("id", clinicA);
+    }
+  });
+
+  it("includes a confirmed today/tomorrow appointment for an enabled clinic", async () => {
+    const candidates = await service.rpc("list_daily_reminder_candidates", {
+      p_now: new Date().toISOString(),
+      p_horizon: new Date(Date.now() + 2 * 86_400_000).toISOString(),
+    });
+    expect(candidates.error).toBeNull();
+    expect((candidates.data ?? []).some((row) => row.id === appointmentA)).toBe(true);
+  });
+});
+
 describe("P3D schema defaults and constraints", () => {
   it("clinics default to the documented {24,3} reminder offsets", async () => {
     const row = await service
@@ -405,6 +540,15 @@ describe("P3D schema defaults and constraints", () => {
       .eq("id", clinicA)
       .single();
     expect(row.data?.reminder_offsets).toEqual([24, 3]);
+  });
+
+  it("clinics default to reminders enabled", async () => {
+    const row = await service
+      .from("clinics")
+      .select("reminders_enabled")
+      .eq("id", clinicB)
+      .single();
+    expect(row.data?.reminders_enabled).toBe(true);
   });
 
   it("rejects out-of-range reminder offsets", async () => {

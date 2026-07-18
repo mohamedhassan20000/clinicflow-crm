@@ -32,6 +32,23 @@ function webhookUrl(): string | null {
   }
 }
 
+/**
+ * Whether the clinic has an active WhatsApp integration — the gate for
+ * attempting a WhatsApp send at all (2026-07-19 flow revision). Email never
+ * depends on this. Best-effort: any error resolves to false (email-only).
+ */
+export async function hasActiveWhatsAppChannel(clinicId: string): Promise<boolean> {
+  const client = createClinicScopedAdminClient(clinicId);
+  const result = await client
+    .from("clinic_channels")
+    .select("id")
+    .eq("channel", "whatsapp")
+    .eq("status", "active")
+    .limit(1)
+    .maybeSingle();
+  return !result.error && !!result.data;
+}
+
 export async function getWhatsAppChannelStatus(
   clinicId: string,
 ): Promise<WhatsAppChannelStatus> {

@@ -1,47 +1,48 @@
 import "server-only";
 import * as Sentry from "@sentry/nextjs";
 import {
-  claimAppointmentReminder,
   createClinicScopedAdminClient,
-  finalizeAppointmentReminder,
   getClinicReminderSettings,
-  listReminderCandidateAppointments,
-  releaseAppointmentReminder,
+  listDailyReminderCandidates,
 } from "@/lib/supabase/admin";
-import { toNumberingLocale } from "@/lib/datetime";
+import { formatScheduledAt } from "@/lib/messaging/format";
 import {
   patientCopyLocale,
   reminderCopy,
   REMINDER_TEMPLATE_NAME,
 } from "@/lib/messaging/patient-copy";
 import {
-  sendAutomatedPatientMessage,
+  dispatchPatientMessage,
+  anyChannelSent,
+  anyChannelFailed,
   type AutomatedTemplateRow,
 } from "@/lib/messaging/automated-send";
+import { hasActiveWhatsAppChannel } from "@/lib/messaging/channel-management";
 import { emitClinicNotification } from "@/lib/notifications/emit";
 
 /**
- * Confirmed-appointment reminders (§7.2). Runs from the Vercel Cron route.
+ * Daily appointment reminders (§7.2b, 2026-07-18 direction; 2026-07-19 flow
+ * revision).
  *
- * Idempotency is a recoverable lease: each (appointment, offset) is claimed
- * under a row lock before any send, so overlapping cron runs cannot
- * double-send; a successful send finalizes the entry to "sent", a definite
- * failure releases it for the next run (with a deduped admin notification),
- * and a crash between claim and dispatch leaves a stale claim that becomes
- * re-claimable after the lease window — a reminder can never be suppressed
- * permanently (P3-H3). An ambiguous provider outcome (timeout after possible
- * acceptance) keeps the claim so the lease expiry retries the same channel
- * later instead of risking a duplicate (P3-M1).
+ * The single daily morning cron sends one reminder per confirmed appointment
+ * whose scheduled_at falls on the clinic-local calendar date of *today or
+ * tomorrow*. Clinics with reminders disabled are excluded at the SQL layer.
  *
- * When several offsets are overdue at once (cron downtime), all are claimed
- * but only one message — the nearest offset — is sent, so a patient never
- * receives a burst of stale reminders.
+ * Idempotency now lives in the per-channel `message_dispatches` ledger
+ * (dedupe_key `appointment_reminder:<id>`): Email and WhatsApp are dispatched
+ * independently, each sent at most once, and if one channel fails while the
+ * other succeeds only the failed channel retries on a later run. Because the
+ * dedupe is per channel, an appointment reminded today as "tomorrow" is skipped
+ * tomorrow as "today".
  */
 
-const HOUR_MS = 3_600_000;
-export const MAX_REMINDER_OFFSET_HOURS = 168;
-/** Mirrors the SQL lease in reminder_offset_actionable (15 minutes). */
-export const REMINDER_CLAIM_LEASE_MS = 15 * 60_000;
+const DAY_MS = 86_400_000;
+/**
+ * Selection horizon. Today+tomorrow in the clinic's local calendar can be up to
+ * ~48h ahead of "now"; the SQL candidate query does the exact local-date
+ * filtering, this bound just keeps the scan index-friendly.
+ */
+export const REMINDER_HORIZON_MS = 2 * DAY_MS;
 
 export type ReminderRunSummary = {
   appointments: number;
@@ -56,62 +57,10 @@ type ClinicReminderContext = {
   locale: string;
   timeFormat: string;
   digits: string;
-  offsets: number[];
   templates: AutomatedTemplateRow[];
   patients: Map<string, { full_name: string; phone: string | null; email: string | null }>;
   doctors: Map<string, string>;
 };
-
-/**
- * Offsets that must not be attempted: finalized sends and fresh claims.
- * Stale claims (older than the lease) stay actionable so a crashed run's
- * reminder is recovered; the claim RPC re-checks the same rule under a lock.
- */
-function unavailableOffsets(value: unknown, now: Date): Set<string> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return new Set();
-  }
-  const unavailable = new Set<string>();
-  for (const [key, entry] of Object.entries(value)) {
-    if (entry && typeof entry === "object" && !Array.isArray(entry)) {
-      const record = entry as { state?: unknown; at?: unknown };
-      if (record.state === "claimed") {
-        const claimedAt =
-          typeof record.at === "string" ? new Date(record.at).getTime() : Number.NaN;
-        const stale =
-          Number.isNaN(claimedAt) ||
-          claimedAt < now.getTime() - REMINDER_CLAIM_LEASE_MS;
-        if (stale) continue;
-      }
-    }
-    unavailable.add(key);
-  }
-  return unavailable;
-}
-
-function formatScheduledAt(
-  scheduledAt: Date,
-  context: Pick<ClinicReminderContext, "timezone" | "locale" | "timeFormat" | "digits">,
-): { dateText: string; timeText: string } {
-  const locale = toNumberingLocale({
-    locale: context.locale,
-    digits: context.digits === "arabic" ? "arabic" : "latin",
-  });
-  const dateText = new Intl.DateTimeFormat(locale, {
-    timeZone: context.timezone,
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  }).format(scheduledAt);
-  const timeText = new Intl.DateTimeFormat(locale, {
-    timeZone: context.timezone,
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: context.timeFormat === "12h",
-  }).format(scheduledAt);
-  return { dateText, timeText };
-}
 
 async function loadClinicContext(
   clinicId: string,
@@ -146,7 +95,6 @@ async function loadClinicContext(
     locale: settings.data.locale,
     timeFormat: settings.data.time_format,
     digits: settings.data.digits,
-    offsets: settings.data.reminder_offsets ?? [24, 3],
     templates: templates.data ?? [],
     patients: new Map(
       (patients.data ?? []).map((row) => [
@@ -168,8 +116,8 @@ export async function runAppointmentReminders(
     skipped: 0,
   };
 
-  const horizon = new Date(now.getTime() + MAX_REMINDER_OFFSET_HOURS * HOUR_MS);
-  const candidates = await listReminderCandidateAppointments(
+  const horizon = new Date(now.getTime() + REMINDER_HORIZON_MS);
+  const candidates = await listDailyReminderCandidates(
     now.toISOString(),
     horizon.toISOString(),
   );
@@ -198,118 +146,76 @@ export async function runAppointmentReminders(
       summary.skipped += appointments.length;
       continue;
     }
+    const whatsappActive = await hasActiveWhatsAppChannel(clinicId);
 
     for (const appointment of appointments) {
-      const scheduledAt = new Date(appointment.scheduled_at);
-      const unavailable = unavailableOffsets(appointment.reminders_sent, now);
-      const dueOffsets = context.offsets
-        .filter(
-          (offset) =>
-            !unavailable.has(String(offset)) &&
-            scheduledAt.getTime() - offset * HOUR_MS <= now.getTime() &&
-            scheduledAt.getTime() > now.getTime(),
-        )
-        .sort((a, b) => a - b);
-      if (dueOffsets.length === 0) continue;
       summary.appointments += 1;
 
-      // Claim every due offset; only the nearest one produces a message.
-      const claimed: number[] = [];
-      for (const offset of dueOffsets) {
-        const claim = await claimAppointmentReminder({
-          clinicId,
-          appointmentId: appointment.id,
-          offsetHours: offset,
-          claimedAt: now.toISOString(),
-        });
-        if (!claim.error && claim.data === true) claimed.push(offset);
-      }
-      if (claimed.length === 0) {
+      const patient = context.patients.get(appointment.patient_id);
+      if (!patient) {
         summary.skipped += 1;
         continue;
       }
 
-      const patient = context.patients.get(appointment.patient_id);
+      const scheduledAt = new Date(appointment.scheduled_at);
       const doctorName = context.doctors.get(appointment.doctor_id) ?? context.name;
       const locale = patientCopyLocale(context.locale);
       const { dateText, timeText } = formatScheduledAt(scheduledAt, context);
-      const copy = patient
-        ? reminderCopy({
-            locale,
-            patientName: patient.full_name,
-            clinicName: context.name,
-            doctorName,
-            dateText,
-            timeText,
-          })
-        : null;
-
-      const result =
-        patient && copy
-          ? await sendAutomatedPatientMessage({
-              clinicId,
-              recipient: { phone: patient.phone, email: patient.email },
-              locale,
-              whatsappTemplates: context.templates,
-              templateValues: {
-                patient_name: patient.full_name,
-                clinic_name: context.name,
-                doctor_name: doctorName,
-                appointment_date: dateText,
-                appointment_time: timeText,
-              },
-              subject: copy.subject,
-              body: copy.body,
-              relatedType: "appointment",
-              relatedId: appointment.id,
-            })
-          : ({ ok: false, code: "NO_USABLE_CHANNEL" } as const);
-
-      if (result.ok) {
-        summary.sent += 1;
-        // Only now does the lease become a durable sent marker (P3-H3).
-        for (const offset of claimed) {
-          await finalizeAppointmentReminder({
-            clinicId,
-            appointmentId: appointment.id,
-            offsetHours: offset,
-            sentAt: new Date().toISOString(),
-          });
-        }
-        continue;
-      }
-
-      if (result.code === "PROVIDER_SEND_AMBIGUOUS") {
-        // The message may have gone out: keep the claims so nothing re-sends
-        // inside the lease window; if it was lost, the stale claims retry on
-        // a later run. No admin alert for a possibly-delivered reminder.
-        summary.failed += 1;
-        continue;
-      }
-
-      summary.failed += 1;
-      // Definite failure: release so the next run retries, and tell the
-      // clinic admins once.
-      for (const offset of claimed) {
-        await releaseAppointmentReminder({
-          clinicId,
-          appointmentId: appointment.id,
-          offsetHours: offset,
-        });
-      }
-      await emitClinicNotification({
-        clinicId,
-        type: "reminder_failed",
-        link: "/appointments",
-        data: {
-          appointmentId: appointment.id,
-          patientName: patient?.full_name ?? "",
-          scheduledAt: appointment.scheduled_at,
-        },
-        roles: ["admin"],
-        dedupeUnread: true,
-        dedupeData: { appointmentId: appointment.id },
+      const copy = reminderCopy({
+        locale,
+        patientName: patient.full_name,
+        clinicName: context.name,
+        doctorName,
+        dateText,
+        timeText,
       });
+
+      const result = await dispatchPatientMessage({
+        clinicId,
+        dedupeKey: `appointment_reminder:${appointment.id}`,
+        recipient: { phone: patient.phone, email: patient.email },
+        locale,
+        whatsappActive,
+        whatsappTemplates: context.templates,
+        templateValues: {
+          patient_name: patient.full_name,
+          clinic_name: context.name,
+          doctor_name: doctorName,
+          appointment_date: dateText,
+          appointment_time: timeText,
+        },
+        subject: copy.subject,
+        body: copy.body,
+        relatedType: "appointment",
+        relatedId: appointment.id,
+      });
+
+      if (anyChannelSent(result)) {
+        summary.sent += 1;
+        continue;
+      }
+      // Nothing newly sent. Alert admins only on a definite failure (a channel
+      // that was attempted and failed); a fully-deduped or unreachable patient
+      // is a quiet skip. The failed channel's claim is already released, so it
+      // retries on the next run.
+      if (anyChannelFailed(result)) {
+        summary.failed += 1;
+        await emitClinicNotification({
+          clinicId,
+          type: "reminder_failed",
+          link: "/appointments",
+          data: {
+            appointmentId: appointment.id,
+            patientName: patient.full_name,
+            scheduledAt: appointment.scheduled_at,
+          },
+          roles: ["admin"],
+          dedupeUnread: true,
+          dedupeData: { appointmentId: appointment.id },
+        });
+        continue;
+      }
+      summary.skipped += 1;
     }
   }
 

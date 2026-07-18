@@ -264,6 +264,75 @@ export async function listReminderCandidateAppointments(
   });
 }
 
+/**
+ * Reviewed cross-tenant read for the daily reminder cron (§7.2b). Selects
+ * confirmed appointments for reminder-enabled clinics whose scheduled_at falls
+ * on the clinic-local calendar date of today or tomorrow and still has an
+ * actionable 'daily' lease. The clinic-local window is computed in SQL.
+ */
+export async function listDailyReminderCandidates(
+  nowIso: string,
+  horizonIso: string,
+) {
+  return createAdminClient().rpc("list_daily_reminder_candidates", {
+    p_now: nowIso,
+    p_horizon: horizonIso,
+  });
+}
+
+/**
+ * Per-channel idempotency ledger (2026-07-19 flow revision). Email and WhatsApp
+ * are independent channels: each (clinic, dedupe_key, channel) is claimed before
+ * a send so a duplicate is never dispatched, and a failed channel is released
+ * for retry without touching the channel that succeeded. A 'claimed' row older
+ * than the 15-minute lease is re-claimable, so a crash never suppresses a
+ * message permanently. Only finalizeMessageDispatch records a real send.
+ */
+export async function claimMessageDispatch(input: {
+  clinicId: string;
+  dedupeKey: string;
+  channel: "whatsapp" | "email";
+  claimedAt: string;
+}) {
+  return createAdminClient().rpc("claim_message_dispatch", {
+    p_clinic_id: input.clinicId,
+    p_dedupe_key: input.dedupeKey,
+    p_channel: input.channel,
+    p_now: input.claimedAt,
+  });
+}
+
+/** Terminal sent marker for one channel, written only after provider acceptance. */
+export async function finalizeMessageDispatch(input: {
+  clinicId: string;
+  dedupeKey: string;
+  channel: "whatsapp" | "email";
+  sentAt: string;
+  outboundMessageId: string | null;
+}) {
+  return createAdminClient().rpc("finalize_message_dispatch", {
+    p_clinic_id: input.clinicId,
+    p_dedupe_key: input.dedupeKey,
+    p_channel: input.channel,
+    p_sent_at: input.sentAt,
+    // The RPC accepts NULL (uuid param); the generated type over-narrows to string.
+    p_outbound_message_id: input.outboundMessageId as string,
+  });
+}
+
+/** Compensation when a claimed channel send fails: the next attempt retries it. */
+export async function releaseMessageDispatch(input: {
+  clinicId: string;
+  dedupeKey: string;
+  channel: "whatsapp" | "email";
+}) {
+  return createAdminClient().rpc("release_message_dispatch", {
+    p_clinic_id: input.clinicId,
+    p_dedupe_key: input.dedupeKey,
+    p_channel: input.channel,
+  });
+}
+
 /** Reviewed cross-tenant read for the P3D invoice follow-up cron. */
 export async function listDueFollowupSequences(nowIso: string) {
   return createAdminClient()
@@ -284,7 +353,7 @@ export async function getClinicReminderSettings(clinicId: string) {
   return createAdminClient()
     .from("clinics")
     .select(
-      "id, name, timezone, locale, time_format, digits, reminder_offsets",
+      "id, name, timezone, locale, time_format, digits, currency, reminder_offsets, reminders_enabled, invoice_followups_enabled, invoice_followup_first_days, invoice_followup_second_days, invoice_followup_email_subject, invoice_followup_email_body",
     )
     .eq("id", clinicId)
     .maybeSingle();

@@ -532,8 +532,14 @@ export type Database = {
           onboarding_completed_at: string | null
           phone: string | null
           phone_e164_valid: boolean
+          invoice_followup_email_body: string | null
+          invoice_followup_email_subject: string | null
+          invoice_followup_first_days: number
+          invoice_followup_second_days: number
+          invoice_followups_enabled: boolean
           reminder_lead_hours: number
           reminder_offsets: number[]
+          reminders_enabled: boolean
           time_format: string
           timezone: string
           updated_at: string
@@ -555,8 +561,14 @@ export type Database = {
           onboarding_completed_at?: string | null
           phone?: string | null
           phone_e164_valid?: boolean
+          invoice_followup_email_body?: string | null
+          invoice_followup_email_subject?: string | null
+          invoice_followup_first_days?: number
+          invoice_followup_second_days?: number
+          invoice_followups_enabled?: boolean
           reminder_lead_hours?: number
           reminder_offsets?: number[]
+          reminders_enabled?: boolean
           time_format?: string
           timezone?: string
           updated_at?: string
@@ -578,8 +590,14 @@ export type Database = {
           onboarding_completed_at?: string | null
           phone?: string | null
           phone_e164_valid?: boolean
+          invoice_followup_email_body?: string | null
+          invoice_followup_email_subject?: string | null
+          invoice_followup_first_days?: number
+          invoice_followup_second_days?: number
+          invoice_followups_enabled?: boolean
           reminder_lead_hours?: number
           reminder_offsets?: number[]
+          reminders_enabled?: boolean
           time_format?: string
           timezone?: string
           updated_at?: string
@@ -1296,6 +1314,53 @@ export type Database = {
             columns: ["patient_id"]
             isOneToOne: false
             referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      message_dispatches: {
+        Row: {
+          channel: Database["public"]["Enums"]["message_channel"]
+          claimed_at: string | null
+          clinic_id: string
+          created_at: string
+          dedupe_key: string
+          id: string
+          outbound_message_id: string | null
+          sent_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          channel: Database["public"]["Enums"]["message_channel"]
+          claimed_at?: string | null
+          clinic_id: string
+          created_at?: string
+          dedupe_key: string
+          id?: string
+          outbound_message_id?: string | null
+          sent_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          channel?: Database["public"]["Enums"]["message_channel"]
+          claimed_at?: string | null
+          clinic_id?: string
+          created_at?: string
+          dedupe_key?: string
+          id?: string
+          outbound_message_id?: string | null
+          sent_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_dispatches_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
             referencedColumns: ["id"]
           },
         ]
@@ -2518,6 +2583,15 @@ export type Database = {
         }
         Returns: boolean
       }
+      claim_message_dispatch: {
+        Args: {
+          p_channel: Database["public"]["Enums"]["message_channel"]
+          p_clinic_id: string
+          p_dedupe_key: string
+          p_now: string
+        }
+        Returns: boolean
+      }
       clear_own_must_change_password: { Args: never; Returns: undefined }
       complete_appointment_billing: {
         Args: {
@@ -2688,6 +2762,40 @@ export type Database = {
         Returns: number
       }
       is_platform_admin: { Args: never; Returns: boolean }
+      list_daily_reminder_candidates: {
+        Args: {
+          p_horizon: string
+          p_limit?: number
+          p_now: string
+        }
+        Returns: {
+          clinic_id: string
+          doctor_id: string
+          id: string
+          patient_id: string
+          reminders_sent: Json
+          scheduled_at: string
+          timezone: string
+        }[]
+      }
+      finalize_message_dispatch: {
+        Args: {
+          p_channel: Database["public"]["Enums"]["message_channel"]
+          p_clinic_id: string
+          p_dedupe_key: string
+          p_outbound_message_id: string
+          p_sent_at: string
+        }
+        Returns: boolean
+      }
+      release_message_dispatch: {
+        Args: {
+          p_channel: Database["public"]["Enums"]["message_channel"]
+          p_clinic_id: string
+          p_dedupe_key: string
+        }
+        Returns: boolean
+      }
       list_reminder_candidates: {
         Args: {
           p_horizon: string

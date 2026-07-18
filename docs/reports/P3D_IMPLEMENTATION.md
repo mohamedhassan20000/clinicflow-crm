@@ -122,3 +122,41 @@ The P3 phase review (`docs/reviews/P3_PHASE_REVIEW.md`) opened six findings agai
 ## Repository state
 
 Nothing was committed, pushed, merged, or opened as a pull request. All P3A–P3D work remains uncommitted on `feat/p3a-messaging-core` for review.
+
+---
+
+## Addendum — 2026-07-18 event-driven revision
+
+Supersedes the cron-centric notification model above where they conflict. Roadmap: `docs/AI_AGENT_PLAN.md` §7.1–§7.3c (2026-07-18 revision) and the new **P7 — System Templates & Document Engine**.
+
+**What changed**
+
+- **Event-driven appointment notifications (§7.2a).** Immediate WhatsApp+Email on appointment **created / confirmed / rescheduled / cancelled**, dispatched inline from the appointment mutations via `lib/messaging/appointment-notifications.ts` → the existing `sendAutomatedPatientMessage` boundary (WhatsApp-first, Email fallback). Wired into `createAppointment` (created), `updateAppointmentStatus` (confirmed/cancelled), and `confirmAndDisplaceConflicts` (confirmed). Best-effort; recorded on `outbound_messages`.
+- **Daily reminders (§7.2b).** `runAppointmentReminders` rewritten from the per-offset hourly model to **one reminder per confirmed appointment scheduled today or tomorrow** (clinic-local calendar dates), driven by a single daily morning cron. New crash-safe lease on `appointments.reminders_sent -> 'daily'` (RPCs `claim/finalize/release_daily_reminder`, `list_daily_reminder_candidates`). `clinics.reminder_offsets` is retained as inert legacy vocabulary.
+- **Reminder settings (§7.2b).** New `clinics.reminders_enabled` (default true) excludes a clinic from the daily run at the SQL layer. New `ReminderSettingsCard` on `/settings/messaging` + `updateReminderSettings` action, with a description explaining the daily WhatsApp+Email behavior (en/ar).
+- **Event-driven invoice delivery (§7.3a).** On billing completion, `deliverIssuedInvoice` sends the invoice immediately via WhatsApp+Email. **Template-agnostic** (`compose summary → render message → send`) using the existing appointment/billing representation — the professional document, PDF/print, and serial numbering are deferred to **P7**. The former D0 cron notice is removed.
+- **Single daily cron.** The hourly `reminders`/`invoice-followups` crons are replaced by one daily morning cron (`vercel.json`: `fx-rates` + `/api/cron/reminders` at `0 6 * * *`, within the Hobby 2-cron limit). The reminders route now runs both jobs via `Promise.allSettled`; the `invoice-followups` route is deleted. Dunning shifts to **D+3 → D+7** (2 messages).
+
+**Migration:** the P3D flow ships as a single squashed migration `supabase/migrations/20260718120000_p3d_event_driven_notifications.sql` (see the 2026-07-19 addendum for its final contents; the 20260717 migration is untouched).
+
+**Validation:** `tsc --noEmit` clean; eslint 0 errors; unit `805/805`; P3D + P3A integration suites pass against a fresh `supabase db reset` local DB.
+
+**Known remaining P3 item:** the `rescheduled` event emitter is implemented and ready, but has **no trigger yet** — the product has no appointment-reschedule flow / `rescheduled` status today (deferred to a later migration per §7.2a). When that flow lands, it calls `notifyAppointmentEvent({ …, event: "rescheduled" })` — no other change needed.
+
+---
+
+## Addendum — 2026-07-19 messaging flow refinements
+
+Four approved product-flow changes on top of the event-driven direction. Roadmap: §7.2a, §7.3a, §7.3b, §7.6a (2026-07-19 revision).
+
+**1. Independent channels.** `lib/messaging/automated-send.ts` was rewritten from a WhatsApp-first fallback into `dispatchPatientMessage`, which attempts **Email whenever the patient has an address** and **WhatsApp only when the clinic has an active integration** (`hasActiveWhatsAppChannel`), independently — one channel never blocks the other, and partial success is normal. Applies to appointment notifications, reminders, invoice delivery, and dunning.
+
+**2. Manual invoice send.** The automatic `deliverIssuedInvoice` call was removed from `updateAppointmentStatus`. New action `sendInvoiceToPatient(appointmentId)` (admin/receptionist) + a **"Send to patient"** button with a confirmation dialog (`components/appointments/send-invoice-button.tsx`, mounted in the completed-invoice view of `appointment-payment-row.tsx`). `deliverIssuedInvoice` now returns the per-channel result so the UI reports what was delivered. The template-agnostic `compose → render → send` seam is unchanged (P7 still plugs in).
+
+**3. Configurable overdue-invoice reminders.** Hardcoded D+3/D+7 replaced by per-clinic config (`clinics.invoice_followups_enabled`, `invoice_followup_first_days`, `invoice_followup_second_days`, `invoice_followup_email_subject`, `invoice_followup_email_body`). `runInvoiceFollowups` reads them (paused clinics are skipped, not stopped); the email subject/body override the built-in copy, WhatsApp uses the clinic's `invoice_followup` template. New `InvoiceFollowupSettingsCard` + `updateInvoiceFollowupSettings` action on `/settings/messaging` (en/ar).
+
+**4. Per-channel idempotency.** New `message_dispatches` ledger + `claim/finalize/release_message_dispatch` RPCs. Each `(clinic, dedupe_key, channel)` is claimed before send, finalized only on provider acceptance, released on definite failure; a duplicate is never sent and only the failed channel retries. This **replaces** the intermediate `reminders_sent 'daily'` lease idea — idempotency is now per channel.
+
+**Migration (squashed):** because none of this P3D work had shipped, the two working migrations were squashed into one — `supabase/migrations/20260718120000_p3d_event_driven_notifications.sql`. It contains `clinics.reminders_enabled`, the `clinics.invoice_followup_*` columns, the `message_dispatches` table + RPCs, and the final `list_daily_reminder_candidates`. The short-lived `claim/finalize/release_daily_reminder` RPCs are never created (they were only ever an uncommitted intermediate step). The 20260717 migration is untouched.
+
+**Validation:** `tsc --noEmit` clean; eslint 0 errors; RTL + i18n gates pass; unit `806/806`; P3D + P3A integration suites pass against a fresh `supabase db reset` local DB.

@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   listDue: vi.fn(),
   getSettings: vi.fn(),
   send: vi.fn(),
+  waActive: vi.fn(),
   emit: vi.fn(),
   captureMessage: vi.fn(),
   captureException: vi.fn(),
@@ -47,7 +48,12 @@ vi.mock("@/lib/supabase/admin", () => ({
   createClinicScopedAdminClient: () => ({ from: tableChain }),
 }));
 vi.mock("@/lib/messaging/automated-send", () => ({
-  sendAutomatedPatientMessage: mocks.send,
+  dispatchPatientMessage: mocks.send,
+  anyChannelSent: (r: { email?: { status: string }; whatsapp?: { status: string } }) =>
+    r?.email?.status === "sent" || r?.whatsapp?.status === "sent",
+}));
+vi.mock("@/lib/messaging/channel-management", () => ({
+  hasActiveWhatsAppChannel: mocks.waActive,
 }));
 vi.mock("@/lib/notifications/emit", () => ({
   emitClinicNotification: mocks.emit,
@@ -94,10 +100,27 @@ beforeEach(() => {
   mocks.updates = [];
   mocks.upserts = [];
   mocks.getSettings.mockResolvedValue({
-    data: { id: clinicId, name: "Clinic A", timezone: "Asia/Kuwait", locale: "en", time_format: "24h", digits: "latin", reminder_offsets: [24, 3] },
+    data: {
+      id: clinicId,
+      name: "Clinic A",
+      timezone: "Asia/Kuwait",
+      locale: "en",
+      time_format: "24h",
+      digits: "latin",
+      reminder_offsets: [24, 3],
+      invoice_followups_enabled: true,
+      invoice_followup_first_days: 3,
+      invoice_followup_second_days: 7,
+      invoice_followup_email_subject: null,
+      invoice_followup_email_body: null,
+    },
     error: null,
   });
-  mocks.send.mockResolvedValue({ ok: true, channel: "email" });
+  mocks.waActive.mockResolvedValue(false);
+  mocks.send.mockResolvedValue({
+    email: { status: "sent" },
+    whatsapp: { status: "not_attempted", reason: "no_whatsapp_channel" },
+  });
   mocks.emit.mockResolvedValue({ created: 1 });
 });
 
@@ -126,7 +149,7 @@ describe("runInvoiceFollowups", () => {
     expect(mocks.send).not.toHaveBeenCalled();
   });
 
-  it("claims the D0 step, schedules D+3 from the invoice date, and sends", async () => {
+  it("claims the first dunning step (D+3), schedules D+7 from the invoice date, and sends", async () => {
     mocks.listDue.mockResolvedValue({ data: [sequence(0)], error: null });
     mocks.results.appointments = [{ data: appointmentRow(), error: null }];
     mocks.results.followup_sequences = [{ data: { id: sequence().id }, error: null }];
@@ -135,8 +158,8 @@ describe("runInvoiceFollowups", () => {
     expect(summary).toMatchObject({ sent: 1, stopped: 0, failed: 0 });
     const claim = mocks.updates.find((update) => update.table === "followup_sequences");
     expect(claim?.payload).toMatchObject({ step: 1 });
-    // Anchored on created_at (2026-07-17T09:00Z) + 3 days.
-    expect(claim?.payload.next_run_at).toBe("2026-07-20T09:00:00.000Z");
+    // The final (D+7) message is anchored on created_at (2026-07-17T09:00Z) + 7 days.
+    expect(claim?.payload.next_run_at).toBe("2026-07-24T09:00:00.000Z");
     expect(mocks.send.mock.calls[0][0]).toMatchObject({
       clinicId,
       relatedType: "invoice",
@@ -144,8 +167,8 @@ describe("runInvoiceFollowups", () => {
     });
   });
 
-  it("stops with reason completed after the third message", async () => {
-    mocks.listDue.mockResolvedValue({ data: [sequence(2)], error: null });
+  it("stops with reason completed after the final (D+7) message", async () => {
+    mocks.listDue.mockResolvedValue({ data: [sequence(1)], error: null });
     mocks.results.appointments = [{ data: appointmentRow(), error: null }];
     mocks.results.followup_sequences = [{ data: { id: sequence().id }, error: null }];
     mocks.results.patients = [{ data: { id: patientId, full_name: "Sara", phone: "+96550000001", email: "sara@example.com" }, error: null }];
@@ -153,7 +176,7 @@ describe("runInvoiceFollowups", () => {
     expect(summary.sent).toBe(1);
     const claim = mocks.updates.find((update) => update.table === "followup_sequences");
     expect(claim?.payload).toMatchObject({
-      step: 3,
+      step: 2,
       status: "stopped",
       stopped_reason: "completed",
       next_run_at: null,
@@ -174,7 +197,10 @@ describe("runInvoiceFollowups", () => {
     mocks.results.appointments = [{ data: appointmentRow(), error: null }];
     mocks.results.followup_sequences = [{ data: { id: sequence().id }, error: null }];
     mocks.results.patients = [{ data: { id: patientId, full_name: "Sara", phone: null, email: null }, error: null }];
-    mocks.send.mockResolvedValue({ ok: false, code: "NO_USABLE_CHANNEL" });
+    mocks.send.mockResolvedValue({
+      email: { status: "not_attempted", reason: "no_address" },
+      whatsapp: { status: "not_attempted", reason: "no_whatsapp_channel" },
+    });
     const summary = await runInvoiceFollowups(now);
     expect(summary.failed).toBe(1);
     expect(mocks.emit.mock.calls[0][0]).toMatchObject({
@@ -197,6 +223,11 @@ describe("ensureInvoiceFollowupSequence", () => {
       step: 0,
       status: "active",
     });
+    // First dunning is due at D+3 (the invoice itself was delivered
+    // immediately by §7.3a — no D0 cron step).
+    const dueAt = new Date(mocks.upserts[0].payload.next_run_at as string).getTime();
+    const threeDaysOut = Date.now() + 3 * 86_400_000;
+    expect(Math.abs(dueAt - threeDaysOut)).toBeLessThan(5_000);
     expect(mocks.upserts[0].options).toMatchObject({
       onConflict: "appointment_id",
       ignoreDuplicates: true,

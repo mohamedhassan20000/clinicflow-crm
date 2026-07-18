@@ -7,6 +7,8 @@
     "pleaseFillEveryRequiredField": "Please fill every required field.",
     "appointmentConfirmedButFailedToRemoveConflictingAppointments": "Appointment confirmed, but failed to remove conflicting appointments.",
     "appointmentNotFound": "Appointment not found.",
+    "noInvoiceToSend": "There is no saved invoice to send for this appointment.",
+    "failedToSendInvoice": "Could not send the invoice. Please try again.",
     "arrivedInSessionCompletedOrChargedAppointmentsCannotBeDeleted": "Arrived, in-session, completed, or charged appointments cannot be deleted.",
     "billingDetailsAreRequiredToCompleteThisAppointment": "Billing details are required to complete this appointment.",
     "cancellationReasonMustBe500CharactersOrLess": "Cancellation reason must be 500 characters or less.",
@@ -272,6 +274,8 @@
     "couldNotDeleteTemplate": "The template could not be deleted. Please try again."
   },
   "settings": {
+    "invoiceFollowupDaysOutOfRange": "Reminder days must be between 1 and 365.",
+    "invoiceFollowupSecondAfterFirst": "The second reminder must be scheduled after the first.",
     "doctorHoursOutsideClinicHours": "{day}: doctor hours ({start}–{end}) must be within clinic hours ({clinicOpen}–{clinicClose}).",
     "doctorScheduleOnClosedDay": "{day} is a clinic closed day. The doctor cannot work on a clinic closed day.",
     "aDepartmentWithThisNameAlreadyExists": "A department with this name already exists.",

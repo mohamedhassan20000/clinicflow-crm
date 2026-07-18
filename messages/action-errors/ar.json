@@ -7,6 +7,8 @@
     "pleaseFillEveryRequiredField": "املأ جميع الحقول المطلوبة.",
     "appointmentConfirmedButFailedToRemoveConflictingAppointments": "تعذر إكمال الطلب. يُرجى المحاولة مرة أخرى.",
     "appointmentNotFound": "لم يتم العثور على الموعد.",
+    "noInvoiceToSend": "لا توجد فاتورة محفوظة لإرسالها لهذا الموعد.",
+    "failedToSendInvoice": "تعذر إرسال الفاتورة. يُرجى المحاولة مرة أخرى.",
     "arrivedInSessionCompletedOrChargedAppointmentsCannotBeDeleted": "تعذر إكمال الطلب. يُرجى المحاولة مرة أخرى.",
     "billingDetailsAreRequiredToCompleteThisAppointment": "تفاصيل الفوترة مطلوبة لإكمال هذا الموعد.",
     "cancellationReasonMustBe500CharactersOrLess": "يجب ألا يتجاوز سبب الإلغاء 500 حرف.",
@@ -272,6 +274,8 @@
     "couldNotDeleteTemplate": "تعذر حذف القالب. يرجى المحاولة مرة أخرى."
   },
   "settings": {
+    "invoiceFollowupDaysOutOfRange": "يجب أن تكون أيام التذكير بين 1 و365.",
+    "invoiceFollowupSecondAfterFirst": "يجب جدولة التذكير الثاني بعد الأول.",
     "doctorHoursOutsideClinicHours": "ساعات الطبيب يوم {day} ({start}–{end}) يجب أن تكون ضمن ساعات العيادة ({clinicOpen}–{clinicClose}).",
     "doctorScheduleOnClosedDay": "العيادة مغلقة يوم {day}، ولا يمكن للطبيب العمل في يوم إغلاق العيادة.",
     "aDepartmentWithThisNameAlreadyExists": "تعذر إكمال الطلب. يُرجى المحاولة مرة أخرى.",

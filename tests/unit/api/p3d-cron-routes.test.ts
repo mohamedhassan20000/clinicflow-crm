@@ -15,10 +15,9 @@ vi.mock("@/lib/messaging/followups", () => ({
 }));
 
 import { GET as remindersGet } from "@/app/api/cron/reminders/route";
-import { GET as followupsGet } from "@/app/api/cron/invoice-followups/route";
 
 function request(authorization?: string) {
-  return new Request("https://clinic.example/api/cron/x", {
+  return new Request("https://clinic.example/api/cron/reminders", {
     headers: authorization ? { authorization } : undefined,
   });
 }
@@ -34,42 +33,58 @@ afterEach(() => {
   delete process.env.CRON_SECRET;
 });
 
-describe.each([
-  ["reminders", () => remindersGet, mocks.runReminders],
-  ["invoice-followups", () => followupsGet, mocks.runFollowups],
-] as const)("/api/cron/%s", (_name, handler, runner) => {
-  it("rejects a missing bearer secret without running", async () => {
-    const response = await handler()(request());
+// The single daily morning messaging cron (§7.1) carries both remaining
+// recurring jobs: appointment reminders and invoice dunning follow-ups.
+describe("/api/cron/reminders (daily messaging cron)", () => {
+  it("rejects a missing bearer secret without running either job", async () => {
+    const response = await remindersGet(request());
     expect(response.status).toBe(401);
-    expect(runner).not.toHaveBeenCalled();
+    expect(mocks.runReminders).not.toHaveBeenCalled();
+    expect(mocks.runFollowups).not.toHaveBeenCalled();
   });
 
   it("rejects a wrong bearer secret", async () => {
-    const response = await handler()(request("Bearer nope"));
+    const response = await remindersGet(request("Bearer nope"));
     expect(response.status).toBe(401);
-    expect(runner).not.toHaveBeenCalled();
+    expect(mocks.runReminders).not.toHaveBeenCalled();
+    expect(mocks.runFollowups).not.toHaveBeenCalled();
   });
 
   it("rejects every request when CRON_SECRET is unset (fail closed)", async () => {
     delete process.env.CRON_SECRET;
-    const response = await handler()(request("Bearer "));
+    const response = await remindersGet(request("Bearer "));
     expect(response.status).toBe(401);
-    expect(runner).not.toHaveBeenCalled();
+    expect(mocks.runReminders).not.toHaveBeenCalled();
+    expect(mocks.runFollowups).not.toHaveBeenCalled();
   });
 
-  it("runs and reports the summary with the correct secret", async () => {
-    const response = await handler()(request("Bearer cron-secret"));
+  it("runs both jobs and reports each summary with the correct secret", async () => {
+    const response = await remindersGet(request("Bearer cron-secret"));
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body.ok).toBe(true);
-    expect(body.sent).toBe(1);
-    expect(runner).toHaveBeenCalledOnce();
+    expect(body.reminders.sent).toBe(1);
+    expect(body.followups.sent).toBe(1);
+    expect(mocks.runReminders).toHaveBeenCalledOnce();
+    expect(mocks.runFollowups).toHaveBeenCalledOnce();
   });
 
-  it("returns 503 and reports to Sentry when the run throws", async () => {
-    runner.mockRejectedValueOnce(new Error("boom"));
-    const response = await handler()(request("Bearer cron-secret"));
-    expect(response.status).toBe(503);
+  it("still succeeds (200) and reports to Sentry when only one job fails", async () => {
+    mocks.runFollowups.mockRejectedValueOnce(new Error("dunning boom"));
+    const response = await remindersGet(request("Bearer cron-secret"));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.ok).toBe(true);
+    expect(body.reminders.sent).toBe(1);
+    expect(body.followups).toBeNull();
     expect(mocks.captureException).toHaveBeenCalledOnce();
+  });
+
+  it("returns 503 when both jobs fail", async () => {
+    mocks.runReminders.mockRejectedValueOnce(new Error("boom"));
+    mocks.runFollowups.mockRejectedValueOnce(new Error("boom"));
+    const response = await remindersGet(request("Bearer cron-secret"));
+    expect(response.status).toBe(503);
+    expect(mocks.captureException).toHaveBeenCalledTimes(2);
   });
 });

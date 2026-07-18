@@ -1,6 +1,11 @@
 import "server-only";
 import { sendMessage } from "@/lib/messaging/send";
 import {
+  claimMessageDispatch,
+  finalizeMessageDispatch,
+  releaseMessageDispatch,
+} from "@/lib/supabase/admin";
+import {
   templateParameterValues,
   type PatientCopyLocale,
   type TemplateVariable,
@@ -13,13 +18,19 @@ import type {
 import type { Database } from "@/types/database";
 
 /**
- * Shared channel-fallback dispatch for the P3D automated senders (§7.2/§7.3).
+ * Independent-channel, idempotent patient dispatch (2026-07-19 flow revision).
  *
- * `sendMessage` owns entitlements, caps, window rules and recording; this
- * helper only handles what it cannot: the recipient address differs per
- * channel (phone vs email) and WhatsApp business-initiated sends need an
- * approved template — so each channel is attempted explicitly, in the §5.2
- * preference order, until one send succeeds.
+ * Email and WhatsApp are treated as **independent** channels — one never blocks
+ * the other:
+ *   - Email is always attempted when the patient has an email address.
+ *   - WhatsApp is attempted only when the clinic has an active WhatsApp
+ *     integration, the patient has a phone, and an approved template exists.
+ *
+ * Every channel send is guarded by a per-channel claim on `dedupe_key` in
+ * `message_dispatches`, so a duplicate is never sent, and if one channel
+ * succeeds while the other fails, only the failed channel is retried (its claim
+ * is released; the succeeded channel stays terminal). `sendMessage` still owns
+ * entitlements, usage caps, window rules, and `outbound_messages` recording.
  */
 
 export type AutomatedTemplateRow = Pick<
@@ -27,28 +38,40 @@ export type AutomatedTemplateRow = Pick<
   "id" | "name" | "language" | "variables" | "approval_status" | "channel"
 >;
 
-export type AutomatedRecipient = {
-  phone: string | null;
-  email: string | null;
+export type ChannelDispatchOutcome =
+  | { status: "sent"; outboundMessageId?: string }
+  /** Claim denied — already sent or a concurrent run is mid-send. */
+  | { status: "duplicate" }
+  /** Provider outcome unclear; the claim is kept so a later run may retry. */
+  | { status: "ambiguous" }
+  | { status: "failed"; code: SendErrorCode }
+  | {
+      status: "not_attempted";
+      reason: "no_address" | "no_whatsapp_channel" | "no_template";
+    };
+
+export type DispatchResult = {
+  email: ChannelDispatchOutcome | null;
+  whatsapp: ChannelDispatchOutcome | null;
 };
 
-export type AutomatedSendInput = {
+export type DispatchInput = {
   clinicId: string;
-  recipient: AutomatedRecipient;
+  /** Logical message identity for per-channel idempotency (e.g. 'invoice:<id>'). */
+  dedupeKey: string;
+  recipient: { phone: string | null; email: string | null };
   locale: PatientCopyLocale;
   /** Approved WhatsApp templates for this clinic matching the send's template name. */
   whatsappTemplates: readonly AutomatedTemplateRow[];
-  templateValues: Record<TemplateVariable, string>;
-  /** Freeform copy used for email fallback. */
+  templateValues: Partial<Record<TemplateVariable, string>>;
+  /** Freeform copy for the email channel. */
   subject: string;
   body: string;
   relatedType: Extract<OutboundRelatedType, "appointment" | "invoice">;
   relatedId: string;
+  /** Whether the clinic has an active WhatsApp integration. */
+  whatsappActive: boolean;
 };
-
-export type AutomatedSendResult =
-  | { ok: true; channel: MessageChannel }
-  | { ok: false; code: SendErrorCode | "NO_USABLE_CHANNEL" };
 
 function templateVariableNames(
   value: AutomatedTemplateRow["variables"],
@@ -76,56 +99,106 @@ export function pickAutomatedTemplate(
   );
 }
 
-export async function sendAutomatedPatientMessage(
-  input: AutomatedSendInput,
-): Promise<AutomatedSendResult> {
-  let lastCode: SendErrorCode | null = null;
+/** True when any channel produced a new send (used by callers for retry/alerts). */
+export function anyChannelSent(result: DispatchResult): boolean {
+  return result.email?.status === "sent" || result.whatsapp?.status === "sent";
+}
 
-  for (const channel of ["whatsapp", "email"] as const) {
-    let attempt: Parameters<typeof sendMessage>[0] | null = null;
+/** True when a channel that was actually attempted ended in a definite failure. */
+export function anyChannelFailed(result: DispatchResult): boolean {
+  return result.email?.status === "failed" || result.whatsapp?.status === "failed";
+}
 
-    if (channel === "whatsapp") {
-      if (!input.recipient.phone) continue;
-      const template = pickAutomatedTemplate(input.whatsappTemplates, input.locale);
-      if (!template) continue;
-      const parameters = templateParameterValues(
-        templateVariableNames(template.variables),
-        input.templateValues,
-      );
-      if (!parameters) continue;
-      attempt = {
-        clinicId: input.clinicId,
-        recipient: input.recipient.phone,
-        body: "",
-        templateId: template.id,
-        templateParameters: parameters,
-        relatedType: input.relatedType,
-        relatedId: input.relatedId,
-        channelPreference: ["whatsapp"],
-      };
-    } else {
-      if (!input.recipient.email) continue;
-      attempt = {
-        clinicId: input.clinicId,
-        recipient: input.recipient.email,
-        body: input.body,
-        subject: input.subject,
-        relatedType: input.relatedType,
-        relatedId: input.relatedId,
-        channelPreference: ["email"],
-      };
-    }
+async function dispatchOnChannel(
+  channel: Extract<MessageChannel, "whatsapp" | "email">,
+  clinicId: string,
+  dedupeKey: string,
+  attempt: Parameters<typeof sendMessage>[0],
+): Promise<ChannelDispatchOutcome> {
+  const claim = await claimMessageDispatch({
+    clinicId,
+    dedupeKey,
+    channel,
+    claimedAt: new Date().toISOString(),
+  });
+  // Claim denied → already sent (idempotent) or a concurrent run holds it.
+  if (claim.error || claim.data !== true) return { status: "duplicate" };
 
-    const result = await sendMessage(attempt);
-    if (result.ok) return { ok: true, channel };
-    if (result.code === "PROVIDER_SEND_AMBIGUOUS") {
-      // The provider may have accepted the message; falling back to the next
-      // channel could deliver a duplicate (P3-M1). Stop and let the caller
-      // retry the same channel on a later run.
-      return { ok: false, code: result.code };
-    }
-    lastCode = result.code;
+  const result = await sendMessage(attempt);
+  if (result.ok) {
+    await finalizeMessageDispatch({
+      clinicId,
+      dedupeKey,
+      channel,
+      sentAt: new Date().toISOString(),
+      outboundMessageId: result.outboundMessageId ?? null,
+    });
+    return { status: "sent", outboundMessageId: result.outboundMessageId };
+  }
+  if (result.code === "PROVIDER_SEND_AMBIGUOUS") {
+    // Keep the claim: the message may have gone out. A later run reclaims after
+    // the lease if it was actually lost.
+    return { status: "ambiguous" };
+  }
+  // Definite failure: release so only this channel retries next time.
+  await releaseMessageDispatch({ clinicId, dedupeKey, channel });
+  return { status: "failed", code: result.code };
+}
+
+export async function dispatchPatientMessage(
+  input: DispatchInput,
+): Promise<DispatchResult> {
+  const result: DispatchResult = { email: null, whatsapp: null };
+
+  // EMAIL — always attempted when an address exists, independent of WhatsApp.
+  if (input.recipient.email) {
+    result.email = await dispatchOnChannel("email", input.clinicId, input.dedupeKey, {
+      clinicId: input.clinicId,
+      recipient: input.recipient.email,
+      body: input.body,
+      subject: input.subject,
+      relatedType: input.relatedType,
+      relatedId: input.relatedId,
+      channelPreference: ["email"],
+    });
+  } else {
+    result.email = { status: "not_attempted", reason: "no_address" };
   }
 
-  return { ok: false, code: lastCode ?? "NO_USABLE_CHANNEL" };
+  // WHATSAPP — only when the clinic has an active integration, independent of
+  // the email outcome.
+  if (!input.whatsappActive) {
+    result.whatsapp = { status: "not_attempted", reason: "no_whatsapp_channel" };
+  } else if (!input.recipient.phone) {
+    result.whatsapp = { status: "not_attempted", reason: "no_address" };
+  } else {
+    const template = pickAutomatedTemplate(input.whatsappTemplates, input.locale);
+    const parameters = template
+      ? templateParameterValues(
+          templateVariableNames(template.variables),
+          input.templateValues,
+        )
+      : null;
+    if (!template || !parameters) {
+      result.whatsapp = { status: "not_attempted", reason: "no_template" };
+    } else {
+      result.whatsapp = await dispatchOnChannel(
+        "whatsapp",
+        input.clinicId,
+        input.dedupeKey,
+        {
+          clinicId: input.clinicId,
+          recipient: input.recipient.phone,
+          body: "",
+          templateId: template.id,
+          templateParameters: parameters,
+          relatedType: input.relatedType,
+          relatedId: input.relatedId,
+          channelPreference: ["whatsapp"],
+        },
+      );
+    }
+  }
+
+  return result;
 }

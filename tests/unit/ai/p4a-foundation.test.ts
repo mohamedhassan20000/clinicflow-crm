@@ -80,14 +80,16 @@ describe("P4A client model tiers (§11)", () => {
     delete process.env.AI_MODEL_PATIENT;
   });
 
-  it("defaults doctor to a Sonnet-tier gateway model and patient to Haiku", () => {
-    expect(resolveModelId("doctor")).toContain("sonnet");
-    expect(resolveModelId("patient")).toContain("haiku");
+  it("defaults doctor to a Sonnet-tier model and patient to a Haiku-tier model", () => {
+    expect(resolveModelId("doctor").modelId).toContain("sonnet");
+    expect(resolveModelId("patient").modelId).toContain("haiku");
   });
 
   it("honors environment overrides", () => {
-    process.env.AI_MODEL_DOCTOR = "anthropic/claude-custom";
-    expect(resolveModelId("doctor")).toBe("anthropic/claude-custom");
+    process.env.AI_MODEL_DOCTOR = "claude-doctor-custom";
+    process.env.AI_MODEL_PATIENT = "claude-patient-custom";
+    expect(resolveModelId("doctor").modelId).toBe("claude-doctor-custom");
+    expect(resolveModelId("patient").modelId).toBe("claude-patient-custom");
   });
 });
 

@@ -766,7 +766,7 @@ clinicflow-crm/
 ## Future Improvements
 
 - **Real-time updates** — Supabase Realtime subscriptions for live appointment board updates
-- **Appointment reminders** — automated SMS/email reminders via Resend before scheduled appointments
+- **Appointment reminders** — automated WhatsApp/email reminders before scheduled appointments
 - **Audit log viewer** — in-app UI to browse `audit_logs` (records are written; no viewer exists yet)
 - **CSV/PDF export** — infrastructure exists; UI-level export triggers are partially implemented
 - **Multi-clinic support** — the schema supports `clinic_id` multi-tenancy; clinic-switching UI is not implemented

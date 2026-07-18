@@ -7,6 +7,8 @@
     "pleaseFillEveryRequiredField": "Please fill every required field.",
     "appointmentConfirmedButFailedToRemoveConflictingAppointments": "Appointment confirmed, but failed to remove conflicting appointments.",
     "appointmentNotFound": "Appointment not found.",
+    "noInvoiceToSend": "There is no saved invoice to send for this appointment.",
+    "failedToSendInvoice": "Could not send the invoice. Please try again.",
     "arrivedInSessionCompletedOrChargedAppointmentsCannotBeDeleted": "Arrived, in-session, completed, or charged appointments cannot be deleted.",
     "billingDetailsAreRequiredToCompleteThisAppointment": "Billing details are required to complete this appointment.",
     "cancellationReasonMustBe500CharactersOrLess": "Cancellation reason must be 500 characters or less.",
@@ -241,7 +243,39 @@
     "unableToSaveDisplayCurrency": "Unable to save display currency.",
     "unsupportedDisplayCurrency": "Unsupported display currency."
   },
+  "messaging": {
+    "whatsAppIsNotIncludedInYourPlan": "WhatsApp messaging is not included in your current plan.",
+    "enterValid360dialogConnectionDetails": "Enter valid 360dialog connection details.",
+    "messagingEnvironmentIsNotConfigured": "Messaging is not configured for this environment.",
+    "couldNotVerify360dialogCredentials": "Could not verify the 360dialog credentials. Check them and try again.",
+    "couldNotSaveWhatsAppConnection": "Could not save the WhatsApp connection.",
+    "invalidTemplateSubmission": "The WhatsApp template submission is invalid.",
+    "whatsAppTemplateOrChannelNotFound": "The WhatsApp template or active channel was not found.",
+    "whatsAppChannelCredentialsUnavailable": "The WhatsApp channel credentials are unavailable.",
+    "couldNotSubmitWhatsAppTemplate": "Could not submit the template to WhatsApp.",
+    "couldNotSaveTemplateSubmission": "The template was submitted, but its provider status could not be saved.",
+    "invalidInboxReply": "Enter a valid reply or complete every template value.",
+    "invalidConversationUpdate": "The conversation update is invalid.",
+    "conversationNotFound": "Conversation not found.",
+    "conversationClosed": "Reopen this conversation before replying.",
+    "serviceWindowClosed": "The 24-hour WhatsApp service window is closed. Choose an approved template.",
+    "templateUnavailable": "This template is unavailable, not approved, or has incomplete values.",
+    "messagingLimitReached": "The clinic's WhatsApp messaging limit has been reached.",
+    "couldNotSendReply": "The reply could not be sent. Please try again.",
+    "inboxOwnerNotFound": "Choose an active administrator or receptionist from this clinic.",
+    "patientNotFound": "Choose an active patient from this clinic.",
+    "couldNotUpdateConversation": "The conversation was updated, but its message history could not be synchronized. Refresh and try again.",
+    "invalidTemplateDetails": "Enter valid template details.",
+    "templateNotFound": "This template could not be found.",
+    "templateIsLocked": "Submitted and approved templates cannot be edited.",
+    "couldNotSaveTemplate": "The template could not be saved. Please try again.",
+    "templateNameAlreadyExists": "A template with this name and language already exists.",
+    "templateCannotBeDeletedWhileSubmitted": "A template cannot be deleted while it is under review.",
+    "couldNotDeleteTemplate": "The template could not be deleted. Please try again."
+  },
   "settings": {
+    "invoiceFollowupDaysOutOfRange": "Reminder days must be between 1 and 365.",
+    "invoiceFollowupSecondAfterFirst": "The second reminder must be scheduled after the first.",
     "doctorHoursOutsideClinicHours": "{day}: doctor hours ({start}–{end}) must be within clinic hours ({clinicOpen}–{clinicClose}).",
     "doctorScheduleOnClosedDay": "{day} is a clinic closed day. The doctor cannot work on a clinic closed day.",
     "aDepartmentWithThisNameAlreadyExists": "A department with this name already exists.",
@@ -279,5 +313,8 @@
     "staffMemberNotFound": "Staff member not found.",
     "unauthorized": "Unauthorized.",
     "weCouldNotCompleteThisRequestPleaseTryAgain": "We could not complete this request. Please try again."
+  },
+  "notifications": {
+    "couldNotUpdateNotifications": "Notifications could not be updated. Please try again."
   }
 }

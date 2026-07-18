@@ -25,4 +25,14 @@ describe("dashboard navigation serialization", () => {
     expect(navigation.every((item) => typeof item.icon === "string")).toBe(true);
     expect(JSON.parse(JSON.stringify(OPERATOR_SHELL_NAVIGATION))).toEqual(OPERATOR_SHELL_NAVIGATION);
   });
+
+  it("makes the inbox a default admin/receptionist page without exposing it to doctors or managers", () => {
+    expect(getRolePageSlugs("admin")).toContain("inbox");
+    expect(getRolePageSlugs("receptionist")).toContain("inbox");
+    expect(getRolePageSlugs("doctor")).not.toContain("inbox");
+    expect(getRolePageSlugs("manager")).not.toContain("inbox");
+    expect(getTenantShellNavigation(getRolePageSlugs("receptionist"))).toContainEqual(
+      expect.objectContaining({ href: "/inbox", icon: "inbox", labelKey: "tenant.inbox" }),
+    );
+  });
 });

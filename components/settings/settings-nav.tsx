@@ -12,6 +12,8 @@ const NAV = [
   { href: "/settings/packages", labelKey: "navPackages" },
   { href: "/settings/insurance", labelKey: "navInsurance" },
   { href: "/settings/clinic", labelKey: "navClinic" },
+  { href: "/settings/messaging", labelKey: "navMessaging" },
+  { href: "/settings/templates", labelKey: "navTemplates" },
   { href: "/settings/customize", labelKey: "navCustomize", adminOnly: true },
 ] as const;
 

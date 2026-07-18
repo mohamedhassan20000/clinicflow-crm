@@ -1,0 +1,15 @@
+{
+  "object": "whatsapp_business_account",
+  "entry": [{
+    "changes": [{
+      "field": "message_template_status_update",
+      "value": {
+        "metadata": { "phone_number_id": "109876543210" },
+        "message_template_id": "template-provider-1",
+        "message_template_name": "appointment_reminder",
+        "message_template_language": "en",
+        "event": "APPROVED"
+      }
+    }]
+  }]
+}

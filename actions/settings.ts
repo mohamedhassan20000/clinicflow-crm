@@ -709,6 +709,85 @@ export async function updateClinic(
   return { success: true };
 }
 
+/**
+ * Toggle the clinic's daily appointment reminders (§7.2b). When enabled, the
+ * daily morning cron sends WhatsApp + Email reminders for confirmed
+ * appointments scheduled today and tomorrow; when disabled, the clinic is
+ * excluded from the reminder run entirely.
+ */
+export async function updateReminderSettings(enabled: boolean): Promise<ActionResult> {
+  const user = await requireRole(["admin", "manager"]);
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("clinics")
+    .update({ reminders_enabled: enabled })
+    .eq("id", user.clinicId);
+
+  if (error) return { error: await actionError("settings.weCouldNotCompleteThisRequestPleaseTryAgain") };
+
+  revalidatePath("/settings/messaging");
+  return { success: true };
+}
+
+export type InvoiceFollowupSettingsInput = {
+  enabled: boolean;
+  firstDays: number;
+  secondDays: number;
+  emailSubject: string | null;
+  emailBody: string | null;
+};
+
+/**
+ * Configure the clinic's overdue-invoice reminders (§7.3b): on/off, the day
+ * offsets for the first and second reminder, and the email subject/body. The
+ * WhatsApp wording is the clinic's own `invoice_followup` template (managed in
+ * the templates settings). Values out of range are rejected.
+ */
+export async function updateInvoiceFollowupSettings(
+  input: InvoiceFollowupSettingsInput,
+): Promise<ActionResult> {
+  const user = await requireRole(["admin", "manager"]);
+
+  const first = Math.trunc(Number(input.firstDays));
+  const second = Math.trunc(Number(input.secondDays));
+  if (
+    !Number.isFinite(first) ||
+    !Number.isFinite(second) ||
+    first < 1 ||
+    first > 365 ||
+    second < 1 ||
+    second > 365
+  ) {
+    return { error: await actionError("settings.invoiceFollowupDaysOutOfRange") };
+  }
+  if (second <= first) {
+    return { error: await actionError("settings.invoiceFollowupSecondAfterFirst") };
+  }
+  const subject = input.emailSubject?.trim() || null;
+  const body = input.emailBody?.trim() || null;
+  if ((subject && subject.length > 200) || (body && body.length > 2000)) {
+    return { error: await actionError("settings.validationError") };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("clinics")
+    .update({
+      invoice_followups_enabled: input.enabled,
+      invoice_followup_first_days: first,
+      invoice_followup_second_days: second,
+      invoice_followup_email_subject: subject,
+      invoice_followup_email_body: body,
+    })
+    .eq("id", user.clinicId);
+
+  if (error) return { error: await actionError("settings.weCouldNotCompleteThisRequestPleaseTryAgain") };
+
+  revalidatePath("/settings/messaging");
+  return { success: true };
+}
+
 export async function uploadClinicLogo(fd: FormData): Promise<ActionResult & { url?: string }> {
   const user = await requireRole(["admin", "manager"]);
 

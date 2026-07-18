@@ -18,6 +18,9 @@ import {
 } from "@/lib/validations/appointment";
 import type { Database, TablesUpdate } from "@/types/database";
 import { getPatientAccountBalance } from "@/actions/patients";
+import { ensureInvoiceFollowupSequence } from "@/lib/messaging/followups";
+import { notifyAppointmentEvent } from "@/lib/messaging/appointment-notifications";
+import { deliverIssuedInvoice } from "@/lib/messaging/invoice-delivery";
 import { getClinicWorkingHours } from "@/actions/settings";
 import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
 
@@ -308,13 +311,17 @@ export async function createAppointment(
   if (slot.error) return slot;
 
   const supabase = await createClient();
-  const { error } = await supabase.from("appointments").insert({
-    ...parsed.data,
-    package_id: selectedPackage.data?.packageId ?? null,
-    package_session_number: selectedPackage.data?.packageSessionNumber ?? null,
-    clinic_id: user.clinicId,
-    created_by: user.id,
-  });
+  const { data: inserted, error } = await supabase
+    .from("appointments")
+    .insert({
+      ...parsed.data,
+      package_id: selectedPackage.data?.packageId ?? null,
+      package_session_number: selectedPackage.data?.packageSessionNumber ?? null,
+      clinic_id: user.clinicId,
+      created_by: user.id,
+    })
+    .select("id")
+    .single();
 
   if (error) {
     if (error.code === "23505") {
@@ -331,6 +338,16 @@ export async function createAppointment(
       };
     }
     return { error: await actionError("appointments.failedToCreateAppointmentPleaseTryAgain") };
+  }
+
+  // §7.2a: a newly created appointment is pending — notify the patient
+  // immediately (WhatsApp + Email). Best-effort; never blocks the booking.
+  if (inserted?.id) {
+    await notifyAppointmentEvent({
+      clinicId: user.clinicId,
+      appointmentId: inserted.id,
+      event: "created",
+    });
   }
 
   revalidatePath("/appointments");
@@ -492,6 +509,17 @@ export async function updateAppointmentStatus(
         : await supabase.rpc("complete_appointment_billing", baseBillingArgs);
 
     if (error) return { error: await actionError("appointments.weCouldNotCompleteThisRequestPleaseTryAgain") };
+
+    // §7.3b: an invoice that completes with an outstanding balance enters the
+    // dunning follow-up sequence (per-clinic configurable timing), advanced by
+    // the daily morning cron. Registration is idempotent and best-effort — it
+    // never fails billing. Invoice *delivery* to the patient is no longer
+    // automatic (2026-07-19 flow revision): the employee sends it explicitly
+    // via sendInvoiceToPatient after saving.
+    if (total - collected > 0.001) {
+      await ensureInvoiceFollowupSequence(user.clinicId, id);
+    }
+
     revalidatePath("/appointments");
     revalidatePath(`/patients/${appt.patient_id}`);
     return {};
@@ -504,6 +532,16 @@ export async function updateAppointmentStatus(
     .eq("clinic_id", user.clinicId);
 
   if (error) return { error: await actionError("appointments.failedToUpdateStatus") };
+
+  // §7.2a: confirming or cancelling an appointment notifies the patient
+  // immediately (WhatsApp + Email). Best-effort; never blocks the status change.
+  if (newStatus === "confirmed" || newStatus === "cancelled") {
+    await notifyAppointmentEvent({
+      clinicId: user.clinicId,
+      appointmentId: id,
+      event: newStatus,
+    });
+  }
 
   revalidatePath("/appointments");
   revalidatePath(`/patients/${appt.patient_id}`);
@@ -755,6 +793,71 @@ export async function undoInvoiceCompletion(
   revalidatePath("/appointments");
   revalidatePath(`/patients/${appt.patient_id}`);
   return {};
+}
+
+export type InvoiceChannelState = "sent" | "already_sent" | "failed" | "unavailable";
+export type SendInvoiceResult = ActionResult & {
+  channels?: { email: InvoiceChannelState; whatsapp: InvoiceChannelState };
+};
+
+/**
+ * Manually deliver a completed appointment's invoice to the patient (§7.3a,
+ * 2026-07-19 flow revision). Triggered by the "Send to patient" action after
+ * the employee saves the invoice — never automatically. Email and WhatsApp are
+ * independent and idempotent, so re-sending only retries the channel that has
+ * not yet succeeded.
+ */
+export async function sendInvoiceToPatient(
+  appointmentId: string,
+): Promise<SendInvoiceResult> {
+  const user = await requireMutationRole(["admin", "receptionist"]);
+  const supabase = await createClient();
+
+  const { data: appt } = await supabase
+    .from("appointments")
+    .select("status, total_amount")
+    .eq("id", appointmentId)
+    .eq("clinic_id", user.clinicId)
+    .single();
+
+  if (!appt) return { error: await actionError("appointments.appointmentNotFound") };
+  if (appt.status !== "completed" || !((appt.total_amount ?? 0) > 0)) {
+    return { error: await actionError("appointments.noInvoiceToSend") };
+  }
+
+  const result = await deliverIssuedInvoice({
+    clinicId: user.clinicId,
+    appointmentId,
+  });
+  if (!result) {
+    return { error: await actionError("appointments.failedToSendInvoice") };
+  }
+
+  const normalize = (
+    outcome:
+      | { status: "sent" | "duplicate" | "ambiguous" | "failed" | "not_attempted" }
+      | null,
+  ): InvoiceChannelState => {
+    switch (outcome?.status) {
+      case "sent":
+      case "ambiguous":
+        return "sent";
+      case "duplicate":
+        return "already_sent";
+      case "failed":
+        return "failed";
+      default:
+        return "unavailable";
+    }
+  };
+
+  return {
+    success: true,
+    channels: {
+      email: normalize(result.email),
+      whatsapp: normalize(result.whatsapp),
+    },
+  };
 }
 
 export async function permanentDeleteAppointment(id: string): Promise<ActionResult> {
@@ -1136,6 +1239,13 @@ export async function confirmAndDisplaceConflicts(
       return { error: await actionError("appointments.appointmentConfirmedButFailedToRemoveConflictingAppointments") };
     }
   }
+
+  // §7.2a: notify the patient their appointment is confirmed. Best-effort.
+  await notifyAppointmentEvent({
+    clinicId: user.clinicId,
+    appointmentId,
+    event: "confirmed",
+  });
 
   revalidatePath("/appointments");
   return { success: true };

@@ -23,6 +23,14 @@ describe("SettingsNav customize visibility", () => {
     );
   });
 
+  it("shows the P3B messaging settings entry to both settings roles", () => {
+    render(<SettingsNav canCustomize={false} />);
+    expect(screen.getByRole("link", { name: "Messaging" })).toHaveAttribute(
+      "href",
+      "/settings/messaging",
+    );
+  });
+
   it("blocks manager direct access at the customize page boundary", () => {
     const pageSource = readFileSync(
       "app/(protected)/settings/customize/page.tsx",

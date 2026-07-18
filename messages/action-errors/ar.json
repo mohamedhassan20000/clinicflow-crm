@@ -7,6 +7,8 @@
     "pleaseFillEveryRequiredField": "املأ جميع الحقول المطلوبة.",
     "appointmentConfirmedButFailedToRemoveConflictingAppointments": "تعذر إكمال الطلب. يُرجى المحاولة مرة أخرى.",
     "appointmentNotFound": "لم يتم العثور على الموعد.",
+    "noInvoiceToSend": "لا توجد فاتورة محفوظة لإرسالها لهذا الموعد.",
+    "failedToSendInvoice": "تعذر إرسال الفاتورة. يُرجى المحاولة مرة أخرى.",
     "arrivedInSessionCompletedOrChargedAppointmentsCannotBeDeleted": "تعذر إكمال الطلب. يُرجى المحاولة مرة أخرى.",
     "billingDetailsAreRequiredToCompleteThisAppointment": "تفاصيل الفوترة مطلوبة لإكمال هذا الموعد.",
     "cancellationReasonMustBe500CharactersOrLess": "يجب ألا يتجاوز سبب الإلغاء 500 حرف.",
@@ -241,7 +243,39 @@
     "unableToSaveDisplayCurrency": "تعذر إكمال الطلب. يُرجى المحاولة مرة أخرى.",
     "unsupportedDisplayCurrency": "عملة العرض غير مدعومة."
   },
+  "messaging": {
+    "whatsAppIsNotIncludedInYourPlan": "مراسلة واتساب غير مشمولة في خطتك الحالية.",
+    "enterValid360dialogConnectionDetails": "أدخل بيانات اتصال 360dialog صالحة.",
+    "messagingEnvironmentIsNotConfigured": "المراسلة غير مهيأة في هذه البيئة.",
+    "couldNotVerify360dialogCredentials": "تعذر التحقق من بيانات اعتماد 360dialog. تحقق منها وحاول مرة أخرى.",
+    "couldNotSaveWhatsAppConnection": "تعذر حفظ اتصال واتساب.",
+    "invalidTemplateSubmission": "طلب إرسال قالب واتساب غير صالح.",
+    "whatsAppTemplateOrChannelNotFound": "لم يتم العثور على قالب واتساب أو قناة نشطة.",
+    "whatsAppChannelCredentialsUnavailable": "بيانات اعتماد قناة واتساب غير متاحة.",
+    "couldNotSubmitWhatsAppTemplate": "تعذر إرسال القالب إلى واتساب.",
+    "couldNotSaveTemplateSubmission": "تم إرسال القالب، لكن تعذر حفظ حالته لدى المزود.",
+    "invalidInboxReply": "أدخل ردًا صالحًا أو أكمل جميع قيم القالب.",
+    "invalidConversationUpdate": "تحديث المحادثة غير صالح.",
+    "conversationNotFound": "لم يتم العثور على المحادثة.",
+    "conversationClosed": "أعد فتح هذه المحادثة قبل الرد.",
+    "serviceWindowClosed": "أُغلقت نافذة خدمة واتساب البالغة 24 ساعة. اختر قالبًا معتمدًا.",
+    "templateUnavailable": "هذا القالب غير متاح أو غير معتمد أو قيمه غير مكتملة.",
+    "messagingLimitReached": "تم بلوغ حد رسائل واتساب الخاص بالعيادة.",
+    "couldNotSendReply": "تعذر إرسال الرد. يُرجى المحاولة مرة أخرى.",
+    "inboxOwnerNotFound": "اختر مسؤولًا أو موظف استقبال نشطًا من هذه العيادة.",
+    "patientNotFound": "اختر مريضًا نشطًا من هذه العيادة.",
+    "couldNotUpdateConversation": "تم تحديث المحادثة، لكن تعذرت مزامنة سجل رسائلها. حدّث الصفحة وحاول مرة أخرى.",
+    "invalidTemplateDetails": "أدخل تفاصيل قالب صحيحة.",
+    "templateNotFound": "تعذر العثور على هذا القالب.",
+    "templateIsLocked": "لا يمكن تعديل القوالب المقدَّمة أو المعتمدة.",
+    "couldNotSaveTemplate": "تعذر حفظ القالب. يرجى المحاولة مرة أخرى.",
+    "templateNameAlreadyExists": "يوجد قالب بهذا الاسم واللغة بالفعل.",
+    "templateCannotBeDeletedWhileSubmitted": "لا يمكن حذف القالب أثناء مراجعته.",
+    "couldNotDeleteTemplate": "تعذر حذف القالب. يرجى المحاولة مرة أخرى."
+  },
   "settings": {
+    "invoiceFollowupDaysOutOfRange": "يجب أن تكون أيام التذكير بين 1 و365.",
+    "invoiceFollowupSecondAfterFirst": "يجب جدولة التذكير الثاني بعد الأول.",
     "doctorHoursOutsideClinicHours": "ساعات الطبيب يوم {day} ({start}–{end}) يجب أن تكون ضمن ساعات العيادة ({clinicOpen}–{clinicClose}).",
     "doctorScheduleOnClosedDay": "العيادة مغلقة يوم {day}، ولا يمكن للطبيب العمل في يوم إغلاق العيادة.",
     "aDepartmentWithThisNameAlreadyExists": "تعذر إكمال الطلب. يُرجى المحاولة مرة أخرى.",
@@ -279,5 +313,8 @@
     "staffMemberNotFound": "لم يتم العثور على عضو فريق العمل.",
     "unauthorized": "غير مصرح لك بتنفيذ هذا الإجراء.",
     "weCouldNotCompleteThisRequestPleaseTryAgain": "تعذر إكمال الطلب. يُرجى المحاولة مرة أخرى."
+  },
+  "notifications": {
+    "couldNotUpdateNotifications": "تعذر تحديث الإشعارات. يرجى المحاولة مرة أخرى."
   }
 }

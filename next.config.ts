@@ -14,6 +14,18 @@ function supabaseHostname(): string {
   }
 }
 
+function supabaseConnectSources(): string {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!url) return "";
+  try {
+    const parsed = new URL(url);
+    const websocketProtocol = parsed.protocol === "http:" ? "ws:" : "wss:";
+    return `${parsed.origin} ${websocketProtocol}//${parsed.host}`;
+  } catch {
+    return "";
+  }
+}
+
 const securityHeaders = [
   { key: "X-Frame-Options", value: "DENY" },
   { key: "X-Content-Type-Options", value: "nosniff" },
@@ -32,7 +44,7 @@ const securityHeaders = [
       "img-src 'self' data: blob: https:",
       "font-src 'self' data:",
       // Supabase REST + Storage + Realtime; Sentry error reporting (optional, no-op without DSN)
-      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.sentry.io",
+      `connect-src 'self' ${supabaseConnectSources()} https://*.supabase.co wss://*.supabase.co https://*.sentry.io`,
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",

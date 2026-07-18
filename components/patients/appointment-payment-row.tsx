@@ -13,6 +13,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { SendInvoiceButton } from "@/components/appointments/send-invoice-button";
 import { formatDoctorName } from "@/lib/format-doctor";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
 import { useTranslations } from "next-intl";
@@ -362,6 +363,12 @@ export function AppointmentPaymentRow({
               {t("paidOn")}{" "}
               {formatDateTime(a.paid_at)}
             </p>
+          )}
+
+          {(a.total_amount ?? 0) > 0 && (
+            <div className="flex justify-end pt-1">
+              <SendInvoiceButton appointmentId={a.id} />
+            </div>
           )}
         </div>
       )}

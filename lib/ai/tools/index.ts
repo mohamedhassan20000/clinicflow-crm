@@ -3,6 +3,7 @@ import { getPatientSummaryTool } from "@/lib/ai/tools/get-patient-summary";
 import { searchPatientVisitsTool } from "@/lib/ai/tools/search-patient-visits";
 import { listDoctorAppointmentsTool } from "@/lib/ai/tools/list-doctor-appointments";
 import { checkAvailabilityTool } from "@/lib/ai/tools/check-availability";
+import { searchAuthorizedPatientsTool } from "@/lib/ai/tools/search-authorized-patients";
 import type { DoctorToolContext } from "@/lib/ai/tools/context";
 
 export type { DoctorToolContext } from "@/lib/ai/tools/context";
@@ -16,6 +17,7 @@ export type { DoctorToolContext } from "@/lib/ai/tools/context";
  */
 export function buildDoctorTools(ctx: DoctorToolContext) {
   return {
+    search_authorized_patients: searchAuthorizedPatientsTool(ctx),
     get_patient_summary: getPatientSummaryTool(ctx),
     search_patient_visits: searchPatientVisitsTool(ctx),
     list_doctor_appointments: listDoctorAppointmentsTool(ctx),
@@ -23,7 +25,27 @@ export function buildDoctorTools(ctx: DoctorToolContext) {
   };
 }
 
+export function buildAdministrativeTools(ctx: DoctorToolContext) {
+  return {
+    search_authorized_patients: searchAuthorizedPatientsTool(ctx),
+    check_availability: checkAvailabilityTool(ctx),
+  };
+}
+
+/** Role-specific, deny-by-default registration at the model boundary. */
+export function buildStaffTools(ctx: DoctorToolContext) {
+  switch (ctx.user.role) {
+    case "doctor":
+      return buildDoctorTools(ctx);
+    case "admin":
+    case "manager":
+    case "receptionist":
+      return buildAdministrativeTools(ctx);
+  }
+}
+
 export const DOCTOR_TOOL_NAMES = [
+  "search_authorized_patients",
   "get_patient_summary",
   "search_patient_visits",
   "list_doctor_appointments",

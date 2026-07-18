@@ -636,22 +636,22 @@ describe("RLS security integration", () => {
     expect(settlements).toEqual([]);
   });
 
-  it("allows managers to manage non-admin page permissions only", async () => {
-    const allowed = await clients.manager.from("user_page_permissions").upsert({
+  it("reserves all page-visibility customization writes for admins", async () => {
+    const managerAttempt = await clients.manager.from("user_page_permissions").upsert({
       user_id: userIds.doctor,
       clinic_id: ids.clinic,
       page_slug: "patients",
       is_visible: true,
     });
-    const denied = await clients.manager.from("user_page_permissions").upsert({
-      user_id: userIds.admin,
+    const adminAttempt = await clients.admin.from("user_page_permissions").upsert({
+      user_id: userIds.doctor,
       clinic_id: ids.clinic,
-      page_slug: "settings",
+      page_slug: "assistant",
       is_visible: true,
     });
 
-    expect(allowed.error).toBeNull();
-    expect(denied.error).not.toBeNull();
+    expect(managerAttempt.error).not.toBeNull();
+    expect(adminAttempt.error).toBeNull();
   });
 
   it("prevents managers from role escalation and admin user management", async () => {

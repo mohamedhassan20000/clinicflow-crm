@@ -2,13 +2,13 @@ import * as Sentry from "@sentry/nextjs";
 import { consumeStream, convertToModelMessages, type UIMessage } from "ai";
 import { getLocale } from "next-intl/server";
 import { z } from "zod";
-import { authorizeDoctorAssistant } from "@/lib/ai/authorization";
+import { authorizeStaffAssistant } from "@/lib/ai/authorization";
 import {
   AiConversationError,
   ensureDoctorConversation,
   persistDoctorTurn,
 } from "@/lib/ai/conversations";
-import { createDoctorAgent } from "@/lib/ai/doctor-agent";
+import { createStaffAgent } from "@/lib/ai/staff-agent";
 import { AiToolAuthorizationError } from "@/lib/ai/errors";
 import { releaseAiTurn, reserveAiTurn } from "@/lib/ai/usage";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -34,6 +34,7 @@ const requestSchema = z
 type ErrorCode =
   | "unauthenticated"
   | "role_forbidden"
+  | "page_hidden"
   | "feature_not_entitled"
   | "usage_limit_reached"
   | "subscription_inactive"
@@ -65,9 +66,9 @@ function messageText(message: z.infer<typeof requestSchema>["message"]): string 
 export async function POST(request: Request) {
   let releaseReservation: (() => Promise<void>) | null = null;
   try {
-    const user = await authorizeDoctorAssistant();
+    const user = await authorizeStaffAssistant();
 
-    const rateLimit = await checkRateLimit("doctor-assistant", user.clinicId, {
+    const rateLimit = await checkRateLimit("staff-assistant", user.clinicId, {
       limit: 30,
       windowSeconds: 60,
       failureMode: "open",
@@ -117,7 +118,7 @@ export async function POST(request: Request) {
       parts: [{ type: "text", text: userText }],
     };
     const uiMessages = [...conversation.messages, currentMessage];
-    const agent = createDoctorAgent({
+    const agent = createStaffAgent({
       user,
       locale,
       clinicName: clinic.name,
@@ -134,7 +135,7 @@ export async function POST(request: Request) {
       onError(error) {
         streamFailed = true;
         Sentry.captureException(error, {
-          tags: { area: "doctor-assistant-stream" },
+          tags: { area: "staff-assistant-stream" },
           extra: { clinicId: user.clinicId, conversationId: conversation.id },
         });
         return locale === "ar"
@@ -164,7 +165,7 @@ export async function POST(request: Request) {
           });
         } catch (error) {
           Sentry.captureException(error, {
-            tags: { area: "doctor-assistant-persistence" },
+            tags: { area: "staff-assistant-persistence" },
             extra: { clinicId: user.clinicId, conversationId: conversation.id },
           });
         }
@@ -182,7 +183,7 @@ export async function POST(request: Request) {
         error.reason === "invalid_patient_context" ? 400 : 503,
       );
     }
-    Sentry.captureException(error, { tags: { area: "doctor-assistant-route" } });
+    Sentry.captureException(error, { tags: { area: "staff-assistant-route" } });
     return errorResponse("temporarily_unavailable", 503);
   }
 }

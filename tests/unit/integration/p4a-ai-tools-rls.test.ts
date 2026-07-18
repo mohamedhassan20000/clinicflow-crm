@@ -4,9 +4,8 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { Database, Json } from "@/types/database";
 
 // P4A two-clinic denial suite (§10's most important suite). Asserts:
-//   * agent_conversations / agent_messages are owner-scoped — a staff member
-//     sees only their own chats, never a colleague's, never another clinic's,
-//     and receptionist/manager roles see nothing at all.
+//   * agent_conversations / agent_messages are owner-scoped — every normal
+//     staff role sees only its own chats, never a colleague's or other clinic's.
 //   * clinic_faq is clinic-readable but not authenticated-writable in P4A.
 //   * log_agent_tool_call is service-role only; a clinic user cannot forge an
 //     audit entry, and a real entry lands in audit_logs for the clinic admin.
@@ -54,6 +53,7 @@ let managerA: Client;
 let doctorDepartmentB: Client;
 let doctorB: Client;
 let anon: Client;
+let adminAId = "";
 let doctorAId = "";
 let receptionistAId = "";
 let managerAId = "";
@@ -98,7 +98,7 @@ async function cleanup() {
   await service.from("clinics").delete().in("id", [clinicA, clinicB]);
 }
 
-async function buildLiveDoctorTools(dbClient: Client, user: {
+async function buildLiveTools(dbClient: Client, user: {
   id: string;
   clinicId: string;
   role: "admin" | "receptionist" | "manager" | "doctor";
@@ -147,8 +147,8 @@ async function buildLiveDoctorTools(dbClient: Client, user: {
     })),
   }));
 
-  const { buildDoctorTools } = await import("@/lib/ai/tools");
-  return buildDoctorTools({
+  const { buildDoctorTools, buildStaffTools } = await import("@/lib/ai/tools");
+  const context = {
     user: {
       ...user,
       email: `${user.id}@example.test`,
@@ -157,7 +157,11 @@ async function buildLiveDoctorTools(dbClient: Client, user: {
       mustChangePassword: false,
     },
     locale: "en",
-  });
+  } as const;
+  return {
+    clinical: buildDoctorTools(context),
+    staff: buildStaffTools(context),
+  };
 }
 
 beforeAll(async () => {
@@ -175,6 +179,7 @@ beforeAll(async () => {
   managerA = manager.client;
   doctorDepartmentB = departmentDoctor.client;
   doctorB = docB.client;
+  adminAId = admin.id;
   doctorAId = doctor.id;
   receptionistAId = receptionist.id;
   managerAId = manager.id;
@@ -322,7 +327,7 @@ describe("P4A doctor tools through live clinical RLS", () => {
   const toolOptions = {} as never;
 
   it("denies doctor A a summary and visit search for doctor B's department patient", async () => {
-    const tools = await buildLiveDoctorTools(doctorA, {
+    const { clinical: tools } = await buildLiveTools(doctorA, {
       id: doctorAId,
       clinicId: clinicA,
       role: "doctor",
@@ -344,7 +349,7 @@ describe("P4A doctor tools through live clinical RLS", () => {
   });
 
   it("returns the same patient's real clinical summary to the matching department doctor", async () => {
-    const tools = await buildLiveDoctorTools(doctorDepartmentB, {
+    const { clinical: tools } = await buildLiveTools(doctorDepartmentB, {
       id: doctorDepartmentBId,
       clinicId: clinicA,
       role: "doctor",
@@ -373,7 +378,7 @@ describe("P4A doctor tools through live clinical RLS", () => {
   });
 
   it("denies a cross-clinic patient through both patient tools", async () => {
-    const tools = await buildLiveDoctorTools(doctorA, {
+    const { clinical: tools } = await buildLiveTools(doctorA, {
       id: doctorAId,
       clinicId: clinicA,
       role: "doctor",
@@ -394,7 +399,7 @@ describe("P4A doctor tools through live clinical RLS", () => {
     ["receptionist", () => receptionistA],
     ["manager", () => managerA],
   ] as const)("rejects the %s persona at the tool boundary", async (role, getClient) => {
-    const tools = await buildLiveDoctorTools(getClient(), {
+    const { clinical: tools } = await buildLiveTools(getClient(), {
       id: role === "receptionist" ? receptionistAId : managerAId,
       clinicId: clinicA,
       role,
@@ -403,6 +408,52 @@ describe("P4A doctor tools through live clinical RLS", () => {
     await expect(
       tools.get_patient_summary.execute!({ patient_id: patientDepartmentA }, toolOptions),
     ).rejects.toMatchObject({ reason: "role_forbidden" });
+  });
+
+  it.each([
+    ["admin", () => adminA, () => adminAId],
+    ["manager", () => managerA, () => managerAId],
+    ["receptionist", () => receptionistA, () => receptionistAId],
+  ] as const)("returns only same-clinic non-clinical lookup fields to %s", async (role, getClient, getId) => {
+    const { staff } = await buildLiveTools(getClient(), {
+      id: getId(),
+      clinicId: clinicA,
+      role,
+      departmentId: null,
+    });
+
+    const result = (await staff.search_authorized_patients.execute!(
+      { query: "Patient" },
+      toolOptions,
+    )) as { patients: { id: string; full_name: string; file_number: string | null; phone: string; email: string | null }[] };
+    expect(result.patients.map((patient) => patient.id).sort()).toEqual([
+      patientDepartmentA,
+      patientDepartmentB,
+    ].sort());
+    expect(result.patients[0]).toEqual({
+      id: expect.any(String),
+      full_name: expect.any(String),
+      file_number: expect.any(String),
+      phone: expect.any(String),
+      email: expect.any(String),
+    });
+    expect(result.patients.every((patient) => !("date_of_birth" in patient))).toBe(true);
+    expect(result.patients.every((patient) => !("national_id" in patient))).toBe(true);
+  });
+
+  it("keeps doctor patient lookup inside assignment/department RLS", async () => {
+    const { staff } = await buildLiveTools(doctorA, {
+      id: doctorAId,
+      clinicId: clinicA,
+      role: "doctor",
+      departmentId: departmentA,
+    });
+
+    const result = (await staff.search_authorized_patients.execute!(
+      { query: "Patient" },
+      toolOptions,
+    )) as { patients: { id: string }[] };
+    expect(result.patients.map((patient) => patient.id)).toEqual([patientDepartmentA]);
   });
 });
 
@@ -426,9 +477,30 @@ describe("P4A agent conversation RLS", () => {
     expect(msg.data).toEqual([]);
   });
 
-  it("denies conversations to receptionist/manager roles entirely", async () => {
-    const conv = await receptionistA.from("agent_conversations").select("id");
-    expect(conv.data).toEqual([]);
+  it.each([
+    ["receptionist", () => receptionistA, () => receptionistAId],
+    ["manager", () => managerA, () => managerAId],
+  ] as const)("allows %s to own a general conversation but not patient context", async (_role, getClient, getId) => {
+    const roleClient = getClient();
+    const own = await roleClient
+      .from("agent_conversations")
+      .insert({ clinic_id: clinicA, user_id: getId(), persona: "doctor" })
+      .select("id, user_id, patient_id");
+    expect(own.error).toBeNull();
+    expect(own.data).toEqual([
+      { id: expect.any(String), user_id: getId(), patient_id: null },
+    ]);
+
+    const patientScoped = await roleClient
+      .from("agent_conversations")
+      .insert({
+        clinic_id: clinicA,
+        user_id: getId(),
+        persona: "doctor",
+        patient_id: patientDepartmentA,
+      })
+      .select("id");
+    expect(patientScoped.error).not.toBeNull();
   });
 
   it("denies cross-clinic reads", async () => {

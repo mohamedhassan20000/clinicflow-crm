@@ -39,9 +39,9 @@ export const PAGE_DEFINITIONS: PageDefinition[] = [
 
 export const ROLE_PAGE_SLUGS: Record<PermissionUserRole, PageSlug[]> = {
   admin: ["dashboard", "patients", "appointments", "assistant", "inbox", "followups", "revenue", "reports", "settings"],
-  receptionist: ["dashboard", "patients", "appointments", "inbox", "followups", "reports"],
+  receptionist: ["dashboard", "patients", "appointments", "assistant", "inbox", "followups", "reports"],
   doctor: ["dashboard", "patients", "appointments", "assistant", "followups"],
-  manager: ["dashboard", "revenue", "reports", "settings"],
+  manager: ["dashboard", "assistant", "revenue", "reports", "settings"],
 };
 
 export function getRolePageSlugs(role: string | null | undefined): PageSlug[] {

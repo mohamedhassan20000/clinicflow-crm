@@ -122,6 +122,10 @@ export async function ensureDoctorConversation(input: {
   if (existingError) throw new AiConversationError("persistence_failed");
   const requestedPatientId = input.patientId ?? null;
 
+  if (requestedPatientId && input.user.role !== "doctor") {
+    throw new AiConversationError("invalid_patient_context");
+  }
+
   if (existing) {
     if (existing.patient_id !== requestedPatientId) {
       throw new AiConversationError("invalid_patient_context");

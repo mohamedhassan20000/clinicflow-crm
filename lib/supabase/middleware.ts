@@ -55,31 +55,6 @@ function isPublicFlowPath(pathname: string) {
 
 // Routes only admins and managers may access.
 const ADMIN_MANAGER_PREFIXES = ["/settings"];
-const PAGE_VISIBILITY_COOKIE = "cf_page_visibility";
-
-function parseVisibilityCookie(
-  value: string | undefined,
-  userId: string,
-  role: string,
-): Set<PageSlug> | null {
-  if (!value) return null;
-  const [cookieUserId, cookieRole, slugs] = value.split(":");
-  if (cookieUserId !== userId || cookieRole !== role) return null;
-  return new Set(
-    (slugs ?? "")
-      .split(",")
-      .filter(Boolean) as PageSlug[],
-  );
-}
-
-function serializeVisibilityCookie(
-  userId: string,
-  role: string,
-  visibleSlugs: Set<PageSlug>,
-) {
-  return `${userId}:${role}:${Array.from(visibleSlugs).sort().join(",")}`;
-}
-
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
@@ -302,61 +277,50 @@ export async function updateSession(request: NextRequest) {
         return NextResponse.redirect(url);
       }
 
-      let visibleSlugs = parseVisibilityCookie(
-        request.cookies.get(PAGE_VISIBILITY_COOKIE)?.value,
-        user.id,
-        profile.role,
-      );
+      // Page visibility is authorization data. Resolve it from the saved rows
+      // on every protected navigation instead of trusting a client-stored
+      // cookie that can be forged or remain stale after an admin change.
+      const { data: permissions, error: permissionsError } = await supabase
+        .from("user_page_permissions")
+        .select("page_slug, is_visible")
+        .eq("user_id", user.id)
+        .eq("clinic_id", profile.clinic_id);
 
-      if (!visibleSlugs) {
-        const { data: permissions, error: permissionsError } = await supabase
-          .from("user_page_permissions")
-          .select("page_slug, is_visible")
-          .eq("user_id", user.id)
-          .eq("clinic_id", profile.clinic_id);
-
-        visibleSlugs = new Set(roleSlugs);
-        if (!permissionsError) {
-          for (const permission of permissions ?? []) {
-            const slug = permission.page_slug as PageSlug;
-            if (!roleSlugs.has(slug) || slug === "dashboard") continue;
-            if (permission.is_visible) visibleSlugs.add(slug);
-            else visibleSlugs.delete(slug);
-          }
-        } else if (
-          permissionsError.code === "PGRST205" ||
-          permissionsError.message?.toLowerCase().includes("user_page_permissions")
-        ) {
-          const { data: fallback, error: fallbackError } = await supabase
-            .from("user_customizations")
-            .select("page, access")
-            .eq("profile_id", user.id)
-            .eq("clinic_id", profile.clinic_id)
-            .eq("feature", "_visible");
-
-          if (!fallbackError) {
-            for (const permission of fallback ?? []) {
-              const slug = permission.page as PageSlug;
-              if (!roleSlugs.has(slug) || slug === "dashboard") continue;
-              if (permission.access === "hidden") visibleSlugs.delete(slug);
-              else visibleSlugs.add(slug);
-            }
-          }
+      const visibleSlugs = new Set(roleSlugs);
+      if (!permissionsError) {
+        for (const permission of permissions ?? []) {
+          const slug = permission.page_slug as PageSlug;
+          if (!roleSlugs.has(slug) || slug === "dashboard") continue;
+          if (permission.is_visible) visibleSlugs.add(slug);
+          else visibleSlugs.delete(slug);
         }
-        visibleSlugs.add("dashboard");
+      } else if (
+        permissionsError.code === "PGRST205" ||
+        permissionsError.message?.toLowerCase().includes("user_page_permissions")
+      ) {
+        const { data: fallback, error: fallbackError } = await supabase
+          .from("user_customizations")
+          .select("page, access")
+          .eq("profile_id", user.id)
+          .eq("clinic_id", profile.clinic_id)
+          .eq("feature", "_visible");
 
-        supabaseResponse.cookies.set(
-          PAGE_VISIBILITY_COOKIE,
-          serializeVisibilityCookie(user.id, profile.role, visibleSlugs),
-          {
-            httpOnly: true,
-            secure: true,
-            sameSite: "lax",
-            path: "/",
-            maxAge: 60 * 60,
-          },
-        );
+        if (!fallbackError) {
+          for (const permission of fallback ?? []) {
+            const slug = permission.page as PageSlug;
+            if (!roleSlugs.has(slug) || slug === "dashboard") continue;
+            if (permission.access === "hidden") visibleSlugs.delete(slug);
+            else visibleSlugs.add(slug);
+          }
+        } else {
+          // A failed authorization lookup is not permission to enter.
+          visibleSlugs.delete(pageSlug);
+        }
+      } else {
+        // Fail closed for this requested page on an unexpected lookup error.
+        visibleSlugs.delete(pageSlug);
       }
+      visibleSlugs.add("dashboard");
 
       if (!visibleSlugs.has(pageSlug)) {
         const url = request.nextUrl.clone();

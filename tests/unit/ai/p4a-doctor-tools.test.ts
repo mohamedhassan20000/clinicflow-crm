@@ -64,19 +64,76 @@ async function loadTools(
       key: string,
     ) => ents.subscriptionAllowed && ents.features[key] === true,
   }));
+  vi.doMock("@/lib/server-page-permissions", () => ({
+    getPageVisibilityState: vi.fn(async () => "visible"),
+  }));
 
-  const { buildDoctorTools } = await import("@/lib/ai/tools");
-  const tools = buildDoctorTools({
+  const { buildDoctorTools, buildStaffTools } = await import("@/lib/ai/tools");
+  const context = {
     // AuthedUser shape; extra fields are harmless.
     user: user as never,
     locale: "en",
-  });
-  return { tools, mocks, logAgentToolCall };
+  } as const;
+  const tools = buildDoctorTools(context);
+  const staffTools = buildStaffTools(context);
+  return { tools, staffTools, mocks, logAgentToolCall };
 }
 
 // The AI SDK tool.execute takes (input, options). Options are unused by our
 // tools; a stub satisfies the signature.
 const opts = {} as never;
+
+describe("role-specific Assistant tool registration", () => {
+  it("mounts clinical tools only for doctors", async () => {
+    const doctor = await loadTools(DOCTOR);
+    expect(Object.keys(doctor.staffTools)).toEqual([
+      "search_authorized_patients",
+      "get_patient_summary",
+      "search_patient_visits",
+      "list_doctor_appointments",
+      "check_availability",
+    ]);
+
+    for (const role of ["admin", "manager", "receptionist"] as const) {
+      const staff = await loadTools({ ...DOCTOR, role });
+      expect(Object.keys(staff.staffTools)).toEqual([
+        "search_authorized_patients",
+        "check_availability",
+      ]);
+    }
+  });
+
+  it("returns non-clinical lookup fields to receptionist/manager/admin personas", async () => {
+    for (const role of ["admin", "manager", "receptionist"] as const) {
+      const { staffTools, mocks } = await loadTools({ ...DOCTOR, role });
+      mocks.state.tableResults.patients = {
+        data: [{
+          id: PATIENT_ID,
+          full_name: "Jane Roe",
+          file_number: "CF-100",
+          phone: "+96550000001",
+          email: "jane@example.com",
+        }],
+        error: null,
+      };
+
+      const result = await staffTools.search_authorized_patients.execute!(
+        { query: "Jane" },
+        opts,
+      );
+      expect(result).toEqual({
+        patients: [{
+          id: PATIENT_ID,
+          full_name: "Jane Roe",
+          file_number: "CF-100",
+          phone: "+96550000001",
+          email: "jane@example.com",
+        }],
+      });
+      expect(mocks.state.queryLog.some((entry) => entry.table === "medical_notes")).toBe(false);
+    }
+  });
+});
 
 describe("P4A get_patient_summary", () => {
   it("returns a redacted summary and scopes every read to the clinic", async () => {

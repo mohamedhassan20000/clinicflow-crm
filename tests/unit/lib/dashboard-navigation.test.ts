@@ -36,11 +36,11 @@ describe("dashboard navigation serialization", () => {
     );
   });
 
-  it("makes the assistant a gated admin/doctor page", () => {
+  it("registers the assistant for every normal clinic role", () => {
     expect(getRolePageSlugs("admin")).toContain("assistant");
     expect(getRolePageSlugs("doctor")).toContain("assistant");
-    expect(getRolePageSlugs("receptionist")).not.toContain("assistant");
-    expect(getRolePageSlugs("manager")).not.toContain("assistant");
+    expect(getRolePageSlugs("receptionist")).toContain("assistant");
+    expect(getRolePageSlugs("manager")).toContain("assistant");
     expect(getTenantShellNavigation(getRolePageSlugs("doctor"))).toContainEqual(
       expect.objectContaining({
         href: "/assistant",

@@ -13,8 +13,8 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import type { DoctorAssistantUIMessage } from "@/lib/ai/doctor-agent";
-import type { DoctorAssistantSurfaceAccess } from "@/lib/ai/surface";
+import type { StaffAssistantUIMessage } from "@/lib/ai/staff-agent";
+import type { StaffAssistantSurfaceAccess } from "@/lib/ai/surface";
 
 export function PatientAssistantLauncher({
   patient,
@@ -24,9 +24,9 @@ export function PatientAssistantLauncher({
   historyTruncated,
 }: {
   patient: { id: string; name: string };
-  access: DoctorAssistantSurfaceAccess;
+  access: StaffAssistantSurfaceAccess;
   initialConversationId: string;
-  initialMessages: DoctorAssistantUIMessage[];
+  initialMessages: StaffAssistantUIMessage[];
   historyTruncated: boolean;
 }) {
   const t = useTranslations("assistant");
@@ -53,6 +53,7 @@ export function PatientAssistantLauncher({
             patient={patient}
             remaining={access.remaining}
             mode="sheet"
+            role="doctor"
           />
         ) : (
           <AssistantAccessGate access={access} compact />

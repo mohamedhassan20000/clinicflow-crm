@@ -8,7 +8,9 @@
 **Revised:** 2026-07-17 — **SMS/Unifonic is removed from the product scope. SMS is not a supported channel anywhere in the product, and Unifonic is not a provider or sub-processor. Phase 3 supports exactly two messaging channels: WhatsApp and Email.** Automated sends (reminders, invoice follow-ups) attempt WhatsApp first and fall back to Email; a clinic with no WhatsApp channel, template, or phone operates directly on Email from day one. The `sms` feature key and `sms_messages` usage metric that P1 shipped in the billing vocabulary (`plans.features`, `usage_metric` enum, §3.4/§3.5) are **retained as inert legacy vocabulary** — removing enum values would force a destructive migration for zero product benefit — but nothing reads or increments them. Where §5/§7/§8 below still name SMS or Unifonic in historical planning text, this revision supersedes it.
 **Revised:** 2026-07-18 — **Approved product direction: appointment notifications and invoice delivery become event-driven; scheduled work collapses to one daily morning cron.** This supersedes the cron-centric §7 design where it conflicts. (1) **Event-driven appointment notifications** — WhatsApp + Email are sent **immediately** (not by cron) at four appointment lifecycle events: **created** (initial/pending), **confirmed**, **rescheduled** (a `rescheduled` status will be added later), and **cancelled**. These fire inline from the appointment mutations (create/`updateAppointmentStatus`/reschedule), through the same `lib/messaging/` send boundary, WhatsApp-first with Email fallback. (2) **Daily reminders remain the only recurring appointment job** — a **single scheduled job that runs once every morning**, sending reminders for **all confirmed appointments scheduled for today and tomorrow** (replacing the per-offset hourly reminder model of §7.2). (3) **Event-driven invoice delivery** — as soon as an invoice is **issued**, it is delivered **immediately** to the patient via **both WhatsApp and Email**, with no wait for any scheduled task. (4) **Invoice delivery is template-agnostic in P3** — P3 ships the **invoice-issued event and immediate WhatsApp+Email delivery workflow** using the *existing* appointment/billing invoice representation (or a minimal system-generated invoice summary), records the delivery attempts/statuses on `outbound_messages`, and is deliberately structured so a later rendered document can be dropped in **without changing the event-driven delivery workflow**. The **professional invoice template, unique serial/invoice numbering, PDF/print layout, and the full document-template engine are NOT built in P3** — they move to the new **P7 — System Templates & Document Engine** (§8, added 2026-07-18). (5) **Scheduled invoice processing is retained only where still valuable after immediate delivery** — initial invoice delivery (formerly the D0 cron step) is gone; only the unpaid-balance **dunning follow-up** remains worth scheduling, and it **folds into the single daily morning cron** rather than a separate hourly job. (6) **Cron configuration** — the hourly `reminders`/`invoice-followups` crons are replaced by **one daily morning cron**, satisfying the **Vercel Hobby free-tier limit (max 2 cron jobs, each once daily)**: `fx-rates` (existing daily) + the daily morning messaging cron. Where §7/§8 below describe hourly crons, cron-driven initial appointment/invoice notifications, or a P3 invoice template/serial, this revision supersedes them.
 **Revised:** 2026-07-19 — **Approved messaging flow refinements (implemented on `feat/p3a-messaging-core`).** Refines the 2026-07-18 direction: (1) **Independent channels** — Email and WhatsApp are no longer a fallback chain; each patient notification attempts **Email whenever the patient has one** and **WhatsApp only when the clinic has an active integration**, and one channel never blocks the other (partial success is normal). Applies to appointment notifications, reminders, invoice delivery, and dunning. (2) **Manual invoice send** — invoice delivery is **no longer automatic** on billing completion. The employee saves the invoice, clicks **"Send to patient"**, and confirms in a popup; only then is it delivered (still template-agnostic, professional document → P7). (3) **Configurable overdue-invoice reminders** — the hardcoded D+3/D+7 dunning is replaced by **per-clinic settings**: on/off, first-reminder days, second-reminder days, and email subject/body (WhatsApp wording stays the clinic's `invoice_followup` template). (4) **Per-channel idempotency** — a `message_dispatches` ledger records each `(clinic, logical message, channel)` send; a duplicate is never sent, and if one channel fails while the other succeeds only the **failed channel** retries. This supersedes the reminder-specific `reminders_sent 'daily'` lease from 2026-07-18. §7 below reflects this.
-**Scope of this document:** Planning only. No code changes accompany this document.
+**Revised:** 2026-07-18 — **Phase 4 manual-testing authorization amendment (implemented).** The in-app Assistant is a normal clinic module for all four clinic roles (`admin`, `manager`, `doctor`, `receptionist`) when the clinic is entitled and the administrator has left that user's Assistant page visible. Doctors retain the clinical persona and patient-profile launcher; the other roles receive an explicitly non-clinical administrative persona. This amendment also makes §3.8's page-registration rule permanent for every future clinic-facing module and makes §6.8 authoritative where older P4 doctor/staff wording conflicts.
+**Revised:** 2026-07-18 — **Phase 4.5 — AI Platform & Provider Architecture is added between P4 and P5. Planning only; nothing is implemented by this revision.** P4.5 records the recommended long-term commercial and technical AI platform before patient-facing automation begins: Starter has no AI; Professional uses ClinicFlow-managed AI with an included pooled allowance; Enterprise supports managed AI plus optional strict BYOK and explicitly contracted hybrid fallback. It adds the future provider-policy abstraction, model certification registry, tenant credential lifecycle, immutable usage/cost ledger, namespaced AI entitlements, plan/billing integration, and operator controls. P5 and all later AI work depend on this decision gate. Details: §8 and `docs/reports/P4_5_ARCHITECTURE_PROPOSAL.md`.
+**Scope of this document:** Master architecture, roadmap, and approved product rules. Implementation evidence and validation results live in the phase reports under `docs/reports/`.
 **Supersedes:** The earlier single-clinic AI-agent plan direction. In particular, the previously proposed "patient portal prerequisite" phase is **explicitly retired** — WhatsApp is now the patient channel (see §5, §6).
 
 ---
@@ -23,16 +25,17 @@
 | **P2 — Arabic i18n & RTL** | 12–18 | `next-intl` (**English default** — amended 2026-07-14), **real language switcher on the marketing site + authenticated header, runtime switching without sign-out**, full RTL retrofit (file/occurrence inventory re-measured after P1.5A), **Thmanyah** Arabic typography (licensed; §4.3), localized zod errors — staff UI fully Arabic-capable | P0 (P2A parallelizable with P1/P1.5); P2B requires P1.5A; **licensed font files required from the founder before P2 starts** |
 | **P3 — Messaging layer + manual WhatsApp inbox + notifications** | 15–20 | Channel-abstracted `outbound_messages` (WhatsApp via BSP, email — **no SMS**, 2026-07-17 revision), inbound webhook, **staff manual WhatsApp inbox**, **event-driven appointment notifications** (created/confirmed/rescheduled/cancelled — 2026-07-18 revision), **single daily morning reminder job** (confirmed appts today+tomorrow), **event-driven invoice delivery** (template-agnostic; professional document deferred to P7), unpaid dunning follow-up (folded into the daily cron), in-app notification center, template management | P0, P1 (usage counters) |
 | **P4 — Doctor AI assistant (read-only)** | 10–14 | Staff chat UI, patient-summary/search tools, audit logging, AI entitlement gating | P0, P1; P2 for Arabic answers |
-| **P5 — Patient WhatsApp AI + preliminary booking** | 12–16 | AI auto/suggested replies in the P3 inbox, availability checks, pending-slot booking with caps, cancellation | P3, P4 |
+| **P4.5 — AI Platform & Provider Architecture** | 11–16 | Provider-neutral AI policy/execution layer; ClinicFlow-managed, Enterprise BYOK, and explicit hybrid modes; certified model registry and safe failover; encrypted per-clinic key lifecycle; immutable request/token/cost ledger; namespaced AI entitlements; Starter/Professional/Enterprise commercial rules and billing integration | P4, P1B/P1D |
+| **P5 — Patient WhatsApp AI + preliminary booking** | 12–16 | AI auto/suggested replies in the P3 inbox, availability checks, pending-slot booking with caps, cancellation | P3, P4, **P4.5** |
 | **P6 — Hardening, eval & Tech Provider migration** | 15–21 | Prompt-injection test suite, eval sets (ar/en), load & cost dashboards, Meta Tech Provider / Embedded Signup migration with in-product onboarding wizard + connection-state machine, WhatsApp Health & diagnostics page | P3–P5 |
 | **P7 — System Templates & Document Engine** | 12–18 | Reusable document/template engine + professional PDF/print rendering with clinic branding (logo/headers/footers) and ar/en + RTL/LTR support; **founder-supplied system templates**: invoice, receipt, prescription, medical report, sick-leave, referral & lab-request, consent forms; preview/print/download/delivery-ready output; per-document numbering/serial strategies (incl. the invoice serial deferred from P3). Replaces P3's template-agnostic invoice payload (§7.3a) with the rendered invoice document **without changing the event-driven delivery workflow** | P3 (messaging/delivery); P2 (RTL/i18n); clinic branding from P1.5 |
-| **Total** | **~117–165** (≈ 7–10 months, single developer) | | |
+| **Total** | **~128–181** (≈ 8–11 months, single developer) | | |
 
-**Recommended v1 cut line:** ship **P0–P4 (P1.5 included) with the manual WhatsApp inbox**. P5 (patient AI booking) may slip without blocking launch — clinics get real patient messaging on day one via the staff inbox, and the AI layer plugs into the same infrastructure later. Within P1.5 itself, P1.5C (marketing site) is the only sub-phase that gates public launch; P1.5B/P1.5D can ship in fast-follow releases if launch pressure demands.
+**Recommended v1 cut line:** ship **P0–P4.5 (P1.5 included) with the manual WhatsApp inbox**. P4.5 is required before AI is sold commercially: it turns the P4 product capability into a supportable, provider-neutral, metered offering. P5 (patient AI booking) may slip without blocking launch — clinics get real patient messaging on day one via the staff inbox, and the patient AI layer plugs into the same infrastructure later. Within P1.5 itself, P1.5C (marketing site) is the only sub-phase that gates public launch; P1.5B/P1.5D can ship in fast-follow releases if launch pressure demands.
 
 ### Execution sub-phase plan (branch/PR boundaries)
 
-Phases P1–P7 are too large for one branch/PR each. They are split below into **25 execution sub-phases** (the 2026-07-17 revision added P6D; the 2026-07-18 revision added P7A/P7B), each sized for one focused implementation session, one rigorous review, one branch, and one PR. Product scope, phase numbering, and dependencies are unchanged — this is an execution-planning split only (full per-sub-phase detail lives in each phase's *Execution split* block in §8). P0 is complete and is not part of this table; P1 (P1A–P1D), P1.5 (P1.5A–P1.5D), and P2 (P2A–P2C) are all merged to `main`; P3A–P3D are implemented on `feat/p3a-messaging-core` pending review/merge — the next sub-phase to execute is **P4A**.
+Phases P1–P7 are too large for one branch/PR each. They are split below into **28 execution sub-phases** (the 2026-07-18 Phase 4.5 revision adds P4.5A–P4.5C), each sized for one focused implementation session, one rigorous review, one branch, and one PR. Product scope, phase numbering, and dependencies are unchanged — this is an execution-planning split only (full per-sub-phase detail lives in each phase's *Execution split* block in §8). P0 is complete and is not part of this table; P1 (P1A–P1D), P1.5 (P1.5A–P1.5D), and P2 (P2A–P2C) are all merged to `main`; P3A–P3D are implemented on `feat/p3a-messaging-core` pending review/merge — the next sub-phase to execute is **P4A**.
 
 | Parent | Sub-phase | Deliverable | Depends on | Est. days | Recommended PR boundary (branch) |
 |---|---|---|---|---|---|
@@ -53,7 +56,10 @@ Phases P1–P7 are too large for one branch/PR each. They are split below into *
 | P3 | **P3D** | Event-driven appointment/invoice notifications + single daily morning cron (reminders + dunning) + template-agnostic immediate invoice delivery (professional document → P7) + template management + notification center | P3A (∥ P3C) | 3–4 | `feat/p3d-reminders-notifications` |
 | P4 | **P4A** | AI foundation + doctor tools + per-tool authorization + audit (no UI) | P1B, P1A; P2A for ar prompts | 6–8 | `feat/p4a-ai-doctor-tools` |
 | P4 | **P4B** | Staff assistant chat UI (streaming route, assistant page, patient-profile launcher) | P4A | 4–6 | `feat/p4b-assistant-ui` |
-| P5 | **P5A** | Booking-core hardening (pending caps/TTL) + patient tools + identity gating (no channel wiring) | P4A, P3A | 6–8 | `feat/p5a-patient-tools-booking` |
+| P4.5 | **P4.5A** | AI policy/provider abstraction + certified model registry + immutable usage/cost ledger and atomic budget reservations | P4B, P1B | 4–6 | `feat/p45a-ai-platform-foundation` |
+| P4.5 | **P4.5B** | Managed/BYOK/hybrid routing + encrypted tenant credential lifecycle + primary-admin provider controls | P4.5A | 4–5 | `feat/p45b-ai-provider-connections` |
+| P4.5 | **P4.5C** | Starter/Professional/Enterprise catalog mapping + namespaced entitlements + billing/operator usage integration | P4.5A, P4.5B, P1D | 3–5 | `feat/p45c-ai-commercial-integration` |
+| P5 | **P5A** | Booking-core hardening (pending caps/TTL) + patient tools + identity gating (no channel wiring) | P4A, P3A, **P4.5** | 6–8 | `feat/p5a-patient-tools-booking` |
 | P5 | **P5B** | Inbox AI integration: suggest/auto modes, escalation, confirmation flows, FAQ content UI | P5A, P3B, P3C | 6–8 | `feat/p5b-inbox-ai-booking` |
 | P6 | **P6A** | Prompt-injection suite + evaluation set (ar/en) in CI | P4B, P5B | 4–5 | `feat/p6a-adversarial-eval` |
 | P6 | **P6B** | Load tests + cost dashboards + delivery/cost alerting | P3, P1D | 3–4 | `feat/p6b-ops-load-cost` |
@@ -68,7 +74,7 @@ Phases P1–P7 are too large for one branch/PR each. They are split below into *
 
 **Verdict: Feasible as a staged build.** The codebase is a genuinely solid foundation for a multi-tenant SaaS: every one of the 23 application tables already has row-level security scoped by `clinic_id` (via `auth_clinic_id()`), transactional business logic already lives in `SECURITY DEFINER` Postgres RPCs that re-verify clinic ownership, storage buckets are clinic-scoped, and the appointment state machine (`pending → confirmed → arrived → in_session → completed`) with its partial unique index design is *already* the right shape for AI-driven preliminary booking. What is missing is the commercial layer (onboarding, billing, entitlements), internationalization (the app is English-only, LTR, hardcoded to Istanbul time and Turkish lira), any messaging channel at all, and the agent itself.
 
-**Total effort estimate: ~105–147 developer-days (~6.5–9 months for a single developer)**, sequenced P0–P6 above (the 2026-07-11 revision added P1.5 — premium UX, marketing site & platform analytics — at 18–26 days; the 2026-07-17 revision expanded P6 with the Embedded Signup onboarding experience and the WhatsApp Health page, +5–6 days). This is an honest estimate that budgets for the two commonly underestimated items: the RTL/i18n retrofit (87 of 176 TSX files contained physical-direction CSS at audit time; the inventory is re-measured after the P1.5A shell redesign) and Meta's WhatsApp Business verification bureaucracy (mitigated by launching on a BSP).
+**Total effort estimate: ~128–181 developer-days (~8–11 months for a single developer)**, sequenced P0–P7 above. The 2026-07-18 revision adds P4.5 at 11–16 days so provider policy, BYOK security, usage accounting, and AI commercial rules are settled before patient-facing AI begins. This is an honest estimate that budgets for the commonly underestimated RTL/i18n retrofit, Meta's WhatsApp Business verification bureaucracy, and the operational work required to sell variable-cost AI safely rather than treating a model API call as a complete platform.
 
 **Top 5 risks:**
 
@@ -252,7 +258,7 @@ All RLS'd: clinics read their own `subscriptions`/`usage_counters` (and any coup
 
 **Coupons / promotions (P1, operator-managed from §3.6):** supported kinds — **lifetime free**, **one year free** (`months_free` with `months = 12`), **X months free**, and **percentage discounts**. Every coupon supports **expiration** (`expires_at`), **usage limits** (`max_redemptions`), **clinic-specific assignment**, and **invitation-specific assignment** (attached to a `clinic_invitations` row so the discount applies automatically on accepted signup). Redemption effects live in the domain model (extended trial/comped period on `subscriptions`, discount recorded for the future provider), so they survive whichever gateway is chosen later.
 
-**Plans philosophy (approved):** the **Basic plan must remain genuinely useful** — full core clinic management (patients, appointments, billing, reports) works well on Basic. Plans differentiate mainly by **limits, automation, AI, messaging, and advanced capabilities** — never by intentionally crippling Basic's core workflows.
+**Plans philosophy (approved):** the entry plan must remain genuinely useful — full core clinic management (patients, appointments, billing, reports) works well without AI. P4.5 maps the stable internal slug `basic` to the **Starter** product name. Plans differentiate mainly by **limits, automation, AI, messaging, and advanced capabilities** — never by intentionally crippling Starter's core workflows.
 
 Webhook routes for the eventual provider are explicitly **out of P1**; when the provider is chosen, its adapter adds `app/api/webhooks/<provider>/route.ts` (signature-verified), following the route-handler precedent of `appointments/export`.
 
@@ -278,7 +284,7 @@ No third-party flag service. **Feature flags are a P1 deliverable: per-clinic fl
 - **Two layers, one resolution:** `plans.features jsonb` (e.g. `{"ai_assistant": true, "whatsapp": true, "sms": false}`) + `plans.limits jsonb` (e.g. `{"ai_messages_month": 1000, "staff_seats": 10}`), overlaid by **per-clinic overrides** (new relational clinic_feature_overrides table; feature overrides must not be stored as JSONB on clinics, operator-writable from §3.6) — effective entitlements = plan defaults ⊕ clinic overrides. Example flags: `ai_assistant`, `whatsapp`, `sms`, `beta_features`, plus namespaced keys for future modules.
 - **New module `lib/entitlements.ts`:** `getEntitlements(clinicId)` (cached with `unstable_cache` + tag, same pattern as [lib/cache/reference-data.ts](../lib/cache/reference-data.ts)), `hasFeature(ents, "ai_assistant")`, `checkUsageLimit(clinicId, "ai_messages")` — the resolution of plan + override happens here, callers never read the raw jsonb.
 - Enforced in three places, mirroring existing RBAC layering: middleware (hide gated pages — extends the existing page-visibility mechanism in [lib/page-permissions.ts](../lib/page-permissions.ts) by adding entitlement-conditional slugs), server actions (guard at top, next to `requireRole`), and the agent/messaging send paths (hard usage caps, §6.7/§11).
-- **Plan-differentiation guardrail (approved):** flags and limits are how Pro/Pro+AI add value on top of a **genuinely useful Basic** (§3.3) — differentiation by limits/automation/AI/messaging/advanced capabilities, not by switching off core clinic management.
+- **Plan-differentiation guardrail (approved):** flags and limits are how Professional/Enterprise add value on top of a **genuinely useful Starter** (§3.3/P4.5) — differentiation by limits/automation/AI/messaging/advanced capabilities, not by switching off core clinic management. Stable internal slugs remain `basic`/`pro`/`pro_ai`.
 
 ### 3.5 Per-clinic configuration (fixes the TZ inconsistency properly)
 
@@ -312,6 +318,20 @@ No third-party flag service. **Feature flags are a P1 deliverable: per-clinic fl
 **Prospective record shape (to be designed in that later phase):** an append-only, immutable acceptance record capturing, per acceptance — the **legal document type** (terms of service / privacy policy / DPA / clinic agreement), the **document version**, an **immutable document snapshot or content hash** (so the exact text accepted can be proved later), the **accepted timestamp**, the **accepting user**, the **clinic**, the **acceptance mechanism** (signup checkbox, onboarding step, re-consent prompt, operator-recorded countersignature), the **source IP** *where legally and operationally appropriate*, the **user agent or other evidence** *where appropriate* (both subject to PDPL/GDPR data-minimization — see §9.5), the **revocation/supersession state** (superseded-by pointer, withdrawn-at), and an **audit trail** (corrections are new rows, never edits).
 
 **Guardrails for that phase:** acceptance records are platform-admin-readable and clinic-readable for their own rows; they are **never patient data**; the document-snapshot store is versioned and immutable; the operator surface stays read-only. Placement in the roadmap is §13-Q12.
+
+### 3.8 Clinic page/module registration and visibility — permanent product rule (recorded 2026-07-18)
+
+Every future clinic-facing page or module must be registered in the existing page customization system in the same change that introduces its route. Registration means adding the stable `PageSlug` and route definition, declaring role-eligible defaults, supplying localized navigation/customization copy, and exposing the page in the administrator's per-user visibility controls. A page is not complete if it only appears in navigation or relies on a feature-specific toggle.
+
+The clinic administrator is the authority that changes user page visibility. A hidden page must be denied on direct navigation and at every server/API/tool boundary; hiding a sidebar item is not authorization. Persisted database state is authoritative, and unsigned client state such as cookies, query parameters, local storage, or submitted role/user ids must never grant access. Visibility lookup failures fail closed at authorization boundaries.
+
+Three decisions remain deliberately independent and must be tested independently:
+
+1. **Entitlement:** whether the clinic's plan/override enables the module.
+2. **Visibility:** whether the administrator exposes the registered page to that user, within the page's role-eligible set.
+3. **Data authorization:** which records and operations the authenticated role/user may access after entering the module, enforced server-side and by RLS.
+
+Future module acceptance must cover role defaults, administrator changes, forged client visibility state, direct-route denial, entitlement denial, and RLS/data-boundary behavior.
 
 ---
 
@@ -558,7 +578,7 @@ Scope: inbound webhook → `conversations` threading per patient (§5.4 identity
 
 ### 6.1 Approach
 
-**Anthropic Claude via the Vercel AI SDK (v6) tool-calling loop**, model strings through the Vercel AI Gateway (`"anthropic/claude-..."`) for provider observability and fallback. Why this pattern over alternatives:
+**P4 bootstrap implementation:** Anthropic Claude via the Vercel AI SDK (v6) tool-calling loop, using `"provider/model"` strings through Vercel AI Gateway for provider observability and fallback. **This is an implementation default, not a product-level commitment to Anthropic.** P4.5 makes task classes, approved model aliases, privacy requirements, credential mode, and failover policy ClinicFlow-owned configuration; no clinic plan, entitlement, prompt, tool, or billing rule may depend on one provider's model id. Why the tool-calling pattern remains correct regardless of provider:
 
 - **Pure RAG chatbot:** can answer FAQs but cannot check real availability or create bookings; wrong tool for transactional flows.
 - **Hardcoded flows (menu bots):** reliable but can't handle free-text Arabic dialect input, and duplicate the booking logic the codebase already has.
@@ -579,8 +599,9 @@ Every tool: zod-validated params, **authorization enforced inside the tool at th
 
 | Tool | Persona | Underlying code path | Auth inside tool |
 |---|---|---|---|
-| `get_patient_summary(patient_id)` | doctor/staff | patient row + recent `appointments`, `medical_notes`, `follow_ups`, `patient_packages` via RLS client | `requireRole(["admin","doctor"])`; RLS doctor-scoping (`20260505220000`) filters rows automatically |
-| `search_patient_visits(patient_id, query, date_range)` | doctor/staff | `medical_notes` + `appointments` filtered text search | same |
+| `search_authorized_patients(query)` | all clinic staff | `patients` via the authenticated RLS client; returns identity/contact fields only | staff role + entitlement + saved Assistant visibility; clinic/doctor scope comes from patient RLS |
+| `get_patient_summary(patient_id)` | doctor | patient row + recent `appointments`, `medical_notes`, `follow_ups`, `patient_packages` via RLS client | doctor-only tool guard; RLS doctor-scoping (`20260505220000`) filters rows automatically |
+| `search_patient_visits(patient_id, query, date_range)` | doctor | `medical_notes` + `appointments` filtered text search | doctor-only tool guard + the same patient RLS scope |
 | `list_doctor_appointments(date_range)` | doctor | logic from [actions/doctor-dashboard.ts](../actions/doctor-dashboard.ts) | doctor's own `id` from session, never a parameter |
 | `check_availability(doctor_id?, date, service?)` | both | core of `getAvailableTimeSlots` ([actions/time-slots.ts:32](../actions/time-slots.ts#L32)) — role gate widened from admin/receptionist to include the agent contexts | staff session or verified patient conversation |
 | `create_preliminary_booking(slot, doctor_id, service?)` | patient | core of `createAppointment` ([actions/appointments.ts:213](../actions/appointments.ts#L213)); status always `pending`; pile-up caps from §12-HP1 | patient identity from the conversation record only — `patient_id` is **not** a model-visible parameter |
@@ -594,6 +615,7 @@ Bookings created by the agent are **always `pending`** — the existing state ma
 ### 6.5 System-prompt design (per persona)
 
 - **Doctor assistant (ar/en per user locale):** clinical *information retrieval and summarization only*; cites which notes/dates a summary came from; refuses diagnosis, treatment recommendations, and drug dosing ("I can show you the record; clinical judgment is yours"); refuses any patient outside tool results (tools already enforce this — the prompt is defense-in-depth, never the enforcement).
+- **Administrative staff assistant (admin/manager/receptionist, ar/en per user locale):** non-clinical patient lookup and appointment availability only; never mounts clinical-summary or visit-search tools, never exposes medical notes/history, and refuses medical advice. Results still come only from authenticated RLS queries, so the assistant does not create a broader patient-search channel than the user's ordinary data permissions.
 - **Patient assistant (Arabic by default, dialect-tolerant):** understands Gulf/Egyptian/Levantine dialect input, replies in clear courteous Arabic (or the patient's language); scope = clinic info, hours, prices from `services`, booking, own appointments; **hard refusals**: no medical advice, no diagnosis, no information about other patients, no staff information beyond doctor names/specialties; escalates to human on medical questions, complaints, and emergencies (emergency keywords → immediate canned response with clinic phone + local emergency number by `clinics.country`).
 
 ### 6.6 Audit
@@ -602,7 +624,20 @@ Every tool invocation writes to the existing `audit_logs` table (baseline line 1
 
 ### 6.7 Per-tenant limits & language
 
-Every agent turn: `checkUsageLimit(clinicId, "ai_messages")` before the model call; over-limit behavior = degrade-to-human (patient side: "a staff member will reply shortly" + inbox flag; staff side: upgrade prompt). Counted via `increment_usage` into `usage_counters` (§3.3) — the same table pricing tiers read. Responses default to Arabic per §4.4.
+Every agent turn: `checkUsageLimit(clinicId, "ai_messages")` before the model call; over-limit behavior = degrade-to-human (patient side: "a staff member will reply shortly" + inbox flag; staff side: upgrade prompt). Counted via `increment_usage` into `usage_counters` (§3.3) — the same table pricing tiers read. **P4.5 retains `ai_messages` as a backward-compatible request/UX cap but adds the authoritative request/token/cost ledger and atomic cost-budget reservation required for managed AI, BYOK, retries, and fallbacks.** Responses default to Arabic per §4.4.
+
+### 6.8 Staff Assistant role, visibility, and failure model (authoritative 2026-07-18)
+
+| Role | Assistant page | General tools | Clinical tools | Patient-profile launcher |
+|---|---|---|---|---|
+| Admin | Entitlement + saved user visibility | Authorized patient lookup, availability | None | No |
+| Manager | Entitlement + saved user visibility | Authorized patient lookup, availability | None | No |
+| Receptionist | Entitlement + saved user visibility | Authorized patient lookup, availability | None | No |
+| Doctor | Entitlement + saved user visibility | Authorized patient lookup, own schedule, availability | Patient summary and visit search within doctor RLS scope | Yes, only for an independently authorized active patient record |
+
+The global Assistant route and chat API enforce the same saved visibility decision server-side; a forged/stale client cookie cannot add the page. Every tool rechecks role, entitlement, subscription, and page visibility before opening an authenticated RLS client. General staff conversations are owner- and clinic-scoped; only doctors may persist a patient-scoped conversation.
+
+AI persistence is an optional dependency of patient records. Missing/unapplied `agent_conversations` or `agent_messages` schema produces a localized unavailable state on the global Assistant page and silently omits the patient launcher; it must never trigger the shared protected-layout error boundary or make the patient record unusable. The required Phase 4 migrations remain a deployment prerequisite for chat functionality.
 
 ---
 
@@ -864,7 +899,9 @@ Summary table at the top of this document. Common to every phase: unit tests fol
 
 ### P4 — Doctor AI assistant, read-only (10–14 days)
 
-- **Goal:** doctors/staff query patient history in natural language (Arabic/English).
+> **2026-07-18 implementation amendment:** the module is now the **Staff Assistant** described in §6.8. Historical P4A/P4B names are retained for traceability, but every normal clinic role can enter the global page when entitled and visible; only the doctor persona and patient-profile launcher are clinical.
+
+- **Goal:** clinic staff use a role-appropriate read-only Assistant in Arabic or English; doctors may query authorized clinical history while other roles remain non-clinical (§6.8).
 - **In scope:** `lib/ai/` foundation (client, prompts, guardrails, redaction); `agent_conversations`/`agent_messages` migration; extraction of callable cores into `lib/booking/` and patient-summary helpers; doctor tools (§6.3 rows 1–4); streaming route + `app/(protected)/assistant/` chat UI + patient-profile Sheet launcher; audit RPC (§6.6); entitlement + usage-cap wiring. **Out:** all write tools; patient-facing anything.
 - **Migrations:** `agent_conversations_messages`, `clinic_faq` (schema only, content UI in P5).
 - **Tests:** LLM fully mocked (deterministic tool-call fixtures); per-tool authorization tests — doctor A cannot summarize doctor B's-department patient (asserting the `20260505220000` RLS scoping through the tool); redaction unit tests; Playwright: staff chat happy path with mocked model.
@@ -888,7 +925,94 @@ Summary table at the top of this document. Common to every phase: unit tests fol
 - *Dependencies:* P4A.
 - *Migrations:* none.
 - *Tests/acceptance:* the P4 phase acceptance above (closes the phase); Playwright staff-chat happy path with mocked model; streaming route rejects non-entitled/role-blocked users.
-- *Parallel:* with P5A (P5A is tools/domain; P4B is UI — disjoint ownership).
+- *Parallel:* P4.5A design and schema review may begin during the P4B tail, but P5A does not start until P4.5 completes.
+
+### P4.5 — AI Platform & Provider Architecture (11–16 days) — *added 2026-07-18; must complete before P5*
+
+> **Planning status:** recommended roadmap direction only. The current documentation change implements none of P4.5: no runtime behavior, migration, provider connection, settings surface, plan mutation, or billing change is included.
+
+- **Goal:** convert P4's working AI capability into a commercially supportable, provider-neutral, secure, and metered ClinicFlow platform before patient-facing automation increases usage and risk.
+- **Long-term product decision — hybrid portfolio, managed-first:** ClinicFlow-managed AI is the default and recommended experience; BYOK is an **Enterprise option**, not the onboarding default; hybrid fallback is available only by explicit clinic contract/configuration. Starter has no AI. Professional receives managed AI with a pooled included allowance. Enterprise may choose managed, strict BYOK, or an expressly enabled hybrid policy. ClinicFlow never promises “unlimited AI.”
+- **Why this strategy:** managed AI produces the lowest-friction onboarding, consistent eval quality, centralized privacy enforcement, reliable failover, and supportable unit economics. Enterprise BYOK satisfies procurement, direct-provider agreements, data-control, and committed-spend requirements without forcing every small clinic to become an AI infrastructure operator. A BYOK-only product is rejected; a managed-only product is too restrictive for enterprise; silent managed fallback from a clinic key is rejected because it changes cost and data-routing expectations without consent.
+
+#### Commercial plan contract
+
+The current internal slugs remain stable to avoid a destructive catalog rename; marketing names and effective AI features change additively in P4.5C:
+
+| Stable internal slug | Product name | AI offer | Provider modes | Usage/billing posture |
+|---|---|---|---|---|
+| `basic` | **Starter** | No AI; core clinic workflows remain useful | None | No AI charge; upgrade gate only |
+| `pro` | **Professional** | Role-aware Staff Assistant plus patient AI in `suggest` mode when P5 lands | ClinicFlow-managed only | Included clinic-level monthly AI-credit pool; hard cap by default; prepaid add-on packs or upgrade |
+| `pro_ai` | **Enterprise** | All Professional AI capabilities; patient `auto` mode only after the P5/P6 safety gates; higher/custom limits | Managed, strict BYOK, or explicitly enabled hybrid | Contracted allowance/overage; BYOK provider spend is paid by the clinic, while ClinicFlow's AI platform fee remains |
+
+The approved per-active-staff pricing model (§3.3) remains the base platform charge, with the primary-admin seat free. AI has a **clinic-level variable-cost component**, so it is priced as an included pooled allowance plus add-ons/contracted overage — not as “unlimited” usage hidden inside the seat price. Exact prices remain a founder/billing decision after pilot usage; the architecture does not hardcode currency or price points.
+
+#### Entitlement and authorization resolution
+
+P4.5 preserves the permanent separation established by §3.8 and §6.8. Every request resolves, in order, and fails closed at every missing/invalid state:
+
+1. Active subscription/trial.
+2. Plan features plus operator-approved clinic overrides.
+3. Allowed provider mode (`managed`, `byok_strict`, `hybrid`) and a healthy provider configuration.
+4. Saved per-user page visibility for the Assistant surface.
+5. Role/persona tool allow-list.
+6. RLS/data authorization inside every tool.
+7. Request, concurrency, turn, and monthly cost/credit budget.
+
+`ai_assistant` remains as a **legacy compatibility umbrella** while callers migrate to additive namespaced features such as `ai.staff_assistant`, `ai.patient_suggest`, `ai.patient_auto`, `ai.managed`, `ai.byok`, and `ai.hybrid_fallback`. Existing P4 authorization must remain functional throughout the transition; no destructive flag rename is allowed. Provider mode is configuration constrained by entitlements, never an unsigned cookie or a client-selected request field.
+
+#### Recommended technical architecture
+
+- **ClinicFlow-owned AI policy boundary:** a single server-only execution entry point resolves the authenticated clinic/user/persona, task class, entitlement, provider mode, approved model alias, privacy policy, budget, and failover set before constructing the AI SDK agent. P4's direct `resolveModelId()` use moves behind this boundary. Tools, prompts, and UI never select raw providers or model ids.
+- **Logical task/model registry:** stable task classes (for example `staff_clinical_summary`, `staff_administrative`, `patient_booking`, `patient_faq`) map to eval-certified model aliases. Raw model ids are configuration and may change without plan/schema changes. A model/fallback may enter production only after ar/en quality, tool-call, latency, cost, and safety evaluation; arbitrary tenant-selected models are not supported.
+- **Transport strategy:** Vercel AI Gateway remains the default transport for managed AI and for request-scoped BYOK because it provides one AI SDK-compatible surface, routing, fallbacks, token/cost observability, and current ZDR/no-training controls. ClinicFlow still owns a thin `AiExecutionProvider`/policy abstraction so Gateway-specific objects never escape the adapter and a direct/regional/self-hosted provider can be added later.
+- **Three explicit credential modes:** `managed` uses ClinicFlow's Vercel OIDC/Gateway account; `byok_strict` injects the clinic's decrypted credential only for that request, pins the approved provider, and never falls back to ClinicFlow funds; `hybrid` tries BYOK first and may use an eval-certified managed fallback **only** when the clinic has opted in and the fallback's billing/data-policy consequences are shown and audited.
+- **Safe failover:** fallbacks are allow-listed by task and must meet the same tool-calling, language, ZDR/no-training, jurisdiction, context-window, and evaluation threshold. A generic “any available model” fallback is forbidden. Clinical and patient automation fail to a safe unavailable/human state when no compliant route exists.
+- **Authoritative usage ledger:** keep `usage_counters.ai_messages` for compatibility and simple quota UX, but add one immutable, content-free event per model attempt/request carrying an idempotent request id, clinic/user (pseudonymous in external tags), surface/persona/task, credential mode, provider/model actually used, input/output/cached/reasoning tokens where reported, latency, status, fallback chain, estimated/final cost micros, and billing disposition. No prompt, completion, tool payload, patient id, or message body is stored in the cost ledger.
+- **Atomic budget control:** reserve the worst-case permitted cost/credits before the provider call, reconcile to actual usage afterward, and release failed/aborted reservations. Enforce monthly pool, per-request output/step ceiling, per-user/per-clinic rate limit, concurrency cap, and repeated-error circuit breaker. Threshold notifications at 70% and 90%; at 100%, staff AI shows an upgrade/add-on state and patient AI degrades to human.
+
+#### BYOK and API-key security model
+
+- Provider keys use a **dedicated AI credential boundary and encryption key**, never `MESSAGING_CREDENTIALS_KEY`. Reuse the P3A versioned AES-256-GCM envelope pattern, add authenticated context binding (clinic id + provider + credential id), support key versions/rotation, and leave a future KMS/Vault-backed master-key seam.
+- The raw key is accepted once over TLS from a **primary clinic admin**; it is never returned, persisted in form state, included in URLs, logged, sent to Sentry, exposed to the operator UI, or readable through authenticated RLS. Clinic users and platform operators see metadata only: provider, status, masked fingerprint, created/rotated/tested timestamps, and last sanitized error.
+- Decrypt just in time in server memory, pass the credential through Gateway request-scoped BYOK, then discard it. Provider connection tests return typed/sanitized states (`valid`, `invalid`, `insufficient_scope`, `quota`, `provider_unavailable`) and never raw provider payloads.
+- Create/rotate/revoke/test actions are primary-admin-only, re-authentication-protected for destructive changes, rate-limited, and audit-logged without secrets. Rotation must support validate-new → atomically activate-new → retire-old. Revocation/deletion destroys ciphertext; audit history retains metadata only.
+- Strict BYOK never uses system credentials on key failure. Hybrid fallback is a separate explicit state, not the implicit provider default. BYOK clinics remain subject to ClinicFlow authorization, safety, fair-use, request/concurrency limits, and platform fees even when provider token cost is billed directly to them.
+
+#### Planned persistence and integration points
+
+P4.5 will design and implement additive storage for: provider connections/credential metadata; clinic AI policy and credential mode; certified task/model policies; immutable AI usage events plus budget reservations/period aggregates; and optional plan-limit keys for AI credits/concurrency. Exact DDL is a P4.5A/P4.5B implementation artifact and must receive RLS/service-boundary review. Credential-bearing storage has **no authenticated read policy**; clinic/admin surfaces read safe projections only.
+
+Integration with existing systems is additive:
+
+- `plans.features` / `plans.limits` + `clinic_feature_overrides` remain the entitlement source (§3.4).
+- `user_page_permissions` / `user_customizations` remain the Assistant visibility source (§3.8); P4.5 provider settings must be registered in the existing Settings/customization system if introduced as a new page.
+- `authorizeStaffAssistant` / `assertStaffToolAccess`, per-tool authorization, and RLS remain the data boundary (§6.8/§9.1); provider configuration can never widen tool access.
+- `platform_audit_logs` records operator plan/policy changes; clinic `audit_logs` records provider-mode/key lifecycle changes and request policy decisions without content.
+- P1 billing remains provider-agnostic. Managed AI usage becomes a billable meter/add-on input; BYOK provider spend is not invoiced by ClinicFlow, but the ClinicFlow AI platform entitlement is still billable.
+
+- **Out of scope:** implementing P5 patient tools/auto-replies; allowing clinics to upload prompts or mount arbitrary tools; arbitrary model selection; exposing raw Gateway/provider logs to clinics; selling unlimited AI; silently routing strict BYOK traffic through managed credentials; changing clinical RLS/tool rules; choosing the final payment gateway.
+- **Dependencies:** P4B; P1B entitlements/usage; P1D operator foundation. P5A/P5B and P6 AI cost/eval work depend on P4.5.
+- **Migrations (future P4.5 implementation, not this planning revision):** additive provider-policy/connection/usage-ledger storage and any required plan-limit keys; no destructive rename of current plan slugs, `ai_assistant`, `ai_messages`, or existing conversation tables.
+- **Tests:** managed/BYOK/hybrid policy matrix; strict-BYOK no-fallback assertion; encrypted-key tamper/cross-clinic/AAD denial; no-secret-in-client/log/Sentry fixtures; atomic budget concurrency and reconciliation; provider/model allow-list + ZDR policy; fallback certification; plan/override/visibility/role/RLS independence; two-clinic denial; billing ledger reconciliation; safe degradation at every cap/outage state.
+- **Acceptance:** a Professional clinic can use managed AI without owning a provider account; an Enterprise clinic can rotate a key and run strict BYOK without ClinicFlow-funded fallback; an explicitly opted-in hybrid clinic follows only its certified fallback policy; Starter cannot invoke a model by direct route; every successful/failed attempt reconciles to a content-free usage/cost event; no credential or PHI appears in browser payloads, logs, Sentry, Gateway tags, or operator views; P5 can add patient tools without changing provider, entitlement, credential, or billing architecture.
+
+#### P4.5 execution split (3 sub-phases; merge order P4.5A → P4.5B → P4.5C)
+
+**P4.5A — AI platform foundation, provider policy & usage accounting** — branch `feat/p45a-ai-platform-foundation`, est. **4–6 days**, merge **1st**.
+- *In scope:* server-only AI execution/policy boundary; task/model certification registry; managed Gateway adapter; refactor P4 agent construction behind the boundary; immutable usage/cost events; atomic budget reservation/reconciliation; model/provider/fallback metadata capture; compatibility with current `ai_assistant` and `ai_messages` gates.
+- *Out:* tenant credentials and BYOK (P4.5B); plan/catalog changes (P4.5C).
+- *Acceptance:* P4 behavior passes unchanged through the new boundary; provider/model ids no longer escape policy code; concurrent requests cannot overspend the clinic pool; usage events reconcile to mocked provider usage with no content.
+
+**P4.5B — Secure provider connections & BYOK/hybrid routing** — branch `feat/p45b-ai-provider-connections`, est. **4–5 days**, merge **2nd**.
+- *In scope:* encrypted provider-connection storage; primary-admin create/test/rotate/revoke flow; safe metadata projection; request-scoped BYOK; strict vs. hybrid routing semantics; credential and fallback audit; key-rotation runbook.
+- *Out:* arbitrary providers/models and provider-specific feature UIs; P5 tools.
+- *Acceptance:* cross-clinic/role/key-tamper denial; strict BYOK never spends managed credits; hybrid requires explicit persisted opt-in; secrets never cross a client/log/Sentry boundary.
+
+**P4.5C — AI commercial integration, entitlements & operations** — branch `feat/p45c-ai-commercial-integration`, est. **3–5 days**, merge **3rd**.
+- *In scope:* stable-slug mapping to Starter/Professional/Enterprise; additive namespaced features/limits; Professional managed allowance and Enterprise modes; add-on/overage domain rules (manual billing provider remains valid); clinic usage/cap UX; operator usage/cost/provider-health reports and safe overrides; localized upgrade/degradation copy.
+- *Out:* final payment-provider checkout/automatic collection; exact GA price selection.
+- *Acceptance:* plan matrix and overrides resolve deterministically; Starter/Professional/Enterprise scenarios reconcile from subscription → entitlement → mode → budget; operator totals reconcile with usage events and reveal neither secrets nor PHI; P5 is formally unblocked.
 
 ### P5 — Patient WhatsApp AI + preliminary booking (12–16 days)
 
@@ -904,10 +1028,10 @@ Summary table at the top of this document. Common to every phase: unit tests fol
 - *Goal:* everything that could book wrongly or leak across patients, reviewed on its own — patient-facing *automation* (P5B) deliberately not bundled with tool *authorization* (here).
 - *In scope:* pending pile-up controls in `lib/booking/` (§12-HP1: per-slot cap default 2, one active AI pending per patient, TTL auto-expiry via the P3D cron); the patient tools (§6.3 rows 5–8: `check_availability` widening, `create_preliminary_booking`, `list_my_appointments`/`cancel_my_appointment`, `answer_clinic_faq`) with conversation-bound identity — `patient_id` never model-visible; DOB verification step + `identity_verified_at` (§5.4); patient persona prompts + allow-listed tool mounting (§9.4).
 - *Out of scope:* wiring into the live inbox/webhook (P5B); FAQ content management UI (P5B); rescheduling negotiation (post-v1).
-- *Dependencies:* P4A (tool/audit/guardrail foundation, `lib/booking/`); P3A (conversations tables). Parallel with P4B.
+- *Dependencies:* P4A (tool/audit/guardrail foundation, `lib/booking/`); P3A (conversations tables); **P4.5 complete** (provider policy, credential mode, usage/billing boundary). P5A no longer runs in parallel with P4B.
 - *Migrations:* `conversations.identity_verified_at`, `appointments.expires_at` (or `pending_booking_holds` — decide here), FAQ content columns.
 - *Tests/acceptance:* booking-tool concurrency test (two simultaneous same-slot bookings → both pending → staff confirm one → displacement flow); cap + TTL-expiry tests; identity-gating tests (unverified sender gets logistics only, never appointment details); cross-patient denial through every patient tool.
-- *Parallel:* **yes — with P4B**.
+- *Parallel:* no — P4.5 is the required decision/implementation gate between P4 and P5.
 
 **P5B — Inbox AI integration & booking flows** — branch `feat/p5b-inbox-ai-booking`, est. **6–8 days**, merge **2nd**.
 - *Goal:* the agent answers real patients in the P3 inbox and the full booking conversation works end-to-end.
@@ -921,7 +1045,7 @@ Summary table at the top of this document. Common to every phase: unit tests fol
 ### P6 — Hardening, evaluation & Tech Provider migration (15–21 days) — *expanded 2026-07-17 with the enterprise WhatsApp onboarding & integration-health experience*
 
 - **Goal:** production confidence, margin recovery, and an enterprise-grade WhatsApp integration experience — clinics connect, monitor, and repair their WhatsApp channel from inside ClinicFlow, leaving the product only for the single Meta-hosted Embedded Signup popup that Meta's model requires.
-- **In scope:** prompt-injection test suite (adversarial ar/en corpora run in CI against mocked-tool agent asserting no unauthorized tool calls); evaluation set (~50 doctor + ~50 patient realistic queries, graded rubric, run per prompt/model change); load tests on webhook + agent routes; cost dashboards in the operator panel (per-clinic LLM/WA/email from `usage_counters` + `outbound_messages.cost_micro`); Meta Business verification → Tech Provider + Embedded Signup ([§5.1 Model A] — start the verification paperwork *at P3 time*, execute the technical migration here) **delivered as the P6C in-product onboarding wizard + connection-state machine + hybrid state refresh**; per-clinic migration runbook off 360dialog; **WhatsApp Health page with diagnostics, guided recovery actions, and a production-readiness checklist (P6D)**.
+- **In scope:** prompt-injection test suite (adversarial ar/en corpora run in CI against mocked-tool agent asserting no unauthorized tool calls); evaluation set (~50 doctor + ~50 patient realistic queries, graded rubric, run per prompt/model-policy change); load tests on webhook + agent routes; cost dashboards in the operator panel (per-clinic LLM from P4.5's AI usage ledger, WA/email from `usage_counters` + `outbound_messages.cost_micro`); Meta Business verification → Tech Provider + Embedded Signup ([§5.1 Model A] — start the verification paperwork *at P3 time*, execute the technical migration here) **delivered as the P6C in-product onboarding wizard + connection-state machine + hybrid state refresh**; per-clinic migration runbook off 360dialog; **WhatsApp Health page with diagnostics, guided recovery actions, and a production-readiness checklist (P6D)**.
 - **Honesty rules (binding on P6C/P6D):** never show a Meta review-time estimate (Meta returns decisions, not ETAs — display decision states + last-checked time only); never display quality/limit/verification data a channel's connection model cannot actually provide (360dialog channels get the §3.7-style honest placeholder); failure reasons shown to clinics come from a sanitized mapping, never raw provider payloads.
 - **Tests/acceptance:** injection suite green in CI; eval score threshold documented and met; a pilot clinic migrated to Embedded Signup with zero message loss; alerting fires on delivery-failure spikes; a clinic connects Meta-direct WhatsApp end-to-end without leaving ClinicFlow except the Meta popup, and the connection state shown always traces to a stored signal; the Health page reflects a manufactured webhook failure honestly and its recovery action clears it.
 
@@ -938,11 +1062,11 @@ Summary table at the top of this document. Common to every phase: unit tests fol
 
 **P6B — Load, cost dashboards & alerting** — branch `feat/p6b-ops-load-cost`, est. **3–4 days**, merge **1st or 2nd (interchangeable with P6A)**.
 - *Goal:* the operator sees problems before customers do, at production load.
-- *In scope:* load tests on webhook + agent routes; cost dashboards in the operator panel (per-clinic LLM/WA/email from `usage_counters` + `outbound_messages.cost_micro` — fills the P1D placeholders, landing as new **P1.5B report-registry entries**, no redesign); alert thresholds on delivery-failure rate and per-clinic cost anomalies.
+- *In scope:* load tests on webhook + agent routes; cost dashboards in the operator panel (LLM requests/tokens/costs/fallbacks from the P4.5 immutable AI usage ledger; WA/email from `usage_counters` + `outbound_messages.cost_micro` — fills the P1D placeholders, landing as new **P1.5B report-registry entries**, no redesign); alert thresholds on delivery-failure rate and per-clinic cost anomalies.
 - *Out of scope:* new billing/usage mechanics (P1 owns the model).
-- *Dependencies:* P3 (delivery data), P1D (panel), P4/P5 for realistic agent-route load profiles.
+- *Dependencies:* P3 (delivery data), P1D (panel), **P4.5 (AI usage/cost ledger)**, P5 for realistic patient-agent route load profiles.
 - *Migrations:* none.
-- *Tests/acceptance:* load-test results documented against targets; alerting fires on a simulated delivery-failure spike; dashboards reconcile with raw `usage_counters`.
+- *Tests/acceptance:* load-test results documented against targets; alerting fires on a simulated delivery-failure spike; messaging dashboards reconcile with raw `usage_counters`, and AI dashboards reconcile with P4.5 usage events/reservations including BYOK and fallback attempts.
 - *Parallel:* **yes — with P6A**.
 
 **P6C — Meta Tech Provider migration & Embedded Signup onboarding experience** — branch `feat/p6c-tech-provider-migration`, est. **5–8 days engineering** (calendar time dominated by Meta approval — paperwork starts at P3 time per §5.1/§12-HP2), merge **3rd** — *rescoped 2026-07-17: the migration now ships as a full in-product connect experience, not a bare adapter swap.*
@@ -1036,7 +1160,7 @@ Agent bookings are always `pending` until staff confirm through existing flows; 
 
 ## 11. Cost & Operations
 
-**Model tiers:** Claude **Haiku 4.5** for patient FAQ/routing/booking dialogue (fast, cheap, fine for constrained tool flows); Claude **Sonnet-tier** for doctor clinical summaries (quality matters, volume is low). Prompt caching on the static system prompt + tool definitions cuts input cost substantially on multi-turn chats.
+**Model tiers:** P4 bootstraps with a fast/low-cost model tier for constrained patient flows and a higher-quality tier for clinical summaries. P4.5 turns those into provider-neutral, eval-certified task aliases; raw model ids are execution configuration, not plan promises. Prompt/tool-prefix caching may reduce cost where the approved provider supports it, but savings are never assumed when enforcing a hard clinic budget.
 
 **Reference prices (all approximate, as of 2026-07-09 — verify at execution):**
 LLM: Haiku 4.5 ≈ $1 / $5 per M input/output tokens; Sonnet ≈ $3 / $15 (https://docs.claude.com/en/docs/about-claude/pricing). WhatsApp: Meta per-template-message pricing varies by country/category — utility messages roughly $0.005–0.05, marketing higher; free within the 24h service window; Kuwait falls in Meta's "Middle East" rate group (https://developers.facebook.com/docs/whatsapp/pricing). 360dialog ≈ €49/month per number, Meta fees pass-through (https://www.360dialog.com/pricing). Font licensing (if 29LT/TPTQ purchased) ≈ $300–1,500 one-time/annual depending on pageview tier.
@@ -1051,7 +1175,7 @@ LLM: Haiku 4.5 ≈ $1 / $5 per M input/output tokens; Sonnet ≈ $3 / $15 (https
 | Medium (~500 appts/mo) | ~1,000 | ~200 | ~400 | ~$30 | ~€49 + ~$15 | ~$0–1 | **~$100–120** |
 | High (multi-doctor, ~1,500 appts/mo) | ~3,000 | ~600 | ~1,200 | ~$90 | ~€49 + ~$45 | ~$0–2 | **~$190–240** |
 
-Implication: **Basic** (no AI, email reminders) can price low; **Pro** (WhatsApp + inbox) must clear ~$60–130 cost; **Pro+AI** needs the `ai_messages` cap (§3.4) and pricing ≥ ~2× the high-profile cost to hold margin — final prices are a founder decision (§13). The €49/number BSP fee is the single biggest fixed unit cost and is what the P6 Tech Provider migration eliminates.
+Implication under the P4.5 commercial contract: **Starter** has no AI; **Professional** bundles managed AI only up to a pooled clinic allowance with add-ons/upgrade at the cap; **Enterprise** supports a negotiated managed allowance/overage or BYOK while retaining a ClinicFlow AI platform fee. Raw token costs are not marketed as the customer-facing unit, and no plan promises unlimited AI. The €49/number BSP fee remains the largest fixed messaging cost and is what the P6 Tech Provider migration eliminates.
 
 **Monitoring:** Sentry (already wired) for errors; operator-panel dashboards from `usage_counters` + `outbound_messages` (delivery rates, cost per clinic, AI usage vs cap); alert thresholds on delivery-failure rate and per-clinic cost anomalies.
 
@@ -1104,6 +1228,11 @@ The runtime display-currency preference (P1.5D) must "apply consistently across 
 *Candidates:* (a) full conversion everywhere, live rates — consistent-looking but corrupts financial communication and caches badly; (b) store-and-ledger in clinic currency, convert **display-layer values only** through a platform-managed daily `fx_rates` table, visibly mark converted figures as approximate (rate + date), and always carry the canonical clinic-currency amount in reports/exports; (c) restrict the preference to platform-level (operator) analytics only — safest but fails the product requirement for tenant users.
 **Recommendation: (b)** — the preference is honored everywhere as the product requires, but conversion is explicitly presentational: canonical amounts remain clinic-currency, converted views are labeled, exports are dual-valued, and operator platform analytics aggregate through the same `fx_rates` snapshots so totals are reproducible. Rate source and update cadence are §13-Q9. **Cost:** ~1–2 days inside P1.5D (the registry/formatting layer is being built anyway).
 
+**HP10 — Managed AI vs. BYOK without provider or commercial lock-in** *(added 2026-07-18 with P4.5).*
+Managed-only AI gives the best onboarding and reliability but blocks enterprise clinics with their own provider contracts or data-control requirements. BYOK-only transfers infrastructure complexity to every clinic, fragments quality/support, and makes small-clinic activation worse. A naive “hybrid” implementation that silently falls back from a clinic key to ClinicFlow funds creates surprise charges and changes the data route without consent.
+*Candidates:* (a) managed only; (b) BYOK only; (c) managed by default + Enterprise strict BYOK + explicitly contracted hybrid fallback, all behind ClinicFlow-owned policy, certified models, encrypted credentials, and one usage ledger.
+**Recommendation: (c).** Vercel AI Gateway is the default transport and may carry request-scoped BYOK, but ClinicFlow owns entitlements, task/model policy, authorization, credential mode, budget reservation, cost attribution, and safe fallback. Starter has no AI; Professional gets managed AI with a pooled cap; Enterprise may choose managed/BYOK/hybrid. **Cost:** 11–16 days in P4.5, before P5.
+
 ---
 
 ## 13. Open Questions for the Founder
@@ -1112,7 +1241,7 @@ Decided already (baked into this plan): staff UI fully Arabic-capable in v1 with
 
 Still open:
 
-1. ~~**Pricing points** for Basic / Pro / Pro+AI~~ — **DECIDED 2026-07-14 (§3.3): per active staff user; the clinic owner / primary admin seat is free; each additional active staff user is initially USD 9/month; pending invitations and disabled/inactive users do not count; the USD 9 figure is provisional and may change before GA; seat counting must be deterministic and auditable.** The plan-tier cost floors in §11 remain the input for validating that this price clears cost on the AI/messaging tiers — that validation is a billing-phase task, not a re-opening of the model. Not implemented in any phase before the billing phase; current subscription behavior is unchanged.
+1. ~~**Base pricing model** for Basic / Pro / Pro+AI~~ — **DECIDED 2026-07-14 (§3.3): per active staff user; the clinic owner / primary admin seat is free; each additional active staff user is initially USD 9/month; pending invitations and disabled/inactive users do not count; the USD 9 figure is provisional and may change before GA; seat counting must be deterministic and auditable.** P4.5 adds a clinic-level included AI allowance/add-on or Enterprise overage on top of that base because AI cost is usage-driven; exact AI allowance sizes and prices remain open in questions 14–15. Current subscription behavior is unchanged until the billing/P4.5 implementation.
 2. **Data residency for Saudi launch:** accept EU-region Supabase with PDPL transfer safeguards, or invest in a KSA-region deployment before Saudi go-live? (Affects P-timeline after v1; §9.5.)
 3. **AI reply mode default:** launch patient AI as `suggest` (staff approves every AI reply — safer, slower) or `auto` with escalation? Recommendation: `suggest` for each clinic's first 2 weeks, then opt-in `auto`.
 4. **Trial policy:** 14-day free trial (planned default) vs. demo-clinic sandbox vs. founder-led onboarding only for the first ~10 customers.
@@ -1125,6 +1254,13 @@ Still open:
 11. ~~**Disposition of `clinics.locale` (P2A — added 2026-07-14):**~~ **DECIDED in P2A (2026-07-14) — option (a).** `clinics.locale` is **retained as clinic *formatting* metadata** (dates/numbers on clinic-wide artifacts), alongside `timezone`/`currency`/`digits`, and is **retired as a language source**: it may never resolve any user's UI language again. Locale resolution is **user → `en`** with **no clinic tier**. The column is **not** dropped, and the constraint is recorded as a `COMMENT ON COLUMN` in `supabase/migrations/20260714120000_p2a_user_ui_preferences.sql` so it travels with the schema rather than living only here. See `docs/reviews/P2A_REVIEW.md` §4.
 12. **Placement of the legal-acceptance & agreement-history feature (§3.7 — added 2026-07-14):** does it belong to a dedicated legal/compliance phase, to the billing phase (where the clinic agreement is signed anyway), or to an onboarding revision? It is **not** P2 and **not** any UX-polish sprint. Until it lands, the operator clinic history shows only real data and an honest, clearly-labeled placeholder — never synthesized acceptance rows.
 13. **Seat-count definition for per-seat billing (billing phase — added 2026-07-14, §3.3):** "active staff user" needs one deterministic definition before billing is implemented. Pending invitations are already excluded by decision; but `profiles` today has **no** `is_active`/`disabled_at` flag, so the billing phase must add one (or define an equivalent derivation) and settle the edge cases: mid-month joiners/leavers (proration?), a re-enabled user, a doctor who is also the owner, and how the count is snapshotted for an auditable invoice.
+14. **Professional AI allowance:** how many monthly ClinicFlow AI credits should be included after the pilot establishes real p50/p95 cost per staff and patient task? Recommendation: set the initial pool from the p95 clinic cost plus a margin buffer, not from a guessed message count.
+15. **Customer-facing usage unit and add-ons:** present “AI credits,” included requests by task, or a simpler percentage meter? Recommendation: AI credits internally backed by cost-weighted usage, with a plain percentage/remaining-allowance UI and prepaid add-on packs; do not expose raw tokens as the primary product concept.
+16. **Enterprise BYOK launch providers:** which provider credentials are supported first, and which models/routes satisfy the required DPA, ZDR/no-training, residency, Arabic, tool-use, and eval gates? Recommendation: launch with one provider family, then add only eval-certified providers through the adapter.
+17. **Hybrid fallback default:** strict BYOK or managed fallback when the clinic key fails? Recommendation: **strict BYOK by default**; managed fallback is a separately priced, explicitly accepted Enterprise option with a visible data-routing disclosure.
+18. **AI contracting and responsibility split:** who signs the DPA/provider agreement in managed vs. BYOK mode, and which entity is controller/processor/sub-processor for each market? Legal review is blocking before real clinical data or Enterprise BYOK reaches production.
+19. **Patient `auto` mode commercial placement:** Enterprise-only at launch, or available to Professional after an observed `suggest` period? Recommendation: Enterprise-only until P6 eval/incident data justifies broadening it; `suggest` remains the Professional default.
+20. **Legacy catalog transition:** confirm the non-destructive mapping `basic` → Starter, `pro` → Professional, `pro_ai` → Enterprise, with stable internal slugs and additive namespaced entitlements. Recommendation: approve this mapping; do not rename slugs used by subscriptions/tests.
 
 ---
 

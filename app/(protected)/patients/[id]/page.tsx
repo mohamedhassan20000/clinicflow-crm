@@ -40,9 +40,8 @@ import { PageHeader } from "@/components/shared/page-header";
 import { resolveReturnTo, withReturnTo } from "@/lib/navigation/return-url";
 import { getTranslations } from "next-intl/server";
 import { PatientAssistantLauncher } from "@/components/assistant/patient-assistant-launcher";
-import { loadLatestDoctorConversation } from "@/lib/ai/conversations";
-import type { DoctorAssistantUIMessage } from "@/lib/ai/doctor-agent";
-import { getDoctorAssistantSurfaceAccess } from "@/lib/ai/surface";
+import type { StaffAssistantUIMessage } from "@/lib/ai/staff-agent";
+import { resolvePatientAssistantLauncher } from "@/lib/ai/surface";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("protected");
@@ -160,14 +159,11 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
 
   if (isDoctor && !doctorCanAccessPatient) notFound();
 
-  const assistantPromise = canManageMedicalNotes && !patient.is_deleted
-    ? (async () => {
-        const access = await getDoctorAssistantSurfaceAccess(user);
-        const conversation = access.state === "available"
-          ? await loadLatestDoctorConversation({ supabase, user, patientId: patient.id })
-          : null;
-        return { access, conversation };
-      })()
+  // The contextual launcher is a doctor-only clinical capability. It is
+  // optional enhancement data: entitlement, admin visibility, usage, or AI
+  // persistence failures must never make the patient record unavailable.
+  const assistantPromise = isDoctor && !patient.is_deleted
+    ? resolvePatientAssistantLauncher({ user, patientId: patient.id })
     : null;
 
   let avatarUrl: string | null = null;
@@ -447,7 +443,7 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
                 patient={{ id: patient.id, name: patient.full_name }}
                 access={assistant.access}
                 initialConversationId={assistant.conversation?.id ?? crypto.randomUUID()}
-                initialMessages={(assistant.conversation?.messages ?? []) as DoctorAssistantUIMessage[]}
+                initialMessages={(assistant.conversation?.messages ?? []) as StaffAssistantUIMessage[]}
                 historyTruncated={assistant.conversation?.historyTruncated ?? false}
               />
             ) : null}

@@ -22,26 +22,28 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import type { DoctorAssistantUIMessage } from "@/lib/ai/doctor-agent";
+import type { StaffAssistantUIMessage } from "@/lib/ai/staff-agent";
+import type { PermissionUserRole } from "@/lib/page-permissions";
 
 type AssistantChatProps = {
   initialConversationId: string;
-  initialMessages: DoctorAssistantUIMessage[];
+  initialMessages: StaffAssistantUIMessage[];
   patient?: { id: string; name: string } | null;
   remaining: number;
   historyTruncated?: boolean;
   mode?: "page" | "sheet";
+  role: PermissionUserRole;
 };
 
 type SessionState = {
   id: string;
-  messages: DoctorAssistantUIMessage[];
+  messages: StaffAssistantUIMessage[];
   historyTruncated: boolean;
 };
 
-type DoctorAssistantPart = DoctorAssistantUIMessage["parts"][number];
-type DoctorAssistantToolPart = Extract<
-  DoctorAssistantPart,
+type StaffAssistantPart = StaffAssistantUIMessage["parts"][number];
+type StaffAssistantToolPart = Extract<
+  StaffAssistantPart,
   { type: `tool-${string}` } | { type: "dynamic-tool" }
 >;
 
@@ -56,6 +58,8 @@ function toolLabel(
   switch (name) {
     case "get_patient_summary":
       return t("toolPatientSummary");
+    case "search_authorized_patients":
+      return t("toolPatientLookup");
     case "search_patient_visits":
       return t("toolVisitSearch");
     case "list_doctor_appointments":
@@ -70,7 +74,7 @@ function toolLabel(
 function ToolActivity({
   part,
 }: {
-  part: DoctorAssistantToolPart;
+  part: StaffAssistantToolPart;
 }) {
   const t = useTranslations("assistant");
   const complete = part.state === "output-available";
@@ -93,7 +97,7 @@ function ToolActivity({
   );
 }
 
-function MessageBubble({ message }: { message: DoctorAssistantUIMessage }) {
+function MessageBubble({ message }: { message: StaffAssistantUIMessage }) {
   const t = useTranslations("assistant");
   const isUser = message.role === "user";
   return (
@@ -142,12 +146,14 @@ function ChatSession({
   patient,
   remaining,
   mode,
+  role,
   onNewConversation,
 }: {
   session: SessionState;
   patient?: AssistantChatProps["patient"];
   remaining: number;
   mode: NonNullable<AssistantChatProps["mode"]>;
+  role: PermissionUserRole;
   onNewConversation: () => void;
 }) {
   const t = useTranslations("assistant");
@@ -157,7 +163,7 @@ function ChatSession({
   const endRef = useRef<HTMLDivElement>(null);
   const transport = useMemo(
     () =>
-      new DefaultChatTransport<DoctorAssistantUIMessage>({
+      new DefaultChatTransport<StaffAssistantUIMessage>({
         api: "/api/agent/chat",
         credentials: "same-origin",
         prepareSendMessagesRequest({ id, messages }) {
@@ -189,7 +195,7 @@ function ChatSession({
     error,
     stop,
     clearError,
-  } = useChat<DoctorAssistantUIMessage>({
+  } = useChat<StaffAssistantUIMessage>({
     id: session.id,
     messages: session.messages,
     transport,
@@ -232,7 +238,9 @@ function ChatSession({
 
   const suggestions = patient
     ? [t("suggestSummary"), t("suggestRecentVisits"), t("suggestFollowups")]
-    : [t("suggestSchedule"), t("suggestAvailability"), t("suggestHowToUse")];
+    : role === "doctor"
+      ? [t("suggestPatientLookup"), t("suggestSchedule"), t("suggestAvailability")]
+      : [t("suggestPatientLookup"), t("suggestAvailabilityStaff"), t("suggestHowToUseStaff")];
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -271,10 +279,18 @@ function ChatSession({
               <span className="absolute -end-1 -top-1 size-3 rounded-full border-2 border-background bg-emerald-500" />
             </div>
             <h2 className="font-heading text-xl font-semibold tracking-tight">
-              {patient ? t("patientEmptyTitle", { patient: patient.name }) : t("emptyTitle")}
+              {patient
+                ? t("patientEmptyTitle", { patient: patient.name })
+                : role === "doctor"
+                  ? t("emptyTitle")
+                  : t("administrativeEmptyTitle")}
             </h2>
             <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-              {patient ? t("patientEmptyDescription") : t("emptyDescription")}
+              {patient
+                ? t("patientEmptyDescription")
+                : role === "doctor"
+                  ? t("emptyDescription")
+                  : t("administrativeEmptyDescription")}
             </p>
             <div className="mt-6 grid w-full gap-2 sm:grid-cols-3">
               {suggestions.map((suggestion) => (
@@ -329,8 +345,12 @@ function ChatSession({
                   submitMessage();
                 }
               }}
-              aria-label={t("messageLabel")}
-              placeholder={patient ? t("patientPlaceholder") : t("placeholder")}
+              aria-label={role === "doctor" ? t("messageLabel") : t("administrativeMessageLabel")}
+              placeholder={patient
+                ? t("patientPlaceholder")
+                : role === "doctor"
+                  ? t("placeholder")
+                  : t("administrativePlaceholder")}
               maxLength={4_000}
               rows={1}
               className="max-h-36 min-h-11 resize-none border-0 bg-transparent px-2 py-2 shadow-none focus-visible:ring-0 dark:bg-transparent"
@@ -347,7 +367,7 @@ function ChatSession({
             )}
           </div>
           <p className="mt-2 px-1 text-center text-[11px] leading-4 text-muted-foreground">
-            {t("clinicalDisclaimer")}
+            {role === "doctor" ? t("clinicalDisclaimer") : t("administrativeDisclaimer")}
           </p>
         </div>
       </div>
@@ -362,6 +382,7 @@ export function AssistantChat({
   remaining,
   historyTruncated = false,
   mode = "page",
+  role,
 }: AssistantChatProps) {
   const [session, setSession] = useState<SessionState>({
     id: initialConversationId,
@@ -376,6 +397,7 @@ export function AssistantChat({
       patient={patient}
       remaining={remaining}
       mode={mode}
+      role={role}
       onNewConversation={() => setSession({
         id: createConversationId(),
         messages: [],

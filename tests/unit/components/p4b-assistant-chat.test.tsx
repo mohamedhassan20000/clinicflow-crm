@@ -36,6 +36,7 @@ describe("P4B assistant UI", () => {
         initialMessages={[]}
         patient={{ id: "00000000-0000-4000-8000-000000000011", name: "Mona Ali" }}
         remaining={25}
+        role="doctor"
       />,
     );
 
@@ -49,7 +50,7 @@ describe("P4B assistant UI", () => {
 
   it("renders an explicit plan upgrade gate without a misleading chat input", () => {
     render(<AssistantAccessGate access={{ state: "upgrade" }} />);
-    expect(screen.getByRole("heading", { name: "Clinical assistant is not included in this plan" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Assistant is not included in this plan" })).toBeVisible();
     expect(screen.getByText("Read-only — never changes medical records")).toBeVisible();
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   });
@@ -65,6 +66,7 @@ describe("P4B assistant UI", () => {
         }]}
         remaining={25}
         historyTruncated
+        role="doctor"
       />,
     );
 
@@ -73,4 +75,23 @@ describe("P4B assistant UI", () => {
     expect(liveRegions).toHaveLength(1);
     expect(liveRegions[0]).toHaveAttribute("role", "status");
   });
+
+  it.each(["admin", "manager", "receptionist"] as const)(
+    "renders the non-clinical persona for %s",
+    (role) => {
+      render(
+        <AssistantChat
+          initialConversationId="00000000-0000-4000-8000-000000000010"
+          initialMessages={[]}
+          remaining={25}
+          role={role}
+        />,
+      );
+
+      expect(screen.getByRole("heading", { name: "How can I help with clinic operations?" })).toBeVisible();
+      expect(screen.getByRole("textbox", { name: "Message the clinic assistant" })).toBeVisible();
+      expect(screen.getByText(/Clinical records are not available/)).toBeVisible();
+      expect(screen.queryByText("Summarize this patient's clinical history")).not.toBeInTheDocument();
+    },
+  );
 });

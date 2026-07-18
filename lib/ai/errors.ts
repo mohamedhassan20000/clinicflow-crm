@@ -7,6 +7,7 @@
 export type AiToolDenialReason =
   | "unauthenticated"
   | "role_forbidden"
+  | "page_hidden"
   | "feature_not_entitled"
   | "usage_limit_reached"
   | "lookup_failed"

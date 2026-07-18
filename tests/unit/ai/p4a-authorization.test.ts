@@ -19,6 +19,7 @@ async function loadAuth(opts: {
   user: typeof DOCTOR | null;
   subscriptionAllowed?: boolean;
   aiFeature?: boolean;
+  visibility?: "visible" | "hidden" | "lookup_failed";
 }) {
   vi.resetModules();
   vi.doMock("server-only", () => ({}));
@@ -36,42 +37,68 @@ async function loadAuth(opts: {
     hasFeature: (ents: { subscriptionAllowed: boolean; features: Record<string, boolean> }, key: string) =>
       ents.subscriptionAllowed && ents.features[key] === true,
   }));
+  vi.doMock("@/lib/server-page-permissions", () => ({
+    getPageVisibilityState: vi.fn(async () => opts.visibility ?? "visible"),
+  }));
   return import("@/lib/ai/authorization");
 }
 
-describe("authorizeDoctorAssistant", () => {
-  it("authorizes an entitled doctor", async () => {
-    const { authorizeDoctorAssistant } = await loadAuth({ user: DOCTOR });
-    await expect(authorizeDoctorAssistant()).resolves.toMatchObject({ id: DOCTOR.id });
-  });
+describe("authorizeStaffAssistant", () => {
+  it.each(["admin", "manager", "doctor", "receptionist"] as const)(
+    "authorizes an entitled %s",
+    async (role) => {
+      const { authorizeStaffAssistant } = await loadAuth({
+        user: { ...DOCTOR, role: role as never },
+      });
+      await expect(authorizeStaffAssistant()).resolves.toMatchObject({
+        id: DOCTOR.id,
+        role,
+      });
+    },
+  );
 
   it("rejects an unauthenticated request", async () => {
-    const { authorizeDoctorAssistant } = await loadAuth({ user: null });
-    await expect(authorizeDoctorAssistant()).rejects.toMatchObject({ reason: "unauthenticated" });
-  });
-
-  it("rejects a forbidden role", async () => {
-    const { authorizeDoctorAssistant } = await loadAuth({
-      user: { ...DOCTOR, role: "receptionist" as never },
-    });
-    await expect(authorizeDoctorAssistant()).rejects.toMatchObject({ reason: "role_forbidden" });
+    const { authorizeStaffAssistant } = await loadAuth({ user: null });
+    await expect(authorizeStaffAssistant()).rejects.toMatchObject({ reason: "unauthenticated" });
   });
 
   it("rejects a clinic without the ai_assistant entitlement", async () => {
-    const { authorizeDoctorAssistant } = await loadAuth({ user: DOCTOR, aiFeature: false });
-    await expect(authorizeDoctorAssistant()).rejects.toMatchObject({
+    const { authorizeStaffAssistant } = await loadAuth({ user: DOCTOR, aiFeature: false });
+    await expect(authorizeStaffAssistant()).rejects.toMatchObject({
       reason: "feature_not_entitled",
     });
   });
 
   it("rejects an inactive subscription", async () => {
-    const { authorizeDoctorAssistant } = await loadAuth({
+    const { authorizeStaffAssistant } = await loadAuth({
       user: DOCTOR,
       subscriptionAllowed: false,
     });
-    await expect(authorizeDoctorAssistant()).rejects.toMatchObject({
+    await expect(authorizeStaffAssistant()).rejects.toMatchObject({
       reason: "subscription_inactive",
     });
+  });
+
+  it("rejects direct access when the admin saved Assistant as hidden", async () => {
+    const { authorizeStaffAssistant } = await loadAuth({ user: DOCTOR, visibility: "hidden" });
+    await expect(authorizeStaffAssistant()).rejects.toMatchObject({ reason: "page_hidden" });
+  });
+
+  it("fails closed when Assistant visibility cannot be verified", async () => {
+    const { authorizeStaffAssistant } = await loadAuth({
+      user: DOCTOR,
+      visibility: "lookup_failed",
+    });
+    await expect(authorizeStaffAssistant()).rejects.toMatchObject({ reason: "lookup_failed" });
+  });
+
+  it("keeps clinical tool authorization doctor-only", async () => {
+    const { assertClinicalToolAccess } = await loadAuth({
+      user: { ...DOCTOR, role: "admin" as never },
+    });
+    await expect(
+      assertClinicalToolAccess({ ...DOCTOR, role: "admin" as never }),
+    ).rejects.toMatchObject({ reason: "role_forbidden" });
   });
 });
 

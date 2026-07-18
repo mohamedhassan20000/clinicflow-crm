@@ -2,7 +2,7 @@ import "server-only";
 import { z } from "zod";
 import { tool } from "ai";
 import { createClient } from "@/lib/supabase/server";
-import { assertDoctorToolAccess } from "@/lib/ai/authorization";
+import { assertStaffToolAccess } from "@/lib/ai/authorization";
 import { logAgentTool } from "@/lib/ai/audit";
 import { computeAvailableSlots } from "@/lib/booking/availability";
 import {
@@ -38,7 +38,7 @@ export function checkAvailabilityTool(ctx: DoctorToolContext) {
         .describe("Optional service name for context."),
     }),
     execute: async ({ date, doctor_id, service }) => {
-      await assertDoctorToolAccess(ctx.user);
+      await assertStaffToolAccess(ctx.user);
       const supabase = await createClient();
       const timeZone = await resolveClinicTimeZone(supabase, ctx.user.clinicId);
 

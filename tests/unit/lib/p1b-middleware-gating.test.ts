@@ -28,14 +28,27 @@ const state = vi.hoisted(() => ({
     data: null as Record<string, unknown> | null,
     error: null as { message: string } | null,
   },
+  pagePermissions: {
+    data: [] as { page_slug: string; is_visible: boolean }[],
+    error: null as { message: string; code?: string } | null,
+  },
 }));
 
-function resultBuilder(result: { data: unknown; error: { message: string } | null }) {
+function resultBuilder(result: {
+  data: unknown;
+  error: { message: string; code?: string } | null;
+}) {
   const builder = {
     select: vi.fn(() => builder),
     eq: vi.fn(() => builder),
     single: vi.fn(async () => result),
     maybeSingle: vi.fn(async () => result),
+    then: vi.fn(
+      <TResult1 = typeof result, TResult2 = never>(
+        onfulfilled?: ((value: typeof result) => TResult1 | PromiseLike<TResult1>) | null,
+        onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+      ) => Promise.resolve(result).then(onfulfilled, onrejected),
+    ),
   };
   return builder;
 }
@@ -52,6 +65,7 @@ vi.mock("@supabase/ssr", () => ({
       if (table === "subscriptions") return resultBuilder(state.subscription);
       if (table === "clinics") return resultBuilder(state.clinic);
       if (table === "platform_admins") return resultBuilder(state.platformAdmin);
+      if (table === "user_page_permissions") return resultBuilder(state.pagePermissions);
       return resultBuilder({ data: [], error: null });
     }),
   })),
@@ -59,8 +73,11 @@ vi.mock("@supabase/ssr", () => ({
 
 import { updateSession } from "@/lib/supabase/middleware";
 
-function request(path: string, method = "GET") {
-  return new NextRequest(`http://localhost${path}`, { method });
+function request(path: string, method = "GET", cookie?: string) {
+  return new NextRequest(`http://localhost${path}`, {
+    method,
+    headers: cookie ? { cookie } : undefined,
+  });
 }
 
 function redirectPath(response: Response) {
@@ -87,6 +104,8 @@ beforeEach(() => {
   state.clinic.error = null;
   state.platformAdmin.data = null;
   state.platformAdmin.error = null;
+  state.pagePermissions.data = [];
+  state.pagePermissions.error = null;
 });
 
 describe("P1B middleware billing behavior", () => {
@@ -149,6 +168,69 @@ describe("P1B middleware billing behavior", () => {
     };
     await expect(updateSession(request("/patients"))).resolves.toMatchObject({ status: 200 });
     await expect(updateSession(request("/patients", "POST"))).resolves.toMatchObject({ status: 200 });
+  });
+
+  it.each(["admin", "manager", "doctor", "receptionist"])(
+    "allows the saved Assistant route for an active %s",
+    async (role) => {
+      state.profile.data = {
+        role,
+        clinic_id: "clinic-1",
+        must_change_password: false,
+        is_active: true,
+      };
+      state.subscription.data = {
+        status: "active",
+        trial_ends_at: null,
+        current_period_end: null,
+      };
+      state.pagePermissions.data = [{ page_slug: "assistant", is_visible: true }];
+
+      await expect(updateSession(request("/assistant"))).resolves.toMatchObject({ status: 200 });
+    },
+  );
+
+  it("enforces a saved hidden Assistant route even when its old visibility cookie is forged", async () => {
+    state.profile.data = {
+      role: "receptionist",
+      clinic_id: "clinic-1",
+      must_change_password: false,
+      is_active: true,
+    };
+    state.subscription.data = {
+      status: "active",
+      trial_ends_at: null,
+      current_period_end: null,
+    };
+    state.pagePermissions.data = [{ page_slug: "assistant", is_visible: false }];
+
+    const response = await updateSession(
+      request(
+        "/assistant",
+        "GET",
+        "cf_page_visibility=user-1:receptionist:dashboard,assistant",
+      ),
+    );
+
+    expect(redirectPath(response)).toBe("/dashboard");
+    expect(state.queriedTables).toContain("user_page_permissions");
+  });
+
+  it("fails closed when saved Assistant visibility cannot be resolved", async () => {
+    state.profile.data = {
+      role: "doctor",
+      clinic_id: "clinic-1",
+      must_change_password: false,
+      is_active: true,
+    };
+    state.subscription.data = {
+      status: "active",
+      trial_ends_at: null,
+      current_period_end: null,
+    };
+    state.pagePermissions.error = { message: "temporary permissions failure" };
+
+    expect(redirectPath(await updateSession(request("/assistant")))).toBe("/dashboard");
   });
 
   it("gates an active clinic on onboarding without looping an expired clinic", async () => {

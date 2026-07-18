@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { BrainCircuit, ShieldCheck } from "lucide-react";
 import { getTranslations } from "next-intl/server";
 import { AssistantAccessGate } from "@/components/assistant/assistant-access-gate";
 import { AssistantChat } from "@/components/assistant/assistant-chat";
-import { loadLatestDoctorConversation } from "@/lib/ai/conversations";
-import type { DoctorAssistantUIMessage } from "@/lib/ai/doctor-agent";
-import { getDoctorAssistantSurfaceAccess } from "@/lib/ai/surface";
-import { requireRole } from "@/lib/rbac";
-import { createClient } from "@/lib/supabase/server";
+import type { StaffAssistantUIMessage } from "@/lib/ai/staff-agent";
+import {
+  resolveStaffAssistantPage,
+} from "@/lib/ai/surface";
+import { requireUser } from "@/lib/rbac";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("assistant");
@@ -17,12 +18,13 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function AssistantPage() {
   const [t, user] = await Promise.all([
     getTranslations("assistant"),
-    requireRole(["admin", "doctor"]),
+    requireUser(),
   ]);
-  const access = await getDoctorAssistantSurfaceAccess(user);
-  const conversation = access.state === "available"
-    ? await loadLatestDoctorConversation({ supabase: await createClient(), user })
-    : null;
+  const resolution = await resolveStaffAssistantPage(user);
+  if (resolution.state === "hidden") redirect("/dashboard");
+  const { access, conversation } = resolution;
+
+  const isClinical = user.role === "doctor";
 
   return (
     <div className="space-y-6">
@@ -32,8 +34,12 @@ export default async function AssistantPage() {
             <BrainCircuit className="size-5" aria-hidden="true" />
           </div>
           <div>
-            <h1 className="font-heading text-2xl font-semibold tracking-tight">{t("title")}</h1>
-            <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">{t("description")}</p>
+            <h1 className="font-heading text-2xl font-semibold tracking-tight">
+              {isClinical ? t("title") : t("administrativeTitle")}
+            </h1>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
+              {isClinical ? t("description") : t("administrativeDescription")}
+            </p>
           </div>
         </div>
         <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-xs">
@@ -46,9 +52,10 @@ export default async function AssistantPage() {
         <section className="flex min-h-[38rem] overflow-hidden rounded-3xl border border-border/70 bg-background shadow-sm">
           <AssistantChat
             initialConversationId={conversation?.id ?? crypto.randomUUID()}
-            initialMessages={(conversation?.messages ?? []) as DoctorAssistantUIMessage[]}
+            initialMessages={(conversation?.messages ?? []) as StaffAssistantUIMessage[]}
             historyTruncated={conversation?.historyTruncated ?? false}
             remaining={access.remaining}
+            role={user.role}
           />
         </section>
       ) : (

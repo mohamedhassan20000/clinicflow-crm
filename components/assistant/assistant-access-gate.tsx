@@ -1,12 +1,12 @@
 import { LockKeyhole, Sparkles, TriangleAlert } from "lucide-react";
 import { useTranslations } from "next-intl";
-import type { DoctorAssistantSurfaceAccess } from "@/lib/ai/surface";
+import type { StaffAssistantSurfaceAccess } from "@/lib/ai/surface";
 
 export function AssistantAccessGate({
   access,
   compact = false,
 }: {
-  access: Exclude<DoctorAssistantSurfaceAccess, { state: "available" }>;
+  access: Exclude<StaffAssistantSurfaceAccess, { state: "available" }>;
   compact?: boolean;
 }) {
   const t = useTranslations("assistant");

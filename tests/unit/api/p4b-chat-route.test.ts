@@ -27,7 +27,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@sentry/nextjs", () => ({ captureException: mocks.captureException }));
 vi.mock("next-intl/server", () => ({ getLocale: async () => "en" }));
 vi.mock("@/lib/ai/authorization", () => ({
-  authorizeDoctorAssistant: mocks.authorize,
+  authorizeStaffAssistant: mocks.authorize,
 }));
 vi.mock("@/lib/ai/usage", () => ({
   reserveAiTurn: mocks.reserveUsage,
@@ -42,8 +42,8 @@ vi.mock("@/lib/ai/conversations", async (importOriginal) => {
     persistDoctorTurn: mocks.persistTurn,
   };
 });
-vi.mock("@/lib/ai/doctor-agent", () => ({
-  createDoctorAgent: () => ({ stream: mocks.stream }),
+vi.mock("@/lib/ai/staff-agent", () => ({
+  createStaffAgent: () => ({ stream: mocks.stream }),
 }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
@@ -114,10 +114,11 @@ beforeEach(() => {
   });
 });
 
-describe("P4B doctor assistant streaming route", () => {
+describe("P4B staff assistant streaming route", () => {
   it.each([
     ["unauthenticated", 401],
     ["role_forbidden", 403],
+    ["page_hidden", 403],
     ["feature_not_entitled", 403],
     ["subscription_inactive", 403],
     ["usage_limit_reached", 429],
@@ -228,7 +229,7 @@ describe("P4B doctor assistant streaming route", () => {
     expect(mocks.persistTurn).not.toHaveBeenCalled();
     expect(mocks.captureException).toHaveBeenCalledWith(
       modelError,
-      expect.objectContaining({ tags: { area: "doctor-assistant-stream" } }),
+      expect.objectContaining({ tags: { area: "staff-assistant-stream" } }),
     );
   });
 
@@ -265,7 +266,7 @@ describe("P4B doctor assistant streaming route", () => {
     expect(mocks.persistTurn).not.toHaveBeenCalled();
     expect(mocks.captureException).toHaveBeenCalledWith(
       toolError,
-      expect.objectContaining({ tags: { area: "doctor-assistant-stream" } }),
+      expect.objectContaining({ tags: { area: "staff-assistant-stream" } }),
     );
   });
 

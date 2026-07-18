@@ -3,6 +3,7 @@
 import { actionError } from "@/lib/i18n/action-errors";
 import { localizeZodFieldErrors } from "@/lib/validations/server";
 import { revalidatePath, revalidateTag } from "next/cache";
+import { headers } from "next/headers";
 import { z } from "zod";
 import {
   issueClinicInvitation,
@@ -234,14 +235,52 @@ export async function revokeInvitationForm(
   return revokeClinicInvitation(parsed.data);
 }
 
+/**
+ * The set of origins an emailed invitation link is allowed to point at. Both
+ * are app-controlled: the configured canonical origin (production) and the
+ * origin the request actually arrived on (previews/local, and the deployed host
+ * whether or not it byte-matches the env var). An empty set means neither could
+ * be resolved — validation then falls back to path-only checks.
+ */
+async function resolveAllowedInvitationOrigins(): Promise<Set<string>> {
+  const origins = new Set<string>();
+  if (process.env.NEXT_PUBLIC_SITE_URL) {
+    try {
+      origins.add(new URL(process.env.NEXT_PUBLIC_SITE_URL).origin);
+    } catch {
+      // Malformed env — ignore and rely on the request origin.
+    }
+  }
+  try {
+    const h = await headers();
+    const host = h.get("x-forwarded-host") ?? h.get("host");
+    if (host) {
+      const proto = h.get("x-forwarded-proto") ?? "https";
+      origins.add(new URL(`${proto}://${host}`).origin);
+    }
+  } catch {
+    // Outside a request context (e.g. unit tests) — env origin still applies.
+  }
+  return origins;
+}
+
 export async function sendInvitationEmail(_previous: OperatorActionResult | null, formData: FormData): Promise<OperatorActionResult> {
   await requirePlatformAdmin();
-  const expectedOrigin = process.env.NEXT_PUBLIC_SITE_URL ? new URL(process.env.NEXT_PUBLIC_SITE_URL).origin : null;
-  const parsed = z.object({ invitationId: z.string().uuid(), invitationEmail: z.string().email(), invitationLink: z.string().url().refine((value) => { const url = new URL(value); return url.pathname.startsWith("/signup/") && (!expectedOrigin || url.origin === expectedOrigin); }) }).safeParse({ invitationId: formData.get("invitationId"), invitationEmail: formData.get("invitationEmail"), invitationLink: formData.get("invitationLink") });
+  // The link is built in the operator's browser from `window.location.origin`,
+  // which is authoritative for where they actually are. Accept it when its
+  // origin matches either the configured canonical origin (NEXT_PUBLIC_SITE_URL)
+  // or the current request origin — so a www/non-www (or preview host) mismatch
+  // between the deployed host and the env var never rejects a legitimate link,
+  // while a foreign origin (matching neither) is still refused.
+  const allowedOrigins = await resolveAllowedInvitationOrigins();
+  const parsed = z.object({ invitationId: z.string().uuid(), invitationEmail: z.string().email(), invitationLink: z.string().url().refine((value) => { const url = new URL(value); return url.pathname.startsWith("/signup/") && (allowedOrigins.size === 0 || allowedOrigins.has(url.origin)); }) }).safeParse({ invitationId: formData.get("invitationId"), invitationEmail: formData.get("invitationEmail"), invitationLink: formData.get("invitationLink") });
   if (!parsed.success) return { error: await actionError("operator.theInvitationEmailRequestIsInvalid") };
   const db = await createClient();
   const invitation = await db.from("clinic_invitations").select("id, clinic_name, owner_name, email, status, expires_at").eq("id", parsed.data.invitationId).eq("email", parsed.data.invitationEmail).maybeSingle();
-  if (invitation.error || !invitation.data || invitation.data.status !== "pending") return { error: await actionError("operator.thisInvitationIsNoLongerAvailable") };
+  // Reject revoked/accepted (status ≠ pending) and also expired invitations
+  // whose status has not yet been flipped — an expired link must never be sent.
+  const isExpired = invitation.data?.expires_at ? new Date(invitation.data.expires_at).getTime() <= Date.now() : true;
+  if (invitation.error || !invitation.data || invitation.data.status !== "pending" || isExpired) return { error: await actionError("operator.thisInvitationIsNoLongerAvailable") };
   try {
     const result = await getResend().emails.send({ from: DEFAULT_FROM, to: invitation.data.email, subject: `You're invited to ClinicFlow — ${invitation.data.clinic_name}`, html: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto"><h1 style="color:#0f766e">Welcome to ClinicFlow</h1><p>Hello ${invitation.data.owner_name},</p><p>Your clinic has been invited to join ClinicFlow.</p><p><a href="${parsed.data.invitationLink}" style="display:inline-block;padding:12px 18px;background:#0f766e;color:white;text-decoration:none;border-radius:8px">Accept invitation</a></p><p>This single-use link expires ${invitation.data.expires_at ? new Date(invitation.data.expires_at).toUTCString() : "soon"}.</p></div>` });
     if (result.error) { console.error("Invitation email send failed", { invitationId: invitation.data.id, category: "provider_error" }); return { error: await actionError("operator.invitationEmailCouldNotBeSentTheInvitationLinkRemains") }; }

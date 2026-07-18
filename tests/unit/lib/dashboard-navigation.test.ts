@@ -35,4 +35,18 @@ describe("dashboard navigation serialization", () => {
       expect.objectContaining({ href: "/inbox", icon: "inbox", labelKey: "tenant.inbox" }),
     );
   });
+
+  it("makes the assistant a gated admin/doctor page", () => {
+    expect(getRolePageSlugs("admin")).toContain("assistant");
+    expect(getRolePageSlugs("doctor")).toContain("assistant");
+    expect(getRolePageSlugs("receptionist")).not.toContain("assistant");
+    expect(getRolePageSlugs("manager")).not.toContain("assistant");
+    expect(getTenantShellNavigation(getRolePageSlugs("doctor"))).toContainEqual(
+      expect.objectContaining({
+        href: "/assistant",
+        icon: "assistant",
+        labelKey: "tenant.assistant",
+      }),
+    );
+  });
 });

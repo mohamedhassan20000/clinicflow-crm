@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { BarChart3, Building2, CalendarDays, ChevronLeft, ChevronRight, Gift, Inbox, LayoutDashboard, Mail, PhoneCall, Settings, Users, Wallet, type LucideIcon } from "lucide-react";
+import { BarChart3, BrainCircuit, Building2, CalendarDays, ChevronLeft, ChevronRight, Gift, Inbox, LayoutDashboard, Mail, PhoneCall, Settings, Users, Wallet, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { OperatorIconKey, ShellNavItem } from "@/lib/dashboard-navigation";
 import type { PageSlug } from "@/lib/page-permissions";
@@ -13,6 +13,7 @@ const TENANT_ICONS: Record<PageSlug, LucideIcon> = {
   dashboard: LayoutDashboard,
   patients: Users,
   appointments: CalendarDays,
+  assistant: BrainCircuit,
   inbox: Inbox,
   followups: PhoneCall,
   revenue: Wallet,

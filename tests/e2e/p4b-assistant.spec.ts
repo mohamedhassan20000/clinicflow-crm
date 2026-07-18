@@ -1,0 +1,122 @@
+import { expect, test, type Page } from "@playwright/test";
+import { createClient } from "@supabase/supabase-js";
+import { randomUUID } from "node:crypto";
+import type { Database } from "@/types/database";
+
+const localUrl = process.env.LOCAL_SUPABASE_URL ?? "http://127.0.0.1:54321";
+const secretKey = process.env.LOCAL_SUPABASE_SECRET_KEY;
+if (!secretKey) throw new Error("LOCAL_SUPABASE_SECRET_KEY is required for P4B E2E.");
+
+const service = createClient<Database>(localUrl, secretKey, {
+  auth: { autoRefreshToken: false, persistSession: false },
+});
+const suffix = `p4b-e2e-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+const password = "P4bAssistant12345!";
+const email = `${suffix}@example.com`;
+const ids = { clinic: randomUUID(), doctor: "", patient: randomUUID() };
+
+async function must<T>(result: PromiseLike<{ data: T | null; error: { message: string } | null }>) {
+  const { data, error } = await result;
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+async function cleanup() {
+  await service.from("agent_messages").delete().eq("clinic_id", ids.clinic);
+  await service.from("agent_conversations").delete().eq("clinic_id", ids.clinic);
+  await service.from("patients").delete().eq("clinic_id", ids.clinic);
+  await service.from("subscriptions").delete().eq("clinic_id", ids.clinic);
+  await service.from("profiles").delete().eq("clinic_id", ids.clinic);
+  await service.from("clinics").delete().eq("id", ids.clinic);
+  if (ids.doctor) await service.auth.admin.deleteUser(ids.doctor);
+}
+
+async function login(page: Page) {
+  await page.goto("/login");
+  await page.locator('input[type="email"]').fill(email);
+  await page.locator('input[type="password"]').fill(password);
+  await page.getByRole("button", { name: /sign in|تسجيل الدخول/i }).click();
+  await expect(page).toHaveURL(/\/dashboard/, { timeout: 10_000 });
+}
+
+function mockAssistantStream(text: string) {
+  return [
+    { type: "start", messageId: "assistant-e2e" },
+    { type: "start-step" },
+    { type: "text-start", id: "text-1" },
+    { type: "text-delta", id: "text-1", delta: text },
+    { type: "text-end", id: "text-1" },
+    { type: "finish-step" },
+    { type: "finish", finishReason: "stop" },
+  ].map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join("") + "data: [DONE]\n\n";
+}
+
+test.beforeAll(async () => {
+  await cleanup();
+  const created = await service.auth.admin.createUser({ email, password, email_confirm: true });
+  if (created.error || !created.data.user) throw new Error(created.error?.message ?? "User setup failed");
+  ids.doctor = created.data.user.id;
+  await must(service.from("clinics").insert({
+    id: ids.clinic,
+    name: `P4B E2E Clinic ${suffix}`,
+    onboarding_completed_at: new Date().toISOString(),
+  }));
+  const plan = await service.from("plans").select("id").eq("slug", "pro_ai").single();
+  if (plan.error) throw new Error(plan.error.message);
+  await must(service.from("subscriptions").insert({
+    clinic_id: ids.clinic,
+    plan_id: plan.data.id,
+    status: "trialing",
+    trial_ends_at: new Date(Date.now() + 14 * 86_400_000).toISOString(),
+  }));
+  await must(service.from("profiles").insert({
+    id: ids.doctor,
+    clinic_id: ids.clinic,
+    full_name: "P4B Test Doctor",
+    role: "doctor",
+    must_change_password: false,
+  }));
+  await must(service.from("patients").insert({
+    id: ids.patient,
+    clinic_id: ids.clinic,
+    full_name: "P4B Test Patient",
+    national_id: `${Date.now()}44`,
+    date_of_birth: "1992-02-02",
+    phone: "+96551112222",
+    email: `${suffix}-patient@example.com`,
+    file_number: `${suffix}-P`,
+    created_by: ids.doctor,
+    assigned_doctor_id: ids.doctor,
+  }));
+});
+
+test.afterAll(cleanup);
+
+test("staff chat streams a mocked response and patient profile opens contextual assistant", async ({ page }) => {
+  await page.route("**/api/agent/chat", async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: {
+        "content-type": "text/event-stream",
+        "cache-control": "no-cache",
+        "x-vercel-ai-ui-message-stream": "v1",
+      },
+      body: mockAssistantStream("Your authorized schedule has been reviewed."),
+    });
+  });
+
+  await login(page);
+  await page.goto("/assistant");
+  await expect(page.getByRole("heading", { level: 1, name: "Clinical assistant" })).toBeVisible();
+  await page.getByRole("textbox", { name: "Message the clinical assistant" }).fill("List my appointments today");
+  await page.getByRole("button", { name: "Send message" }).click();
+  await expect(page.getByText("Your authorized schedule has been reviewed.")).toBeVisible();
+
+  await page.goto(`/patients/${ids.patient}`);
+  await page.getByRole("button", { name: "Ask assistant" }).click();
+  await expect(page.getByText("Clinical assistant · P4B Test Patient")).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Message the clinical assistant" })).toHaveAttribute(
+    "placeholder",
+    "Ask about this patient's record…",
+  );
+});

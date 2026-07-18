@@ -15,6 +15,13 @@ function builder(operation: "select" | "update" = "select") {
   };
   return value;
 }
+let requestHost: string | null = null;
+vi.mock("next/headers", () => ({
+  headers: vi.fn(async () => ({
+    get: (key: string) =>
+      key === "x-forwarded-host" ? requestHost : key === "x-forwarded-proto" ? "https" : null,
+  })),
+}));
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn(async () => ({ from })) }));
 vi.mock("@/lib/rbac", () => ({ requirePlatformAdmin: requireAdmin }));
 vi.mock("@/lib/email/resend", () => ({ DEFAULT_FROM: "ClinicFlow <invite@example.com>", getResend: () => ({ emails: { send } }) }));
@@ -31,7 +38,7 @@ function form(origin = "https://clinicflow.example", path = `/signup/${rawToken}
 }
 
 describe("P1.5B invitation email", () => {
-  beforeEach(() => { vi.clearAllMocks(); from.mockImplementation(() => builder()); writes.length = 0; updateError = null; process.env.NEXT_PUBLIC_SITE_URL = "https://clinicflow.example"; send.mockResolvedValue({ data: { id: "email-1" }, error: null }); });
+  beforeEach(() => { vi.clearAllMocks(); from.mockImplementation(() => builder()); writes.length = 0; updateError = null; requestHost = null; invitation.status = "pending"; invitation.expires_at = "2030-01-01T00:00:00Z"; process.env.NEXT_PUBLIC_SITE_URL = "https://clinicflow.example"; send.mockResolvedValue({ data: { id: "email-1" }, error: null }); });
 
   it("sends, audits, and records email_sent_at without persisting the token", async () => {
     await expect(sendInvitationEmail(null, form())).resolves.toEqual({ ok: true });
@@ -64,5 +71,49 @@ describe("P1.5B invitation email", () => {
     expect((await sendInvitationEmail(null, form("https://evil.example"))).error).toMatch(/invalid/i);
     expect((await sendInvitationEmail(null, form("https://clinicflow.example", "/not-signup/token"))).error).toMatch(/invalid/i);
     expect(await sendInvitationEmail(null, form())).toEqual({ ok: true });
+  });
+
+  // Regression: the SEO www-canonical change (commit 5dd4152) made the browser
+  // build the link from the www origin while NEXT_PUBLIC_SITE_URL stayed non-www,
+  // so the strict env-only origin check rejected every valid link.
+  it("accepts a link on the request origin when it differs from NEXT_PUBLIC_SITE_URL (www regression)", async () => {
+    process.env.NEXT_PUBLIC_SITE_URL = "https://clinicflow.fit";
+    requestHost = "www.clinicflow.fit";
+    expect(await sendInvitationEmail(null, form("https://www.clinicflow.fit"))).toEqual({ ok: true });
+    expect(send).toHaveBeenCalledOnce();
+  });
+
+  it("still accepts the configured env origin when it matches (no request host)", async () => {
+    process.env.NEXT_PUBLIC_SITE_URL = "https://clinicflow.fit";
+    requestHost = "www.clinicflow.fit";
+    expect(await sendInvitationEmail(null, form("https://clinicflow.fit"))).toEqual({ ok: true });
+  });
+
+  it("rejects origins matching neither the env nor the request origin", async () => {
+    process.env.NEXT_PUBLIC_SITE_URL = "https://clinicflow.fit";
+    requestHost = "www.clinicflow.fit";
+    expect((await sendInvitationEmail(null, form("https://evil.example"))).error).toMatch(/invalid/i);
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("rejects revoked invitations without sending", async () => {
+    invitation.status = "revoked";
+    const result = await sendInvitationEmail(null, form());
+    expect(result.error).toMatch(/no longer available/i);
+    expect(send).not.toHaveBeenCalled(); expect(writes).toEqual([]); expect(audit).not.toHaveBeenCalled();
+  });
+
+  it("rejects accepted invitations without sending", async () => {
+    invitation.status = "accepted";
+    const result = await sendInvitationEmail(null, form());
+    expect(result.error).toMatch(/no longer available/i);
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("rejects expired invitations even when the status is still pending", async () => {
+    invitation.expires_at = "2000-01-01T00:00:00Z";
+    const result = await sendInvitationEmail(null, form());
+    expect(result.error).toMatch(/no longer available/i);
+    expect(send).not.toHaveBeenCalled(); expect(writes).toEqual([]); expect(audit).not.toHaveBeenCalled();
   });
 });

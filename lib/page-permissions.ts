@@ -4,6 +4,7 @@ export type PageSlug =
   | "dashboard"
   | "patients"
   | "appointments"
+  | "assistant"
   | "inbox"
   | "followups"
   | "revenue"
@@ -28,6 +29,7 @@ export const PAGE_DEFINITIONS: PageDefinition[] = [
   { slug: "dashboard", href: "/dashboard", alwaysVisible: true },
   { slug: "patients", href: "/patients" },
   { slug: "appointments", href: "/appointments" },
+  { slug: "assistant", href: "/assistant" },
   { slug: "inbox", href: "/inbox" },
   { slug: "followups", href: "/followups" },
   { slug: "revenue", href: "/revenue" },
@@ -36,9 +38,9 @@ export const PAGE_DEFINITIONS: PageDefinition[] = [
 ];
 
 export const ROLE_PAGE_SLUGS: Record<PermissionUserRole, PageSlug[]> = {
-  admin: ["dashboard", "patients", "appointments", "inbox", "followups", "revenue", "reports", "settings"],
+  admin: ["dashboard", "patients", "appointments", "assistant", "inbox", "followups", "revenue", "reports", "settings"],
   receptionist: ["dashboard", "patients", "appointments", "inbox", "followups", "reports"],
-  doctor: ["dashboard", "patients", "appointments", "followups"],
+  doctor: ["dashboard", "patients", "appointments", "assistant", "followups"],
   manager: ["dashboard", "revenue", "reports", "settings"],
 };
 
@@ -58,6 +60,7 @@ export function getPageSlugFromPath(pathname: string): PageSlug | null {
   if (pathname === "/" || pathname.startsWith("/dashboard")) return "dashboard";
   if (pathname.startsWith("/patients")) return "patients";
   if (pathname.startsWith("/appointments")) return "appointments";
+  if (pathname.startsWith("/assistant")) return "assistant";
   if (pathname.startsWith("/inbox")) return "inbox";
   if (pathname.startsWith("/followups")) return "followups";
   if (pathname.startsWith("/revenue")) return "revenue";

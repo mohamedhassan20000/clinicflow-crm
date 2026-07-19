@@ -16,6 +16,7 @@ import { requirePlatformAdmin } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
 import { logOperatorAction } from "@/lib/platform-audit";
 import { DEFAULT_FROM, getResend } from "@/lib/email/resend";
+import { isAiFeatureKey, isKnownAiFeature } from "@/lib/ai/commercial-policy";
 
 export type OperatorActionResult = {
   ok?: boolean;
@@ -175,6 +176,21 @@ export async function upsertFeatureOverride(
   if (!parsed.success) return { fieldErrors: await localizeZodFieldErrors(parsed.error) };
 
   const supabase = await createClient();
+  if (isAiFeatureKey(parsed.data.featureKey)) {
+    if (!isKnownAiFeature(parsed.data.featureKey)) {
+      return { error: await actionError("operator.aiFeatureOverrideInvalid") };
+    }
+    if (parsed.data.enabled) {
+      const subscription = await supabase
+        .from("subscriptions")
+        .select("plans(slug)")
+        .eq("clinic_id", parsed.data.clinicId)
+        .maybeSingle();
+      if (subscription.error || subscription.data?.plans?.slug !== "pro_ai") {
+        return { error: await actionError("operator.aiRequiresProAi") };
+      }
+    }
+  }
   const { error } = await supabase.from("clinic_feature_overrides").upsert(
     {
       clinic_id: parsed.data.clinicId,
@@ -188,6 +204,103 @@ export async function upsertFeatureOverride(
 
   invalidateEntitlements(parsed.data.clinicId);
   revalidatePath("/operator", "layout");
+  return { ok: true };
+}
+
+// ── AI commercial terms (§P4.5C — manual billing remains authoritative) ────
+
+const usdAmountSchema = z
+  .union([z.literal(""), z.coerce.number().positive().max(1_000_000)])
+  .transform((value) => (value === "" ? null : value));
+
+const aiCommercialTermsSchema = z.object({
+  clinicId: z.string().uuid(),
+  includedBudgetUsd: usdAmountSchema,
+  addonBudgetUsd: z.coerce.number().min(0).max(1_000_000),
+  overageMode: z.enum(["hard_cap", "contracted"]),
+  overageBudgetUsd: z.coerce.number().min(0).max(1_000_000),
+  reason: z.enum(["pilot", "prepaid_addon", "contracted_overage", "support_adjustment"]),
+}).superRefine((value, context) => {
+  if (value.overageMode === "hard_cap" && value.overageBudgetUsd !== 0) {
+    context.addIssue({
+      code: "custom",
+      path: ["overageBudgetUsd"],
+      message: "validation.aiHardCapOverageMustBeZero",
+    });
+  }
+  if (value.overageMode === "contracted" && value.overageBudgetUsd <= 0) {
+    context.addIssue({
+      code: "custom",
+      path: ["overageBudgetUsd"],
+      message: "validation.aiContractedOverageRequired",
+    });
+  }
+});
+
+function usdToMicros(value: number | null): number | null {
+  if (value === null) return null;
+  const micros = Math.round(value * 1_000_000);
+  if (!Number.isSafeInteger(micros)) throw new RangeError("AI budget is outside the safe range.");
+  return micros;
+}
+
+export async function updateAiCommercialTerms(
+  _previous: OperatorActionResult | null,
+  formData: FormData,
+): Promise<OperatorActionResult> {
+  const admin = await requirePlatformAdmin();
+  const parsed = aiCommercialTermsSchema.safeParse({
+    clinicId: formData.get("clinicId"),
+    includedBudgetUsd: formData.get("includedBudgetUsd") ?? "",
+    addonBudgetUsd: formData.get("addonBudgetUsd"),
+    overageMode: formData.get("overageMode"),
+    overageBudgetUsd: formData.get("overageBudgetUsd"),
+    reason: formData.get("reason"),
+  });
+  if (!parsed.success) return { fieldErrors: await localizeZodFieldErrors(parsed.error) };
+
+  const supabase = await createClient();
+  const subscription = await supabase
+    .from("subscriptions")
+    .select("plans(slug)")
+    .eq("clinic_id", parsed.data.clinicId)
+    .maybeSingle();
+  if (subscription.error || subscription.data?.plans?.slug !== "pro_ai") {
+    return { error: await actionError("operator.aiRequiresProAi") };
+  }
+
+  const includedBudgetMicros = usdToMicros(parsed.data.includedBudgetUsd);
+  const addonBudgetMicros = usdToMicros(parsed.data.addonBudgetUsd)!;
+  const overageBudgetMicros = usdToMicros(parsed.data.overageBudgetUsd)!;
+  const updatedAt = new Date().toISOString();
+  const { error } = await supabase.from("ai_commercial_terms").upsert({
+    clinic_id: parsed.data.clinicId,
+    included_budget_override_micros: includedBudgetMicros,
+    addon_budget_micros: addonBudgetMicros,
+    overage_mode: parsed.data.overageMode,
+    overage_budget_micros: overageBudgetMicros,
+    change_reason: parsed.data.reason,
+    updated_by: admin.id,
+    updated_at: updatedAt,
+  });
+  if (error) return { error: await actionError("operator.aiCommercialTermsCouldNotBeSaved") };
+
+  await logOperatorAction({
+    action: "ai_commercial_terms.updated",
+    targetType: "ai_commercial_terms",
+    targetId: parsed.data.clinicId,
+    clinicId: parsed.data.clinicId,
+    payload: {
+      includedBudgetMicros,
+      addonBudgetMicros,
+      overageMode: parsed.data.overageMode,
+      overageBudgetMicros,
+      reason: parsed.data.reason,
+    },
+  });
+  invalidateEntitlements(parsed.data.clinicId);
+  revalidatePath(`/operator/clinics/${parsed.data.clinicId}`);
+  revalidatePath("/operator/reports", "layout");
   return { ok: true };
 }
 

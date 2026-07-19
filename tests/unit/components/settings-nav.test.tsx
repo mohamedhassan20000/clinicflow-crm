@@ -9,13 +9,13 @@ vi.mock("next/navigation", () => ({
 
 describe("SettingsNav customize visibility", () => {
   it("hides Customize when the current role cannot customize settings", () => {
-    render(<SettingsNav canCustomize={false} />);
+    render(<SettingsNav canCustomize={false} canManageAi={false} />);
 
     expect(screen.queryByRole("link", { name: "Customize" })).not.toBeInTheDocument();
   });
 
   it("shows Customize for authorized admins", () => {
-    render(<SettingsNav canCustomize />);
+    render(<SettingsNav canCustomize canManageAi />);
 
     expect(screen.getByRole("link", { name: "Customize" })).toHaveAttribute(
       "href",
@@ -24,10 +24,23 @@ describe("SettingsNav customize visibility", () => {
   });
 
   it("shows the P3B messaging settings entry to both settings roles", () => {
-    render(<SettingsNav canCustomize={false} />);
+    render(<SettingsNav canCustomize={false} canManageAi={false} />);
     expect(screen.getByRole("link", { name: "Messaging" })).toHaveAttribute(
       "href",
       "/settings/messaging",
+    );
+  });
+
+  it("shows AI provider settings only when the server grants provider management", () => {
+    const { rerender } = render(
+      <SettingsNav canCustomize canManageAi={false} />,
+    );
+    expect(screen.queryByRole("link", { name: "AI provider" })).not.toBeInTheDocument();
+
+    rerender(<SettingsNav canCustomize canManageAi />);
+    expect(screen.getByRole("link", { name: "AI provider" })).toHaveAttribute(
+      "href",
+      "/settings/ai",
     );
   });
 

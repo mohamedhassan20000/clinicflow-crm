@@ -112,8 +112,6 @@ async function loadUsage(resolution: {
   vi.resetModules();
   const captureMessage = vi.fn();
   const captureException = vi.fn();
-  const incrementClinicUsage = vi.fn();
-  const releaseClinicUsage = vi.fn();
   vi.doMock("server-only", () => ({}));
   vi.doMock("@sentry/nextjs", () => ({ captureMessage, captureException }));
   vi.doMock("@/lib/entitlements", () => ({
@@ -125,14 +123,11 @@ async function loadUsage(resolution: {
       ...resolution,
     })),
   }));
-  vi.doMock("@/lib/supabase/admin", () => ({ incrementClinicUsage, releaseClinicUsage }));
   const usage = await import("@/lib/ai/usage");
   return {
     ...usage,
     captureMessage,
     captureException,
-    incrementClinicUsage,
-    releaseClinicUsage,
   };
 }
 
@@ -162,59 +157,4 @@ describe("P4A AI turn usage enforcement (§6.7)", () => {
     );
   });
 
-  it("atomically reserves a unit and returns the authoritative remaining count", async () => {
-    const { reserveAiTurn, incrementClinicUsage } = await loadUsage({
-      allowed: true,
-      reason: "allowed",
-      used: 4,
-      limit: 10,
-      remaining: 6,
-    });
-    incrementClinicUsage.mockResolvedValueOnce({ data: 5, error: null });
-    await expect(reserveAiTurn(DOCTOR.clinicId)).resolves.toEqual({
-      used: 5,
-      limit: 10,
-      remaining: 5,
-      periodStart: expect.stringMatching(/^\d{4}-\d{2}-01$/),
-    });
-    expect(incrementClinicUsage).toHaveBeenCalledWith(
-      DOCTOR.clinicId,
-      "ai_messages",
-      1,
-      expect.stringMatching(/^\d{4}-\d{2}-01$/),
-    );
-  });
-
-  it("maps an atomic reservation race loss to usage_limit_reached", async () => {
-    const { reserveAiTurn, incrementClinicUsage } = await loadUsage({
-      allowed: true,
-      reason: "allowed",
-    });
-    incrementClinicUsage.mockResolvedValueOnce({
-      data: null,
-      error: { message: "USAGE_LIMIT_EXCEEDED" },
-    });
-    await expect(reserveAiTurn(DOCTOR.clinicId)).rejects.toMatchObject({
-      reason: "usage_limit_reached",
-    });
-  });
-
-  it("swallows and captures reservation-release failures", async () => {
-    const { releaseAiTurn, releaseClinicUsage, captureException } = await loadUsage({
-      allowed: true,
-      reason: "allowed",
-    });
-    releaseClinicUsage.mockRejectedValueOnce(new Error("counter unavailable"));
-    await expect(releaseAiTurn(DOCTOR.clinicId, "2026-07-01")).resolves.toBeUndefined();
-    expect(releaseClinicUsage).toHaveBeenCalledWith(
-      DOCTOR.clinicId,
-      "ai_messages",
-      1,
-      "2026-07-01",
-    );
-    expect(captureException).toHaveBeenCalledWith(
-      expect.objectContaining({ message: "counter unavailable" }),
-      expect.objectContaining({ tags: { area: "ai-usage-release" } }),
-    );
-  });
 });

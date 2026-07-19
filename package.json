@@ -26,6 +26,7 @@
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.98",
+    "@ai-sdk/provider": "^3.0.14",
     "@ai-sdk/react": "^3.0.232",
     "@hookform/resolvers": "^5.2.2",
     "@radix-ui/react-label": "^2.1.8",

@@ -4,13 +4,19 @@ import { getLocale } from "next-intl/server";
 import { z } from "zod";
 import { authorizeStaffAssistant } from "@/lib/ai/authorization";
 import {
+  createAiRequestId,
+  prepareAiExecution,
+  staffTaskForRole,
+  type AiExecutionHandle,
+  type AiExecutionOutcome,
+} from "@/lib/ai/client";
+import {
   AiConversationError,
   ensureDoctorConversation,
   persistDoctorTurn,
 } from "@/lib/ai/conversations";
 import { createStaffAgent } from "@/lib/ai/staff-agent";
 import { AiToolAuthorizationError } from "@/lib/ai/errors";
-import { releaseAiTurn, reserveAiTurn } from "@/lib/ai/usage";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { createClient } from "@/lib/supabase/server";
 
@@ -64,7 +70,18 @@ function messageText(message: z.infer<typeof requestSchema>["message"]): string 
 }
 
 export async function POST(request: Request) {
-  let releaseReservation: (() => Promise<void>) | null = null;
+  let execution: AiExecutionHandle | null = null;
+  const finalizeExecution = async (
+    outcome: AiExecutionOutcome,
+    errorClass?: string,
+  ) => {
+    if (!execution) return;
+    try {
+      await execution.finalize({ outcome, errorClass });
+    } catch (error) {
+      Sentry.captureException(error, { tags: { area: "ai-budget-reconciliation" } });
+    }
+  };
   try {
     const user = await authorizeStaffAssistant();
 
@@ -86,13 +103,19 @@ export async function POST(request: Request) {
       return errorResponse("invalid_request", 400);
     }
 
-    const reservation = await reserveAiTurn(user.clinicId);
-    let reservationActive = true;
-    releaseReservation = async () => {
-      if (!reservationActive) return;
-      reservationActive = false;
-      await releaseAiTurn(user.clinicId, reservation.periodStart);
-    };
+    const { task, persona } = staffTaskForRole(user.role);
+    execution = await prepareAiExecution({
+      user,
+      requestId: createAiRequestId({
+        clinicId: user.clinicId,
+        actorId: user.id,
+        conversationId: parsed.data.id,
+        messageId: parsed.data.message.id,
+      }),
+      task,
+      persona,
+      surface: "staff_assistant",
+    });
 
     const locale = (await getLocale()) === "ar" ? "ar" : "en";
     const supabase = await createClient();
@@ -123,6 +146,7 @@ export async function POST(request: Request) {
       locale,
       clinicName: clinic.name,
       patientId: conversation.patientId,
+      execution,
     });
     const result = await agent.stream({
       messages: await convertToModelMessages(uiMessages),
@@ -149,10 +173,13 @@ export async function POST(request: Request) {
           .join("\n")
           .trim();
         if (isAborted || streamFailed || finishReason === "error" || !assistantText) {
-          await releaseReservation?.();
+          await finalizeExecution(
+            isAborted ? "aborted" : "failed",
+            isAborted ? "client_aborted" : "stream_failed",
+          );
           return;
         }
-        reservationActive = false;
+        await finalizeExecution("success");
         try {
           await persistDoctorTurn({
             supabase,
@@ -173,7 +200,7 @@ export async function POST(request: Request) {
       consumeSseStream: consumeStream,
     });
   } catch (error) {
-    await releaseReservation?.();
+    await finalizeExecution("failed", "request_failed");
     if (error instanceof AiToolAuthorizationError) return authorizationResponse(error);
     if (error instanceof AiConversationError) {
       return errorResponse(

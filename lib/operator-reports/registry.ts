@@ -5,6 +5,8 @@ import { requirePlatformAdmin } from "@/lib/rbac";
 import {
   countAllOperatorClinics,
   loadOperatorGrowthSource,
+  loadOperatorAiProviderHealthSource,
+  loadOperatorAiUsageReport,
   loadOperatorUserAggregateSource,
   queryOperatorClinicReport,
 } from "@/lib/supabase/admin";
@@ -45,6 +47,16 @@ const invitationStatusSchema = z.enum([
 ]);
 const yesNoSchema = z.enum(["all", "yes", "no"]);
 const onboardingSchema = z.enum(["all", "complete", "incomplete"]);
+const aiCredentialModeSchema = z.enum(["all", "managed", "byok_strict", "hybrid"]);
+const aiProviderHealthSchema = z.enum([
+  "all",
+  "not_connected",
+  "valid",
+  "invalid",
+  "insufficient_scope",
+  "quota",
+  "provider_unavailable",
+]);
 const idSchema = z.union([z.literal("all"), z.string().uuid()]);
 const slugSchema = z.union([
   z.literal("all"),
@@ -600,6 +612,75 @@ async function growthQuery(
   );
 }
 
+function microsToUsd(value: number): number {
+  return Number((value / 1_000_000).toFixed(6));
+}
+
+async function aiUsageQuery(
+  params: ParsedReportParams,
+  mode: ReportQueryMode = "page",
+) {
+  await requirePlatformAdmin();
+  const source = await loadOperatorAiUsageReport({
+    periodFrom: `${params.filters.monthFrom}-01`,
+    periodTo: `${params.filters.monthTo}-01`,
+    clinicId: params.filters.clinic === "all" ? undefined : params.filters.clinic,
+  });
+  if (source.error) throw new Error("Unable to load AI usage report.");
+  const rows: ReportRow[] = (source.data ?? []).map((row) => ({
+    clinic_id: row.clinic_id,
+    clinic_name: row.clinic_name,
+    period_start: row.period_start,
+    allowance_used_percent: row.budget_limit_micros > 0
+      ? Number((((row.managed_spent_micros + row.reserved_micros) / row.budget_limit_micros) * 100).toFixed(1))
+      : 100,
+    managed_cost_usd: microsToUsd(row.managed_spent_micros),
+    provider_cost_usd: microsToUsd(row.provider_cost_micros),
+    budget_usd: microsToUsd(row.budget_limit_micros),
+    requests: `${row.request_used}/${row.request_limit}`,
+  }));
+  const factor = params.direction === "asc" ? 1 : -1;
+  rows.sort((a, b) => {
+    const left = a[params.sort];
+    const right = b[params.sort];
+    if (typeof left === "number" && typeof right === "number") return (left - right) * factor;
+    return String(left ?? "").localeCompare(String(right ?? "")) * factor;
+  });
+  return paginateDerived(rows, params, mode, rows.length > 0);
+}
+
+async function aiProviderHealthQuery(
+  params: ParsedReportParams,
+  mode: ReportQueryMode = "page",
+) {
+  await requirePlatformAdmin();
+  const source = await loadOperatorAiProviderHealthSource();
+  if (source.error || !source.data) throw new Error("Unable to load AI provider health report.");
+  const rows: ReportRow[] = source.data
+    .filter((row) => params.filters.clinic === "all" || row.clinic_id === params.filters.clinic)
+    .filter((row) => params.filters.mode === "all" || row.credential_mode === params.filters.mode)
+    .filter((row) => {
+      if (params.filters.health === "all") return true;
+      if (params.filters.health === "not_connected") return row.health_status === null;
+      return row.health_status === params.filters.health;
+    })
+    .map((row) => ({
+      clinic_id: row.clinic_id,
+      clinic_name: row.clinic_name,
+      credential_mode: row.credential_mode,
+      provider: row.provider,
+      health_status: row.health_status ?? "not_connected",
+      last_error_code: row.last_error_code,
+      tested_at: row.tested_at,
+      policy_updated_at: row.policy_updated_at,
+    }));
+  const factor = params.direction === "asc" ? 1 : -1;
+  rows.sort((a, b) =>
+    String(a[params.sort] ?? "").localeCompare(String(b[params.sort] ?? "")) * factor,
+  );
+  return paginateDerived(rows, params, mode, source.data.length > 0);
+}
+
 const reports: OperatorReportDefinition[] = [
   definition({
     id: "clinics",
@@ -763,6 +844,63 @@ const reports: OperatorReportDefinition[] = [
     defaultSort: "month",
     normalize: normalizeRange("monthFrom", "monthTo", (now) => [monthsAgo(now, 11), monthOnly(now)]),
     query: growthQuery,
+  }),
+  definition({
+    id: "ai-usage",
+    title: "AI usage and cost",
+    description: "Content-free monthly allowance, managed cost, provider cost, and request totals.",
+    columns: [
+      { key: "clinic_name", label: "Clinic", sortable: true },
+      { key: "period_start", label: "Period", sortable: true },
+      { key: "allowance_used_percent", label: "Allowance used %", numeric: true, sortable: true },
+      { key: "managed_cost_usd", label: "Managed cost USD", numeric: true, sortable: true },
+      { key: "provider_cost_usd", label: "All provider cost USD", numeric: true, sortable: true },
+      { key: "budget_usd", label: "Budget USD", numeric: true, sortable: true },
+      { key: "requests", label: "Requests" },
+    ],
+    filters: [
+      { key: "clinic", label: "Clinic", kind: "combobox", defaultValue: "all", clearValue: "all", schema: idSchema, optionSource: "clinics", placeholder: "All clinics" },
+      { key: "monthFrom", label: "Month from", kind: "month", defaultValue: (now) => monthsAgo(now, 11), clearValue: "", schema: monthSchema },
+      { key: "monthTo", label: "Month to", kind: "month", defaultValue: monthOnly, clearValue: "", schema: monthSchema },
+    ],
+    sorts: [
+      { key: "period_start", label: "Period", defaultDirection: "desc" },
+      { key: "clinic_name", label: "Clinic", defaultDirection: "asc" },
+      { key: "allowance_used_percent", label: "Allowance used", defaultDirection: "desc" },
+      { key: "managed_cost_usd", label: "Managed cost", defaultDirection: "desc" },
+      { key: "provider_cost_usd", label: "Provider cost", defaultDirection: "desc" },
+      { key: "budget_usd", label: "Budget", defaultDirection: "desc" },
+    ],
+    defaultSort: "period_start",
+    normalize: normalizeRange("monthFrom", "monthTo", (now) => [monthsAgo(now, 11), monthOnly(now)]),
+    query: aiUsageQuery,
+  }),
+  definition({
+    id: "ai-provider-health",
+    title: "AI provider health",
+    description: "Safe tenant provider mode and health metadata; credentials and fingerprints are excluded.",
+    columns: [
+      { key: "clinic_name", label: "Clinic", sortable: true },
+      { key: "credential_mode", label: "Mode", sortable: true },
+      { key: "provider", label: "Provider" },
+      { key: "health_status", label: "Health", sortable: true },
+      { key: "last_error_code", label: "Sanitized error" },
+      { key: "tested_at", label: "Last tested", sortable: true },
+      { key: "policy_updated_at", label: "Policy updated" },
+    ],
+    filters: [
+      { key: "clinic", label: "Clinic", kind: "combobox", defaultValue: "all", clearValue: "all", schema: idSchema, optionSource: "clinics", placeholder: "All clinics" },
+      { key: "mode", label: "Provider mode", kind: "select", defaultValue: "all", clearValue: "all", schema: aiCredentialModeSchema, options: [ALL, { value: "managed", label: "Managed" }, { value: "byok_strict", label: "Strict BYOK" }, { value: "hybrid", label: "Hybrid" }] },
+      { key: "health", label: "Health", kind: "select", defaultValue: "all", clearValue: "all", schema: aiProviderHealthSchema, options: [ALL, { value: "not_connected", label: "Not connected" }, { value: "valid", label: "Valid" }, { value: "invalid", label: "Invalid" }, { value: "insufficient_scope", label: "Insufficient scope" }, { value: "quota", label: "Quota" }, { value: "provider_unavailable", label: "Provider unavailable" }] },
+    ],
+    sorts: [
+      { key: "clinic_name", label: "Clinic", defaultDirection: "asc" },
+      { key: "credential_mode", label: "Mode", defaultDirection: "asc" },
+      { key: "health_status", label: "Health", defaultDirection: "asc" },
+      { key: "tested_at", label: "Last tested", defaultDirection: "desc" },
+    ],
+    defaultSort: "clinic_name",
+    query: aiProviderHealthQuery,
   }),
 ];
 

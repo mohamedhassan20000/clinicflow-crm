@@ -1,11 +1,7 @@
 import "server-only";
 
 import { ToolLoopAgent, stepCountIs, type UIMessage } from "ai";
-import {
-  DOCTOR_GENERATION,
-  MAX_AGENT_STEPS,
-  resolveModelId,
-} from "@/lib/ai/client";
+import { assertAiInputWithinPolicy, type AiExecutionHandle } from "@/lib/ai/client";
 import { buildStaffSystemPrompt } from "@/lib/ai/prompts/staff";
 import type { PromptLocale } from "@/lib/ai/prompts/doctor";
 import { buildStaffTools } from "@/lib/ai/tools";
@@ -16,6 +12,7 @@ type StaffAgentContext = {
   locale: PromptLocale;
   clinicName: string;
   patientId?: string | null;
+  execution: AiExecutionHandle;
 };
 
 export function createStaffAgent(ctx: StaffAgentContext) {
@@ -25,7 +22,8 @@ export function createStaffAgent(ctx: StaffAgentContext) {
 
   return new ToolLoopAgent({
     id: `clinicflow-${ctx.user.role}-assistant`,
-    model: resolveModelId("doctor"),
+    model: ctx.execution.model,
+    providerOptions: ctx.execution.providerOptions,
     instructions:
       buildStaffSystemPrompt({
         locale: ctx.locale,
@@ -38,8 +36,15 @@ export function createStaffAgent(ctx: StaffAgentContext) {
       locale: ctx.locale,
       patientId: ctx.user.role === "doctor" ? ctx.patientId : null,
     }),
-    stopWhen: stepCountIs(MAX_AGENT_STEPS),
-    ...DOCTOR_GENERATION,
+    stopWhen: stepCountIs(ctx.execution.taskPolicy.maxSteps),
+    temperature: ctx.execution.taskPolicy.temperature,
+    maxOutputTokens: ctx.execution.taskPolicy.maxOutputTokens,
+    prepareStep: ({ messages }) => {
+      ctx.execution.beginStep();
+      assertAiInputWithinPolicy(messages, ctx.execution.taskPolicy.maxInputTokensPerStep);
+      return {};
+    },
+    onStepFinish: ctx.execution.observeStep,
   });
 }
 

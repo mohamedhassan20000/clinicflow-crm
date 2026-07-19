@@ -1,5 +1,5 @@
 /**
- * Sentry/log scrubbing for messaging credentials (§9.2).
+ * Sentry/log scrubbing for messaging and AI-provider credentials (§9.2/P4.5B).
  *
  * Deliberately NOT server-only: sentry.server.config.ts imports this at
  * instrumentation time. It is pure and holds no secrets of its own.
@@ -13,6 +13,8 @@ const SENSITIVE_KEY_PATTERN =
 const SENSITIVE_VALUE_PATTERNS: readonly RegExp[] = [
   /whsec_[A-Za-z0-9+/=_-]+/g, // Svix/Resend webhook secrets
   /re_[A-Za-z0-9_-]{10,}/g, // Resend API keys
+  /sk-ant-[A-Za-z0-9_-]{10,}/g, // Anthropic API keys
+  /sk-[A-Za-z0-9_-]{20,}/g, // Other provider-style API keys
   /Bearer\s+[A-Za-z0-9._~+/=-]+/gi,
   /\\x[0-9a-fA-F]{40,}/g, // bytea credential envelopes
 ];

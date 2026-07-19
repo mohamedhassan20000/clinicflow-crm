@@ -131,7 +131,10 @@
     "theClinicHasNoSubscriptionRow": "The clinic has no subscription row.",
     "theClinicHasNoSubscriptionRowToGrantAgainst": "The clinic has no subscription row to grant against.",
     "theInvitationEmailRequestIsInvalid": "The invitation email request is invalid.",
-    "thisInvitationIsNoLongerAvailable": "This invitation is no longer available."
+    "thisInvitationIsNoLongerAvailable": "This invitation is no longer available.",
+    "aiFeatureOverrideInvalid": "This AI feature override is not recognized.",
+    "aiRequiresProAi": "AI capabilities and commercial terms require the Pro + AI plan.",
+    "aiCommercialTermsCouldNotBeSaved": "AI commercial terms could not be saved."
   },
   "package-templates": {
     "failedToDeactivateTemplate": "Failed to deactivate template.",
@@ -313,6 +316,20 @@
     "staffMemberNotFound": "Staff member not found.",
     "unauthorized": "Unauthorized.",
     "weCouldNotCompleteThisRequestPleaseTryAgain": "We could not complete this request. Please try again."
+  },
+  "aiProvider": {
+    "couldNotCompleteRequest": "The AI provider request could not be completed. No credential or routing change was saved.",
+    "enterValidCredential": "Enter a valid provider API key.",
+    "tooManyRequests": "Too many provider-management requests. Please wait and try again.",
+    "reauthenticationFailed": "Your current password could not be verified.",
+    "acceptHybridDisclosure": "Accept the managed-fallback disclosure before enabling hybrid mode.",
+    "modeNotIncluded": "This provider mode is not included in the clinic's current AI contract.",
+    "health": {
+      "invalid": "The provider rejected this API key.",
+      "insufficient_scope": "The API key does not have the required model permissions.",
+      "quota": "The provider account has insufficient quota or is rate limited.",
+      "provider_unavailable": "The provider could not be reached. Please try again later."
+    }
   },
   "notifications": {
     "couldNotUpdateNotifications": "Notifications could not be updated. Please try again."

@@ -10,7 +10,11 @@ import {
   detectInjectionAttempt,
   wrapUntrustedContent,
 } from "@/lib/ai/guardrails";
-import { resolveModelId } from "@/lib/ai/client";
+import {
+  AiPolicyRegistryError,
+  getCertifiedModelRoute,
+  getTaskPolicy,
+} from "@/lib/ai/platform/registry";
 import { buildDoctorSystemPrompt } from "@/lib/ai/prompts/doctor";
 
 describe("P4A redaction (§9.3)", () => {
@@ -81,15 +85,19 @@ describe("P4A client model tiers (§11)", () => {
   });
 
   it("defaults doctor to a Sonnet-tier model and patient to a Haiku-tier model", () => {
-    expect(resolveModelId("doctor").modelId).toContain("sonnet");
-    expect(resolveModelId("patient").modelId).toContain("haiku");
+    expect(getCertifiedModelRoute(getTaskPolicy("staff_clinical_summary", "doctor")).modelId)
+      .toContain("sonnet");
+    expect(getCertifiedModelRoute(getTaskPolicy("patient_faq", "patient")).modelId)
+      .toContain("haiku");
   });
 
-  it("honors environment overrides", () => {
+  it("accepts only certified legacy overrides", () => {
+    process.env.AI_MODEL_DOCTOR = "claude-sonnet-4-5";
+    expect(getCertifiedModelRoute(getTaskPolicy("staff_clinical_summary", "doctor")).modelId)
+      .toBe("anthropic/claude-sonnet-4.5");
     process.env.AI_MODEL_DOCTOR = "claude-doctor-custom";
-    process.env.AI_MODEL_PATIENT = "claude-patient-custom";
-    expect(resolveModelId("doctor").modelId).toBe("claude-doctor-custom");
-    expect(resolveModelId("patient").modelId).toBe("claude-patient-custom");
+    expect(() => getCertifiedModelRoute(getTaskPolicy("staff_clinical_summary", "doctor")))
+      .toThrow(new AiPolicyRegistryError("model_not_certified"));
   });
 });
 

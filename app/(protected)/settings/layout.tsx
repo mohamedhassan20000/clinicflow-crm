@@ -4,6 +4,8 @@ import { SettingsNav } from "@/components/settings/settings-nav";
 import { SettingsPageHeader } from "@/components/settings/settings-page-header";
 import { isPrimaryClinicAdmin } from "@/lib/primary-admin";
 import { getTranslations } from "next-intl/server";
+import { AI_ASSISTANT_FEATURE } from "@/lib/ai/authorization";
+import { getEntitlements, hasFeature } from "@/lib/entitlements";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("protected");
@@ -16,15 +18,18 @@ export default async function SettingsLayout({
   children: React.ReactNode;
 }) {
   const user = await requireRole(["admin", "manager"]);
-  const canCustomize =
-    user.role === "admin" &&
-    await isPrimaryClinicAdmin(user.id, user.clinicId);
+  const [primary, entitlements] = await Promise.all([
+    user.role === "admin" ? isPrimaryClinicAdmin(user.id, user.clinicId) : false,
+    getEntitlements(user.clinicId),
+  ]);
+  const canCustomize = user.role === "admin" && primary;
+  const canManageAi = canCustomize && hasFeature(entitlements, AI_ASSISTANT_FEATURE);
 
   return (
     <div className="space-y-6">
       <SettingsPageHeader />
 
-      <SettingsNav canCustomize={canCustomize} />
+      <SettingsNav canCustomize={canCustomize} canManageAi={canManageAi} />
 
       {children}
     </div>

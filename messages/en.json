@@ -1082,15 +1082,21 @@
     "aiUsageThresholdNinety": "90% allowance notice",
     "aiUsageThresholdExhausted": "Allowance exhausted",
     "aiManagedAllowance": "Managed AI allowance used",
+    "aiManagedAllowanceNotConfigured": "No managed allowance",
+    "aiManagedAllowanceNotConfiguredNote": "This clinic has no managed AI allowance configured for this period. Connect a clinic-owned credential or ask your operator to enable a managed allowance.",
+    "aiManagedInternalAllowanceNote": "The managed allowance is ClinicFlow's internal, cost-weighted allowance for this plan. Request count is shown separately.",
     "aiAllowanceIncludesInFlight": "The percentage includes currently reserved in-flight requests.",
-    "aiAllowanceCostWeighted": "The allowance is cost-weighted; request count is shown separately.",
     "aiRequestsThisMonth": "AI requests this month",
     "aiRequestsRemaining": "{count, plural, one {# request remaining} other {# requests remaining}}",
     "aiBillingPolicy": "Allowance policy",
     "aiContractedOverage": "Contracted overage ceiling",
     "aiPrepaidAddon": "Included allowance + prepaid add-on",
     "aiHardCap": "Hard cap — no automatic overbilling",
-    "aiByokAllowanceNote": "Strict BYOK provider spend is billed by the clinic's provider and does not reduce the managed allowance. Fair-use request limits still apply."
+    "aiByokAllowanceNote": "Strict BYOK provider spend is billed by the clinic's provider and does not reduce the managed allowance. Fair-use request limits still apply.",
+    "aiByokUsageTitle": "Clinic-owned provider usage (BYOK)",
+    "aiByokRequests": "BYOK requests this month",
+    "aiByokEstimatedCost": "Estimated provider cost",
+    "aiByokEstimateDisclaimer": "This is ClinicFlow's internal estimate from actual token usage and configured model pricing. It is billed directly by your provider and may not match your provider invoice exactly. ClinicFlow cannot see your provider account balance."
   },
   "profile": {
     "myProfile": "My profile",

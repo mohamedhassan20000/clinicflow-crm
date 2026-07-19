@@ -3,6 +3,7 @@ import { getAuthedUser, type AuthedUser, type UserRole } from "@/lib/rbac";
 import { getEntitlements, hasFeature } from "@/lib/entitlements";
 import { AiToolAuthorizationError } from "@/lib/ai/errors";
 import { getPageVisibilityState } from "@/lib/server-page-permissions";
+import { LEGACY_AI_ASSISTANT_FEATURE } from "@/lib/ai/commercial-policy";
 
 /** Every normal clinic role may use its role-appropriate Assistant persona. */
 export const STAFF_ASSISTANT_ROLES: readonly UserRole[] = [
@@ -15,7 +16,7 @@ export const STAFF_ASSISTANT_ROLES: readonly UserRole[] = [
 /** Clinical summaries and visit search remain doctor-only tools. */
 export const CLINICAL_ASSISTANT_ROLES: readonly UserRole[] = ["doctor"];
 
-export const AI_ASSISTANT_FEATURE = "ai_assistant";
+export const AI_ASSISTANT_FEATURE = LEGACY_AI_ASSISTANT_FEATURE;
 
 /**
  * Resolves and authorizes the current staff user for the doctor assistant.

@@ -1,6 +1,6 @@
 import "server-only";
 import { createClient } from "@supabase/supabase-js";
-import type { Database } from "@/types/database";
+import type { Database, Json } from "@/types/database";
 import type { FxSnapshot } from "@/lib/currency/provider";
 import { requirePlatformAdmin } from "@/lib/rbac";
 
@@ -132,21 +132,161 @@ export async function incrementClinicUsage(
 }
 
 /**
- * Service-role compensation for a usage unit reserved before an AI stream.
- * The database decrement is atomic; callers must still make their local
- * release path idempotent so one request cannot release another turn's unit.
+ * P4.5A service boundary for the durable AI reservation transaction. The RPC
+ * atomically claims the legacy ai_messages unit and the managed-cost ceiling;
+ * callers never write reservation or ledger tables directly.
  */
-export async function releaseClinicUsage(
-  clinicId: string,
-  metric: Database["public"]["Enums"]["usage_metric"],
-  amount = 1,
-  periodStart?: string,
-) {
-  return createAdminClient().rpc("release_usage", {
-    p_clinic_id: clinicId,
-    p_metric: metric,
-    p_amount: amount,
-    p_period_start: periodStart,
+export async function reserveAiBudget(input: {
+  requestId: string;
+  leaseToken: string;
+  clinicId: string;
+  actorId: string;
+  periodStart: string;
+  surface: string;
+  persona: string;
+  task: string;
+  transport: string;
+  expectedProvider: string;
+  expectedModel: string;
+  modelAlias: string;
+  fallbackModelAliases: string[];
+  policyVersion: string;
+  certificationVersion: string;
+  privacyPolicyVersion: string;
+  reservedCostMicros: number;
+  budgetLimitMicros: number;
+  leaseSeconds: number;
+  credentialMode: "managed" | "byok_strict" | "hybrid";
+}) {
+  return createAdminClient().rpc("reserve_ai_budget", {
+    p_request_id: input.requestId,
+    p_lease_token: input.leaseToken,
+    p_clinic_id: input.clinicId,
+    p_actor_id: input.actorId,
+    p_period_start: input.periodStart,
+    p_surface: input.surface,
+    p_persona: input.persona,
+    p_task: input.task,
+    p_transport: input.transport,
+    p_expected_provider: input.expectedProvider,
+    p_expected_model: input.expectedModel,
+    p_model_alias: input.modelAlias,
+    p_fallback_model_aliases: input.fallbackModelAliases,
+    p_policy_version: input.policyVersion,
+    p_certification_version: input.certificationVersion,
+    p_privacy_policy_version: input.privacyPolicyVersion,
+    p_reserved_cost_micros: input.reservedCostMicros,
+    p_budget_limit_micros: input.budgetLimitMicros,
+    p_lease_seconds: input.leaseSeconds,
+    p_credential_mode: input.credentialMode,
+  });
+}
+
+/** Atomic P4.5B credential activation/rotation plus metadata-only audit. */
+export async function activateAiProviderConnection(input: {
+  connectionId: string;
+  clinicId: string;
+  actorId: string;
+  provider: "anthropic";
+  credentialEncrypted: string;
+  encryptionKeyVersion: number;
+  maskedFingerprint: string;
+}) {
+  return createAdminClient().rpc("activate_ai_provider_connection", {
+    p_connection_id: input.connectionId,
+    p_clinic_id: input.clinicId,
+    p_actor_id: input.actorId,
+    p_provider: input.provider,
+    p_credential_encrypted: input.credentialEncrypted,
+    p_encryption_key_version: input.encryptionKeyVersion,
+    p_masked_fingerprint: input.maskedFingerprint,
+  });
+}
+
+/** Stores only a typed, sanitized provider-health result and its audit row. */
+export async function recordAiProviderConnectionTest(input: {
+  connectionId: string;
+  clinicId: string;
+  actorId: string;
+  healthStatus: "valid" | "invalid" | "insufficient_scope" | "quota" | "provider_unavailable";
+  errorCode: "invalid" | "insufficient_scope" | "quota" | "provider_unavailable" | null;
+}) {
+  return createAdminClient().rpc("record_ai_provider_connection_test", {
+    p_connection_id: input.connectionId,
+    p_clinic_id: input.clinicId,
+    p_actor_id: input.actorId,
+    p_health_status: input.healthStatus,
+    p_error_code: input.errorCode,
+  });
+}
+
+/** Persists one explicit managed/strict/hybrid policy change with audit. */
+export async function setAiProviderPolicy(input: {
+  clinicId: string;
+  actorId: string;
+  credentialMode: "managed" | "byok_strict" | "hybrid";
+  hybridDisclosureVersion: "p45b-hybrid-disclosure-v1" | null;
+}) {
+  return createAdminClient().rpc("set_ai_provider_policy", {
+    p_clinic_id: input.clinicId,
+    p_actor_id: input.actorId,
+    p_credential_mode: input.credentialMode,
+    p_hybrid_disclosure_version: input.hybridDisclosureVersion,
+  });
+}
+
+/** Destroys active tenant ciphertext and atomically returns routing to managed. */
+export async function revokeAiProviderConnection(input: {
+  connectionId: string;
+  clinicId: string;
+  actorId: string;
+}) {
+  return createAdminClient().rpc("revoke_ai_provider_connection", {
+    p_connection_id: input.connectionId,
+    p_clinic_id: input.clinicId,
+    p_actor_id: input.actorId,
+  });
+}
+
+/** Required audit boundary before a hybrid request may spend managed credits. */
+export async function logAiProviderFallback(input: {
+  clinicId: string;
+  actorId: string;
+  requestId: string;
+  provider: "anthropic";
+  errorClass: "authentication" | "permission" | "quota" | "rate_limit" | "timeout" | "provider_unavailable" | "request_failed";
+}) {
+  return createAdminClient().rpc("log_ai_provider_fallback", {
+    p_clinic_id: input.clinicId,
+    p_actor_id: input.actorId,
+    p_request_id: input.requestId,
+    p_provider: input.provider,
+    p_error_class: input.errorClass,
+  });
+}
+
+/**
+ * P4.5A service boundary for atomic reservation finalization. The database
+ * inserts content-free immutable attempts, reconciles reserved/actual cost,
+ * and compensates the legacy request unit for failed or aborted executions.
+ */
+export async function reconcileAiBudget(input: {
+  reservationId: string;
+  leaseToken: string;
+  outcome: "success" | "failed" | "aborted";
+  attempts: Json;
+  actualCostMicros: number;
+  managedCostMicros: number;
+  errorClass: string | null;
+}) {
+  return createAdminClient().rpc("reconcile_ai_budget", {
+    p_reservation_id: input.reservationId,
+    p_lease_token: input.leaseToken,
+    p_outcome: input.outcome,
+    p_attempts: input.attempts,
+    p_actual_cost_micros: input.actualCostMicros,
+    p_managed_cost_micros: input.managedCostMicros,
+    p_error_class: input.errorClass,
   });
 }
 
@@ -655,6 +795,72 @@ export async function loadOperatorGrowthSource(input: {
   });
 }
 
+/** Content-free P4.5C usage/cost aggregate for an already-authorized operator path. */
+export async function loadOperatorAiUsageReport(input: {
+  periodFrom: string;
+  periodTo: string;
+  clinicId?: string;
+}) {
+  return createAdminClient().rpc("operator_ai_usage_report", {
+    p_period_from: input.periodFrom,
+    p_period_to: input.periodTo,
+    p_clinic_id: input.clinicId ?? undefined,
+  });
+}
+
+/**
+ * Provider operations projection. The selected columns intentionally exclude
+ * credential ciphertext, key version, fingerprint, actor ids, and audit data.
+ */
+export async function loadOperatorAiProviderHealthSource() {
+  const db = createAdminClient();
+  const [clinics, subscriptions, policies, connections] = await Promise.all([
+    db.from("clinics").select("id, name").order("name"),
+    db.from("subscriptions").select("clinic_id, plans(slug)"),
+    db
+      .from("ai_clinic_provider_policies")
+      .select("clinic_id, credential_mode, updated_at"),
+    db
+      .from("ai_provider_connections")
+      .select("clinic_id, provider, health_status, last_error_code, tested_at, rotated_at")
+      .eq("lifecycle_status", "active"),
+  ]);
+  const error = clinics.error ?? subscriptions.error ?? policies.error ?? connections.error;
+  if (error) return { data: null, error };
+  const policyByClinic = new Map((policies.data ?? []).map((row) => [row.clinic_id, row]));
+  const connectionByClinic = new Map((connections.data ?? []).map((row) => [row.clinic_id, row]));
+  const proAiClinicIds = new Set(
+    (subscriptions.data ?? [])
+      .filter((subscription) => subscription.plans?.slug === "pro_ai")
+      .map((subscription) => subscription.clinic_id),
+  );
+  return {
+    data: (clinics.data ?? [])
+      .filter(
+        (clinic) =>
+          proAiClinicIds.has(clinic.id) ||
+          policyByClinic.has(clinic.id) ||
+          connectionByClinic.has(clinic.id),
+      )
+      .map((clinic) => {
+        const policy = policyByClinic.get(clinic.id);
+        const connection = connectionByClinic.get(clinic.id);
+        return {
+          clinic_id: clinic.id,
+          clinic_name: clinic.name,
+          credential_mode: policy?.credential_mode ?? "managed",
+          provider: connection?.provider ?? null,
+          health_status: connection?.health_status ?? null,
+          last_error_code: connection?.last_error_code ?? null,
+          tested_at: connection?.tested_at ?? null,
+          rotated_at: connection?.rotated_at ?? null,
+          policy_updated_at: policy?.updated_at ?? null,
+        };
+      }),
+    error: null,
+  };
+}
+
 export async function getOperatorAggregateInputs() {
   const db=createAdminClient(), now=new Date(), nowIso=now.toISOString();
   const monthStart=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),1)).toISOString(), previousStart=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth()-1,1)).toISOString(), sixMonthsStart=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth()-5,1)).toISOString();
@@ -746,6 +952,7 @@ const SAFE_OPERATOR_CLINIC_AUDIT_ACTIONS = [
   "invitation.revoked",
   "invitation.email_sent",
   "coupon.redeemed",
+  "ai_commercial_terms.updated",
 ] as const;
 const OPERATOR_CLINIC_AUDIT_SOURCE_LIMIT = 10_000;
 
@@ -809,6 +1016,15 @@ export function safeAuditSummary(row: {
         detail: typeof payload.kind === "string" ? `Kind: ${payload.kind.replaceAll("_", " ")}` : null,
         createdAt: row.created_at,
       };
+    case "ai_commercial_terms.updated": {
+      const overageMode = typeof payload.overageMode === "string" ? payload.overageMode : "hard_cap";
+      return {
+        id: row.id,
+        title: "AI commercial terms updated",
+        detail: `Policy: ${overageMode.replaceAll("_", " ")}`,
+        createdAt: row.created_at,
+      };
+    }
     default:
       return null;
   }
@@ -863,7 +1079,8 @@ export async function getOperatorClinicHistory(
     };
   }
 
-  const [clinic, subscription, workingHours, invitations, redemptions, overrides, usageRows, plans] =
+  const currentPeriodStart = `${new Date().getUTCFullYear()}-${String(new Date().getUTCMonth() + 1).padStart(2, "0")}-01`;
+  const [clinic, subscription, workingHours, invitations, redemptions, overrides, usageRows, plans, aiTerms, aiBudget] =
     await Promise.all([
       db
         .from("clinics")
@@ -902,11 +1119,22 @@ export async function getOperatorClinicHistory(
         .order("feature_key"),
       loadUsagePage(),
       db.from("plans").select("slug, name_en").eq("is_active", true).order("slug"),
+      db
+        .from("ai_commercial_terms")
+        .select("included_budget_override_micros, addon_budget_micros, overage_mode, overage_budget_micros, change_reason, updated_at")
+        .eq("clinic_id", clinicId)
+        .maybeSingle(),
+      db
+        .from("ai_budget_periods")
+        .select("budget_limit_micros, reserved_micros, spent_micros")
+        .eq("clinic_id", clinicId)
+        .eq("period_start", currentPeriodStart)
+        .maybeSingle(),
     ]);
 
   if (clinic.error) return { data: null, error: clinic.error };
   if (!clinic.data) return { data: null, error: null };
-  const firstError = [subscription, workingHours, invitations, redemptions, overrides, usageRows, plans]
+  const firstError = [subscription, workingHours, invitations, redemptions, overrides, usageRows, plans, aiTerms, aiBudget]
     .map((result) => result.error)
     .find(Boolean);
   if (firstError) return { data: null, error: firstError };
@@ -953,6 +1181,8 @@ export async function getOperatorClinicHistory(
       overrides: overrides.data ?? [],
       usage: usageRows.data!,
       plans: plans.data ?? [],
+      aiTerms: aiTerms.data,
+      aiBudget: aiBudget.data,
       auditEvents: [...safeAudit.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
       auditTruncated: clinicAudit.truncated || invitationAudit.truncated,
     },
@@ -1007,6 +1237,10 @@ export async function listOrphanedSignupUsers(): Promise<
 }
 
 const CLINIC_SCOPED_TABLES = new Set([
+  "ai_budget_periods",
+  "ai_clinic_provider_policies",
+  "ai_commercial_terms",
+  "ai_provider_connections",
   "appointment_services",
   "appointments",
   "audit_logs",

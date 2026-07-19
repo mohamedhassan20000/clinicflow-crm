@@ -333,6 +333,8 @@ describe("Pre-P2 WS7 operator report queries", () => {
         createdTo: "",
       },
       growth: { monthFrom: "", monthTo: "" },
+      "ai-usage": { clinic: "all", monthFrom: "", monthTo: "" },
+      "ai-provider-health": { clinic: "all", mode: "all", health: "all" },
     };
     for (const definition of operatorReportRegistry.values()) {
       const params = parseReportParams(definition, rawByReport[definition.id]!);

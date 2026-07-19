@@ -2,6 +2,13 @@ import "server-only";
 import { unstable_cache } from "next/cache";
 import { createClinicScopedAdminClient } from "@/lib/supabase/admin";
 import { resolveSubscriptionAccess } from "@/lib/billing/access";
+import {
+  AI_LIMIT_KEYS,
+  LEGACY_AI_ASSISTANT_FEATURE,
+  aiModeFeatures,
+  isAiFeatureKey,
+} from "@/lib/ai/commercial-policy";
+import type { AiCredentialMode } from "@/lib/ai/platform/types";
 import type { Database, Json } from "@/types/database";
 
 export type FeatureValue = boolean;
@@ -120,7 +127,35 @@ export async function getEntitlements(clinicId: string): Promise<Entitlements> {
 }
 
 export function hasFeature(entitlements: Entitlements, featureKey: string): boolean {
-  return entitlements.subscriptionAllowed && entitlements.features[featureKey] === true;
+  if (!entitlements.subscriptionAllowed) return false;
+  if (!isAiFeatureKey(featureKey)) return entitlements.features[featureKey] === true;
+
+  // AI is the exclusive differentiator of the stable pro_ai catalog row.
+  // Operator feature overrides may disable AI capabilities within that tier,
+  // but must never turn Basic or Professional into an unsigned AI plan.
+  if (entitlements.planSlug !== "pro_ai") return false;
+  if (featureKey !== LEGACY_AI_ASSISTANT_FEATURE) {
+    return (
+      entitlements.features[LEGACY_AI_ASSISTANT_FEATURE] === true &&
+      entitlements.features[featureKey] === true
+    );
+  }
+  return entitlements.features[featureKey] === true;
+}
+
+export function hasAiProviderMode(
+  entitlements: Entitlements,
+  mode: AiCredentialMode,
+): boolean {
+  return aiModeFeatures(mode).every((feature) => hasFeature(entitlements, feature));
+}
+
+export function resolveAiRequestLimit(entitlements: Entitlements): number {
+  return (
+    entitlements.limits[AI_LIMIT_KEYS.requestsMonth] ??
+    entitlements.limits[AI_LIMIT_KEYS.legacyRequestsMonth] ??
+    0
+  );
 }
 
 export function requireFeature(entitlements: Entitlements, featureKey: string): void {

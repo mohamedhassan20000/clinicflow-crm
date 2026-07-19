@@ -13,6 +13,7 @@ const SETTINGS_LABELS: Record<string, string> = {
   "/settings/clinic": "clinic",
   "/settings/messaging": "messaging",
   "/settings/templates": "templates",
+  "/settings/ai": "aiProvider",
   "/settings/customize": "customize",
 };
 

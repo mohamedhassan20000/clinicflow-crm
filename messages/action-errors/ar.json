@@ -131,7 +131,10 @@
     "theClinicHasNoSubscriptionRow": "تعذر إكمال الطلب. يُرجى المحاولة مرة أخرى.",
     "theClinicHasNoSubscriptionRowToGrantAgainst": "تعذر إكمال الطلب. يُرجى المحاولة مرة أخرى.",
     "theInvitationEmailRequestIsInvalid": "طلب إرسال بريد الدعوة غير صالح.",
-    "thisInvitationIsNoLongerAvailable": "هذه الدعوة لم تعد متاحة."
+    "thisInvitationIsNoLongerAvailable": "هذه الدعوة لم تعد متاحة.",
+    "aiFeatureOverrideInvalid": "تجاوز ميزة الذكاء الاصطناعي هذا غير معروف.",
+    "aiRequiresProAi": "تتطلب إمكانات الذكاء الاصطناعي وشروطه التجارية خطة الاحترافية مع الذكاء الاصطناعي.",
+    "aiCommercialTermsCouldNotBeSaved": "تعذر حفظ الشروط التجارية للذكاء الاصطناعي."
   },
   "package-templates": {
     "failedToDeactivateTemplate": "تعذر تعطيل القالب.",
@@ -313,6 +316,20 @@
     "staffMemberNotFound": "لم يتم العثور على عضو فريق العمل.",
     "unauthorized": "غير مصرح لك بتنفيذ هذا الإجراء.",
     "weCouldNotCompleteThisRequestPleaseTryAgain": "تعذر إكمال الطلب. يُرجى المحاولة مرة أخرى."
+  },
+  "aiProvider": {
+    "couldNotCompleteRequest": "تعذر إكمال طلب مزود الذكاء الاصطناعي. لم يتم حفظ أي تغيير في بيانات الاعتماد أو التوجيه.",
+    "enterValidCredential": "أدخل مفتاح API صالحًا للمزود.",
+    "tooManyRequests": "تم إجراء عدد كبير من طلبات إدارة المزود. انتظر قليلًا ثم حاول مرة أخرى.",
+    "reauthenticationFailed": "تعذر التحقق من كلمة مرورك الحالية.",
+    "acceptHybridDisclosure": "وافق على إفصاح المسار المُدار الاحتياطي قبل تفعيل الوضع الهجين.",
+    "modeNotIncluded": "وضع المزود هذا غير مشمول في عقد الذكاء الاصطناعي الحالي للعيادة.",
+    "health": {
+      "invalid": "رفض المزود مفتاح API هذا.",
+      "insufficient_scope": "لا يملك مفتاح API أذونات النموذج المطلوبة.",
+      "quota": "حصة حساب المزود غير كافية أو أن الطلبات محدودة مؤقتًا.",
+      "provider_unavailable": "تعذر الوصول إلى المزود. حاول مرة أخرى لاحقًا."
+    }
   },
   "notifications": {
     "couldNotUpdateNotifications": "تعذر تحديث الإشعارات. يرجى المحاولة مرة أخرى."

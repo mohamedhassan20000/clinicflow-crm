@@ -15,8 +15,8 @@ const USER = {
 
 const mocks = vi.hoisted(() => ({
   authorize: vi.fn(),
-  reserveUsage: vi.fn(),
-  releaseUsage: vi.fn(),
+  prepareExecution: vi.fn(),
+  finalizeExecution: vi.fn(),
   rateLimit: vi.fn(),
   ensureConversation: vi.fn(),
   persistTurn: vi.fn(),
@@ -29,9 +29,12 @@ vi.mock("next-intl/server", () => ({ getLocale: async () => "en" }));
 vi.mock("@/lib/ai/authorization", () => ({
   authorizeStaffAssistant: mocks.authorize,
 }));
-vi.mock("@/lib/ai/usage", () => ({
-  reserveAiTurn: mocks.reserveUsage,
-  releaseAiTurn: mocks.releaseUsage,
+vi.mock("@/lib/ai/client", () => ({
+  createAiRequestId: () => "00000000-0000-4000-8000-000000000099",
+  staffTaskForRole: (role: string) => role === "doctor"
+    ? { task: "staff_clinical_summary", persona: "doctor" }
+    : { task: "staff_administrative", persona: "administrative_staff" },
+  prepareAiExecution: mocks.prepareExecution,
 }));
 vi.mock("@/lib/rate-limit", () => ({ checkRateLimit: mocks.rateLimit }));
 vi.mock("@/lib/ai/conversations", async (importOriginal) => {
@@ -61,7 +64,6 @@ import { POST } from "@/app/api/agent/chat/route";
 
 const conversationId = "00000000-0000-4000-8000-000000000010";
 const patientId = "00000000-0000-4000-8000-000000000011";
-const periodStart = "2026-07-01";
 
 function request(body: unknown) {
   return new Request("https://clinicflow.test/api/agent/chat", {
@@ -86,13 +88,19 @@ function validBody() {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.authorize.mockResolvedValue(USER);
-  mocks.reserveUsage.mockResolvedValue({
-    used: 1,
-    limit: 25,
-    remaining: 24,
-    periodStart,
+  mocks.finalizeExecution.mockResolvedValue(undefined);
+  mocks.prepareExecution.mockResolvedValue({
+    model: {},
+    providerOptions: {},
+    transport: "vercel_ai_gateway",
+    requestId: "00000000-0000-4000-8000-000000000099",
+    taskPolicy: { maxSteps: 8, temperature: 0.2, maxOutputTokens: 1500 },
+    route: { alias: "staff-sonnet-bootstrap-v1" },
+    legacyUsage: { used: 1, limit: 25, remaining: 24 },
+    beginStep: vi.fn(),
+    observeStep: vi.fn(),
+    finalize: mocks.finalizeExecution,
   });
-  mocks.releaseUsage.mockResolvedValue(undefined);
   mocks.rateLimit.mockResolvedValue({ allowed: true, retryAfterSeconds: 0, backendAvailable: true });
   mocks.ensureConversation.mockResolvedValue({ id: conversationId, patientId, messages: [] });
   mocks.persistTurn.mockResolvedValue(undefined);
@@ -147,8 +155,16 @@ describe("P4B staff assistant streaming route", () => {
     const response = await POST(request(validBody()));
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toEqual({ error: "invalid_request" });
-    expect(mocks.reserveUsage).toHaveBeenCalledWith(USER.clinicId);
-    expect(mocks.releaseUsage).toHaveBeenCalledWith(USER.clinicId, periodStart);
+    expect(mocks.prepareExecution).toHaveBeenCalledWith(expect.objectContaining({
+      user: USER,
+      task: "staff_clinical_summary",
+      persona: "doctor",
+      surface: "staff_assistant",
+    }));
+    expect(mocks.finalizeExecution).toHaveBeenCalledWith({
+      outcome: "failed",
+      errorClass: "request_failed",
+    });
     expect(mocks.stream).not.toHaveBeenCalled();
   });
 
@@ -158,7 +174,7 @@ describe("P4B staff assistant streaming route", () => {
     expect(response.status).toBe(429);
     expect(response.headers.get("retry-after")).toBe("12");
     await expect(response.json()).resolves.toEqual({ error: "rate_limited" });
-    expect(mocks.reserveUsage).not.toHaveBeenCalled();
+    expect(mocks.prepareExecution).not.toHaveBeenCalled();
   });
 
   it("reserves, streams, and persists one successful turn without releasing usage", async () => {
@@ -177,8 +193,8 @@ describe("P4B staff assistant streaming route", () => {
         assistantText: "Sourced summary",
       }));
     });
-    expect(mocks.reserveUsage).toHaveBeenCalledWith(USER.clinicId);
-    expect(mocks.releaseUsage).not.toHaveBeenCalled();
+    expect(mocks.prepareExecution).toHaveBeenCalled();
+    expect(mocks.finalizeExecution).toHaveBeenCalledWith({ outcome: "success", errorClass: undefined });
   });
 
   it("releases the reservation and persists nothing when the stream is aborted", async () => {
@@ -201,7 +217,10 @@ describe("P4B staff assistant streaming route", () => {
 
     expect((await POST(request(validBody()))).status).toBe(200);
     await vi.waitFor(() => {
-      expect(mocks.releaseUsage).toHaveBeenCalledWith(USER.clinicId, periodStart);
+      expect(mocks.finalizeExecution).toHaveBeenCalledWith({
+        outcome: "aborted",
+        errorClass: "client_aborted",
+      });
     });
     expect(mocks.persistTurn).not.toHaveBeenCalled();
   });
@@ -224,7 +243,10 @@ describe("P4B staff assistant streaming route", () => {
 
     expect((await POST(request(validBody()))).status).toBe(200);
     await vi.waitFor(() => {
-      expect(mocks.releaseUsage).toHaveBeenCalledWith(USER.clinicId, periodStart);
+      expect(mocks.finalizeExecution).toHaveBeenCalledWith({
+        outcome: "failed",
+        errorClass: "stream_failed",
+      });
     });
     expect(mocks.persistTurn).not.toHaveBeenCalled();
     expect(mocks.captureException).toHaveBeenCalledWith(
@@ -261,7 +283,10 @@ describe("P4B staff assistant streaming route", () => {
 
     expect((await POST(request(validBody()))).status).toBe(200);
     await vi.waitFor(() => {
-      expect(mocks.releaseUsage).toHaveBeenCalledWith(USER.clinicId, periodStart);
+      expect(mocks.finalizeExecution).toHaveBeenCalledWith({
+        outcome: "failed",
+        errorClass: "stream_failed",
+      });
     });
     expect(mocks.persistTurn).not.toHaveBeenCalled();
     expect(mocks.captureException).toHaveBeenCalledWith(
@@ -271,7 +296,7 @@ describe("P4B staff assistant streaming route", () => {
   });
 
   it("returns the cap response when the atomic reservation loses a concurrent race", async () => {
-    mocks.reserveUsage.mockRejectedValueOnce(
+    mocks.prepareExecution.mockRejectedValueOnce(
       new AiToolAuthorizationError("usage_limit_reached"),
     );
 
@@ -279,6 +304,6 @@ describe("P4B staff assistant streaming route", () => {
     expect(response.status).toBe(429);
     await expect(response.json()).resolves.toEqual({ error: "usage_limit_reached" });
     expect(mocks.stream).not.toHaveBeenCalled();
-    expect(mocks.releaseUsage).not.toHaveBeenCalled();
+    expect(mocks.finalizeExecution).not.toHaveBeenCalled();
   });
 });

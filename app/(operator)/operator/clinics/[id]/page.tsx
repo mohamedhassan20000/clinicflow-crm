@@ -7,12 +7,15 @@ import {
   grantManualSubscription,
   removeFeatureOverride,
   upsertFeatureOverride,
+  updateAiCommercialTerms,
 } from "@/actions/operator";
 import { OperatorActionForm } from "@/components/operator/operator-action-form";
 import { DataTable, type DataTableColumn } from "@/components/shared/data-table";
 import { PageHeader } from "@/components/shared/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { resolveSubscriptionAccess } from "@/lib/billing/access";
 import { resolveReturnTo } from "@/lib/navigation/return-url";
 import {
@@ -139,6 +142,10 @@ export default async function OperatorClinicPage({
     clinic.working_hours_start,
     clinic.working_hours_end,
   );
+  const aiTerms = history.aiTerms;
+  const aiBudget = history.aiBudget;
+  const microsToUsdInput = (value: number | null | undefined) =>
+    value === null || value === undefined ? "" : String(value / 1_000_000);
 
   const timeline = [
     {
@@ -355,6 +362,112 @@ export default async function OperatorClinicPage({
           </div>
         </Section>
       </div>
+
+      <Section
+        id="ai-commercial-terms"
+        title={t("aiCommercialTerms")}
+        description={t("aiCommercialTermsDescription")}
+      >
+        {subscription?.plans?.slug !== "pro_ai" ? (
+          <p className="text-sm text-muted-foreground">{t("aiCommercialTermsRequireProAi")}</p>
+        ) : (
+          <div className="space-y-5">
+            <dl className="grid gap-3 text-sm sm:grid-cols-3">
+              <div className="rounded-lg border bg-muted/20 p-3">
+                <dt className="text-muted-foreground">{t("currentManagedSpend")}</dt>
+                <dd className="mt-1 font-semibold tabular-nums" dir="ltr">
+                  ${microsToUsdInput(aiBudget?.spent_micros ?? 0)}
+                </dd>
+              </div>
+              <div className="rounded-lg border bg-muted/20 p-3">
+                <dt className="text-muted-foreground">{t("currentReservedSpend")}</dt>
+                <dd className="mt-1 font-semibold tabular-nums" dir="ltr">
+                  ${microsToUsdInput(aiBudget?.reserved_micros ?? 0)}
+                </dd>
+              </div>
+              <div className="rounded-lg border bg-muted/20 p-3">
+                <dt className="text-muted-foreground">{t("currentBudgetCeiling")}</dt>
+                <dd className="mt-1 font-semibold tabular-nums" dir="ltr">
+                  ${microsToUsdInput(aiBudget?.budget_limit_micros ?? 0)}
+                </dd>
+              </div>
+            </dl>
+
+            <OperatorActionForm action={updateAiCommercialTerms} submitLabel={t("saveAiCommercialTerms")}>
+              <input type="hidden" name="clinicId" value={id} />
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                <div className="grid gap-1.5">
+                  <Label htmlFor="includedBudgetUsd">{t("includedBudgetOverrideUsd")}</Label>
+                  <Input
+                    id="includedBudgetUsd"
+                    name="includedBudgetUsd"
+                    type="number"
+                    min="0.000001"
+                    max="1000000"
+                    step="0.000001"
+                    defaultValue={microsToUsdInput(aiTerms?.included_budget_override_micros)}
+                    placeholder={t("usePlanAllowance")}
+                    dir="ltr"
+                  />
+                </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="addonBudgetUsd">{t("prepaidAddonBudgetUsd")}</Label>
+                  <Input
+                    id="addonBudgetUsd"
+                    name="addonBudgetUsd"
+                    type="number"
+                    min="0"
+                    max="1000000"
+                    step="0.000001"
+                    defaultValue={microsToUsdInput(aiTerms?.addon_budget_micros ?? 0)}
+                    required
+                    dir="ltr"
+                  />
+                </div>
+                <label className="grid gap-1.5 text-sm font-medium">
+                  {t("overageMode")}
+                  <select
+                    name="overageMode"
+                    defaultValue={aiTerms?.overage_mode ?? "hard_cap"}
+                    className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    <option value="hard_cap">{t("hardCap")}</option>
+                    <option value="contracted">{t("contractedOverage")}</option>
+                  </select>
+                </label>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="overageBudgetUsd">{t("contractedOverageBudgetUsd")}</Label>
+                  <Input
+                    id="overageBudgetUsd"
+                    name="overageBudgetUsd"
+                    type="number"
+                    min="0"
+                    max="1000000"
+                    step="0.000001"
+                    defaultValue={microsToUsdInput(aiTerms?.overage_budget_micros ?? 0)}
+                    required
+                    dir="ltr"
+                  />
+                </div>
+                <label className="grid gap-1.5 text-sm font-medium">
+                  {t("changeReason")}
+                  <select
+                    name="reason"
+                    defaultValue={aiTerms?.change_reason ?? "pilot"}
+                    className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    <option value="pilot">{t("pilot")}</option>
+                    <option value="prepaid_addon">{t("prepaidAddon")}</option>
+                    <option value="contracted_overage">{t("contractedOverage")}</option>
+                    <option value="support_adjustment">{t("supportAdjustment")}</option>
+                  </select>
+                </label>
+              </div>
+              <p className="text-xs text-muted-foreground">{t("aiCommercialTermsAuditNote")}</p>
+            </OperatorActionForm>
+          </div>
+        )}
+      </Section>
 
       <Section id="invitation-lineage" title={t("invitationLineage")} description={t("lifecycleTimestampsOnlyOwnerContactDetails")}>
         <DataTable

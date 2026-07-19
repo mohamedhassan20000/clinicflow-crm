@@ -115,6 +115,444 @@ export type Database = {
           },
         ]
       }
+      ai_budget_periods: {
+        Row: {
+          addon_limit_micros: number
+          budget_limit_micros: number
+          clinic_id: string
+          created_at: string
+          included_limit_micros: number
+          overage_limit_micros: number
+          period_start: string
+          reserved_micros: number
+          spent_micros: number
+          updated_at: string
+        }
+        Insert: {
+          addon_limit_micros?: number
+          budget_limit_micros: number
+          clinic_id: string
+          created_at?: string
+          included_limit_micros?: number
+          overage_limit_micros?: number
+          period_start: string
+          reserved_micros?: number
+          spent_micros?: number
+          updated_at?: string
+        }
+        Update: {
+          addon_limit_micros?: number
+          budget_limit_micros?: number
+          clinic_id?: string
+          created_at?: string
+          included_limit_micros?: number
+          overage_limit_micros?: number
+          period_start?: string
+          reserved_micros?: number
+          spent_micros?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_budget_periods_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_commercial_terms: {
+        Row: {
+          addon_budget_micros: number
+          change_reason: string
+          clinic_id: string
+          created_at: string
+          included_budget_override_micros: number | null
+          overage_budget_micros: number
+          overage_mode: string
+          updated_at: string
+          updated_by: string
+        }
+        Insert: {
+          addon_budget_micros?: number
+          change_reason: string
+          clinic_id: string
+          created_at?: string
+          included_budget_override_micros?: number | null
+          overage_budget_micros?: number
+          overage_mode?: string
+          updated_at?: string
+          updated_by: string
+        }
+        Update: {
+          addon_budget_micros?: number
+          change_reason?: string
+          clinic_id?: string
+          created_at?: string
+          included_budget_override_micros?: number | null
+          overage_budget_micros?: number
+          overage_mode?: string
+          updated_at?: string
+          updated_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_commercial_terms_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: true
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_clinic_provider_policies: {
+        Row: {
+          clinic_id: string
+          created_at: string
+          credential_mode: string
+          hybrid_accepted_at: string | null
+          hybrid_accepted_by: string | null
+          hybrid_disclosure_version: string | null
+          provider: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          clinic_id: string
+          created_at?: string
+          credential_mode?: string
+          hybrid_accepted_at?: string | null
+          hybrid_accepted_by?: string | null
+          hybrid_disclosure_version?: string | null
+          provider?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          clinic_id?: string
+          created_at?: string
+          credential_mode?: string
+          hybrid_accepted_at?: string | null
+          hybrid_accepted_by?: string | null
+          hybrid_disclosure_version?: string | null
+          provider?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_clinic_provider_policies_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: true
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_clinic_provider_policies_hybrid_accepted_by_fkey"
+            columns: ["hybrid_accepted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_clinic_provider_policies_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_provider_connections: {
+        Row: {
+          activated_at: string
+          clinic_id: string
+          created_at: string
+          created_by: string | null
+          credential_encrypted: string | null
+          encryption_key_version: number
+          health_status: string
+          id: string
+          last_error_code: string | null
+          lifecycle_status: string
+          masked_fingerprint: string
+          provider: string
+          retired_at: string | null
+          revoked_at: string | null
+          rotated_at: string | null
+          tested_at: string
+          updated_at: string
+        }
+        Insert: {
+          activated_at?: string
+          clinic_id: string
+          created_at?: string
+          created_by?: string | null
+          credential_encrypted?: string | null
+          encryption_key_version: number
+          health_status: string
+          id: string
+          last_error_code?: string | null
+          lifecycle_status: string
+          masked_fingerprint: string
+          provider: string
+          retired_at?: string | null
+          revoked_at?: string | null
+          rotated_at?: string | null
+          tested_at?: string
+          updated_at?: string
+        }
+        Update: {
+          activated_at?: string
+          clinic_id?: string
+          created_at?: string
+          created_by?: string | null
+          credential_encrypted?: string | null
+          encryption_key_version?: number
+          health_status?: string
+          id?: string
+          last_error_code?: string | null
+          lifecycle_status?: string
+          masked_fingerprint?: string
+          provider?: string
+          retired_at?: string | null
+          revoked_at?: string | null
+          rotated_at?: string | null
+          tested_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_provider_connections_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_provider_connections_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_budget_reservations: {
+        Row: {
+          actor_id: string
+          actual_cost_micros: number | null
+          certification_version: string
+          clinic_id: string
+          created_at: string
+          credential_mode: string
+          error_class: string | null
+          expected_model: string
+          expected_provider: string
+          expires_at: string
+          fallback_model_aliases: string[]
+          finalized_at: string | null
+          id: string
+          lease_token: string
+          legacy_usage_amount: number
+          managed_billing_disposition: string
+          model_alias: string
+          outcome: string | null
+          period_start: string
+          persona: string
+          policy_version: string
+          privacy_policy_version: string
+          request_id: string
+          reserved_at: string
+          reserved_cost_micros: number
+          status: string
+          surface: string
+          task: string
+          transport: string
+        }
+        Insert: {
+          actor_id: string
+          actual_cost_micros?: number | null
+          certification_version: string
+          clinic_id: string
+          created_at?: string
+          credential_mode?: string
+          error_class?: string | null
+          expected_model: string
+          expected_provider: string
+          expires_at: string
+          fallback_model_aliases?: string[]
+          finalized_at?: string | null
+          id?: string
+          lease_token: string
+          legacy_usage_amount?: number
+          managed_billing_disposition?: string
+          model_alias: string
+          outcome?: string | null
+          period_start: string
+          persona: string
+          policy_version: string
+          privacy_policy_version: string
+          request_id: string
+          reserved_at?: string
+          reserved_cost_micros: number
+          status?: string
+          surface: string
+          task: string
+          transport: string
+        }
+        Update: {
+          actor_id?: string
+          actual_cost_micros?: number | null
+          certification_version?: string
+          clinic_id?: string
+          created_at?: string
+          credential_mode?: string
+          error_class?: string | null
+          expected_model?: string
+          expected_provider?: string
+          expires_at?: string
+          fallback_model_aliases?: string[]
+          finalized_at?: string | null
+          id?: string
+          lease_token?: string
+          legacy_usage_amount?: number
+          managed_billing_disposition?: string
+          model_alias?: string
+          outcome?: string | null
+          period_start?: string
+          persona?: string
+          policy_version?: string
+          privacy_policy_version?: string
+          request_id?: string
+          reserved_at?: string
+          reserved_cost_micros?: number
+          status?: string
+          surface?: string
+          task?: string
+          transport?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_budget_reservations_period_fkey"
+            columns: ["clinic_id", "period_start"]
+            isOneToOne: false
+            referencedRelation: "ai_budget_periods"
+            referencedColumns: ["clinic_id", "period_start"]
+          },
+        ]
+      }
+      ai_usage_events: {
+        Row: {
+          actor_id: string
+          attempt_id: string
+          attempt_sequence: number
+          billing_disposition: string
+          cache_write_tokens: number | null
+          cached_input_tokens: number | null
+          certification_version: string
+          clinic_id: string
+          created_at: string
+          credential_mode: string
+          error_class: string | null
+          estimated_cost_micros: number
+          fallback_parent_attempt_id: string | null
+          final_cost_micros: number
+          id: string
+          input_tokens: number | null
+          latency_ms: number | null
+          model: string
+          model_alias: string
+          output_tokens: number | null
+          persona: string
+          policy_version: string
+          privacy_policy_version: string
+          provider: string
+          reasoning_tokens: number | null
+          request_id: string
+          reservation_id: string
+          status: string
+          surface: string
+          task: string
+          transport: string
+        }
+        Insert: {
+          actor_id: string
+          attempt_id: string
+          attempt_sequence: number
+          billing_disposition: string
+          cache_write_tokens?: number | null
+          cached_input_tokens?: number | null
+          certification_version: string
+          clinic_id: string
+          created_at?: string
+          credential_mode: string
+          error_class?: string | null
+          estimated_cost_micros: number
+          fallback_parent_attempt_id?: string | null
+          final_cost_micros: number
+          id?: string
+          input_tokens?: number | null
+          latency_ms?: number | null
+          model: string
+          model_alias: string
+          output_tokens?: number | null
+          persona: string
+          policy_version: string
+          privacy_policy_version: string
+          provider: string
+          reasoning_tokens?: number | null
+          request_id: string
+          reservation_id: string
+          status: string
+          surface: string
+          task: string
+          transport: string
+        }
+        Update: {
+          actor_id?: string
+          attempt_id?: string
+          attempt_sequence?: number
+          billing_disposition?: string
+          cache_write_tokens?: number | null
+          cached_input_tokens?: number | null
+          certification_version?: string
+          clinic_id?: string
+          created_at?: string
+          credential_mode?: string
+          error_class?: string | null
+          estimated_cost_micros?: number
+          fallback_parent_attempt_id?: string | null
+          final_cost_micros?: number
+          id?: string
+          input_tokens?: number | null
+          latency_ms?: number | null
+          model?: string
+          model_alias?: string
+          output_tokens?: number | null
+          persona?: string
+          policy_version?: string
+          privacy_policy_version?: string
+          provider?: string
+          reasoning_tokens?: number | null
+          request_id?: string
+          reservation_id?: string
+          status?: string
+          surface?: string
+          task?: string
+          transport?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_usage_events_reservation_fkey"
+            columns: ["reservation_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "ai_budget_reservations"
+            referencedColumns: ["id", "clinic_id"]
+          },
+        ]
+      }
       appointment_services: {
         Row: {
           appointment_id: string
@@ -2698,6 +3136,18 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      activate_ai_provider_connection: {
+        Args: {
+          p_actor_id: string
+          p_clinic_id: string
+          p_connection_id: string
+          p_credential_encrypted: string
+          p_encryption_key_version: number
+          p_masked_fingerprint: string
+          p_provider: string
+        }
+        Returns: string
+      }
       advance_outbound_message_status: {
         Args: {
           p_client_reference: string | null
@@ -2709,6 +3159,10 @@ export type Database = {
           p_status: Database["public"]["Enums"]["outbound_message_status"]
         }
         Returns: boolean
+      }
+      assert_primary_ai_provider_admin: {
+        Args: { p_actor_id: string; p_clinic_id: string }
+        Returns: undefined
       }
       auth_clinic_id: { Args: never; Returns: string }
       auth_department_id: { Args: never; Returns: string }
@@ -2911,6 +3365,56 @@ export type Database = {
         }
         Returns: number
       }
+      log_ai_provider_fallback: {
+        Args: {
+          p_actor_id: string
+          p_clinic_id: string
+          p_error_class: string
+          p_provider: string
+          p_request_id: string
+        }
+        Returns: boolean
+      }
+      operator_ai_usage_report: {
+        Args: {
+          p_clinic_id?: string
+          p_period_from: string
+          p_period_to: string
+        }
+        Returns: {
+          budget_limit_micros: number
+          clinic_id: string
+          clinic_name: string
+          managed_spent_micros: number
+          period_start: string
+          provider_cost_micros: number
+          request_limit: number
+          request_used: number
+          reserved_micros: number
+        }[]
+      }
+      reconcile_ai_budget: {
+        Args: {
+          p_actual_cost_micros: number
+          p_attempts: Json
+          p_error_class: string | null
+          p_lease_token: string
+          p_managed_cost_micros: number
+          p_outcome: string
+          p_reservation_id: string
+        }
+        Returns: boolean
+      }
+      record_ai_provider_connection_test: {
+        Args: {
+          p_actor_id: string
+          p_clinic_id: string
+          p_connection_id: string
+          p_error_code: string | null
+          p_health_status: string
+        }
+        Returns: boolean
+      }
       release_usage: {
         Args: {
           p_amount?: number
@@ -2919,6 +3423,92 @@ export type Database = {
           p_period_start?: string
         }
         Returns: number
+      }
+      reserve_ai_budget: {
+        Args: {
+          p_actor_id: string
+          p_budget_limit_micros: number
+          p_certification_version: string
+          p_clinic_id: string
+          p_credential_mode: string
+          p_expected_model: string
+          p_expected_provider: string
+          p_fallback_model_aliases: string[]
+          p_lease_seconds: number
+          p_lease_token: string
+          p_model_alias: string
+          p_period_start: string
+          p_persona: string
+          p_policy_version: string
+          p_privacy_policy_version: string
+          p_request_id: string
+          p_reserved_cost_micros: number
+          p_surface: string
+          p_task: string
+          p_transport: string
+        }
+        Returns: {
+          acquired: boolean
+          budget_limit_micros: number
+          expires_at: string
+          legacy_limit: number
+          legacy_used: number
+          reservation_id: string
+          reservation_status: string
+          reserved_cost_micros: number
+          returned_lease_token: string
+        }[]
+      }
+      reserve_ai_budget_p45a_limit_v1: {
+        Args: {
+          p_actor_id: string
+          p_budget_limit_micros: number
+          p_certification_version: string
+          p_clinic_id: string
+          p_expected_model: string
+          p_expected_provider: string
+          p_fallback_model_aliases: string[]
+          p_lease_seconds: number
+          p_lease_token: string
+          p_model_alias: string
+          p_period_start: string
+          p_persona: string
+          p_policy_version: string
+          p_privacy_policy_version: string
+          p_request_id: string
+          p_reserved_cost_micros: number
+          p_surface: string
+          p_task: string
+          p_transport: string
+        }
+        Returns: {
+          acquired: boolean
+          budget_limit_micros: number
+          expires_at: string
+          legacy_limit: number
+          legacy_used: number
+          reservation_id: string
+          reservation_status: string
+          reserved_cost_micros: number
+          returned_lease_token: string
+        }[]
+      }
+      revoke_ai_provider_connection: {
+        Args: {
+          p_actor_id: string
+          p_clinic_id: string
+          p_connection_id: string
+        }
+        Returns: boolean
+      }
+      set_ai_provider_policy: {
+        Args: {
+          p_actor_id: string
+          p_clinic_id: string
+          p_credential_mode: string
+          p_hybrid_disclosure_version: string | null
+        }
+        Returns: boolean
       }
       is_platform_admin: { Args: never; Returns: boolean }
       list_daily_reminder_candidates: {

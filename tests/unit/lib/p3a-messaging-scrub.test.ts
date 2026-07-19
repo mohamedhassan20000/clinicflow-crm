@@ -31,6 +31,8 @@ describe("messaging secret scrubbing", () => {
     expect(scrubSensitiveString("key re_1234567890abcdef used")).not.toContain(
       "re_1234567890abcdef",
     );
+    expect(scrubSensitiveString("Anthropic rejected sk-ant-api03_supersecretvalue"))
+      .not.toContain("sk-ant-api03_supersecretvalue");
     expect(scrubSensitiveString(`envelope \\x${"ab".repeat(30)} leaked`)).not.toContain(
       "ab".repeat(30),
     );

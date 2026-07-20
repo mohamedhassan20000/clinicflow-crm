@@ -88,6 +88,14 @@ export function createServerActionMocks() {
       return this;
     }
 
+    upsert(...args: unknown[]) {
+      // Logged as an insert so assertions can read the row and the conflict
+      // target from `queryLog` the same way they read a plain insert.
+      this.operation = "insert";
+      this.log(args);
+      return this;
+    }
+
     update(...args: unknown[]) {
       this.operation = "update";
       this.log(args);
@@ -127,6 +135,11 @@ export function createServerActionMocks() {
 
     gt(...args: unknown[]) {
       this.logFilter("gt", args);
+      return this;
+    }
+
+    lt(...args: unknown[]) {
+      this.logFilter("lt", args);
       return this;
     }
 

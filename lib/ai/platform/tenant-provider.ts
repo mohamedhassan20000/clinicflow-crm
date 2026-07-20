@@ -105,6 +105,14 @@ export function prepareTenantProvider(input: {
   request: AiProviderRequest;
   onFallback: (errorClass: AiProviderFailureClass) => Promise<void>;
 }): PreparedAiProvider {
+  // Fail closed on an empty secret. Otherwise @ai-sdk/anthropic would fall back
+  // to a process-level ANTHROPIC_API_KEY, silently serving a BYOK/hybrid turn
+  // from an ambient key instead of the tenant's resolved credential.
+  if (!input.secret) {
+    const error = new Error("BYOK credential secret is empty.");
+    error.name = "AiProviderConfigurationError";
+    throw error;
+  }
   const anthropic = createAnthropic({ apiKey: input.secret });
   const directModel = anthropic(input.request.route.providerModelId);
   if (input.mode === "byok_strict") {

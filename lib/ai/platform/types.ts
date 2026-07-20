@@ -11,6 +11,8 @@ export type AiProviderOptions = Record<string, Record<string, AiJsonValue | unde
 export type AiTaskClass =
   | "staff_clinical_summary"
   | "staff_administrative"
+  /** P4.6A: typed aggregate/list/report queries for administrative personas. */
+  | "staff_operational_query"
   | "patient_booking"
   | "patient_faq";
 

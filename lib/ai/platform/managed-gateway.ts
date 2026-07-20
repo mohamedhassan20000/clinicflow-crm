@@ -22,9 +22,18 @@ class ManagedGatewayProvider implements AiExecutionProvider {
 
   prepare(request: AiProviderRequest): PreparedAiProvider {
     const user = pseudonymousGatewayUser(request.clinicId, request.actorId);
+    // Certified routes require zero-data-retention. Production ALWAYS enforces it.
+    // A local development environment — where the Gateway account may not yet
+    // have ZDR provisioned — may explicitly opt out via AI_GATEWAY_ZDR=false.
+    // That flag is ignored in production, so it can never weaken deployed
+    // behavior; when Vercel AI Gateway Pro + ZDR is enabled in prod this stays
+    // true untouched.
+    const zeroDataRetention =
+      request.route.privacy.zeroDataRetentionRequired &&
+      !(process.env.NODE_ENV !== "production" && process.env.AI_GATEWAY_ZDR === "false");
     const gatewayOptions = {
       only: [...request.route.allowedServingProviders],
-      zeroDataRetention: request.route.privacy.zeroDataRetentionRequired,
+      zeroDataRetention,
       tags: [
         "product:clinicflow",
         `surface:${request.surface}`,

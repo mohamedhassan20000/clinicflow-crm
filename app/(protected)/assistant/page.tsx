@@ -22,7 +22,7 @@ export default async function AssistantPage() {
   ]);
   const resolution = await resolveStaffAssistantPage(user);
   if (resolution.state === "hidden") redirect("/dashboard");
-  const { access, conversation } = resolution;
+  const { access, conversation, capabilities } = resolution;
 
   const isClinical = user.role === "doctor";
 
@@ -56,6 +56,7 @@ export default async function AssistantPage() {
             historyTruncated={conversation?.historyTruncated ?? false}
             remaining={access.remaining}
             role={user.role}
+            capabilities={capabilities}
           />
         </section>
       ) : (

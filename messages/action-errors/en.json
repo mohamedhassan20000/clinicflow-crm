@@ -1,4 +1,26 @@
 {
+  "ai-permissions": {
+    "planDoesNotIncludeFinancialAi": "The current plan does not include financial AI insights.",
+    "primaryAdminOnly": "Only the clinic’s primary administrator can manage AI permissions.",
+    "staffMemberNotFound": "Staff member not found.",
+    "thisPermissionDoesNotApplyToThatRole": "This permission does not apply to that role.",
+    "unknownPermission": "Unknown permission.",
+    "weCouldNotCompleteThisRequestPleaseTryAgain": "We could not complete this request. Please try again."
+  },
+  "aiProvider": {
+    "couldNotCompleteRequest": "The AI provider request could not be completed. No credential or routing change was saved.",
+    "enterValidCredential": "Enter a valid provider API key.",
+    "tooManyRequests": "Too many provider-management requests. Please wait and try again.",
+    "reauthenticationFailed": "Your current password could not be verified.",
+    "acceptHybridDisclosure": "Accept the managed-fallback disclosure before enabling hybrid mode.",
+    "modeNotIncluded": "This provider mode is not included in the clinic's current AI contract.",
+    "health": {
+      "invalid": "The provider rejected this API key.",
+      "insufficient_scope": "The API key does not have the required model permissions.",
+      "quota": "The provider account has insufficient quota or is rate limited.",
+      "provider_unavailable": "The provider could not be reached. Please try again later."
+    }
+  },
   "appointments": {
     "cannotTransitionStatus": "Cannot transition from {from} to {to}.",
     "clinicClosedOnDay": "The clinic is closed on {day}. Please select a different date.",
@@ -111,6 +133,39 @@
     "pickAnAttachmentToUpload": "Pick an attachment to upload.",
     "storedAttachmentPathIsNotValidForThisNote": "Stored attachment path is not valid for this note.",
     "unsupportedAttachmentFileType": "Unsupported attachment file type."
+  },
+  "messaging": {
+    "whatsAppIsNotIncludedInYourPlan": "WhatsApp messaging is not included in your current plan.",
+    "enterValid360dialogConnectionDetails": "Enter valid 360dialog connection details.",
+    "messagingEnvironmentIsNotConfigured": "Messaging is not configured for this environment.",
+    "couldNotVerify360dialogCredentials": "Could not verify the 360dialog credentials. Check them and try again.",
+    "couldNotSaveWhatsAppConnection": "Could not save the WhatsApp connection.",
+    "invalidTemplateSubmission": "The WhatsApp template submission is invalid.",
+    "whatsAppTemplateOrChannelNotFound": "The WhatsApp template or active channel was not found.",
+    "whatsAppChannelCredentialsUnavailable": "The WhatsApp channel credentials are unavailable.",
+    "couldNotSubmitWhatsAppTemplate": "Could not submit the template to WhatsApp.",
+    "couldNotSaveTemplateSubmission": "The template was submitted, but its provider status could not be saved.",
+    "invalidInboxReply": "Enter a valid reply or complete every template value.",
+    "invalidConversationUpdate": "The conversation update is invalid.",
+    "conversationNotFound": "Conversation not found.",
+    "conversationClosed": "Reopen this conversation before replying.",
+    "serviceWindowClosed": "The 24-hour WhatsApp service window is closed. Choose an approved template.",
+    "templateUnavailable": "This template is unavailable, not approved, or has incomplete values.",
+    "messagingLimitReached": "The clinic's WhatsApp messaging limit has been reached.",
+    "couldNotSendReply": "The reply could not be sent. Please try again.",
+    "inboxOwnerNotFound": "Choose an active administrator or receptionist from this clinic.",
+    "patientNotFound": "Choose an active patient from this clinic.",
+    "couldNotUpdateConversation": "The conversation was updated, but its message history could not be synchronized. Refresh and try again.",
+    "invalidTemplateDetails": "Enter valid template details.",
+    "templateNotFound": "This template could not be found.",
+    "templateIsLocked": "Submitted and approved templates cannot be edited.",
+    "couldNotSaveTemplate": "The template could not be saved. Please try again.",
+    "templateNameAlreadyExists": "A template with this name and language already exists.",
+    "templateCannotBeDeletedWhileSubmitted": "A template cannot be deleted while it is under review.",
+    "couldNotDeleteTemplate": "The template could not be deleted. Please try again."
+  },
+  "notifications": {
+    "couldNotUpdateNotifications": "Notifications could not be updated. Please try again."
   },
   "operator": {
     "aCouponWithThisCodeAlreadyExists": "A coupon with this code already exists.",
@@ -246,36 +301,6 @@
     "unableToSaveDisplayCurrency": "Unable to save display currency.",
     "unsupportedDisplayCurrency": "Unsupported display currency."
   },
-  "messaging": {
-    "whatsAppIsNotIncludedInYourPlan": "WhatsApp messaging is not included in your current plan.",
-    "enterValid360dialogConnectionDetails": "Enter valid 360dialog connection details.",
-    "messagingEnvironmentIsNotConfigured": "Messaging is not configured for this environment.",
-    "couldNotVerify360dialogCredentials": "Could not verify the 360dialog credentials. Check them and try again.",
-    "couldNotSaveWhatsAppConnection": "Could not save the WhatsApp connection.",
-    "invalidTemplateSubmission": "The WhatsApp template submission is invalid.",
-    "whatsAppTemplateOrChannelNotFound": "The WhatsApp template or active channel was not found.",
-    "whatsAppChannelCredentialsUnavailable": "The WhatsApp channel credentials are unavailable.",
-    "couldNotSubmitWhatsAppTemplate": "Could not submit the template to WhatsApp.",
-    "couldNotSaveTemplateSubmission": "The template was submitted, but its provider status could not be saved.",
-    "invalidInboxReply": "Enter a valid reply or complete every template value.",
-    "invalidConversationUpdate": "The conversation update is invalid.",
-    "conversationNotFound": "Conversation not found.",
-    "conversationClosed": "Reopen this conversation before replying.",
-    "serviceWindowClosed": "The 24-hour WhatsApp service window is closed. Choose an approved template.",
-    "templateUnavailable": "This template is unavailable, not approved, or has incomplete values.",
-    "messagingLimitReached": "The clinic's WhatsApp messaging limit has been reached.",
-    "couldNotSendReply": "The reply could not be sent. Please try again.",
-    "inboxOwnerNotFound": "Choose an active administrator or receptionist from this clinic.",
-    "patientNotFound": "Choose an active patient from this clinic.",
-    "couldNotUpdateConversation": "The conversation was updated, but its message history could not be synchronized. Refresh and try again.",
-    "invalidTemplateDetails": "Enter valid template details.",
-    "templateNotFound": "This template could not be found.",
-    "templateIsLocked": "Submitted and approved templates cannot be edited.",
-    "couldNotSaveTemplate": "The template could not be saved. Please try again.",
-    "templateNameAlreadyExists": "A template with this name and language already exists.",
-    "templateCannotBeDeletedWhileSubmitted": "A template cannot be deleted while it is under review.",
-    "couldNotDeleteTemplate": "The template could not be deleted. Please try again."
-  },
   "settings": {
     "invoiceFollowupDaysOutOfRange": "Reminder days must be between 1 and 365.",
     "invoiceFollowupSecondAfterFirst": "The second reminder must be scheduled after the first.",
@@ -316,22 +341,5 @@
     "staffMemberNotFound": "Staff member not found.",
     "unauthorized": "Unauthorized.",
     "weCouldNotCompleteThisRequestPleaseTryAgain": "We could not complete this request. Please try again."
-  },
-  "aiProvider": {
-    "couldNotCompleteRequest": "The AI provider request could not be completed. No credential or routing change was saved.",
-    "enterValidCredential": "Enter a valid provider API key.",
-    "tooManyRequests": "Too many provider-management requests. Please wait and try again.",
-    "reauthenticationFailed": "Your current password could not be verified.",
-    "acceptHybridDisclosure": "Accept the managed-fallback disclosure before enabling hybrid mode.",
-    "modeNotIncluded": "This provider mode is not included in the clinic's current AI contract.",
-    "health": {
-      "invalid": "The provider rejected this API key.",
-      "insufficient_scope": "The API key does not have the required model permissions.",
-      "quota": "The provider account has insufficient quota or is rate limited.",
-      "provider_unavailable": "The provider could not be reached. Please try again later."
-    }
-  },
-  "notifications": {
-    "couldNotUpdateNotifications": "Notifications could not be updated. Please try again."
   }
 }

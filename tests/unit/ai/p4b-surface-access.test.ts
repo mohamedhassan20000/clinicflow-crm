@@ -84,7 +84,7 @@ describe("P4B assistant surface access", () => {
 
   it("turns missing conversation persistence into a localized unavailable state", async () => {
     mocks.conversation.mockRejectedValueOnce(new Error("PGRST205"));
-    await expect(resolveStaffAssistantPage(user)).resolves.toEqual({
+    await expect(resolveStaffAssistantPage(user)).resolves.toMatchObject({
       state: "render",
       access: { state: "temporarily_unavailable" },
       conversation: null,

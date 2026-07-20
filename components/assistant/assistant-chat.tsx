@@ -7,22 +7,34 @@ import {
   isToolUIPart,
 } from "ai";
 import {
+  ArrowUpRight,
   Bot,
   CircleStop,
   FileSearch,
+  HelpCircle,
   LoaderCircle,
   Plus,
   Send,
   ShieldCheck,
   Sparkles,
+  TriangleAlert,
   UserRound,
+  Wallet,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import type { StaffAssistantUIMessage } from "@/lib/ai/staff-agent";
+import type { AssistantCapabilities } from "@/lib/ai/capabilities";
+import type { AssistantErrorCode } from "@/lib/ai/errors";
+import {
+  presentationFor,
+  summarizeToolResult,
+  type AssistantResultNotice,
+} from "@/lib/ai/tool-presentation";
 import type { PermissionUserRole } from "@/lib/page-permissions";
 
 type AssistantChatProps = {
@@ -33,6 +45,13 @@ type AssistantChatProps = {
   historyTruncated?: boolean;
   mode?: "page" | "sheet";
   role: PermissionUserRole;
+  /**
+   * Server-resolved tool mount (P4.6B). Display only: it decides which
+   * suggestions and notices are offered, never what the assistant may do. Null
+   * on surfaces that do not resolve it (the doctor patient sheet), which falls
+   * back to the role-based suggestions.
+   */
+  capabilities?: AssistantCapabilities | null;
 };
 
 type SessionState = {
@@ -51,48 +70,200 @@ function createConversationId() {
   return crypto.randomUUID();
 }
 
-function toolLabel(
-  name: string,
+/**
+ * Maps a server error code to its localized copy.
+ *
+ * The codes are the route's own `ErrorCode` union, and they arrive over three
+ * transports, not two — the correction review #2's H2 made. A pre-stream denial
+ * comes back as a JSON body; a stream-level failure comes back as an `error`
+ * chunk that sets `useChat`'s `error`; and a tool that throws mid-turn comes
+ * back as a `tool-output-error` **part**, which never touches `useChat`'s
+ * `error` and is classified by `ToolActivity` instead. All three are keyed off
+ * this one table so the three cannot describe the same denial differently.
+ *
+ * Typing the table by that union rather than comparing loose strings in a
+ * ternary chain is the point: a renamed or newly added reason is a compile
+ * error here instead of a silent fall-through to "something went wrong", which
+ * is exactly how `permission_not_granted` became unreachable in the first
+ * place.
+ */
+const ERROR_COPY_KEYS: Record<AssistantErrorCode, string> = {
+  usage_limit_reached: "errorCapReached",
+  feature_not_entitled: "errorUpgrade",
+  // Deliberately distinct from feature_not_entitled so the UI can say "ask your
+  // admin" rather than "upgrade your plan" — different problem, different
+  // person to go to.
+  permission_not_granted: "errorPermissionNotGranted",
+  rate_limited: "errorRateLimited",
+  subscription_inactive: "errorSubscriptionInactive",
+  // These four used to share `errorGeneric` ("try again"), which was harmless
+  // while they could only arrive before the stream — the pre-stream cases are
+  // mostly wiring bugs a user cannot act on. They now also arrive as *tool*
+  // denials mid-turn (review #2, M3), where each is a distinct, actionable
+  // state and "try again" is actively wrong for three of them.
+  unauthenticated: "errorUnauthenticated",
+  role_forbidden: "errorRoleForbidden",
+  page_hidden: "errorPageHidden",
+  lookup_failed: "errorLookupFailed",
+  invalid_request: "errorGeneric",
+  temporarily_unavailable: "errorGeneric",
+};
+
+function errorCopyKey(message: string): string {
+  return ERROR_COPY_KEYS[message as AssistantErrorCode] ?? "errorGeneric";
+}
+
+/**
+ * Whether a tool part's `errorText` is one of our codes rather than free text.
+ *
+ * The route's `onError` returns only `AssistantErrorCode` values, but this runs
+ * on stream input and an SDK-internal error (an aborted fetch, a malformed
+ * chunk) can produce arbitrary text. Rendering an unrecognized string would put
+ * an untranslated internal message in front of the user, so anything unknown
+ * falls back to the generic sentence.
+ */
+function isAssistantErrorCode(value: unknown): value is AssistantErrorCode {
+  return typeof value === "string" && value in ERROR_COPY_KEYS;
+}
+
+function noticeText(
+  notice: AssistantResultNotice,
   t: ReturnType<typeof useTranslations<"assistant">>,
-) {
-  switch (name) {
-    case "get_patient_summary":
-      return t("toolPatientSummary");
-    case "search_authorized_patients":
-      return t("toolPatientLookup");
-    case "search_patient_visits":
-      return t("toolVisitSearch");
-    case "list_doctor_appointments":
-      return t("toolAppointments");
-    case "check_availability":
-      return t("toolAvailability");
-    default:
-      return t("toolRecordReview");
+): string {
+  switch (notice.kind) {
+    case "range_clamped":
+      return t("noticeRangeClamped", { from: notice.from, to: notice.to });
+    case "truncated":
+      return t("noticeTruncated", { count: notice.rowCap });
+    case "suppressed":
+      // One fact, stated exactly: N groups were combined into "Other", covering
+      // M patients. No claim is made about any individual group, because the
+      // payload no longer contains one — which is what review #3's H1 fix
+      // replaced the old two-sentence below-floor/complementary split with.
+      return t("noticeSuppressed", {
+        count: notice.groupedBuckets,
+        patients: notice.groupedPatients,
+        floor: notice.floor,
+      });
+    case "distribution_withheld":
+      return t("noticeDistributionWithheld");
+    case "all_time_scope":
+      return t("noticeAllTimeScope");
+    case "needs_clarification":
+      return t("noticeNeedsClarification");
+    case "permission_denied":
+      // Same table the two error transports use, so a denial reads identically
+      // whether it arrived before the stream, as a stream error, or as a
+      // structured tool result.
+      return t(errorCopyKey(notice.reason));
+    case "text_truncated":
+      return t("noticeTextTruncated", { count: notice.fields });
   }
 }
 
-function ToolActivity({
-  part,
-}: {
-  part: StaffAssistantToolPart;
-}) {
+/**
+ * One tool call, rendered with its group and the caveats its result carries.
+ *
+ * Financial results are visually distinct from operational ones on purpose:
+ * they are the group behind the entitlement plus the per-user grant, and a
+ * revenue figure should not read like an appointment count.
+ *
+ * The notices are rendered from the structured result rather than trusting the
+ * model to have relayed them. `truncated`, `clamped`, and the suppression
+ * fields exist so an answer stays honest about what it did *not* see; a model
+ * that summarizes loosely would silently drop exactly those caveats.
+ */
+function ToolActivity({ part }: { part: StaffAssistantToolPart }) {
   const t = useTranslations("assistant");
   const complete = part.state === "output-available";
   const failed = part.state === "output-error";
   const name = part.type === "dynamic-tool" ? part.toolName : part.type.slice(5);
+  const { labelKey, group } = presentationFor(name);
+  const isFinancial = group === "financial";
+  const { notices, link } = complete
+    ? summarizeToolResult((part as { output?: unknown }).output)
+    : { notices: [], link: null };
+
+  // H2 (review #2). A tool that throws mid-stream arrives here and *only* here:
+  // the SDK converts it to a `tool-output-error` part, so `useChat`'s `error`
+  // stays undefined and the page-level error banner never renders. This branch
+  // used to show a bare "could not complete" chip and discard `errorText`
+  // entirely — including the reason code the route had gone to the trouble of
+  // emitting — so a revoked grant, a hidden page, or a lapsed subscription all
+  // looked like the same anonymous glitch.
+  const errorText = failed ? (part as { errorText?: unknown }).errorText : undefined;
+  const failureCopy = failed
+    ? t(isAssistantErrorCode(errorText) ? errorCopyKey(errorText) : "errorGeneric")
+    : null;
+
   return (
-    <div className="my-2 flex items-center gap-2 rounded-xl border border-border/60 bg-muted/35 px-3 py-2 text-xs text-muted-foreground">
-      {complete ? (
-        <ShieldCheck className="size-3.5 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
-      ) : failed ? (
-        <FileSearch className="size-3.5 text-destructive" aria-hidden="true" />
-      ) : (
-        <LoaderCircle className="size-3.5 animate-spin text-primary" aria-hidden="true" />
+    <div
+      className={cn(
+        "my-2 rounded-xl border px-3 py-2 text-xs",
+        isFinancial
+          ? "border-amber-500/30 bg-amber-500/8 text-amber-900 dark:text-amber-200"
+          : "border-border/60 bg-muted/35 text-muted-foreground",
       )}
-      <span className="font-medium text-foreground/80">{toolLabel(name, t)}</span>
-      <span className="ms-auto">
-        {complete ? t("toolComplete") : failed ? t("toolFailed") : t("toolWorking")}
-      </span>
+    >
+      <div className="flex items-center gap-2">
+        {complete ? (
+          isFinancial ? (
+            <Wallet className="size-3.5" aria-hidden="true" />
+          ) : (
+            <ShieldCheck
+              className="size-3.5 text-emerald-600 dark:text-emerald-400"
+              aria-hidden="true"
+            />
+          )
+        ) : failed ? (
+          <FileSearch className="size-3.5 text-destructive" aria-hidden="true" />
+        ) : (
+          <LoaderCircle className="size-3.5 animate-spin text-primary" aria-hidden="true" />
+        )}
+        <span className={cn("font-medium", !isFinancial && "text-foreground/80")}>
+          {t(labelKey)}
+        </span>
+        {isFinancial ? (
+          <span className="rounded-full border border-amber-500/30 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide">
+            {t("groupFinancial")}
+          </span>
+        ) : null}
+        <span className="ms-auto">
+          {complete ? t("toolComplete") : failed ? t("toolFailed") : t("toolWorking")}
+        </span>
+      </div>
+
+      {failureCopy ? (
+        <p className="mt-2 flex items-start gap-1.5 border-t border-current/15 pt-2">
+          <TriangleAlert className="mt-0.5 size-3 shrink-0" aria-hidden="true" />
+          <span>{failureCopy}</span>
+        </p>
+      ) : null}
+
+      {notices.length > 0 ? (
+        <ul className="mt-2 space-y-1 border-t border-current/15 pt-2">
+          {notices.map((notice) => (
+            <li key={notice.kind} className="flex items-start gap-1.5">
+              {notice.kind === "needs_clarification" ? (
+                <HelpCircle className="mt-0.5 size-3 shrink-0" aria-hidden="true" />
+              ) : (
+                <TriangleAlert className="mt-0.5 size-3 shrink-0" aria-hidden="true" />
+              )}
+              <span>{noticeText(notice, t)}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      {link ? (
+        <Link
+          href={link}
+          className="mt-2 inline-flex items-center gap-1 font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
+          {t("openFullReport")}
+          <ArrowUpRight className="size-3 rtl:-scale-x-100" aria-hidden="true" />
+        </Link>
+      ) : null}
     </div>
   );
 }
@@ -141,12 +312,94 @@ function MessageBubble({ message }: { message: StaffAssistantUIMessage }) {
   );
 }
 
+/**
+ * Suggestion chips, built from the server-resolved mount rather than from role
+ * alone (P4.6B). A chip that opens a capability the user does not have is worse
+ * than no chip: it produces a denial the user cannot act on. Because the source
+ * is `resolveToolMount` — the same resolution the model gets — a chip can only
+ * appear when the tool behind it is genuinely mounted.
+ */
+function suggestionsFor({
+  t,
+  patient,
+  role,
+  capabilities,
+}: {
+  t: ReturnType<typeof useTranslations<"assistant">>;
+  patient: AssistantChatProps["patient"];
+  role: PermissionUserRole;
+  capabilities: AssistantCapabilities | null;
+}): string[] {
+  if (patient) {
+    return [t("suggestSummary"), t("suggestRecentVisits"), t("suggestFollowups")];
+  }
+  if (role === "doctor") {
+    return [t("suggestPatientLookup"), t("suggestSchedule"), t("suggestAvailability")];
+  }
+
+  if (!capabilities) {
+    return [
+      t("suggestPatientLookup"),
+      t("suggestAvailabilityStaff"),
+      t("suggestHowToUseStaff"),
+    ];
+  }
+
+  const mounted = new Set(capabilities.toolNames);
+  const suggestions: string[] = [];
+  if (mounted.has("get_clinic_summary")) suggestions.push(t("suggestClinicSummary"));
+  if (mounted.has("list_appointments")) suggestions.push(t("suggestTodaysAppointments"));
+  if (mounted.has("count_new_patients")) suggestions.push(t("suggestNewPatients"));
+  if (mounted.has("get_appointment_stats")) suggestions.push(t("suggestNoShowRate"));
+  if (mounted.has("list_pending_followups")) suggestions.push(t("suggestPendingFollowups"));
+  if (capabilities.financial === "available") {
+    suggestions.push(t("suggestRevenue"), t("suggestOutstanding"));
+  }
+  if (mounted.has("run_clinic_report")) suggestions.push(t("suggestRunReport"));
+  suggestions.push(t("suggestPatientLookup"), t("suggestAvailabilityStaff"));
+
+  return suggestions.slice(0, 6);
+}
+
+/**
+ * The two reasons a manager has no financial tools, told apart.
+ *
+ * "Your plan does not include this" and "your admin has not enabled this for
+ * you" need different actions from different people, so collapsing them into
+ * one message reliably sends the user to the wrong place. Receptionists and
+ * doctors see nothing at all — the financial group does not exist for them, and
+ * advertising a capability they can never be granted would be a worse lie than
+ * silence.
+ */
+function FinancialNotice({
+  state,
+}: {
+  state: AssistantCapabilities["financial"];
+}) {
+  const t = useTranslations("assistant");
+  if (state === "available" || state === "not_applicable") return null;
+
+  return (
+    <p className="flex items-start gap-2 rounded-xl border border-border/70 bg-muted/40 px-3 py-2 text-xs leading-5 text-muted-foreground">
+      <Wallet className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+      <span>
+        {state === "not_entitled"
+          ? t("financialNotEntitled")
+          : state === "unavailable"
+            ? t("financialUnavailable")
+            : t("financialNotGranted")}
+      </span>
+    </p>
+  );
+}
+
 function ChatSession({
   session,
   patient,
   remaining,
   mode,
   role,
+  capabilities,
   onNewConversation,
 }: {
   session: SessionState;
@@ -154,6 +407,7 @@ function ChatSession({
   remaining: number;
   mode: NonNullable<AssistantChatProps["mode"]>;
   role: PermissionUserRole;
+  capabilities: AssistantCapabilities | null;
   onNewConversation: () => void;
 }) {
   const t = useTranslations("assistant");
@@ -218,15 +472,7 @@ function ChatSession({
     });
   }, [messages, status]);
 
-  const errorCopy = error
-    ? error.message === "usage_limit_reached"
-      ? t("errorCapReached")
-      : error.message === "feature_not_entitled"
-        ? t("errorUpgrade")
-        : error.message === "rate_limited"
-          ? t("errorRateLimited")
-          : t("errorGeneric")
-    : null;
+  const errorCopy = error ? t(errorCopyKey(error.message)) : null;
 
   function submitMessage() {
     const text = input.trim();
@@ -236,11 +482,7 @@ function ChatSession({
     void sendMessage({ text });
   }
 
-  const suggestions = patient
-    ? [t("suggestSummary"), t("suggestRecentVisits"), t("suggestFollowups")]
-    : role === "doctor"
-      ? [t("suggestPatientLookup"), t("suggestSchedule"), t("suggestAvailability")]
-      : [t("suggestPatientLookup"), t("suggestAvailabilityStaff"), t("suggestHowToUseStaff")];
+  const suggestions = suggestionsFor({ t, patient, role, capabilities });
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -292,7 +534,7 @@ function ChatSession({
                   ? t("emptyDescription")
                   : t("administrativeEmptyDescription")}
             </p>
-            <div className="mt-6 grid w-full gap-2 sm:grid-cols-3">
+            <div className="mt-6 grid w-full gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {suggestions.map((suggestion) => (
                 <button
                   key={suggestion}
@@ -304,6 +546,11 @@ function ChatSession({
                 </button>
               ))}
             </div>
+            {capabilities && !patient ? (
+              <div className="mt-4 w-full text-start">
+                <FinancialNotice state={capabilities.financial} />
+              </div>
+            ) : null}
           </div>
         ) : (
           <div className="mx-auto max-w-3xl space-y-5">
@@ -383,6 +630,7 @@ export function AssistantChat({
   historyTruncated = false,
   mode = "page",
   role,
+  capabilities = null,
 }: AssistantChatProps) {
   const [session, setSession] = useState<SessionState>({
     id: initialConversationId,
@@ -398,6 +646,7 @@ export function AssistantChat({
       remaining={remaining}
       mode={mode}
       role={role}
+      capabilities={capabilities}
       onNewConversation={() => setSession({
         id: createConversationId(),
         messages: [],

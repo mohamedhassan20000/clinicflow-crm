@@ -28,12 +28,35 @@ vi.mock("@sentry/nextjs", () => ({ captureException: mocks.captureException }));
 vi.mock("next-intl/server", () => ({ getLocale: async () => "en" }));
 vi.mock("@/lib/ai/authorization", () => ({
   authorizeStaffAssistant: mocks.authorize,
+  AI_STAFF_ANALYTICS_FEATURE: "ai.staff_analytics",
+}));
+// P4.6A: the route reads entitlements to pick the certified task class.
+vi.mock("@/lib/entitlements", () => ({
+  getEntitlements: async () => ({
+    clinicId: "clinic-1",
+    planSlug: "pro_ai",
+    features: { ai_assistant: true, "ai.staff_analytics": true },
+    limits: {},
+    subscriptionAllowed: true,
+  }),
+  hasFeature: (
+    ents: { subscriptionAllowed: boolean; features: Record<string, boolean> },
+    key: string,
+  ) => ents.subscriptionAllowed && ents.features[key] === true,
 }));
 vi.mock("@/lib/ai/client", () => ({
   createAiRequestId: () => "00000000-0000-4000-8000-000000000099",
-  staffTaskForRole: (role: string) => role === "doctor"
+  staffTaskForRole: (
+    role: string,
+    options: { analyticsEntitled?: boolean } = {},
+  ) => role === "doctor"
     ? { task: "staff_clinical_summary", persona: "doctor" }
-    : { task: "staff_administrative", persona: "administrative_staff" },
+    : {
+        task: options.analyticsEntitled
+          ? "staff_operational_query"
+          : "staff_administrative",
+        persona: "administrative_staff",
+      },
   prepareAiExecution: mocks.prepareExecution,
 }));
 vi.mock("@/lib/rate-limit", () => ({ checkRateLimit: mocks.rateLimit }));
@@ -46,7 +69,7 @@ vi.mock("@/lib/ai/conversations", async (importOriginal) => {
   };
 });
 vi.mock("@/lib/ai/staff-agent", () => ({
-  createStaffAgent: () => ({ stream: mocks.stream }),
+  createStaffAgent: async () => ({ stream: mocks.stream }),
 }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
@@ -253,6 +276,103 @@ describe("P4B staff assistant streaming route", () => {
       modelError,
       expect.objectContaining({ tags: { area: "staff-assistant-stream" } }),
     );
+  });
+
+  /**
+   * P4.6 phase review H1. A tool that denies mid-stream reaches onError, not the
+   * route's pre-stream authorization mapping. onError previously discarded the
+   * reason and returned a fixed "could not be completed, please try again",
+   * which the client could not classify — so a permanent, admin-actionable
+   * denial rendered as a generic transient error the user would retry forever.
+   */
+  it("emits the reason code, not a generic sentence, for a mid-stream denial", async () => {
+    let emitted: unknown;
+    mocks.stream.mockResolvedValueOnce({
+      toUIMessageStreamResponse: vi.fn((options) => {
+        emitted = options.onError(
+          new AiToolAuthorizationError("permission_not_granted"),
+        );
+        return new Response("stream", { status: 200 });
+      }),
+    });
+
+    expect((await POST(request(validBody()))).status).toBe(200);
+    expect(emitted).toBe("permission_not_granted");
+  });
+
+  /**
+   * `onError` is a string-only channel that feeds two different consumers (the
+   * `error` chunk and a tool part's `errorText`), and neither can classify a
+   * sentence. It returns codes exclusively as of review #2's H2 — the client
+   * owns the wording, in the user's locale, for both.
+   */
+  it("returns a classifiable code, not a sentence, for a genuine stream failure", async () => {
+    let emitted: unknown;
+    mocks.stream.mockResolvedValueOnce({
+      toUIMessageStreamResponse: vi.fn((options) => {
+        emitted = options.onError(new Error("provider exploded"));
+        return new Response("stream", { status: 200 });
+      }),
+    });
+
+    expect((await POST(request(validBody()))).status).toBe(200);
+    expect(emitted).toBe("temporarily_unavailable");
+  });
+
+  /**
+   * M2 (review #2). `onError` fires for every tool-error part, not only for a
+   * fatal stream error, and the route used to take the failure branch on it —
+   * discarding a turn the user watched complete and billing it as `failed`.
+   *
+   * The transport claim underneath this (a tool throw produces a tool-error
+   * part while the stream finishes normally) is proven against the real SDK in
+   * `tests/unit/ai/p46-tool-error-transport.test.ts`; this asserts what the
+   * route then does with it.
+   */
+  it("persists the turn when the model recovered from a tool error", async () => {
+    const toolError = new Error("tool failed");
+    mocks.stream.mockResolvedValueOnce({
+      toUIMessageStreamResponse: vi.fn((options) => {
+        options.onError(toolError);
+        void options.onFinish({
+          messages: [],
+          isContinuation: false,
+          isAborted: false,
+          responseMessage: {
+            id: "assistant-recovered",
+            role: "assistant",
+            parts: [
+              {
+                type: "tool-get_patient_summary",
+                toolCallId: "tool-1",
+                state: "output-error",
+                input: { patient_id: patientId },
+                errorText: "temporarily_unavailable",
+              },
+              { type: "text", text: "I could not read that, but here is what I can tell you." },
+            ],
+          },
+          finishReason: "stop",
+        });
+        return new Response("stream", { status: 200 });
+      }),
+    });
+
+    expect((await POST(request(validBody()))).status).toBe(200);
+    await vi.waitFor(() => {
+      expect(mocks.persistTurn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          assistantText: "I could not read that, but here is what I can tell you.",
+        }),
+      );
+    });
+    // Billed as the success it was, but the ledger still records that something
+    // was raised — the signal `streamFailed` used to carry, without letting it
+    // decide the outcome.
+    expect(mocks.finalizeExecution).toHaveBeenCalledWith({
+      outcome: "success",
+      errorClass: "recovered_tool_error",
+    });
   });
 
   it("releases the reservation and persists nothing on a tool error", async () => {

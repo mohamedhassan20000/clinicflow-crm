@@ -90,7 +90,10 @@ describe("P4B assistant UI", () => {
 
       expect(screen.getByRole("heading", { name: "How can I help with clinic operations?" })).toBeVisible();
       expect(screen.getByRole("textbox", { name: "Message the clinic assistant" })).toBeVisible();
-      expect(screen.getByText(/Clinical records are not available/)).toBeVisible();
+      // The disclosure that this persona is non-clinical survived P4.6B's
+      // rewrite of the administrative empty state; only its wording changed,
+      // because the persona now also covers analytics and reports.
+      expect(screen.getByText(/Individual clinical records stay with doctors/)).toBeVisible();
       expect(screen.queryByText("Summarize this patient's clinical history")).not.toBeInTheDocument();
     },
   );

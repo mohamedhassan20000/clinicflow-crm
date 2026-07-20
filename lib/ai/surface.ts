@@ -2,6 +2,10 @@ import "server-only";
 
 import * as Sentry from "@sentry/nextjs";
 import { AI_ASSISTANT_FEATURE } from "@/lib/ai/authorization";
+import {
+  resolveAssistantCapabilities,
+  type AssistantCapabilities,
+} from "@/lib/ai/capabilities";
 import { checkAiTurn } from "@/lib/ai/usage";
 import {
   loadLatestDoctorConversation,
@@ -64,6 +68,7 @@ export type StaffAssistantPageResolution =
       state: "render";
       access: StaffAssistantSurfaceAccess;
       conversation: LoadedDoctorConversation | null;
+      capabilities: AssistantCapabilities | null;
     };
 
 export async function resolveStaffAssistantPage(
@@ -76,19 +81,31 @@ export async function resolveStaffAssistantPage(
       state: "render",
       access: { state: "temporarily_unavailable" },
       conversation: null,
+      capabilities: null,
     };
   }
 
   let access = await getStaffAssistantSurfaceAccess(user);
   if (access.state !== "available") {
-    return { state: "render", access, conversation: null };
+    return { state: "render", access, conversation: null, capabilities: null };
   }
 
-  const loaded = await loadAssistantConversationForSurface({ user });
+  // P4.6B: resolved only once the surface is actually usable. Capabilities
+  // describe the tool mount; there is nothing to describe on a gated surface,
+  // and the access gate is the right place to explain a gated one.
+  const [loaded, capabilities] = await Promise.all([
+    loadAssistantConversationForSurface({ user }),
+    resolveAssistantCapabilities(user),
+  ]);
   if (!loaded.persistenceAvailable) {
     access = { state: "temporarily_unavailable" };
   }
-  return { state: "render", access, conversation: loaded.conversation };
+  return {
+    state: "render",
+    access,
+    conversation: loaded.conversation,
+    capabilities,
+  };
 }
 
 export async function resolvePatientAssistantLauncher(input: {

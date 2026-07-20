@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createServerActionMocks } from "../helpers/server-action-mocks";
 
 // P4A doctor-tool authorization + behavior suite (the most important suite,
@@ -74,9 +74,22 @@ async function loadTools(
     user: user as never,
     locale: "en",
   } as const;
-  const tools = buildDoctorTools(context);
-  const staffTools = buildStaffTools(context);
-  return { tools, staffTools, mocks, logAgentToolCall };
+  const tools = await buildDoctorTools(context);
+  const staffTools = await buildStaffTools(context);
+
+  // P4.6A: the registry no longer mounts a tool the caller may not use, which
+  // is the primary defense. These tests exercise the *second* line — each
+  // tool's own re-check inside execute() — so they build the tool directly,
+  // bypassing registration exactly as a future mis-wiring would.
+  const [{ getPatientSummaryTool }, { searchPatientVisitsTool }] = await Promise.all([
+    import("@/lib/ai/tools/get-patient-summary"),
+    import("@/lib/ai/tools/search-patient-visits"),
+  ]);
+  const unmountedTools = {
+    get_patient_summary: getPatientSummaryTool(context),
+    search_patient_visits: searchPatientVisitsTool(context),
+  };
+  return { tools, staffTools, unmountedTools, mocks, logAgentToolCall };
 }
 
 // The AI SDK tool.execute takes (input, options). Options are unused by our
@@ -103,16 +116,18 @@ describe("role-specific Assistant tool registration", () => {
     }
   });
 
-  it("returns non-clinical lookup fields to receptionist/manager/admin personas", async () => {
+  it("returns ranked non-clinical lookup fields to receptionist/manager/admin personas", async () => {
     for (const role of ["admin", "manager", "receptionist"] as const) {
       const { staffTools, mocks } = await loadTools({ ...DOCTOR, role });
-      mocks.state.tableResults.patients = {
+      mocks.state.rpcResults.search_patients_ranked = {
         data: [{
           id: PATIENT_ID,
           full_name: "Jane Roe",
           file_number: "CF-100",
           phone: "+96550000001",
           email: "jane@example.com",
+          score: 0.92,
+          match_kind: "name_fuzzy",
         }],
         error: null,
       };
@@ -121,15 +136,22 @@ describe("role-specific Assistant tool registration", () => {
         { query: "Jane" },
         opts,
       );
-      expect(result).toEqual({
+      expect(result).toMatchObject({
+        confidence: "high",
         patients: [{
           id: PATIENT_ID,
           full_name: "Jane Roe",
           file_number: "CF-100",
           phone: "+96550000001",
           email: "jane@example.com",
+          score: 0.92,
+          match_kind: "name_fuzzy",
         }],
       });
+      expect(mocks.state.rpc).toHaveBeenCalledWith(
+        "search_patients_ranked",
+        expect.objectContaining({ p_query: "Jane", p_limit: 10 }),
+      );
       expect(mocks.state.queryLog.some((entry) => entry.table === "medical_notes")).toBe(false);
     }
   });
@@ -208,7 +230,7 @@ describe("P4A get_patient_summary", () => {
   });
 
   it("refuses a non-doctor role before any data access", async () => {
-    const { tools, mocks, logAgentToolCall } = await loadTools({ ...DOCTOR, role: "receptionist" });
+    const { unmountedTools: tools, mocks, logAgentToolCall } = await loadTools({ ...DOCTOR, role: "receptionist" });
     await expect(
       tools.get_patient_summary.execute!({ patient_id: PATIENT_ID }, opts),
     ).rejects.toMatchObject({ code: "AI_TOOL_FORBIDDEN", reason: "role_forbidden" });
@@ -217,14 +239,14 @@ describe("P4A get_patient_summary", () => {
   });
 
   it("refuses the manager role too", async () => {
-    const { tools } = await loadTools({ ...DOCTOR, role: "manager" });
+    const { unmountedTools: tools } = await loadTools({ ...DOCTOR, role: "manager" });
     await expect(
       tools.get_patient_summary.execute!({ patient_id: PATIENT_ID }, opts),
     ).rejects.toMatchObject({ reason: "role_forbidden" });
   });
 
   it("re-asserts the AI entitlement before creating an RLS data client", async () => {
-    const { tools, mocks, logAgentToolCall } = await loadTools(DOCTOR, {
+    const { unmountedTools: tools, mocks, logAgentToolCall } = await loadTools(DOCTOR, {
       aiFeature: false,
     });
     await expect(
@@ -319,6 +341,19 @@ describe("P4A list_doctor_appointments", () => {
 });
 
 describe("P4A check_availability", () => {
+  // The clock is frozen because check_availability drops slots that have
+  // already elapsed *today*. With a real clock this test asked for 09:00–09:45
+  // on the current date and passed only when the suite happened to run before
+  // 09:00 local — it began failing every morning thereafter, for a reason that
+  // has nothing to do with the behavior under test.
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-20T03:00:00.000Z")); // 06:00 Asia/Kuwait
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("returns only free slots from the shared booking core", async () => {
     const { tools, mocks } = await loadTools();
     mocks.state.tableResults["clinics"] = { data: { timezone: "Asia/Kuwait" }, error: null };

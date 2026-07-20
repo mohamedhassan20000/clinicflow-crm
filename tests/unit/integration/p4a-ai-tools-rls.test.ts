@@ -158,9 +158,15 @@ async function buildLiveTools(dbClient: Client, user: {
     },
     locale: "en",
   } as const;
+  // P4.6A: an unauthorized tool is no longer mounted at all. `unmounted` builds
+  // clinical tools directly so tests can still prove the second line of defense
+  // — each tool's own role re-check inside execute() — holds against a future
+  // registry mis-wiring.
+  const { getPatientSummaryTool } = await import("@/lib/ai/tools/get-patient-summary");
   return {
-    clinical: buildDoctorTools(context),
-    staff: buildStaffTools(context),
+    clinical: await buildDoctorTools(context),
+    staff: await buildStaffTools(context),
+    unmounted: { get_patient_summary: getPatientSummaryTool(context) },
   };
 }
 
@@ -345,7 +351,11 @@ describe("P4A doctor tools through live clinical RLS", () => {
       { patient_id: patientDepartmentB, query: "confidential" },
       toolOptions,
     );
-    expect(visits).toEqual({ found: false, notes: [], appointments: [] });
+    // toMatchObject rather than toEqual: every tool result now also carries the
+    // untrusted-text provenance marker added at the mount boundary (P4.6A). The
+    // property under test is that no clinical row crossed the boundary, which
+    // the explicit emptiness assertions below still pin down exactly.
+    expect(visits).toMatchObject({ found: false, notes: [], appointments: [] });
   });
 
   it("returns the same patient's real clinical summary to the matching department doctor", async () => {
@@ -392,14 +402,14 @@ describe("P4A doctor tools through live clinical RLS", () => {
         { patient_id: patientClinicB, query: "confidential" },
         toolOptions,
       ),
-    ).resolves.toEqual({ found: false, notes: [], appointments: [] });
+    ).resolves.toMatchObject({ found: false, notes: [], appointments: [] });
   });
 
   it.each([
     ["receptionist", () => receptionistA],
     ["manager", () => managerA],
   ] as const)("rejects the %s persona at the tool boundary", async (role, getClient) => {
-    const { clinical: tools } = await buildLiveTools(getClient(), {
+    const { unmounted: tools } = await buildLiveTools(getClient(), {
       id: role === "receptionist" ? receptionistAId : managerAId,
       clinicId: clinicA,
       role,
@@ -430,15 +440,26 @@ describe("P4A doctor tools through live clinical RLS", () => {
       patientDepartmentA,
       patientDepartmentB,
     ].sort());
+    // Two candidates means the user must choose, so contact details are
+    // withheld from the list (P4.6 phase review M5): identity is what
+    // disambiguates, and the full set would put every near-miss patient's
+    // phone and email into model context — and, under the managed gateway, in
+    // front of a third-party inference provider.
     expect(result.patients[0]).toEqual({
       id: expect.any(String),
       full_name: expect.any(String),
       file_number: expect.any(String),
-      phone: expect.any(String),
-      email: expect.any(String),
+      phone: expect.stringMatching(/^••••\d{4}$/),
+      email: null,
+      score: expect.any(Number),
+      match_kind: expect.any(String),
     });
     expect(result.patients.every((patient) => !("date_of_birth" in patient))).toBe(true);
     expect(result.patients.every((patient) => !("national_id" in patient))).toBe(true);
+
+    // The identifying fields a user actually disambiguates on are untouched.
+    expect(result.patients.every((patient) => patient.full_name.length > 0)).toBe(true);
+    expect(result.patients.every((patient) => patient.file_number !== null)).toBe(true);
   });
 
   it("keeps doctor patient lookup inside assignment/department RLS", async () => {

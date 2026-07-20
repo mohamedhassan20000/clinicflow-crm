@@ -1,5 +1,13 @@
+allowBuilds:
+  "@parcel/watcher": true
+  "@sentry/cli": true
+  "@swc/core": true
+  esbuild: true
+  msw: true
+  sharp: true
+  unrs-resolver: true
 ignoredBuiltDependencies:
-  - '@parcel/watcher'
-  - '@swc/core'
+  - "@parcel/watcher"
+  - "@swc/core"
   - sharp
   - unrs-resolver

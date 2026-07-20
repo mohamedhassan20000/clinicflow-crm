@@ -4,6 +4,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
 import type { AuthedUser } from "@/lib/rbac";
 import type { PromptLocale } from "@/lib/ai/prompts/doctor";
+import type { AiTaskClass } from "@/lib/ai/platform/types";
+import type { AiUserPermissionKey } from "@/lib/ai/permissions";
 import type { Database } from "@/types/database";
 
 /**
@@ -20,6 +22,29 @@ export type DoctorToolContext = {
    * takes an explicit patient_id and RLS still scopes every read.
    */
   patientId?: string | null;
+  /**
+   * The certified task class this turn is running under (P4.6A). The registry
+   * filters the mount by it, so a tool is only reachable in the kinds of turn
+   * it was declared for. Optional so non-route callers (tests, future surfaces)
+   * can omit it; omission means "do not filter by task class".
+   */
+  taskClass?: AiTaskClass | null;
+  /**
+   * Per-user AI permissions resolved once at mount time (P4.6 phase review H1).
+   *
+   * This exists for tools whose *description* depends on a grant they do not
+   * themselves require to mount. `run_clinic_report` is the only such tool: it
+   * mounts for any administrative role because most of its reports are
+   * non-financial, but its description enumerates the reports the user may run
+   * — and enumerating `revenue` to a manager without the financial grant put a
+   * promise into the model's context that `execute()` would then refuse.
+   *
+   * **Presentation only.** Never an authorization decision: every financial
+   * path still calls `assertFinancialInsightsAccess`, which re-reads the grant
+   * from the database on every invocation. A stale or absent set here can only
+   * make the assistant offer less than it could, never more.
+   */
+  grantedPermissions?: ReadonlySet<AiUserPermissionKey>;
 };
 
 /** ISO calendar date, e.g. "2026-07-18". */

@@ -15,10 +15,23 @@ type StaffAgentContext = {
   execution: AiExecutionHandle;
 };
 
-export function createStaffAgent(ctx: StaffAgentContext) {
+/**
+ * Async because the tool mount is now resolved from the registry, which reads
+ * plan entitlements and the caller's per-user AI permissions (P4.6A).
+ */
+export async function createStaffAgent(ctx: StaffAgentContext) {
   const patientContext = ctx.user.role === "doctor" && ctx.patientId
     ? `\n\nThis chat was opened from a patient profile. When the user refers to "this patient", use the internal patient id "${ctx.patientId}" as the patient_id tool argument. Never display that internal id in your answer.`
     : "";
+
+  const tools = await buildStaffTools({
+    user: ctx.user,
+    locale: ctx.locale,
+    patientId: ctx.user.role === "doctor" ? ctx.patientId : null,
+    // The registry filters the mount by task class, so the certified policy the
+    // turn resolved to also decides which tools exist in it (P4.6A).
+    taskClass: ctx.execution.taskPolicy.task,
+  });
 
   return new ToolLoopAgent({
     id: `clinicflow-${ctx.user.role}-assistant`,
@@ -31,11 +44,7 @@ export function createStaffAgent(ctx: StaffAgentContext) {
         doctorName: ctx.user.fullName,
         role: ctx.user.role,
       }) + patientContext,
-    tools: buildStaffTools({
-      user: ctx.user,
-      locale: ctx.locale,
-      patientId: ctx.user.role === "doctor" ? ctx.patientId : null,
-    }),
+    tools,
     stopWhen: stepCountIs(ctx.execution.taskPolicy.maxSteps),
     temperature: ctx.execution.taskPolicy.temperature,
     maxOutputTokens: ctx.execution.taskPolicy.maxOutputTokens,

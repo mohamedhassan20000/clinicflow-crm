@@ -42,7 +42,7 @@ vi.mock("@/lib/ai/tools", async () => {
     vi.importActual<typeof import("zod")>("zod"),
   ]);
   return {
-    buildStaffTools: () => ({
+    buildStaffTools: async () => ({
       lookup: tool({
         description: "Return a deterministic test result.",
         inputSchema: z.object({ query: z.string() }),
@@ -147,7 +147,7 @@ describe("P4.5A real ToolLoopAgent accounting wiring", () => {
       persona: "doctor",
       surface: "staff_assistant",
     });
-    const agent = createStaffAgent({
+    const agent = await createStaffAgent({
       user: USER,
       locale: "en",
       clinicName: "Test Clinic",

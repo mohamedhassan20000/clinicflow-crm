@@ -91,6 +91,20 @@ const TASK_POLICIES = {
     task: "staff_administrative",
     allowedPersonas: ["administrative_staff"],
   },
+  /**
+   * P4.6A operational query class. Same certified route and privacy policy as
+   * the administrative class, with a tighter step and output budget: these
+   * answers are typed aggregates and bounded lists, so they need fewer tool
+   * round-trips and far less prose than a clinical summary.
+   */
+  staff_operational_query: {
+    ...STAFF_POLICY_BASE,
+    version: "p46a-staff-operational-policy-v1",
+    task: "staff_operational_query",
+    allowedPersonas: ["administrative_staff"],
+    maxOutputTokens: 1_200,
+    maxSteps: 6,
+  },
   patient_booking: {
     task: "patient_booking",
     version: "p45b-patient-policy-reserved-v1",
@@ -145,7 +159,9 @@ export function getCertifiedModelRoute(
   policy: CertifiedTaskPolicy,
 ): CertifiedModelRoute {
   const legacyOverride =
-    policy.task === "staff_clinical_summary" || policy.task === "staff_administrative"
+    policy.task === "staff_clinical_summary" ||
+    policy.task === "staff_administrative" ||
+    policy.task === "staff_operational_query"
       ? process.env.AI_MODEL_DOCTOR?.trim()
       : process.env.AI_MODEL_PATIENT?.trim();
   const alias = legacyOverride

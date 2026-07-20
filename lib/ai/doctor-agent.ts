@@ -20,10 +20,16 @@ type DoctorAgentContext = {
  * the clinic or actor. Patient context is advisory: every clinical read still
  * passes through the P4A tool authorization and RLS boundaries.
  */
-export function createDoctorAgent(ctx: DoctorAgentContext) {
+export async function createDoctorAgent(ctx: DoctorAgentContext) {
   const patientContext = ctx.patientId
     ? `\n\nThis chat was opened from a patient profile. When the user refers to "this patient", use the internal patient id "${ctx.patientId}" as the patient_id tool argument. Never display that internal id in your answer.`
     : "";
+
+  const tools = await buildDoctorTools({
+    user: ctx.user,
+    locale: ctx.locale,
+    patientId: ctx.patientId,
+  });
 
   return new ToolLoopAgent({
     id: "clinicflow-doctor-assistant",
@@ -35,11 +41,7 @@ export function createDoctorAgent(ctx: DoctorAgentContext) {
         clinicName: ctx.clinicName,
         doctorName: ctx.user.fullName,
       }) + patientContext,
-    tools: buildDoctorTools({
-      user: ctx.user,
-      locale: ctx.locale,
-      patientId: ctx.patientId,
-    }),
+    tools,
     stopWhen: stepCountIs(ctx.execution.taskPolicy.maxSteps),
     temperature: ctx.execution.taskPolicy.temperature,
     maxOutputTokens: ctx.execution.taskPolicy.maxOutputTokens,
@@ -53,5 +55,5 @@ export function createDoctorAgent(ctx: DoctorAgentContext) {
 }
 
 export type DoctorAssistantUIMessage = InferAgentUIMessage<
-  ReturnType<typeof createDoctorAgent>
+  Awaited<ReturnType<typeof createDoctorAgent>>
 >;

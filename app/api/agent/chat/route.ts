@@ -2,7 +2,11 @@ import * as Sentry from "@sentry/nextjs";
 import { consumeStream, convertToModelMessages, type UIMessage } from "ai";
 import { getLocale } from "next-intl/server";
 import { z } from "zod";
-import { authorizeStaffAssistant } from "@/lib/ai/authorization";
+import {
+  AI_STAFF_ANALYTICS_FEATURE,
+  authorizeStaffAssistant,
+} from "@/lib/ai/authorization";
+import { getEntitlements, hasFeature } from "@/lib/entitlements";
 import {
   createAiRequestId,
   prepareAiExecution,
@@ -16,7 +20,10 @@ import {
   persistDoctorTurn,
 } from "@/lib/ai/conversations";
 import { createStaffAgent } from "@/lib/ai/staff-agent";
-import { AiToolAuthorizationError } from "@/lib/ai/errors";
+import {
+  AiToolAuthorizationError,
+  type AssistantErrorCode,
+} from "@/lib/ai/errors";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { createClient } from "@/lib/supabase/server";
 
@@ -37,17 +44,9 @@ const requestSchema = z
   })
   .strict();
 
-type ErrorCode =
-  | "unauthenticated"
-  | "role_forbidden"
-  | "page_hidden"
-  | "feature_not_entitled"
-  | "usage_limit_reached"
-  | "subscription_inactive"
-  | "lookup_failed"
-  | "rate_limited"
-  | "invalid_request"
-  | "temporarily_unavailable";
+// The union lives in lib/ai/errors.ts so the client maps exactly the codes this
+// route can emit — see ERROR_COPY_KEYS in components/assistant/assistant-chat.tsx.
+type ErrorCode = AssistantErrorCode;
 
 function errorResponse(code: ErrorCode, status: number, headers?: HeadersInit) {
   return Response.json({ error: code }, { status, headers });
@@ -103,7 +102,16 @@ export async function POST(request: Request) {
       return errorResponse("invalid_request", 400);
     }
 
-    const { task, persona } = staffTaskForRole(user.role);
+    // P4.6A: an administrative turn runs on the cheaper, tighter operational
+    // task class only when the turn actually *is* an operational query — the
+    // entitlement decides whether those tools exist, the turn's intent decides
+    // the budget. Entitlements are cached per clinic, so this adds no
+    // per-request database round-trip.
+    const entitlements = await getEntitlements(user.clinicId);
+    const { task, persona } = staffTaskForRole(user.role, {
+      analyticsEntitled: hasFeature(entitlements, AI_STAFF_ANALYTICS_FEATURE),
+      messageText: userText,
+    });
     execution = await prepareAiExecution({
       user,
       requestId: createAiRequestId({
@@ -141,7 +149,7 @@ export async function POST(request: Request) {
       parts: [{ type: "text", text: userText }],
     };
     const uiMessages = [...conversation.messages, currentMessage];
-    const agent = createStaffAgent({
+    const agent = await createStaffAgent({
       user,
       locale,
       clinicName: clinic.name,
@@ -156,15 +164,26 @@ export async function POST(request: Request) {
 
     return result.toUIMessageStreamResponse({
       originalMessages: uiMessages,
+      // `onError` serves two distinct jobs in ai@6, and conflating them is what
+      // review #2's H2 reported (see the transport notes in lib/ai/errors.ts):
+      //
+      //  - for a stream-level failure it produces the `error` chunk's text,
+      //    which the client turns into `useChat`'s `error`;
+      //  - for a tool whose execute() threw it produces the *`tool-output-error`
+      //    part's* `errorText`, which never touches `useChat`'s `error` at all.
+      //
+      // Both are string-only channels, so this returns an `AssistantErrorCode`
+      // and nothing else. A localized sentence here would be unclassifiable at
+      // the receiving end and would land in model context untranslated; the
+      // client maps the code to copy in the user's locale instead.
       onError(error) {
         streamFailed = true;
         Sentry.captureException(error, {
           tags: { area: "staff-assistant-stream" },
           extra: { clinicId: user.clinicId, conversationId: conversation.id },
         });
-        return locale === "ar"
-          ? "تعذر إكمال الرد. حاول مرة أخرى."
-          : "The response could not be completed. Please try again.";
+        if (error instanceof AiToolAuthorizationError) return error.reason;
+        return "temporarily_unavailable" satisfies ErrorCode;
       },
       async onFinish({ responseMessage, isAborted, finishReason }) {
         const assistantText = responseMessage.parts
@@ -172,14 +191,36 @@ export async function POST(request: Request) {
           .map((part) => part.text)
           .join("\n")
           .trim();
-        if (isAborted || streamFailed || finishReason === "error" || !assistantText) {
+        // M2 (review #2): `streamFailed` is deliberately *not* part of this
+        // condition.
+        //
+        // `onError` fires for every tool-error part, not only for a fatal
+        // stream error, and a tool error is not fatal to the turn — the SDK
+        // feeds it back to the model, which typically tries another tool and
+        // produces a complete answer that the user watches stream to the end.
+        // Treating that as a failure discarded the turn (the question and the
+        // answer both vanished on the next page load) and billed the execution
+        // as `failed` for a turn that visibly succeeded.
+        //
+        // The two signals that actually distinguish the fatal case are already
+        // here: a stream that truly failed finishes with `finishReason ===
+        // "error"`, and one that died before producing anything has no
+        // assistant text. `streamFailed` is kept only as the Sentry-side record
+        // that something was raised at all.
+        if (isAborted || finishReason === "error" || !assistantText) {
           await finalizeExecution(
             isAborted ? "aborted" : "failed",
             isAborted ? "client_aborted" : "stream_failed",
           );
           return;
         }
-        await finalizeExecution("success");
+        // Successful, but recorded as having recovered from something. The
+        // ledger keeps the signal `streamFailed` used to carry without letting
+        // it decide the outcome.
+        await finalizeExecution(
+          "success",
+          streamFailed ? "recovered_tool_error" : undefined,
+        );
         try {
           await persistDoctorTurn({
             supabase,

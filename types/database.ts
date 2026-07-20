@@ -1405,6 +1405,7 @@ export type Database = {
           id: string
           is_active: boolean
           name: string
+          search_name: string | null
         }
         Insert: {
           clinic_id: string
@@ -2508,6 +2509,8 @@ export type Database = {
           national_id: string
           phone: string
           phone_e164_valid: boolean
+          search_name: string | null
+          search_phone: string | null
           updated_at: string
           updated_by: string | null
         }
@@ -2746,6 +2749,7 @@ export type Database = {
           phone: string | null
           phone_e164_valid: boolean
           role: Database["public"]["Enums"]["user_role"]
+          search_name: string | null
           updated_at: string
         }
         Insert: {
@@ -2811,6 +2815,7 @@ export type Database = {
           is_active: boolean
           name: string
           price: number
+          search_name: string | null
           updated_at: string
         }
         Insert: {
@@ -3065,6 +3070,58 @@ export type Database = {
           },
         ]
       }
+      user_ai_permissions: {
+        Row: {
+          clinic_id: string
+          created_at: string
+          granted: boolean
+          permission_key: string
+          updated_at: string
+          updated_by: string | null
+          user_id: string
+        }
+        Insert: {
+          clinic_id: string
+          created_at?: string
+          granted?: boolean
+          permission_key: string
+          updated_at?: string
+          updated_by?: string | null
+          user_id: string
+        }
+        Update: {
+          clinic_id?: string
+          created_at?: string
+          granted?: boolean
+          permission_key?: string
+          updated_at?: string
+          updated_by?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_ai_permissions_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_ai_permissions_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_ai_permissions_user_clinic_fk"
+            columns: ["user_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id", "clinic_id"]
+          },
+        ]
+      }
       user_page_permissions: {
         Row: {
           clinic_id: string
@@ -3136,6 +3193,67 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      ai_compare_revenue_periods: {
+        Args: {
+          p_a_end: string
+          p_a_start: string
+          p_b_end: string
+          p_b_start: string
+        }
+        Returns: Json
+      }
+      ai_get_appointment_stats: {
+        Args: { p_end: string; p_group_by?: string; p_start: string }
+        Returns: Json
+      }
+      ai_get_clinic_summary: {
+        Args: { p_end: string; p_start: string }
+        Returns: Json
+      }
+      ai_get_patient_stats: {
+        Args: { p_end: string; p_group_by?: string; p_start: string }
+        Returns: Json
+      }
+      ai_get_revenue_summary: {
+        Args: { p_end: string; p_start: string }
+        Returns: Json
+      }
+      search_departments_ranked: {
+        Args: { p_limit?: number; p_query: string; p_query_alt?: string }
+        Returns: {
+          id: string
+          match_kind: string
+          name: string
+          score: number
+        }[]
+      }
+      search_services_ranked: {
+        Args: { p_limit?: number; p_query: string; p_query_alt?: string }
+        Returns: {
+          department_id: string
+          id: string
+          match_kind: string
+          name: string
+          price: number
+          score: number
+        }[]
+      }
+      search_staff_ranked: {
+        Args: {
+          p_limit?: number
+          p_query: string
+          p_query_alt?: string
+          p_role?: Database["public"]["Enums"]["user_role"]
+        }
+        Returns: {
+          department_id: string
+          full_name: string
+          id: string
+          match_kind: string
+          role: string
+          score: number
+        }[]
+      }
       activate_ai_provider_connection: {
         Args: {
           p_actor_id: string
@@ -3586,6 +3704,18 @@ export type Database = {
         Returns: string
       }
       platform_week_start: { Args: { p_at?: string }; Returns: string }
+      search_patients_ranked: {
+        Args: { p_limit?: number; p_query: string; p_query_alt?: string }
+        Returns: {
+          email: string
+          file_number: string
+          full_name: string
+          id: string
+          match_kind: string
+          phone: string
+          score: number
+        }[]
+      }
       persist_whatsapp_inbound: {
         Args: {
           p_body: string

@@ -63,7 +63,10 @@ export async function getVisiblePageSlugs(user: AuthedUser): Promise<PageSlug[]>
  * denial from an infrastructure failure so they can fail closed safely.
  */
 export async function getPageVisibilityState(
-  user: AuthedUser,
+  // Widened from AuthedUser to exactly the fields this reads, so callers that
+  // memoize on primitives can reconstruct the argument without a cast. Every
+  // existing AuthedUser caller still satisfies it unchanged.
+  user: Pick<AuthedUser, "id" | "clinicId" | "role">,
   pageSlug: PageSlug,
 ): Promise<PageVisibilityState> {
   const roleSlugs = new Set(getRolePageSlugs(user.role));

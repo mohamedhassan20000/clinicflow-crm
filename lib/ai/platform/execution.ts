@@ -68,13 +68,83 @@ export function assertAiInputWithinPolicy(messages: unknown, maxInputTokens: num
   }
 }
 
-export function staffTaskForRole(role: AuthedUser["role"]): {
+/**
+ * Deterministic operational-intent detection for the task-class router.
+ *
+ * Keyword-based on purpose: the router decides a *budget and policy*, so it has
+ * to be cheap, predictable, and inspectable in a test. An LLM classifier here
+ * would mean a model call to decide how much model call to allow.
+ *
+ * Getting it wrong is safe in both directions — this selects a certified policy
+ * from a fixed set, never an authorization. A missed operational turn simply
+ * runs on the roomier administrative budget; a false positive runs a chatty turn
+ * on a tighter one. Authorization, entitlement, and the tool mount are decided
+ * elsewhere and are unaffected.
+ */
+const OPERATIONAL_INTENT_RE = new RegExp(
+  [
+    // English: aggregates, lists, reports, financial questions.
+    "\\b(how many|how much|count|total|totals|average|rate|rates|trend|trends|compare|comparison)\\b",
+    "\\b(list|show me|report|reports|statistics|stats|summary|breakdown|distribution)\\b",
+    "\\b(revenue|invoice|invoices|outstanding|unpaid|deposit|deposits|billing|income)\\b",
+    "\\b(no.?show|no.?shows|cancellation|cancellations|follow.?up|follow.?ups)\\b",
+    // Arabic equivalents.
+    "(كم عدد|كم|إجمالي|اجمالي|عدد|متوسط|نسبة|مقارنة|اتجاه)",
+    "(قائمة|اعرض|أعرض|تقرير|تقارير|إحصائيات|احصائيات|ملخص|توزيع)",
+    "(إيراد|ايراد|إيرادات|ايرادات|فاتورة|فواتير|مستحق|مستحقات|غير مدفوع|دفعة|دفعات)",
+    "(عدم الحضور|إلغاء|الغاء|إلغاءات|متابعة|متابعات)",
+  ].join("|"),
+  "iu",
+);
+
+export function isOperationalQueryIntent(text: string | null | undefined): boolean {
+  return typeof text === "string" && OPERATIONAL_INTENT_RE.test(text);
+}
+
+/**
+ * Resolves the certified task class for a staff turn.
+ *
+ * Doctors always route to the clinical class. Administrative personas route by
+ * the *intent of the turn*, which is what §12 of the expansion proposal
+ * describes ("`staff_operational_query` for lists/stats") — not by entitlement.
+ *
+ * Routing on entitlement instead, as this first did, had a consequence worth
+ * spelling out: `ai.staff_analytics` resolves true exactly on `pro_ai`, and
+ * `pro`/`basic` have no assistant at all, so *every* administrative turn on
+ * every paying clinic ran as `staff_operational_query`. That made
+ * `staff_administrative` unreachable in production and silently cut the budget
+ * for turns that touch no analytics tool at all — a plain patient lookup, an
+ * availability check, an open-ended question — from 8 steps / 1500 tokens to
+ * 6 / 1200. The tighter budget is right for typed aggregates and bounded lists;
+ * it was never justified for the general administrative persona, and applying
+ * it there was a regression against the shipped P4B surface.
+ *
+ * Intent routing restores the administrative baseline for administrative turns
+ * while keeping the cheaper class for the turns it was designed for. The
+ * entitlement still matters — without it the analytics tools do not mount — but
+ * it decides *capability*, not *budget*.
+ */
+export function staffTaskForRole(
+  role: AuthedUser["role"],
+  options: { analyticsEntitled?: boolean; messageText?: string | null } = {},
+): {
   task: AiTaskClass;
   persona: AiPersona;
 } {
-  return role === "doctor"
-    ? { task: "staff_clinical_summary", persona: "doctor" }
-    : { task: "staff_administrative", persona: "administrative_staff" };
+  if (role === "doctor") {
+    return { task: "staff_clinical_summary", persona: "doctor" };
+  }
+
+  // The operational class is only meaningful when the operational tools can
+  // actually mount, so the entitlement remains a precondition — but it is no
+  // longer sufficient on its own.
+  const operational =
+    options.analyticsEntitled === true && isOperationalQueryIntent(options.messageText);
+
+  return {
+    task: operational ? "staff_operational_query" : "staff_administrative",
+    persona: "administrative_staff",
+  };
 }
 
 function isBudgetDenial(message: string | undefined): boolean {

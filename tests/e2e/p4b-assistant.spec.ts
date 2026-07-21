@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import AxeBuilder from "@axe-core/playwright";
 import { createClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
 import type { Database } from "@/types/database";
@@ -37,6 +38,51 @@ async function login(page: Page) {
   await page.locator('input[type="password"]').fill(password);
   await page.getByRole("button", { name: /sign in|تسجيل الدخول/i }).click();
   await expect(page).toHaveURL(/\/dashboard/, { timeout: 10_000 });
+}
+
+async function setAccountLocale(page: Page, locale: "en" | "ar") {
+  await page.goto("/preferences");
+  await page.getByTestId("language-switcher-account").click();
+  await page
+    .getByRole("option", { name: locale === "ar" ? "العربية" : "English" })
+    .click();
+  await expect(page.locator("html")).toHaveAttribute("lang", locale);
+  await expect(page.locator("html")).toHaveAttribute(
+    "dir",
+    locale === "ar" ? "rtl" : "ltr",
+  );
+}
+
+async function assertCapabilityPanelA11y(
+  page: Page,
+  locale: "en" | "ar",
+) {
+  const labels = locale === "ar"
+    ? { toggle: "ماذا يمكنني أن أطلب؟", close: "إغلاق" }
+    : { toggle: "What can I ask?", close: "Close" };
+
+  await expect(page.locator("html")).toHaveAttribute("lang", locale);
+  await expect(page.locator("html")).toHaveAttribute(
+    "dir",
+    locale === "ar" ? "rtl" : "ltr",
+  );
+  const capabilityToggle = page.getByRole("button", { name: labels.toggle });
+  await capabilityToggle.click();
+  await expect(capabilityToggle).toHaveAttribute("aria-expanded", "true");
+  const capabilityPanelId = await capabilityToggle.getAttribute("aria-controls");
+  expect(capabilityPanelId).toBeTruthy();
+  await expect(page.locator(`[id="${capabilityPanelId}"]`)).toBeVisible();
+  const capabilityA11y = await new AxeBuilder({ page })
+    .include(`[id="${capabilityPanelId}"]`)
+    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+    .analyze();
+  expect(
+    capabilityA11y.violations.filter(
+      ({ impact }) => impact === "critical" || impact === "serious",
+    ),
+  ).toEqual([]);
+  await page.getByRole("button", { name: labels.close }).click();
+  await expect(capabilityToggle).toBeFocused();
 }
 
 function mockAssistantStream(text: string) {
@@ -108,6 +154,7 @@ test("staff chat streams a mocked response and patient profile opens contextual 
   await login(page);
   await page.goto("/assistant");
   await expect(page.getByRole("heading", { level: 1, name: "Clinical assistant" })).toBeVisible();
+  await assertCapabilityPanelA11y(page, "en");
   await page.getByRole("textbox", { name: "Message the clinical assistant" }).fill("List my appointments today");
   await page.getByRole("button", { name: "Send message" }).click();
   await expect(page.getByText("Your authorized schedule has been reviewed.")).toBeVisible();
@@ -119,4 +166,13 @@ test("staff chat streams a mocked response and patient profile opens contextual 
     "placeholder",
     "Ask about this patient's record…",
   );
+
+  await test.step("Arabic RTL capability panel passes the same Axe checks", async () => {
+    await setAccountLocale(page, "ar");
+    await page.goto("/assistant");
+    await expect(
+      page.getByRole("heading", { level: 1, name: "المساعد السريري" }),
+    ).toBeVisible();
+    await assertCapabilityPanelA11y(page, "ar");
+  });
 });

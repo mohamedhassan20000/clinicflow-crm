@@ -102,6 +102,74 @@ export function isOperationalQueryIntent(text: string | null | undefined): boole
 }
 
 /**
+ * Deterministic help-intent detection (P4.7A).
+ *
+ * Same keyword approach as the operational router, but held to a **stricter
+ * standard**, because the two failure modes are not symmetric. Misrouting an
+ * operational turn only changes its budget. Misrouting a turn to `staff_help`
+ * also changes its *mount*: the help class is the first one narrow enough to
+ * exclude every tool that reads clinic data, so a false positive would leave a
+ * real data question with no tool able to answer it.
+ *
+ * Two guards make that unlikely, and make the residual risk one-directional:
+ *
+ *  1. The phrasing must look like a request for instructions — "how do I…",
+ *     "where is…", "كيف أ…", "أين أجد…" — not merely mention a feature.
+ *  2. The turn must not already read as an *aggregation or list* request. This
+ *     is narrower than the full operational matcher on purpose. That matcher
+ *     flags any domain noun — "invoice", "revenue", "follow-up" — so deferring
+ *     to it wholesale would misroute "how do I issue an invoice", a textbook
+ *     help question, back to the data class. What actually distinguishes a data
+ *     turn is an aggregation or listing verb ("how many", "list", "show me",
+ *     "compare", "total"), so only those override an instructional opener.
+ *
+ * So a missed help turn costs a little money and answers correctly (the help
+ * tools are mounted in every class), while a false positive is filtered out by
+ * guard 2 in exactly the cases where it would have hurt — "how many invoices are
+ * outstanding" keeps its data tools; "how do I issue an invoice" becomes help.
+ * That asymmetry is the design, not a happy accident.
+ */
+const HELP_INTENT_RE = new RegExp(
+  [
+    // English: asking to be taught or directed.
+    "\\b(how (do|can|would) (i|we|you)|how to)\\b",
+    "\\bwhere (is|are|do|can) (i|we|it|the|that)\\b",
+    "\\b(walk me through|show me how|steps to|guide me|teach me)\\b",
+    "\\b(how does .* work|what does .* (button|page|screen|setting) do)\\b",
+    // Arabic: كيف/ازاي/وين/فين + طلب الشرح والخطوات.
+    "(كيف (أ|ا|ن|ي)|كيفية|ازاي|إزاي)",
+    "(اين|أين|وين|فين) (أجد|اجد|هو|هي|يمكن|أستطيع|استطيع)",
+    "(اشرح لي|وضح لي|خطوات|كيف استخدم|كيف أستخدم|دلني|علمني)",
+  ].join("|"),
+  "iu",
+);
+
+/**
+ * The subset of operational phrasing that overrides an instructional opener:
+ * aggregation and listing, not domain nouns. "show me how" is excluded so it
+ * stays a help phrase.
+ */
+const AGGREGATION_LEAD_RE = new RegExp(
+  [
+    "\\b(how many|how much|count|total|totals|average|rate|rates|trend|trends|compare|comparison|breakdown|distribution|statistics|stats)\\b",
+    "\\b(list|report|reports)\\b",
+    "\\bshow me (?!how)\\b",
+    "(كم عدد|كم |إجمالي|اجمالي|عدد|متوسط|نسبة|مقارنة|اتجاه|توزيع|إحصائيات|احصائيات)",
+    "(قائمة|اعرض|أعرض|تقرير|تقارير)",
+  ].join("|"),
+  "iu",
+);
+
+export function isHelpIntent(text: string | null | undefined): boolean {
+  if (typeof text !== "string") return false;
+  // Guard 2: an aggregation/list request keeps its data tools even when phrased
+  // as a question. A bare domain noun does not — that is the difference between
+  // this and the full operational matcher.
+  if (AGGREGATION_LEAD_RE.test(text)) return false;
+  return HELP_INTENT_RE.test(text);
+}
+
+/**
  * Resolves the certified task class for a staff turn.
  *
  * Doctors always route to the clinical class. Administrative personas route by
@@ -131,6 +199,18 @@ export function staffTaskForRole(
   task: AiTaskClass;
   persona: AiPersona;
 } {
+  // Help routing is checked before the persona split because "how do I use
+  // this?" is the same question from every role, and answering it out of the
+  // clinical budget is the exact waste P4.7 exists to stop. The persona still
+  // differs — `staff_help` admits both, and the system prompt is still built
+  // from the caller's real role.
+  if (isHelpIntent(options.messageText)) {
+    return {
+      task: "staff_help",
+      persona: role === "doctor" ? "doctor" : "administrative_staff",
+    };
+  }
+
   if (role === "doctor") {
     return { task: "staff_clinical_summary", persona: "doctor" };
   }

@@ -1271,6 +1271,7 @@ const CLINIC_SCOPED_TABLES = new Set([
   "staff_invitations",
   "subscriptions",
   "usage_counters",
+  "user_ai_permissions",
   "user_customizations",
   "user_page_permissions",
 ]);

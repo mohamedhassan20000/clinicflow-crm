@@ -13,6 +13,12 @@ export type AiTaskClass =
   | "staff_administrative"
   /** P4.6A: typed aggregate/list/report queries for administrative personas. */
   | "staff_operational_query"
+  /**
+   * P4.7A: "how do I use ClinicFlow?" turns. The first class whose tool mount is
+   * genuinely narrower than its role would otherwise allow — help and navigation
+   * only, no clinic data at all — which is why it also routes to a cheaper model.
+   */
+  | "staff_help"
   | "patient_booking"
   | "patient_faq";
 

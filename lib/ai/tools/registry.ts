@@ -25,6 +25,13 @@ import { compareRevenuePeriodsTool } from "@/lib/ai/tools/compare-revenue-period
 import { listOutstandingInvoicesTool } from "@/lib/ai/tools/list-outstanding-invoices";
 import { runClinicReportTool } from "@/lib/ai/tools/run-clinic-report";
 
+// P4.7A system-knowledge tools.
+import { searchHelpTool } from "@/lib/ai/tools/search-help";
+import { getNavigationTargetTool } from "@/lib/ai/tools/get-navigation-target";
+
+// P4.7B capability transparency.
+import { listMyCapabilitiesTool } from "@/lib/ai/tools/list-my-capabilities";
+
 import {
   AI_FINANCIAL_INSIGHTS_FEATURE,
   AI_STAFF_ANALYTICS_FEATURE,
@@ -42,8 +49,9 @@ import {
  * may use it.
  *
  * The same metadata is the single source of truth for the P4.7 capability
- * panel, which is why `capabilityDescription` lives here: the panel and the
- * model's actual tool mount are derived from one resolution and cannot drift.
+ * panel, which is why `capabilityDescription` lives here: the panel's
+ * cross-task authorized union and every narrower active-turn mount are derived
+ * from this resolution and cannot acquire an independently maintained tool.
  *
  * Registration is necessary but never sufficient. Every tool independently
  * re-asserts role, subscription, entitlement, page visibility, and (for
@@ -89,23 +97,28 @@ const ANALYTICS: readonly UserRole[] = ["admin", "manager"];
 const FINANCIAL: readonly UserRole[] = ["admin", "manager"];
 
 /**
- * **The task-class gate is enforced, but it currently excludes nothing.**
+ * **The task-class gate became load-bearing in P4.7A.**
  *
- * `resolveToolMount` really does filter on `taskClasses` — that is not
- * decorative, and the mechanism is covered by a test. But every P4.6 tool
- * declares both administrative classes, and `staffTaskForRole` returns one of
- * exactly those two for every non-doctor role, so no reachable administrative
- * turn can resolve to a class that excludes a P4.6 tool. The only partition the
- * metadata expresses today is clinical vs. non-clinical, which the `roles`
- * array already enforces independently.
+ * The P4.6A note here recorded that `resolveToolMount` really did filter on
+ * `taskClasses`, but that nothing was excluded by it in practice: every P4.6
+ * tool declared both administrative classes, and `staffTaskForRole` returned one
+ * of exactly those two for every non-doctor role, so no reachable turn resolved
+ * to a class that excluded a tool. It predicted that P4.7's `staff_help` class
+ * would be the first genuinely narrower one.
  *
- * That is fine as long as it is known. It stops being fine when a later
- * sub-phase assumes the gate is load-bearing: **P4.7's `staff_help` class is
- * specified as cheap, which implies a narrower mount, and P4.11's workflow
- * steps are meant to be constrained by class.** Either of those is the first
- * entry that must declare a genuinely narrower class — and until one does, no
- * test can distinguish "the gate works" from "the gate is a no-op" on real
- * data, only on a synthetic mount.
+ * It is. Only the three data-free guidance tools include `staff_help`, so a help
+ * turn mounts `search_help`, `get_navigation_target`, and
+ * `list_my_capabilities`, and no tool that reads clinic data exists in it at
+ * all. That is now a real, testable
+ * containment property on real data rather than a synthetic mount, and it is
+ * what makes the class safe to route to a cheaper model: the budget is small
+ * because the reachable work is small, not merely because help *ought* to be
+ * cheap.
+ *
+ * The converse matters as much: the help tools declare *every* class, so a user
+ * whose turn routed to the administrative or clinical class can still ask "where
+ * is this?" without a misrouted intent costing them the answer. Help is additive
+ * everywhere and exclusive only in its own class.
  */
 const CLINICAL_TASKS: readonly AiTaskClass[] = ["staff_clinical_summary"];
 const OPERATIONAL_TASKS: readonly AiTaskClass[] = [
@@ -116,6 +129,13 @@ const SHARED_TASKS: readonly AiTaskClass[] = [
   "staff_clinical_summary",
   "staff_administrative",
   "staff_operational_query",
+];
+/** Every staff class: help is answerable in any turn, whatever its intent. */
+const HELP_TASKS: readonly AiTaskClass[] = [
+  "staff_clinical_summary",
+  "staff_administrative",
+  "staff_operational_query",
+  "staff_help",
 ];
 
 export const AI_TOOL_REGISTRY: readonly AiToolDefinition[] = [
@@ -257,6 +277,56 @@ export const AI_TOOL_REGISTRY: readonly AiToolDefinition[] = [
     capabilityDescription: {
       en: "Run a standard clinic report (cancellations, no-shows, follow-ups, performance, revenue) and link to it.",
       ar: "تشغيل أحد تقارير العيادة القياسية (الإلغاءات، عدم الحضور، المتابعات، الأداء، الإيرادات) مع رابط التقرير.",
+    },
+  },
+
+  // ---- P4.7A help, guidance & navigation ----------------------------------
+  //
+  // Both ride on `ai.staff_assistant` alone: help is part of the assistant, not
+  // a separately sellable unit, so no new entitlement key exists to check. They
+  // are the only tools mounted for every staff role without an analytics
+  // feature, which is deliberate — a receptionist who cannot see a single
+  // aggregate can still be told how to issue an invoice.
+  {
+    name: "search_help",
+    build: searchHelpTool,
+    roles: ALL_STAFF,
+    requiredFeatures: [AI_ASSISTANT_FEATURE],
+    taskClasses: HELP_TASKS,
+    capabilityDescription: {
+      en: "Explain how to use ClinicFlow — step-by-step instructions for a feature, from the product's official help articles.",
+      ar: "شرح كيفية استخدام كلينيك فلو — خطوات تفصيلية لأي ميزة، من مقالات المساعدة الرسمية للمنتج.",
+    },
+  },
+  {
+    name: "get_navigation_target",
+    build: getNavigationTargetTool,
+    roles: ALL_STAFF,
+    requiredFeatures: [AI_ASSISTANT_FEATURE],
+    taskClasses: HELP_TASKS,
+    capabilityDescription: {
+      en: "Tell you where a feature lives in ClinicFlow and whether your account can open it.",
+      ar: "تحديد مكان أي ميزة داخل كلينيك فلو وما إذا كان حسابك يستطيع فتحها.",
+    },
+  },
+
+  // ---- P4.7B capability transparency --------------------------------------
+  //
+  // Rides on `ai.staff_assistant` alone, in every task class (HELP_TASKS), like
+  // the help tools: "what can I ask you?" is a fair question in any turn, and the
+  // tool reads no clinic data — its answer is this same registry resolved against
+  // the caller's entitlements and permissions. It is the model-facing twin of the
+  // capability panel. It reports the authorized union across supported task
+  // classes; each active turn remains a narrower authorized subset.
+  {
+    name: "list_my_capabilities",
+    build: listMyCapabilitiesTool,
+    roles: ALL_STAFF,
+    requiredFeatures: [AI_ASSISTANT_FEATURE],
+    taskClasses: HELP_TASKS,
+    capabilityDescription: {
+      en: "List everything your account is authorized to ask across the assistant's supported task types.",
+      ar: "عرض كل ما يُصرّح لحسابك بطلبه عبر أنواع المهام التي يدعمها المساعد.",
     },
   },
 

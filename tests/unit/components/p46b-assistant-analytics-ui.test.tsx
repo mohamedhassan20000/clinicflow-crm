@@ -31,6 +31,7 @@ vi.mock("@/actions/ai-permissions", () => ({
 }));
 
 import { AssistantChat } from "@/components/assistant/assistant-chat";
+import { CapabilityPanel } from "@/components/assistant/capability-panel";
 import { AiFinancialPermissions } from "@/components/settings/ai-financial-permissions";
 
 beforeEach(() => {
@@ -45,6 +46,7 @@ function capabilities(
 ): AssistantCapabilities {
   return {
     toolNames: [],
+    items: [],
     clinicAnalytics: false,
     operational: false,
     financial: "not_applicable",
@@ -324,6 +326,68 @@ describe("P4.6B — result presentation", () => {
     );
   });
 
+  it("renders the Arabic receptionist help article as a citation with its working deep link", () => {
+    renderChat(capabilities(), [
+      toolPart("search_help", {
+        results: [
+          {
+            article_id: "record-payment-and-invoice",
+            title: "إصدار فاتورة الجلسة وتسجيل الدفع",
+            section: "المواعيد",
+            link: "/appointments",
+            steps: ["افتح الموعد المكتمل."],
+          },
+        ],
+        corpus_only: true,
+      }),
+    ]);
+
+    expect(
+      screen.getByText("Help article: إصدار فاتورة الجلسة وتسجيل الدفع"),
+    ).toBeVisible();
+    expect(screen.getByRole("link", { name: "Open المواعيد" })).toHaveAttribute(
+      "href",
+      "/appointments",
+    );
+  });
+
+  it("cites an unavailable help article without rendering a forbidden link", () => {
+    renderChat(capabilities(), [
+      toolPart("search_help", {
+        results: [
+          {
+            article_id: "control-page-visibility",
+            title: "Show or hide pages for a staff member",
+            section: "Settings → Customize",
+            unavailable_reason: "hidden_by_admin",
+            steps: [],
+          },
+        ],
+        corpus_only: true,
+      }),
+    ]);
+
+    expect(
+      screen.getByText("Help article: Show or hide pages for a staff member"),
+    ).toBeVisible();
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
+
+  it("labels a navigation destination as a page, never as a full report", () => {
+    renderChat(capabilities(), [
+      toolPart("get_navigation_target", {
+        status: "available",
+        section: "Settings → Messaging",
+        link: "/settings/messaging",
+      }),
+    ]);
+
+    expect(
+      screen.getByRole("link", { name: "Open Settings → Messaging" }),
+    ).toHaveAttribute("href", "/settings/messaging");
+    expect(screen.queryByText("Open the full report")).not.toBeInTheDocument();
+  });
+
   it("asks the user to disambiguate instead of letting the model pick a namesake", () => {
     renderChat(
       capabilities(),
@@ -339,6 +403,68 @@ describe("P4.6B — result presentation", () => {
     expect(
       screen.getByText("More than one match — confirm which one you mean."),
     ).toBeVisible();
+  });
+});
+
+describe("P4.7 — capability panel component and accessibility", () => {
+  const items: AssistantCapabilities["items"] = [
+    {
+      name: "get_patient_summary",
+      group: "clinical",
+      description: "Summarize an authorized patient record.",
+    },
+    {
+      name: "get_revenue_summary",
+      group: "financial",
+      description: "Report authorized revenue figures.",
+    },
+    {
+      name: "search_help",
+      group: "guidance",
+      description: "شرح كيفية استخدام كلينيك فلو.",
+    },
+  ];
+
+  it("opens from the labelled toggle, groups localized items, closes, and restores focus", () => {
+    renderChat(capabilities({ items }));
+    const toggle = screen.getByRole("button", { name: "What can I ask?" });
+
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("heading", { name: "What you can ask" })).toBeVisible();
+    expect(screen.getByText("Patient care")).toBeVisible();
+    expect(screen.getByText("Finance")).toBeVisible();
+    expect(screen.getByText("Help & guidance")).toBeVisible();
+    expect(screen.getByText("شرح كيفية استخدام كلينيك فلو.")).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("heading", { name: "What you can ask" })).not.toBeInTheDocument();
+    expect(toggle).toHaveFocus();
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("renders the honest empty state and keeps long lists scrollable", () => {
+    const { rerender, container } = render(
+      <CapabilityPanel items={[]} onClose={() => {}} titleId="capability-title" />,
+    );
+    expect(
+      screen.getByText("No assistant capabilities are available for your account right now."),
+    ).toBeVisible();
+
+    rerender(
+      <CapabilityPanel
+        items={Array.from({ length: 30 }, (_, index) => ({
+          name: `help-${index}`,
+          group: "guidance" as const,
+          description: `Help capability ${index + 1}`,
+        }))}
+        onClose={() => {}}
+        titleId="capability-title"
+      />,
+    );
+    expect(screen.getAllByRole("listitem")).toHaveLength(30);
+    expect(container.querySelector(".max-h-64.overflow-y-auto")).toBeInTheDocument();
   });
 });
 

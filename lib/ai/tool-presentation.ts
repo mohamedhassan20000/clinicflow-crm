@@ -18,7 +18,7 @@ import type { AiToolDenialReason } from "@/lib/ai/errors";
  * treat "the assistant said 42,000" with the same weight as "the assistant
  * listed 3 appointments".
  */
-export type AssistantToolGroup = "clinical" | "operational" | "financial";
+export type AssistantToolGroup = "clinical" | "operational" | "financial" | "guidance";
 
 export type AssistantToolPresentation = {
   /** Key under the `assistant` i18n namespace. */
@@ -51,6 +51,18 @@ export const ASSISTANT_TOOL_PRESENTATION: Readonly<
   get_revenue_summary: { labelKey: "toolRevenueSummary", group: "financial" },
   compare_revenue_periods: { labelKey: "toolCompareRevenue", group: "financial" },
   list_outstanding_invoices: { labelKey: "toolOutstandingInvoices", group: "financial" },
+
+  // P4.7A help & navigation. Their own group so the label never reads as "reviewing
+  // records": these tools touch no clinic data, and presenting a documentation
+  // lookup as a record review would be a small dishonesty of exactly the kind the
+  // phase is about.
+  search_help: { labelKey: "toolSearchHelp", group: "guidance" },
+  get_navigation_target: { labelKey: "toolNavigation", group: "guidance" },
+
+  // P4.7B capability transparency. Guidance group for the same reason: it reads
+  // no clinic data, and it frames what the assistant can do rather than reporting
+  // a record.
+  list_my_capabilities: { labelKey: "toolCapabilities", group: "guidance" },
 };
 
 export function presentationFor(toolName: string): AssistantToolPresentation {
@@ -113,7 +125,21 @@ export type AssistantResultNotice =
 
 export type AssistantResultSummary = {
   notices: AssistantResultNotice[];
-  /** Deep link to the real report page, when the tool returned one. */
+  /** Safe top-level deep link returned by report/navigation tools. */
+  link: string | null;
+  /** Controls destination-appropriate localized link copy. */
+  linkKind: "report" | "navigation" | null;
+  /** Localized section/label supplied by the navigation resolver. */
+  linkLabel: string | null;
+  /** Structured citations supplied by `search_help` results. */
+  citations: AssistantHelpCitation[];
+};
+
+export type AssistantHelpCitation = {
+  articleId: string;
+  title: string;
+  section: string;
+  /** Absent when the destination is unavailable to this caller. */
   link: string | null;
 };
 
@@ -153,9 +179,14 @@ function asNumber(value: unknown): number | null {
  * a message bubble — a malformed result should render as "no notices", not as
  * a broken conversation.
  */
-export function summarizeToolResult(output: unknown): AssistantResultSummary {
+export function summarizeToolResult(
+  output: unknown,
+  toolName?: string,
+): AssistantResultSummary {
   const result = asRecord(output);
-  if (!result) return { notices: [], link: null };
+  if (!result) {
+    return { notices: [], link: null, linkKind: null, linkLabel: null, citations: [] };
+  }
 
   const notices: AssistantResultNotice[] = [];
 
@@ -220,17 +251,55 @@ export function summarizeToolResult(output: unknown): AssistantResultSummary {
     notices.push({ kind: "needs_clarification" });
   }
 
-  return { notices, link: safeInternalLink(result.link) };
+  const link = safeInternalLink(result.link);
+  const linkLabel =
+    typeof result.section === "string"
+      ? result.section
+      : typeof result.label === "string"
+        ? result.label
+        : null;
+
+  const citations: AssistantHelpCitation[] = [];
+  if (toolName === "search_help" && Array.isArray(result.results)) {
+    for (const value of result.results) {
+      const article = asRecord(value);
+      if (!article) continue;
+      if (
+        typeof article.article_id !== "string" ||
+        typeof article.title !== "string" ||
+        typeof article.section !== "string"
+      ) {
+        continue;
+      }
+      citations.push({
+        articleId: article.article_id,
+        title: article.title,
+        section: article.section,
+        link: safeInternalLink(article.link),
+      });
+    }
+  }
+
+  return {
+    notices,
+    link,
+    linkKind: link
+      ? toolName === "run_clinic_report"
+        ? "report"
+        : "navigation"
+      : null,
+    linkLabel,
+    citations,
+  };
 }
 
 /**
  * Only same-origin, absolute-path links are rendered.
  *
- * `run_clinic_report` is the sole producer today and it builds the path from a
- * fixed `href` per report, so nothing tenant- or model-controlled reaches here.
- * The check exists because a tool result is model-loop output rendered as a
- * clickable anchor, and that combination should not depend on the current set
- * of producers staying well-behaved.
+ * Report links, resolved navigation targets, and nested help-result links all
+ * pass through this boundary. Their current producers use fixed registered
+ * routes, but tool output crosses the model loop before it is rendered, so the
+ * UI must not rely on every present and future producer staying well-behaved.
  *
  * A leading "/" alone is not enough: `//evil.example` is protocol-relative and
  * a browser resolves it as an absolute off-site URL.

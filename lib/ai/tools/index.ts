@@ -14,10 +14,32 @@ import {
 import { AI_TOOL_REGISTRY, type AiToolDefinition } from "@/lib/ai/tools/registry";
 import { sanitizeUntrustedDeep, withProvenance } from "@/lib/ai/untrusted-text";
 import type { DoctorToolContext } from "@/lib/ai/tools/context";
+import type { AiTaskClass } from "@/lib/ai/platform/types";
+import type { UserRole } from "@/lib/rbac";
 
 export type { DoctorToolContext } from "@/lib/ai/tools/context";
 export { AI_TOOL_REGISTRY, AI_TOOL_REGISTRY_BY_NAME } from "@/lib/ai/tools/registry";
 export type { AiToolDefinition } from "@/lib/ai/tools/registry";
+
+/**
+ * Certified staff task classes that can be selected for each role.
+ *
+ * This mapping defines the scope of an unscoped mount: it is the authorized
+ * union across task classes the router can actually select for that role. It is
+ * not a second tool matrix. Every tool still comes from `AI_TOOL_REGISTRY` and
+ * must intersect one of these classes plus pass role, entitlement, and
+ * permission checks.
+ */
+export const STAFF_TASK_CLASSES_BY_ROLE = {
+  admin: ["staff_administrative", "staff_operational_query", "staff_help"],
+  manager: ["staff_administrative", "staff_operational_query", "staff_help"],
+  receptionist: ["staff_administrative", "staff_operational_query", "staff_help"],
+  doctor: ["staff_clinical_summary", "staff_help"],
+} as const satisfies Record<UserRole, readonly AiTaskClass[]>;
+
+export function staffTaskClassesForRole(role: UserRole): readonly AiTaskClass[] {
+  return STAFF_TASK_CLASSES_BY_ROLE[role];
+}
 
 /**
  * Generic, deny-by-default resolution of the tools a caller may use (P4.6A).
@@ -37,6 +59,12 @@ export async function resolveToolMount(
   ctx: DoctorToolContext,
 ): Promise<{ definitions: AiToolDefinition[]; tools: Record<string, Tool> }> {
   const entitlements = await getEntitlements(ctx.user.clinicId);
+  const supportedTaskClasses = staffTaskClassesForRole(ctx.user.role);
+  const activeTaskClasses: readonly AiTaskClass[] = ctx.taskClass
+    ? supportedTaskClasses.includes(ctx.taskClass)
+      ? [ctx.taskClass]
+      : []
+    : supportedTaskClasses;
 
   const candidates = AI_TOOL_REGISTRY.filter(
     (definition) =>
@@ -47,7 +75,7 @@ export async function resolveToolMount(
       // mount happened to look right only because roles aligned. Metadata that
       // has never executed is wrong by the time P4.7's capability panel and
       // P4.11's workflow steps depend on it, so it is enforced now.
-      (!ctx.taskClass || definition.taskClasses.includes(ctx.taskClass)) &&
+      definition.taskClasses.some((taskClass) => activeTaskClasses.includes(taskClass)) &&
       definition.requiredFeatures.every((feature) => hasFeature(entitlements, feature)),
   );
 

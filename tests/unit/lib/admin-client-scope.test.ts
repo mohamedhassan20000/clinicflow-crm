@@ -167,6 +167,23 @@ describe("createClinicScopedAdminClient", () => {
     }
   });
 
+  it("keeps the AI provider permission read on the clinic-scoped path", async () => {
+    const { createClinicScopedAdminClient } = await import("@/lib/supabase/admin");
+    const admin = createClinicScopedAdminClient("clinic-a");
+
+    expect(() =>
+      admin
+        .from("user_ai_permissions")
+        .select("user_id, granted")
+        .eq("permission_key", "ai.financial_insights"),
+    ).not.toThrow();
+    expect(queryLog).toContainEqual({
+      table: "user_ai_permissions",
+      method: "eq",
+      args: ["clinic_id", "clinic-a"],
+    });
+  });
+
   it("leaves global-or-assigned coupons for explicit caller scoping", async () => {
     const { createClinicScopedAdminClient } = await import("@/lib/supabase/admin");
     const admin = createClinicScopedAdminClient("clinic-a") as unknown as {

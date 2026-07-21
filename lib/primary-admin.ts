@@ -24,7 +24,16 @@ export async function getPrimaryClinicAdminId(
     .order("id", { ascending: true })
     .limit(1);
 
-  if (error) return null;
+  // A query failure is not evidence that there is no eligible primary admin.
+  // Keep that state distinct so callers that report authorization outcomes can
+  // say the lookup failed instead of misclassifying the user as a secondary
+  // administrator. Authorization callers still fail closed because the error
+  // interrupts the positive check.
+  if (error) {
+    throw new Error("Failed to determine the primary clinic administrator", {
+      cause: error,
+    });
+  }
   return data?.[0]?.id ?? null;
 }
 

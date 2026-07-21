@@ -26,7 +26,9 @@ export type DoctorToolContext = {
    * The certified task class this turn is running under (P4.6A). The registry
    * filters the mount by it, so a tool is only reachable in the kinds of turn
    * it was declared for. Optional so non-route callers (tests, future surfaces)
-   * can omit it; omission means "do not filter by task class".
+   * can omit it; omission means "resolve the authorized union across the task
+   * classes the router supports for this user's role". A supplied class still
+   * produces the narrower active-turn mount.
    */
   taskClass?: AiTaskClass | null;
   /**

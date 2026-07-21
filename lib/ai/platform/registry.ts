@@ -40,6 +40,40 @@ const MODEL_ROUTES = {
       rollbackAlias: null,
     },
   },
+  /**
+   * P4.7A cheap staff route. Same certified Haiku tier as the patient route, but
+   * a distinct alias rather than a reuse: the two are separately certifiable and
+   * separately rollback-able, and a shared alias would mean a patient-side model
+   * change silently retargeted staff help turns (and the reverse). The alias is
+   * the unit of certification, so tasks that are not the same task do not share
+   * one.
+   */
+  "staff-haiku-bootstrap-v1": {
+    alias: "staff-haiku-bootstrap-v1",
+    transport: "vercel_ai_gateway",
+    provider: "anthropic",
+    modelId: "anthropic/claude-haiku-4.5",
+    providerModelId: "claude-haiku-4-5",
+    allowedServingProviders: ["anthropic"],
+    capabilities: ["streaming", "tool_calling", "arabic", "english"],
+    privacy: {
+      zeroDataRetentionRequired: true,
+      noTrainingRequired: true,
+    },
+    pricing: {
+      inputMicrosPerMillion: 1_000_000,
+      outputMicrosPerMillion: 5_000_000,
+      cacheReadMicrosPerMillion: 100_000,
+      cacheWriteMicrosPerMillion: 1_250_000,
+    },
+    certification: {
+      status: "bootstrap_approved",
+      version: "p47a-bootstrap-2026-07-20",
+      evaluationSuiteVersion: "p47a-help-retrieval-suite-v1",
+      effectiveDate: "2026-07-20",
+      rollbackAlias: "staff-sonnet-bootstrap-v1",
+    },
+  },
   "patient-haiku-bootstrap-v1": {
     alias: "patient-haiku-bootstrap-v1",
     transport: "vercel_ai_gateway",
@@ -105,6 +139,34 @@ const TASK_POLICIES = {
     maxOutputTokens: 1_200,
     maxSteps: 6,
   },
+  /**
+   * P4.7A help/guidance class.
+   *
+   * Cheap by design: "where do I configure reminders?" must not cost what a
+   * clinical summary costs. The budget is small because the work is small — the
+   * turn calls at most two tools, neither of which reads clinic data, and the
+   * answer is a short set of steps plus a link.
+   *
+   * Both staff personas are allowed. A doctor asking how to use the app is
+   * asking the same question a receptionist is, and routing them to the clinical
+   * class for it would burn the clinic's budget on a documentation lookup.
+   * Because the mount for this class is help-only, the narrower budget can never
+   * strand a clinical turn: a turn that needed patient data would have had to
+   * resolve to a different class to reach any tool that returns it.
+   */
+  staff_help: {
+    task: "staff_help",
+    version: "p47a-staff-help-policy-v1",
+    primaryModelAlias: "staff-haiku-bootstrap-v1",
+    fallbackModelAliases: [],
+    allowedPersonas: ["doctor", "administrative_staff"],
+    allowedCredentialModes: ["managed", "byok_strict", "hybrid"],
+    maxInputTokensPerStep: 12_000,
+    maxOutputTokens: 700,
+    maxSteps: 4,
+    temperature: 0.2,
+    privacyPolicyVersion: "clinical-zdr-no-training-v1",
+  },
   patient_booking: {
     task: "patient_booking",
     version: "p45b-patient-policy-reserved-v1",
@@ -158,12 +220,20 @@ export function getTaskPolicy(task: AiTaskClass, persona: AiPersona): CertifiedT
 export function getCertifiedModelRoute(
   policy: CertifiedTaskPolicy,
 ): CertifiedModelRoute {
+  // `staff_help` honors neither override. The two env vars exist to preserve
+  // pre-P4.5 deployments' pinned model choices for surfaces that existed then;
+  // the help class did not, so there is no legacy behavior to preserve — and
+  // letting AI_MODEL_DOCTOR retarget it would silently move the cheapest class
+  // in the system onto the most expensive route, which is the opposite of the
+  // reason it exists.
   const legacyOverride =
-    policy.task === "staff_clinical_summary" ||
-    policy.task === "staff_administrative" ||
-    policy.task === "staff_operational_query"
-      ? process.env.AI_MODEL_DOCTOR?.trim()
-      : process.env.AI_MODEL_PATIENT?.trim();
+    policy.task === "staff_help"
+      ? undefined
+      : policy.task === "staff_clinical_summary" ||
+          policy.task === "staff_administrative" ||
+          policy.task === "staff_operational_query"
+        ? process.env.AI_MODEL_DOCTOR?.trim()
+        : process.env.AI_MODEL_PATIENT?.trim();
   const alias = legacyOverride
     ? LEGACY_CERTIFIED_MODEL_IDS[legacyOverride]
     : policy.primaryModelAlias;

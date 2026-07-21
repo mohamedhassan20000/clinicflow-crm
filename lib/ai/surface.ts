@@ -15,6 +15,7 @@ import { getEntitlements, hasFeature } from "@/lib/entitlements";
 import type { AuthedUser } from "@/lib/rbac";
 import { getPageVisibilityState } from "@/lib/server-page-permissions";
 import { createClient } from "@/lib/supabase/server";
+import type { PromptLocale } from "@/lib/ai/prompts/doctor";
 
 export type StaffAssistantSurfaceAccess =
   | { state: "available"; remaining: number; limit: number }
@@ -73,6 +74,7 @@ export type StaffAssistantPageResolution =
 
 export async function resolveStaffAssistantPage(
   user: AuthedUser,
+  locale: PromptLocale = "en",
 ): Promise<StaffAssistantPageResolution> {
   const visibility = await getPageVisibilityState(user, "assistant");
   if (visibility === "hidden") return { state: "hidden" };
@@ -95,7 +97,7 @@ export async function resolveStaffAssistantPage(
   // and the access gate is the right place to explain a gated one.
   const [loaded, capabilities] = await Promise.all([
     loadAssistantConversationForSurface({ user }),
-    resolveAssistantCapabilities(user),
+    resolveAssistantCapabilities(user, locale),
   ]);
   if (!loaded.persistenceAvailable) {
     access = { state: "temporarily_unavailable" };

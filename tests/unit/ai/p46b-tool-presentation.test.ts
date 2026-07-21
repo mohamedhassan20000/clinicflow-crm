@@ -214,14 +214,76 @@ describe("P4.6B result notices", () => {
   });
 
   it("exposes a report deep link", () => {
-    const { link } = summarizeToolResult({
-      report: "cancellations",
-      link: "/reports/cancellations?preset=this_month&from=2026-07-01&to=2026-07-31",
-    });
+    const { link, linkKind } = summarizeToolResult(
+      {
+        report: "cancellations",
+        link: "/reports/cancellations?preset=this_month&from=2026-07-01&to=2026-07-31",
+      },
+      "run_clinic_report",
+    );
 
     expect(link).toBe(
       "/reports/cancellations?preset=this_month&from=2026-07-01&to=2026-07-31",
     );
+    expect(linkKind).toBe("report");
+  });
+
+  it("extracts safe nested help citations and preserves unavailable citations without links", () => {
+    const summary = summarizeToolResult(
+      {
+        results: [
+          {
+            article_id: "record-payment-and-invoice",
+            title: "إصدار فاتورة الجلسة وتسجيل الدفع",
+            section: "المواعيد",
+            link: "/appointments",
+          },
+          {
+            article_id: "hidden-article",
+            title: "مقالة مخفية",
+            section: "الإعدادات ← التخصيص",
+            unavailable_reason: "hidden_by_admin",
+          },
+          {
+            article_id: "unsafe",
+            title: "Unsafe",
+            section: "Elsewhere",
+            link: "https://evil.example/steal",
+          },
+        ],
+      },
+      "search_help",
+    );
+
+    expect(summary.citations).toEqual([
+      {
+        articleId: "record-payment-and-invoice",
+        title: "إصدار فاتورة الجلسة وتسجيل الدفع",
+        section: "المواعيد",
+        link: "/appointments",
+      },
+      {
+        articleId: "hidden-article",
+        title: "مقالة مخفية",
+        section: "الإعدادات ← التخصيص",
+        link: null,
+      },
+      {
+        articleId: "unsafe",
+        title: "Unsafe",
+        section: "Elsewhere",
+        link: null,
+      },
+    ]);
+  });
+
+  it("classifies navigation links separately and carries their localized section label", () => {
+    const summary = summarizeToolResult(
+      { link: "/settings/messaging", section: "Settings → Messaging" },
+      "get_navigation_target",
+    );
+    expect(summary.linkKind).toBe("navigation");
+    expect(summary.linkLabel).toBe("Settings → Messaging");
   });
 
   it("refuses an off-site link, so a tool result can never become an open redirect", () => {

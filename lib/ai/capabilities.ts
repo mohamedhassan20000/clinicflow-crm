@@ -12,6 +12,11 @@ import {
   hasAiUserPermission,
 } from "@/lib/ai/permissions";
 import { resolveToolMount } from "@/lib/ai/tools";
+import {
+  presentationFor,
+  type AssistantToolGroup,
+} from "@/lib/ai/tool-presentation";
+import type { PromptLocale } from "@/lib/ai/prompts/doctor";
 import type { AuthedUser } from "@/lib/rbac";
 
 /**
@@ -40,15 +45,85 @@ export type FinancialCapabilityState =
    */
   | "unavailable";
 
+/**
+ * One capability, as the panel and the `list_my_capabilities` tool present it
+ * (P4.7B).
+ *
+ * `description` is the registry's own `capabilityDescription[locale]` — the same
+ * text placed in the model's context when the tool is mounted — so the panel and
+ * the model describe a capability with one wording, resolved from one place. The
+ * `group` reuses the presentation grouping the chat already renders tool activity
+ * with, so a financial capability reads as financial in the panel too.
+ */
+export type AssistantCapabilityItem = {
+  /** The registry tool name; a stable id, not shown to the user. */
+  name: string;
+  group: AssistantToolGroup;
+  description: string;
+};
+
 export type AssistantCapabilities = {
-  /** Tool names actually mounted for this user — the model's own resolution. */
+  /** Authorized union across the task classes supported for this user's role. */
   toolNames: readonly string[];
+  /**
+   * The authorized union rendered as localized, grouped descriptions — the
+   * capability panel's content and the `list_my_capabilities` payload, from the
+   * same resolution as `toolNames` (P4.7B). Order is group-then-registry so the
+   * panel is stable across requests.
+   */
+  items: readonly AssistantCapabilityItem[];
   /** Clinic-wide aggregate distributions (admin/manager). */
   clinicAnalytics: boolean;
   /** Bounded operational lists, counts, and reports. */
   operational: boolean;
   financial: FinancialCapabilityState;
 };
+
+/**
+ * The order the panel lists groups in. Guidance sits last because "how to use
+ * the app" and "what can I ask" are meta-capabilities framing the rest, not
+ * clinic work; clinical/operational/financial mirror the chat's own visual
+ * ordering of tool activity.
+ */
+const GROUP_ORDER: readonly AssistantToolGroup[] = [
+  "clinical",
+  "operational",
+  "financial",
+  "guidance",
+];
+
+/**
+ * Maps the resolved authorized union to localized, grouped capability items.
+ *
+ * Deliberately derived from `resolveToolMount` definitions rather than a second
+ * list. An active turn passes a task class and receives a narrower mount; this
+ * unscoped resolution receives the union of the classes supported for the role.
+ * Tests require every active mount to be a subset of this union and require the
+ * union to equal the set union of those mounts.
+ */
+function capabilityItems(
+  definitions: readonly {
+    name: string;
+    capabilityDescription?: { en: string; ar: string };
+  }[],
+  locale: PromptLocale,
+): AssistantCapabilityItem[] {
+  const items = definitions.map((definition) => ({
+    name: definition.name,
+    group: presentationFor(definition.name).group,
+    // Every real registry entry carries a description; the fallback only guards
+    // the degrade paths (and the synthetic mounts tests force) so a missing one
+    // renders as an empty string rather than throwing the whole resolution away.
+    description: definition.capabilityDescription?.[locale] ?? "",
+  }));
+  return items.sort((a, b) => {
+    const byGroup = GROUP_ORDER.indexOf(a.group) - GROUP_ORDER.indexOf(b.group);
+    if (byGroup !== 0) return byGroup;
+    // Preserve registry order within a group (map above kept it), so equal-group
+    // items keep the deliberate ordering of AI_TOOL_REGISTRY.
+    return 0;
+  });
+}
 
 const CLINIC_ANALYTICS_TOOLS = [
   "get_clinic_summary",
@@ -71,6 +146,7 @@ export const FINANCIAL_TOOL_NAMES = [
 
 const EMPTY: AssistantCapabilities = {
   toolNames: [],
+  items: [],
   clinicAnalytics: false,
   operational: false,
   financial: "not_applicable",
@@ -81,29 +157,34 @@ const EMPTY: AssistantCapabilities = {
  * only** — suggestion chips, the financial "not enabled" notice, and how a
  * result is framed.
  *
- * It reads the mount from `resolveToolMount`, the same function that builds the
- * model's tool array, rather than re-deriving the rules from the role matrix.
+ * It reads the authorized union from `resolveToolMount`, the same function that
+ * builds each active model tool array, rather than re-deriving tool rules.
  * That is deliberate: a second copy of the matrix is a second thing to keep
  * correct, and the failure mode of a drifted copy is an affordance that offers
  * a capability the user does not have (or hides one they do).
  *
- * `taskClass` is intentionally omitted, so this returns the union across the
- * task classes the role can run rather than one turn's narrower mount. The
- * per-turn mount stays authoritative for what the model may call; this is the
- * superset the UI describes. Nothing here is an authorization decision — every
+ * `taskClass` is intentionally omitted, so this returns the exact set union
+ * across the certified task classes the router supports for the role, rather
+ * than one turn's narrower mount. The per-turn mount stays authoritative for
+ * what the model may call; this is the cross-turn authorization contract the UI
+ * describes. Nothing here is an authorization decision — every
  * tool re-asserts role, entitlement, permission, and RLS inside `execute()`,
  * and the route denies independently of anything the client was shown.
  */
 export async function resolveAssistantCapabilities(
   user: AuthedUser,
+  locale: PromptLocale = "en",
 ): Promise<AssistantCapabilities> {
   try {
-    const { definitions } = await resolveToolMount({ user, locale: "en" });
+    // Locale is passed to the mount so `capabilityDescription` is read in the
+    // right language for the panel; it does not change *which* tools mount.
+    const { definitions } = await resolveToolMount({ user, locale });
     const toolNames = definitions.map((definition) => definition.name);
     const mounted = new Set(toolNames);
 
     return {
       toolNames,
+      items: capabilityItems(definitions, locale),
       clinicAnalytics: CLINIC_ANALYTICS_TOOLS.some((name) => mounted.has(name)),
       operational: OPERATIONAL_TOOLS.some((name) => mounted.has(name)),
       financial: FINANCIAL_TOOL_NAMES.some((name) => mounted.has(name))

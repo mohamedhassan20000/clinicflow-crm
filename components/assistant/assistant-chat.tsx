@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import {
   DefaultChatTransport,
@@ -12,6 +12,7 @@ import {
   CircleStop,
   FileSearch,
   HelpCircle,
+  ListChecks,
   LoaderCircle,
   Plus,
   Send,
@@ -36,6 +37,7 @@ import {
   type AssistantResultNotice,
 } from "@/lib/ai/tool-presentation";
 import type { PermissionUserRole } from "@/lib/page-permissions";
+import { CapabilityPanel } from "@/components/assistant/capability-panel";
 
 type AssistantChatProps = {
   initialConversationId: string;
@@ -180,9 +182,15 @@ function ToolActivity({ part }: { part: StaffAssistantToolPart }) {
   const name = part.type === "dynamic-tool" ? part.toolName : part.type.slice(5);
   const { labelKey, group } = presentationFor(name);
   const isFinancial = group === "financial";
-  const { notices, link } = complete
-    ? summarizeToolResult((part as { output?: unknown }).output)
-    : { notices: [], link: null };
+  const { notices, link, linkKind, linkLabel, citations } = complete
+    ? summarizeToolResult((part as { output?: unknown }).output, name)
+    : {
+        notices: [],
+        link: null,
+        linkKind: null,
+        linkLabel: null,
+        citations: [],
+      };
 
   // H2 (review #2). A tool that throws mid-stream arrives here and *only* here:
   // the SDK converts it to a `tool-output-error` part, so `useChat`'s `error`
@@ -255,12 +263,41 @@ function ToolActivity({ part }: { part: StaffAssistantToolPart }) {
         </ul>
       ) : null}
 
+      {citations.length > 0 ? (
+        <div className="mt-2 border-t border-current/15 pt-2">
+          <p className="font-medium text-foreground/80">{t("helpSources")}</p>
+          <ul className="mt-1.5 space-y-1.5">
+            {citations.map((citation) => (
+              <li key={citation.articleId}>
+                <span>{t("helpArticleCitation", { title: citation.title })}</span>
+                {citation.link ? (
+                  <Link
+                    href={citation.link}
+                    className="ms-2 inline-flex items-center gap-1 font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  >
+                    {t("openDestination", { destination: citation.section })}
+                    <ArrowUpRight
+                      className="size-3 rtl:-scale-x-100"
+                      aria-hidden="true"
+                    />
+                  </Link>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       {link ? (
         <Link
           href={link}
           className="mt-2 inline-flex items-center gap-1 font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
-          {t("openFullReport")}
+          {linkKind === "report"
+            ? t("openFullReport")
+            : t("openDestination", {
+                destination: linkLabel ?? t("destinationFallback"),
+              })}
           <ArrowUpRight className="size-3 rtl:-scale-x-100" aria-hidden="true" />
         </Link>
       ) : null}
@@ -414,7 +451,14 @@ function ChatSession({
   const router = useRouter();
   const [input, setInput] = useState("");
   const [announcement, setAnnouncement] = useState("");
+  const [capabilitiesOpen, setCapabilitiesOpen] = useState(false);
+  const capabilityPanelId = useId();
+  const capabilityToggleRef = useRef<HTMLButtonElement>(null);
+  const restoreCapabilityFocusRef = useRef(false);
   const endRef = useRef<HTMLDivElement>(null);
+  // The panel is offered only where there is a server-resolved capability set to
+  // show — the assistant page, not the doctor patient sheet (capabilities null).
+  const showCapabilityToggle = (capabilities?.items.length ?? 0) > 0;
   const transport = useMemo(
     () =>
       new DefaultChatTransport<StaffAssistantUIMessage>({
@@ -472,6 +516,13 @@ function ChatSession({
     });
   }, [messages, status]);
 
+  useEffect(() => {
+    if (!capabilitiesOpen && restoreCapabilityFocusRef.current) {
+      restoreCapabilityFocusRef.current = false;
+      capabilityToggleRef.current?.focus();
+    }
+  }, [capabilitiesOpen]);
+
   const errorCopy = error ? t(errorCopyKey(error.message)) : null;
 
   function submitMessage() {
@@ -502,11 +553,39 @@ function ChatSession({
         <span className="ms-auto text-xs tabular-nums text-muted-foreground">
           {t("remaining", { count: remaining })}
         </span>
+        {showCapabilityToggle ? (
+          <Button
+            ref={capabilityToggleRef}
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => setCapabilitiesOpen((open) => !open)}
+            aria-expanded={capabilitiesOpen}
+            aria-controls={capabilityPanelId}
+          >
+            <ListChecks className="size-3.5" aria-hidden="true" />
+            {t("capabilitiesButton")}
+          </Button>
+        ) : null}
         <Button type="button" variant="ghost" size="sm" className="gap-1.5" onClick={onNewConversation} disabled={busy}>
           <Plus className="size-3.5" aria-hidden="true" />
           {t("newChat")}
         </Button>
       </div>
+
+      {showCapabilityToggle && capabilitiesOpen ? (
+        <div id={capabilityPanelId}>
+          <CapabilityPanel
+            items={capabilities!.items}
+            titleId={`${capabilityPanelId}-title`}
+            onClose={() => {
+              restoreCapabilityFocusRef.current = true;
+              setCapabilitiesOpen(false);
+            }}
+          />
+        </div>
+      ) : null}
 
       <div
         className={cn(

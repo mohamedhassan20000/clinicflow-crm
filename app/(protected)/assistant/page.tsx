@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { BrainCircuit, ShieldCheck } from "lucide-react";
-import { getTranslations } from "next-intl/server";
+import { getLocale, getTranslations } from "next-intl/server";
 import { AssistantAccessGate } from "@/components/assistant/assistant-access-gate";
 import { AssistantChat } from "@/components/assistant/assistant-chat";
 import type { StaffAssistantUIMessage } from "@/lib/ai/staff-agent";
@@ -16,11 +16,12 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function AssistantPage() {
-  const [t, user] = await Promise.all([
+  const [t, user, locale] = await Promise.all([
     getTranslations("assistant"),
     requireUser(),
+    getLocale(),
   ]);
-  const resolution = await resolveStaffAssistantPage(user);
+  const resolution = await resolveStaffAssistantPage(user, locale === "ar" ? "ar" : "en");
   if (resolution.state === "hidden") redirect("/dashboard");
   const { access, conversation, capabilities } = resolution;
 

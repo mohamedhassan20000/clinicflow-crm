@@ -102,14 +102,18 @@ describe("P4.5A certified policy registry", () => {
   });
 
   it("contains only certified Gateway routes with explicit privacy requirements", () => {
-    expect(listCertifiedModelRoutes()).toHaveLength(2);
+    // Three since P4.7A added the cheap `staff-haiku-bootstrap-v1` help route.
+    expect(listCertifiedModelRoutes()).toHaveLength(3);
     for (const route of listCertifiedModelRoutes()) {
       expect(route.transport).toBe("vercel_ai_gateway");
       expect(route.privacy).toEqual({
         zeroDataRetentionRequired: true,
         noTrainingRequired: true,
       });
-      expect(route.certification.version).toMatch(/^p4-bootstrap-/);
+      // P4.7A's help route carries its own bootstrap version (`p47a-…`); all
+      // remain bootstrap-approved, which is what this assertion guards.
+      expect(route.certification.status).toBe("bootstrap_approved");
+      expect(route.certification.version).toMatch(/^p4/);
     }
   });
 

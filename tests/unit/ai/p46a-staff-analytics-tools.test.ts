@@ -185,6 +185,12 @@ describe("P4.6A registration matrix", () => {
       "search_patient_visits",
       "list_doctor_appointments",
       "check_availability",
+      // P4.7A help/navigation ride on ai_assistant for every role, doctors
+      // included — a doctor may ask how to use the app just like anyone else;
+      // P4.7B's list_my_capabilities rides on the same base entitlement.
+      "search_help",
+      "get_navigation_target",
+      "list_my_capabilities",
     ]);
   });
 
@@ -206,6 +212,12 @@ describe("P4.6A registration matrix", () => {
     expect(Object.keys(tools)).toEqual([
       "search_authorized_patients",
       "check_availability",
+      // Help/navigation and capability transparency are part of the base
+      // assistant, so the umbrella entitlement alone is enough for them even
+      // with no analytics feature.
+      "search_help",
+      "get_navigation_target",
+      "list_my_capabilities",
     ]);
   });
 

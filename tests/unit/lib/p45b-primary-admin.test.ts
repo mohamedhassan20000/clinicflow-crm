@@ -70,9 +70,16 @@ describe("P4.5B getPrimaryClinicAdminId app/DB parity (L1)", () => {
     expect(await getPrimaryClinicAdminId("clinic-a")).toBeNull();
   });
 
-  it("fails closed to null on a query error", async () => {
+  it("preserves a query failure instead of treating it as no eligible admin", async () => {
     mocks.result = { data: null as unknown as { id: string }[], error: { message: "boom" } };
-    const { getPrimaryClinicAdminId } = await import("@/lib/primary-admin");
-    expect(await getPrimaryClinicAdminId("clinic-a")).toBeNull();
+    const { getPrimaryClinicAdminId, isPrimaryClinicAdmin } = await import(
+      "@/lib/primary-admin"
+    );
+    await expect(getPrimaryClinicAdminId("clinic-a")).rejects.toThrow(
+      "Failed to determine the primary clinic administrator",
+    );
+    await expect(
+      isPrimaryClinicAdmin("admin-1", "clinic-a"),
+    ).rejects.toThrow("Failed to determine the primary clinic administrator");
   });
 });

@@ -319,11 +319,10 @@ describe("M5 — contact details are withheld from a candidate list", () => {
 
 describe("M6 — the task-class gate is mechanically load-bearing", () => {
   it("excludes P4.6 tools from a clinical-summary turn", async () => {
-    // No *reachable* administrative turn resolves to this class today (see the
-    // note in registry.ts), so this asserts the mechanism rather than a
-    // production path — which is precisely what M6 says must not be confused
-    // for the other. When P4.7's `staff_help` class lands, it becomes real.
-    const { mount } = await load(user("admin"), { taskClass: "staff_clinical_summary" });
+    // Use the role that can actually run this certified class. Unsupported
+    // role/class pairings now fail closed with an empty mount; the separate
+    // P4.7 union-contract test pins that behavior.
+    const { mount } = await load(user("doctor"), { taskClass: "staff_clinical_summary" });
     const names = mount.definitions.map((definition) => definition.name);
 
     expect(names).not.toContain("get_clinic_summary");

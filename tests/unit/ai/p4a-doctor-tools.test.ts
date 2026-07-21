@@ -105,6 +105,11 @@ describe("role-specific Assistant tool registration", () => {
       "search_patient_visits",
       "list_doctor_appointments",
       "check_availability",
+      // P4.7A help/navigation mount for every staff role under ai_assistant;
+      // P4.7B adds list_my_capabilities on the same footing.
+      "search_help",
+      "get_navigation_target",
+      "list_my_capabilities",
     ]);
 
     for (const role of ["admin", "manager", "receptionist"] as const) {
@@ -112,6 +117,9 @@ describe("role-specific Assistant tool registration", () => {
       expect(Object.keys(staff.staffTools)).toEqual([
         "search_authorized_patients",
         "check_availability",
+        "search_help",
+        "get_navigation_target",
+        "list_my_capabilities",
       ]);
     }
   });

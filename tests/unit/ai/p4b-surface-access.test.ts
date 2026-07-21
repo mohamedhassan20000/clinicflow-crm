@@ -25,7 +25,6 @@ vi.mock("@sentry/nextjs", () => ({ captureException: mocks.captureException }));
 
 import {
   getStaffAssistantSurfaceAccess,
-  resolvePatientAssistantLauncher,
   resolveStaffAssistantPage,
 } from "@/lib/ai/surface";
 
@@ -64,6 +63,27 @@ describe("P4B assistant surface access", () => {
     expect(mocks.usage).not.toHaveBeenCalled();
   });
 
+  it("requires every feature declared by a generalized assistant surface", async () => {
+    mocks.hasFeature.mockImplementation(
+      (_entitlements, feature: string) => feature === "ai_assistant",
+    );
+    await expect(getStaffAssistantSurfaceAccess(user, [
+      "ai_assistant",
+      "ai.staff_analytics",
+    ])).resolves.toEqual({ state: "upgrade" });
+    expect(mocks.hasFeature).toHaveBeenNthCalledWith(
+      1,
+      { subscriptionAllowed: true },
+      "ai_assistant",
+    );
+    expect(mocks.hasFeature).toHaveBeenNthCalledWith(
+      2,
+      { subscriptionAllowed: true },
+      "ai.staff_analytics",
+    );
+    expect(mocks.usage).not.toHaveBeenCalled();
+  });
+
   it("shows cap degradation and temporary lookup failure distinctly", async () => {
     mocks.usage.mockResolvedValueOnce({ allowed: false, remaining: 0, limit: 100, reason: "limit_reached" });
     await expect(getStaffAssistantSurfaceAccess(user)).resolves.toEqual({ state: "cap_reached", limit: 100 });
@@ -92,28 +112,4 @@ describe("P4B assistant surface access", () => {
     expect(mocks.captureException).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps the patient launcher doctor-only and optional", async () => {
-    await expect(resolvePatientAssistantLauncher({
-      user: { ...user, role: "receptionist" },
-      patientId: "patient-1",
-    })).resolves.toBeNull();
-
-    mocks.conversation.mockRejectedValueOnce(new Error("PGRST205"));
-    await expect(resolvePatientAssistantLauncher({
-      user,
-      patientId: "patient-1",
-    })).resolves.toBeNull();
-  });
-
-  it("keeps the patient page usable when an Assistant entitlement dependency throws", async () => {
-    mocks.entitlements.mockRejectedValueOnce(new Error("entitlement dependency unavailable"));
-    await expect(resolvePatientAssistantLauncher({
-      user,
-      patientId: "patient-1",
-    })).resolves.toBeNull();
-    expect(mocks.captureException).toHaveBeenCalledWith(
-      expect.objectContaining({ message: "entitlement dependency unavailable" }),
-      expect.objectContaining({ tags: { area: "patient-assistant-launcher" } }),
-    );
-  });
 });

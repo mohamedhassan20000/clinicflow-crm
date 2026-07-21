@@ -6,12 +6,17 @@ import { buildStaffSystemPrompt } from "@/lib/ai/prompts/staff";
 import type { PromptLocale } from "@/lib/ai/prompts/doctor";
 import { buildStaffTools } from "@/lib/ai/tools";
 import type { AuthedUser } from "@/lib/rbac";
+import {
+  buildAssistantPageContextPrompt,
+  patientIdFromAssistantPageContext,
+  type AssistantPageContext,
+} from "@/lib/ai/page-context";
 
 type StaffAgentContext = {
   user: AuthedUser;
   locale: PromptLocale;
   clinicName: string;
-  patientId?: string | null;
+  pageContext?: AssistantPageContext | null;
   execution: AiExecutionHandle;
 };
 
@@ -20,14 +25,14 @@ type StaffAgentContext = {
  * plan entitlements and the caller's per-user AI permissions (P4.6A).
  */
 export async function createStaffAgent(ctx: StaffAgentContext) {
-  const patientContext = ctx.user.role === "doctor" && ctx.patientId
-    ? `\n\nThis chat was opened from a patient profile. When the user refers to "this patient", use the internal patient id "${ctx.patientId}" as the patient_id tool argument. Never display that internal id in your answer.`
-    : "";
+  const patientId = ctx.user.role === "doctor"
+    ? patientIdFromAssistantPageContext(ctx.pageContext ?? null)
+    : null;
 
   const tools = await buildStaffTools({
     user: ctx.user,
     locale: ctx.locale,
-    patientId: ctx.user.role === "doctor" ? ctx.patientId : null,
+    patientId,
     // The registry filters the mount by task class, so the certified policy the
     // turn resolved to also decides which tools exist in it (P4.6A).
     taskClass: ctx.execution.taskPolicy.task,
@@ -43,7 +48,7 @@ export async function createStaffAgent(ctx: StaffAgentContext) {
         clinicName: ctx.clinicName,
         doctorName: ctx.user.fullName,
         role: ctx.user.role,
-      }) + patientContext,
+      }) + buildAssistantPageContextPrompt(ctx.pageContext ?? null, ctx.locale),
     tools,
     stopWhen: stepCountIs(ctx.execution.taskPolicy.maxSteps),
     temperature: ctx.execution.taskPolicy.temperature,

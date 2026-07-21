@@ -4,9 +4,11 @@ import { useTranslations } from "next-intl";
 export function ReportPageHeader({
   title,
   description,
+  actions,
 }: {
   title: string;
   description: string;
+  actions?: React.ReactNode;
 }) {
   const t = useTranslations("reports");
   return (
@@ -15,6 +17,7 @@ export function ReportPageHeader({
       breadcrumbs={[{ label: t("reports"), href: "/reports" }, { label: title }]}
       title={title}
       description={description}
+      actions={actions}
       className="print:hidden"
     />
   );

@@ -50,6 +50,7 @@ function capabilities(
     clinicAnalytics: false,
     operational: false,
     financial: "not_applicable",
+    allowedReportIds: [],
     ...overrides,
   };
 }
@@ -464,7 +465,10 @@ describe("P4.7 — capability panel component and accessibility", () => {
       />,
     );
     expect(screen.getAllByRole("listitem")).toHaveLength(30);
-    expect(container.querySelector(".max-h-64.overflow-y-auto")).toBeInTheDocument();
+    expect(container.querySelector(".max-h-64.overflow-y-auto")).toHaveAttribute(
+      "tabindex",
+      "0",
+    );
   });
 });
 

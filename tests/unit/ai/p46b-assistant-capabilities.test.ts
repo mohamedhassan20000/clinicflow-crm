@@ -151,6 +151,12 @@ describe("P4.6B capability resolution", () => {
     // The rest of the surface is unaffected by the financial grant.
     expect(capabilities.operational).toBe(true);
     expect(capabilities.clinicAnalytics).toBe(true);
+    expect(capabilities.allowedReportIds).toEqual([
+      "cancellations",
+      "no_shows",
+      "doctor_performance",
+      "receptionist_performance",
+    ]);
   });
 
   it("treats an explicitly revoked grant as not_granted", async () => {
@@ -158,6 +164,35 @@ describe("P4.6B capability resolution", () => {
       financialPermission: false,
     });
     expect(capabilities.financial).toBe("not_granted");
+  });
+
+  it("derives the exact role × report × financial-grant matrix from the shared policy", async () => {
+    const admin = await loadCapabilities(user("admin"));
+    const manager = await loadCapabilities(user("manager"), {
+      financialPermission: true,
+    });
+    const receptionist = await loadCapabilities(user("receptionist"));
+
+    expect(admin.capabilities.allowedReportIds).toEqual([
+      "cancellations",
+      "no_shows",
+      "revenue",
+      "followups",
+      "doctor_performance",
+      "receptionist_performance",
+    ]);
+    expect(manager.capabilities.allowedReportIds).toEqual([
+      "cancellations",
+      "no_shows",
+      "revenue",
+      "doctor_performance",
+      "receptionist_performance",
+    ]);
+    expect(receptionist.capabilities.allowedReportIds).toEqual([
+      "cancellations",
+      "no_shows",
+      "followups",
+    ]);
   });
 
   it("tells a manager on a plan without financial AI to upgrade, not to ask an admin", async () => {

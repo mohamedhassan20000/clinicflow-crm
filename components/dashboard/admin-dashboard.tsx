@@ -25,6 +25,7 @@ type Appointment = Tables<"appointments"> & {
 };
 
 interface AdminDashboardProps {
+  assistantLauncher?: React.ReactNode;
   fullName: string;
   pendingCount: number;
   todayAppointments: Appointment[];
@@ -42,6 +43,7 @@ function formatDate(iso: string) {
 }
 
 export function AdminDashboard({
+  assistantLauncher,
   fullName,
   pendingCount,
   todayAppointments,
@@ -61,7 +63,8 @@ export function AdminDashboard({
             {t("welcomeBack")}{fullName}.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          {assistantLauncher}
           <Button asChild variant="outline" size="sm" className="gap-2">
             <Link href="/patients/new">
               <UserPlus className="h-4 w-4" />

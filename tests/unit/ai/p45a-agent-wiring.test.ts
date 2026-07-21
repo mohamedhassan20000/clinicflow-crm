@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   reconcile: vi.fn(),
   resolveCredential: vi.fn(),
   toolExecute: vi.fn(),
+  buildTools: vi.fn(),
 }));
 
 vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
@@ -41,15 +42,14 @@ vi.mock("@/lib/ai/tools", async () => {
     vi.importActual<typeof import("ai")>("ai"),
     vi.importActual<typeof import("zod")>("zod"),
   ]);
-  return {
-    buildStaffTools: async () => ({
+  mocks.buildTools.mockImplementation(async () => ({
       lookup: tool({
         description: "Return a deterministic test result.",
         inputSchema: z.object({ query: z.string() }),
         execute: mocks.toolExecute,
       }),
-    }),
-  };
+    }));
+  return { buildStaffTools: mocks.buildTools };
 });
 
 import { prepareAiExecution } from "@/lib/ai/platform/execution";
@@ -139,6 +139,87 @@ beforeEach(() => {
 });
 
 describe("P4.5A real ToolLoopAgent accounting wiring", () => {
+  it("keeps non-patient page context out of tool-mount authorization inputs", async () => {
+    const execution = await prepareAiExecution({
+      user: USER,
+      requestId: "00000000-0000-4000-8000-000000000010",
+      task: "staff_clinical_summary",
+      persona: "doctor",
+      surface: "staff_assistant",
+    });
+    await createStaffAgent({
+      user: USER,
+      locale: "en",
+      clinicName: "Test Clinic",
+      pageContext: {
+        type: "appointments",
+        dateRange: { from: "2026-07-01", to: "2026-07-07" },
+        doctorId: "00000000-0000-4000-8000-000000000099",
+      },
+      execution,
+    });
+
+    expect(mocks.buildTools).toHaveBeenLastCalledWith(expect.objectContaining({
+      user: USER,
+      patientId: null,
+      taskClass: "staff_clinical_summary",
+    }));
+  });
+
+  it.each([
+    { type: "revenue", dateRange: { from: "2026-07-01", to: "2026-07-31" } },
+    { type: "reports", report: "no_shows", range: { from: "2026-07-01", to: "2026-07-31" } },
+    { type: "invoices", filter: "outstanding" },
+    { type: "staff" },
+    { type: "departments" },
+    { type: "doctor-schedule" },
+  ] as const)("keeps P4.8B $type context out of tool-mount authorization", async (pageContext) => {
+    const execution = await prepareAiExecution({
+      user: USER,
+      requestId: "00000000-0000-4000-8000-000000000010",
+      task: "staff_clinical_summary",
+      persona: "doctor",
+      surface: "staff_assistant",
+    });
+    await createStaffAgent({
+      user: USER,
+      locale: "en",
+      clinicName: "Test Clinic",
+      pageContext,
+      execution,
+    });
+
+    expect(mocks.buildTools).toHaveBeenLastCalledWith(expect.objectContaining({
+      user: USER,
+      patientId: null,
+      taskClass: "staff_clinical_summary",
+    }));
+  });
+
+  it("preserves the existing validated patient default without changing the role mount", async () => {
+    const execution = await prepareAiExecution({
+      user: USER,
+      requestId: "00000000-0000-4000-8000-000000000010",
+      task: "staff_clinical_summary",
+      persona: "doctor",
+      surface: "staff_assistant",
+    });
+    const patientId = "00000000-0000-4000-8000-000000000011";
+    await createStaffAgent({
+      user: USER,
+      locale: "en",
+      clinicName: "Test Clinic",
+      pageContext: { type: "patient", patientId },
+      execution,
+    });
+
+    expect(mocks.buildTools).toHaveBeenLastCalledWith(expect.objectContaining({
+      user: USER,
+      patientId,
+      taskClass: "staff_clinical_summary",
+    }));
+  });
+
   it("maps every SDK step into an ordered content-free reconciliation", async () => {
     const execution = await prepareAiExecution({
       user: USER,

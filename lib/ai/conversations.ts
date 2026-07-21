@@ -102,6 +102,39 @@ export async function loadLatestDoctorConversation(input: {
   };
 }
 
+/**
+ * Re-authorizes a patient context before a non-page server boundary may expose
+ * conversation history for it. Launcher session requests are browser input,
+ * so the patient page's earlier RLS check cannot be treated as authorization
+ * for the later request.
+ */
+export async function assertDoctorPatientContextAccess(input: {
+  supabase: AiClient;
+  user: AuthedUser;
+  patientId: string;
+}): Promise<void> {
+  if (input.user.role !== "doctor") {
+    throw new AiConversationError("invalid_patient_context");
+  }
+
+  const { data: patient, error: patientError } = await input.supabase
+    .from("patients")
+    .select("id, assigned_doctor_id, department_id")
+    .eq("id", input.patientId)
+    .eq("clinic_id", input.user.clinicId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (patientError || !patient) {
+    throw new AiConversationError("invalid_patient_context");
+  }
+  if (
+    patient.assigned_doctor_id !== input.user.id &&
+    (!input.user.departmentId || patient.department_id !== input.user.departmentId)
+  ) {
+    throw new AiConversationError("invalid_patient_context");
+  }
+}
+
 export async function ensureDoctorConversation(input: {
   supabase: AiClient;
   user: AuthedUser;
@@ -139,23 +172,11 @@ export async function ensureDoctorConversation(input: {
   }
 
   if (requestedPatientId) {
-    const { data: patient, error: patientError } = await input.supabase
-      .from("patients")
-      .select("id, assigned_doctor_id, department_id")
-      .eq("id", requestedPatientId)
-      .eq("clinic_id", input.user.clinicId)
-      .is("deleted_at", null)
-      .maybeSingle();
-    if (patientError || !patient) {
-      throw new AiConversationError("invalid_patient_context");
-    }
-    if (
-      input.user.role === "doctor" &&
-      patient.assigned_doctor_id !== input.user.id &&
-      (!input.user.departmentId || patient.department_id !== input.user.departmentId)
-    ) {
-      throw new AiConversationError("invalid_patient_context");
-    }
+    await assertDoctorPatientContextAccess({
+      supabase: input.supabase,
+      user: input.user,
+      patientId: requestedPatientId,
+    });
   }
 
   // Keep a first turn virtual until the model completes. This prevents an abort

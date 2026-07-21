@@ -39,9 +39,8 @@ import { formatDoctorName } from "@/lib/format-doctor";
 import { PageHeader } from "@/components/shared/page-header";
 import { resolveReturnTo, withReturnTo } from "@/lib/navigation/return-url";
 import { getTranslations } from "next-intl/server";
-import { PatientAssistantLauncher } from "@/components/assistant/patient-assistant-launcher";
-import type { StaffAssistantUIMessage } from "@/lib/ai/staff-agent";
-import { resolvePatientAssistantLauncher } from "@/lib/ai/surface";
+import { AssistantLauncherEntry } from "@/components/assistant/assistant-launcher-entry";
+import { resolveAssistantLauncher } from "@/lib/ai/launchers";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("protected");
@@ -162,8 +161,9 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
   // The contextual launcher is a doctor-only clinical capability. It is
   // optional enhancement data: entitlement, admin visibility, usage, or AI
   // persistence failures must never make the patient record unavailable.
+  const patientAssistantContext = { type: "patient", patientId: patient.id } as const;
   const assistantPromise = isDoctor && !patient.is_deleted
-    ? resolvePatientAssistantLauncher({ user, patientId: patient.id })
+    ? resolveAssistantLauncher({ user, context: patientAssistantContext })
     : null;
 
   let avatarUrl: string | null = null;
@@ -439,12 +439,10 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
         actions={
           <>
             {assistant ? (
-              <PatientAssistantLauncher
-                patient={{ id: patient.id, name: patient.full_name }}
-                access={assistant.access}
-                initialConversationId={assistant.conversation?.id ?? crypto.randomUUID()}
-                initialMessages={(assistant.conversation?.messages ?? []) as StaffAssistantUIMessage[]}
-                historyTruncated={assistant.conversation?.historyTruncated ?? false}
+              <AssistantLauncherEntry
+                resolution={assistant}
+                contextLabel={patient.full_name}
+                role={user.role}
               />
             ) : null}
             {!isDoctor && !patient.is_deleted ? (

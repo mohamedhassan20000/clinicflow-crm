@@ -38,11 +38,13 @@ import {
 } from "@/lib/ai/tool-presentation";
 import type { PermissionUserRole } from "@/lib/page-permissions";
 import { CapabilityPanel } from "@/components/assistant/capability-panel";
+import type { AssistantPageContext } from "@/lib/ai/page-context";
 
 type AssistantChatProps = {
   initialConversationId: string;
   initialMessages: StaffAssistantUIMessage[];
-  patient?: { id: string; name: string } | null;
+  pageContext?: AssistantPageContext | null;
+  contextLabel?: string | null;
   remaining: number;
   historyTruncated?: boolean;
   mode?: "page" | "sheet";
@@ -62,6 +64,8 @@ type SessionState = {
   historyTruncated: boolean;
 };
 
+type PatientChatContext = { id: string; name: string } | null;
+
 type StaffAssistantPart = StaffAssistantUIMessage["parts"][number];
 type StaffAssistantToolPart = Extract<
   StaffAssistantPart,
@@ -70,6 +74,18 @@ type StaffAssistantToolPart = Extract<
 
 function createConversationId() {
   return crypto.randomUUID();
+}
+
+export function buildAssistantChatRequestBody(input: {
+  id: string;
+  pageContext: AssistantPageContext | null;
+  message: StaffAssistantUIMessage | undefined;
+}) {
+  return {
+    id: input.id,
+    context: input.pageContext,
+    message: input.message,
+  };
 }
 
 /**
@@ -359,43 +375,119 @@ function MessageBubble({ message }: { message: StaffAssistantUIMessage }) {
 function suggestionsFor({
   t,
   patient,
+  pageContext,
   role,
   capabilities,
 }: {
   t: ReturnType<typeof useTranslations<"assistant">>;
-  patient: AssistantChatProps["patient"];
+  patient: PatientChatContext;
+  pageContext: AssistantPageContext | null;
   role: PermissionUserRole;
   capabilities: AssistantCapabilities | null;
 }): string[] {
   if (patient) {
     return [t("suggestSummary"), t("suggestRecentVisits"), t("suggestFollowups")];
   }
-  if (role === "doctor") {
-    return [t("suggestPatientLookup"), t("suggestSchedule"), t("suggestAvailability")];
+
+  // This host edits recurring hours but intentionally carries no doctor id or
+  // appointment range. Keep its chips limited to safe product help.
+  if (pageContext?.type === "doctor-schedule") {
+    return capabilities?.toolNames.includes("search_help")
+      ? [t("suggestScheduleHelp")]
+      : [];
   }
 
-  if (!capabilities) {
-    return [
+  const mounted = new Set(capabilities?.toolNames ?? []);
+  const contextual: string[] = [];
+  if (pageContext && capabilities) {
+    switch (pageContext.type) {
+      case "patient":
+      case "dashboard":
+        break;
+      case "appointments":
+        if (mounted.has("list_appointments") || mounted.has("list_doctor_appointments")) {
+          contextual.push(t("suggestVisibleAppointments", pageContext.dateRange));
+        }
+        if (mounted.has("get_appointment_stats")) {
+          contextual.push(t("suggestVisibleAppointmentStats", pageContext.dateRange));
+        }
+        if (mounted.has("check_availability")) {
+          contextual.push(t("suggestVisibleAvailability", pageContext.dateRange));
+        }
+        break;
+      case "revenue":
+        if (mounted.has("get_revenue_summary")) {
+          contextual.push(t("suggestVisibleRevenue", pageContext.dateRange));
+        }
+        if (mounted.has("compare_revenue_periods")) {
+          contextual.push(t("suggestCompareVisibleRevenue"));
+        }
+        if (mounted.has("list_outstanding_invoices")) {
+          contextual.push(t("suggestVisibleOutstanding"));
+        }
+        break;
+      case "reports":
+        if (
+          mounted.has("run_clinic_report") &&
+          capabilities.allowedReportIds.includes(pageContext.report)
+        ) {
+          contextual.push(
+            t("suggestCurrentReport", pageContext.range),
+            t("suggestExplainCurrentReport"),
+          );
+        }
+        break;
+      case "invoices":
+        if (mounted.has("list_outstanding_invoices")) {
+          contextual.push(t("suggestInvoiceOutstanding"));
+        }
+        if (mounted.has("search_help")) {
+          contextual.push(t("suggestInvoiceHelp"));
+        }
+        break;
+      case "staff":
+        if (mounted.has("get_clinic_summary")) {
+          contextual.push(t("suggestStaffOverview"));
+        }
+        if (mounted.has("search_help")) {
+          contextual.push(t("suggestStaffHelp"));
+        }
+        break;
+      case "departments":
+        if (mounted.has("get_clinic_summary")) {
+          contextual.push(t("suggestDepartmentOverview"));
+        }
+        if (mounted.has("search_help")) {
+          contextual.push(t("suggestDepartmentHelp"));
+        }
+        break;
+    }
+  }
+
+  let general: string[];
+  if (role === "doctor") {
+    general = [t("suggestPatientLookup"), t("suggestSchedule"), t("suggestAvailability")];
+  } else if (!capabilities) {
+    general = [
       t("suggestPatientLookup"),
       t("suggestAvailabilityStaff"),
       t("suggestHowToUseStaff"),
     ];
+  } else {
+    general = [];
+    if (mounted.has("get_clinic_summary")) general.push(t("suggestClinicSummary"));
+    if (mounted.has("list_appointments")) general.push(t("suggestTodaysAppointments"));
+    if (mounted.has("count_new_patients")) general.push(t("suggestNewPatients"));
+    if (mounted.has("get_appointment_stats")) general.push(t("suggestNoShowRate"));
+    if (mounted.has("list_pending_followups")) general.push(t("suggestPendingFollowups"));
+    if (capabilities.financial === "available") {
+      general.push(t("suggestRevenue"), t("suggestOutstanding"));
+    }
+    if (mounted.has("run_clinic_report")) general.push(t("suggestRunReport"));
+    general.push(t("suggestPatientLookup"), t("suggestAvailabilityStaff"));
   }
 
-  const mounted = new Set(capabilities.toolNames);
-  const suggestions: string[] = [];
-  if (mounted.has("get_clinic_summary")) suggestions.push(t("suggestClinicSummary"));
-  if (mounted.has("list_appointments")) suggestions.push(t("suggestTodaysAppointments"));
-  if (mounted.has("count_new_patients")) suggestions.push(t("suggestNewPatients"));
-  if (mounted.has("get_appointment_stats")) suggestions.push(t("suggestNoShowRate"));
-  if (mounted.has("list_pending_followups")) suggestions.push(t("suggestPendingFollowups"));
-  if (capabilities.financial === "available") {
-    suggestions.push(t("suggestRevenue"), t("suggestOutstanding"));
-  }
-  if (mounted.has("run_clinic_report")) suggestions.push(t("suggestRunReport"));
-  suggestions.push(t("suggestPatientLookup"), t("suggestAvailabilityStaff"));
-
-  return suggestions.slice(0, 6);
+  return [...new Set([...contextual, ...general])].slice(0, 6);
 }
 
 /**
@@ -433,6 +525,7 @@ function FinancialNotice({
 function ChatSession({
   session,
   patient,
+  pageContext,
   remaining,
   mode,
   role,
@@ -440,7 +533,8 @@ function ChatSession({
   onNewConversation,
 }: {
   session: SessionState;
-  patient?: AssistantChatProps["patient"];
+  patient: PatientChatContext;
+  pageContext: AssistantPageContext | null;
   remaining: number;
   mode: NonNullable<AssistantChatProps["mode"]>;
   role: PermissionUserRole;
@@ -466,11 +560,11 @@ function ChatSession({
         credentials: "same-origin",
         prepareSendMessagesRequest({ id, messages }) {
           return {
-            body: {
+            body: buildAssistantChatRequestBody({
               id,
-              patientId: patient?.id ?? null,
+              pageContext,
               message: messages.at(-1),
-            },
+            }),
           };
         },
         async fetch(input, init) {
@@ -484,7 +578,7 @@ function ChatSession({
           return response;
         },
       }),
-    [patient?.id],
+    [pageContext],
   );
   const {
     messages,
@@ -533,7 +627,17 @@ function ChatSession({
     void sendMessage({ text });
   }
 
-  const suggestions = suggestionsFor({ t, patient, role, capabilities });
+  const suggestions = suggestionsFor({
+    t,
+    patient,
+    pageContext,
+    role,
+    capabilities,
+  });
+  const currentReportUnavailable =
+    pageContext?.type === "reports" &&
+    capabilities !== null &&
+    !capabilities.allowedReportIds.includes(pageContext.report);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -613,6 +717,11 @@ function ChatSession({
                   ? t("emptyDescription")
                   : t("administrativeEmptyDescription")}
             </p>
+            {currentReportUnavailable ? (
+              <p className="mt-4 w-full rounded-xl border border-amber-500/25 bg-amber-500/8 px-3 py-2 text-start text-xs leading-5 text-amber-800 dark:text-amber-200">
+                {t("currentReportUnavailable")}
+              </p>
+            ) : null}
             <div className="mt-6 grid w-full gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {suggestions.map((suggestion) => (
                 <button
@@ -704,13 +813,17 @@ function ChatSession({
 export function AssistantChat({
   initialConversationId,
   initialMessages,
-  patient = null,
+  pageContext = null,
+  contextLabel = null,
   remaining,
   historyTruncated = false,
   mode = "page",
   role,
   capabilities = null,
 }: AssistantChatProps) {
+  const patient = pageContext?.type === "patient"
+    ? { id: pageContext.patientId, name: contextLabel ?? "" }
+    : null;
   const [session, setSession] = useState<SessionState>({
     id: initialConversationId,
     messages: initialMessages,
@@ -722,6 +835,7 @@ export function AssistantChat({
       key={session.id}
       session={session}
       patient={patient}
+      pageContext={pageContext}
       remaining={remaining}
       mode={mode}
       role={role}

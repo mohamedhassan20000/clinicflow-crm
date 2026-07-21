@@ -38,6 +38,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
 import { useTranslations } from "next-intl";
+import { ScopedAssistantLauncher } from "@/components/assistant/assistant-launcher-scope";
 
 export type PaymentMethod =
   | "cash"
@@ -397,7 +398,10 @@ export function BillingDialog({
     >
       <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{t("invoiceCompleteAppointment")}</DialogTitle>
+          <div className="flex flex-wrap items-start justify-between gap-2 pe-6">
+            <DialogTitle>{t("invoiceCompleteAppointment")}</DialogTitle>
+            <ScopedAssistantLauncher />
+          </div>
           <DialogDescription>
             {t("billingDescription", { patient: patientName ? t("patientnamedsuffix", { patient: patientName }) : "" })}
           </DialogDescription>

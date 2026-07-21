@@ -11,6 +11,8 @@ import {
 } from "@/components/revenue/print-button";
 import { PageHeader } from "@/components/shared/page-header";
 import { getTranslations } from "next-intl/server";
+import { AssistantLauncherEntry } from "@/components/assistant/assistant-launcher-entry";
+import { resolveAssistantLauncher } from "@/lib/ai/launchers";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("protected");
@@ -179,6 +181,16 @@ export default async function RevenuePage({ searchParams }: PageProps) {
   const filterPhone = sp.phone?.trim() || "";
   const currentPage = Math.max(1, Number.parseInt(sp.page ?? "1", 10) || 1);
   const rowFrom = (currentPage - 1) * REVENUE_PAGE_SIZE;
+  const assistantPromise = resolveAssistantLauncher({
+    user,
+    context: {
+      type: "revenue",
+      dateRange: {
+        from: fmtInput(range.start),
+        to: fmtInput(range.end),
+      },
+    },
+  });
 
   const supabase = await createClient();
 
@@ -286,6 +298,7 @@ export default async function RevenuePage({ searchParams }: PageProps) {
 
   const fromInput = sp.from ?? fmtInput(range.start);
   const toInput = sp.to ?? fmtInput(range.end);
+  const assistant = await assistantPromise;
 
   return (
     <div className="space-y-6">
@@ -295,6 +308,9 @@ export default async function RevenuePage({ searchParams }: PageProps) {
         breadcrumbs={[{ label: t("dashboard"), href: "/dashboard" }, { label: t("revenueTransactions2") }]}
         title={t("revenueTransactions")}
         description={t("reviewCollectedPaymentsSettlementsAndOutstanding")}
+        actions={
+          <AssistantLauncherEntry resolution={assistant} role={user.role} />
+        }
         className="print:hidden"
       />
 

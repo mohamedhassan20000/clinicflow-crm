@@ -29,17 +29,14 @@ import {
 } from "@/lib/reports/data";
 import type { AuthedUser, UserRole } from "@/lib/rbac";
 import type { ResolvedDateRange } from "@/lib/date-range";
+import {
+  allowedClinicReports,
+  CLINIC_REPORT_IDS,
+  CLINIC_REPORTS,
+  type ClinicReportId,
+} from "@/lib/ai/clinic-reports";
 
-export const CLINIC_REPORT_IDS = [
-  "cancellations",
-  "no_shows",
-  "revenue",
-  "followups",
-  "doctor_performance",
-  "receptionist_performance",
-] as const;
-
-export type ClinicReportId = (typeof CLINIC_REPORT_IDS)[number];
+export { CLINIC_REPORT_IDS, type ClinicReportId } from "@/lib/ai/clinic-reports";
 
 type ReportDefinition = {
   id: ClinicReportId;
@@ -76,57 +73,32 @@ type ReportDefinition = {
 const REPORTS: Record<ClinicReportId, ReportDefinition> = {
   cancellations: {
     id: "cancellations",
-    roles: ["admin", "manager", "receptionist"],
-    financial: false,
-    acceptsDoctor: true,
-    href: "/reports/cancellations",
-    auditTable: "appointments",
+    ...CLINIC_REPORTS.cancellations,
     run: ({ user, range, doctorId }) => getCancellationReportData(user, range, doctorId),
   },
   no_shows: {
     id: "no_shows",
-    roles: ["admin", "manager", "receptionist"],
-    financial: false,
-    acceptsDoctor: true,
-    href: "/reports/no-shows",
-    auditTable: "appointments",
+    ...CLINIC_REPORTS.no_shows,
     run: ({ range, doctorId }) => getNoShowReportData(range, doctorId),
   },
   revenue: {
     id: "revenue",
-    roles: ["admin", "manager"],
-    financial: true,
-    acceptsDoctor: true,
-    href: "/reports/revenue",
-    auditTable: "appointments",
+    ...CLINIC_REPORTS.revenue,
     run: ({ range, doctorId }) => getRevenueSummaryData(range, doctorId, null),
   },
   followups: {
     id: "followups",
-    // get_followups_dashboard denies managers; keep the assistant aligned.
-    roles: ["admin", "receptionist"],
-    financial: false,
-    acceptsDoctor: false,
-    href: "/reports/follow-ups",
-    auditTable: "follow_ups",
+    ...CLINIC_REPORTS.followups,
     run: ({ range }) => getFollowupsReportData(range, null),
   },
   doctor_performance: {
     id: "doctor_performance",
-    roles: ["admin", "manager"],
-    financial: false,
-    acceptsDoctor: true,
-    href: "/reports/doctors",
-    auditTable: "appointments",
+    ...CLINIC_REPORTS.doctor_performance,
     run: ({ range, doctorId }) => getDoctorPerformanceData(range, doctorId),
   },
   receptionist_performance: {
     id: "receptionist_performance",
-    roles: ["admin", "manager"],
-    financial: false,
-    acceptsDoctor: false,
-    href: "/reports/receptionists",
-    auditTable: "profiles",
+    ...CLINIC_REPORTS.receptionist_performance,
     run: ({ range }) => getReceptionistPerformanceData(range, null),
   },
 };
@@ -151,12 +123,7 @@ export function allowedReportsForRole(
   role: UserRole,
   options: { financialGranted?: boolean } = {},
 ): ClinicReportId[] {
-  const financialGranted = options.financialGranted ?? true;
-  return CLINIC_REPORT_IDS.filter(
-    (id) =>
-      REPORTS[id].roles.includes(role) &&
-      (financialGranted || !REPORTS[id].financial),
-  );
+  return allowedClinicReports(role, options);
 }
 
 function reportDeepLink(report: ReportDefinition, range: ResolvedDateRange): string {

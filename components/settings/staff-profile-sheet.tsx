@@ -43,6 +43,7 @@ import { getDoctorSchedule, upsertDoctorSchedule, getClinicWorkingHours } from "
 import type { DoctorScheduleValues, ClinicWorkingHoursValues } from "@/lib/validations/settings";
 import type { Tables } from "@/types/database";
 import { useTranslations } from "next-intl";
+import { ScopedAssistantLauncher } from "@/components/assistant/assistant-launcher-scope";
 
 type StaffMember = Tables<"profiles"> & {
   departments: { name: string; color?: string | null } | null;
@@ -514,9 +515,12 @@ function DoctorScheduleTab({
 
   return (
     <div className="space-y-4">
-      <p className="text-xs text-muted-foreground">
-        {t("setWhichDaysThisDoctorWorks")}
-      </p>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <p className="text-xs text-muted-foreground">
+          {t("setWhichDaysThisDoctorWorks")}
+        </p>
+        <ScopedAssistantLauncher />
+      </div>
 
       {saveError && (
         <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">

@@ -9,6 +9,9 @@ import { isPrimaryClinicAdmin } from "@/lib/primary-admin";
 import { createClinicScopedAdminClient } from "@/lib/supabase/admin";
 import { THIRTY_DAYS_MS } from "@/lib/constants";
 import { getTranslations } from "next-intl/server";
+import { AssistantLauncherEntry } from "@/components/assistant/assistant-launcher-entry";
+import { AssistantLauncherScope } from "@/components/assistant/assistant-launcher-scope";
+import { resolveAssistantLauncher } from "@/lib/ai/launchers";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("protected");
@@ -19,7 +22,14 @@ export default async function StaffSettingsPage() {
   const t = await getTranslations("protected");
   const user = await requireRole(["admin", "manager"]);
 
-  const [allStaff, cachedDepts, canCustomize, lastSeenMap] = await Promise.all([
+  const [
+    allStaff,
+    cachedDepts,
+    canCustomize,
+    lastSeenMap,
+    staffAssistant,
+    scheduleAssistant,
+  ] = await Promise.all([
     getCachedStaff(user.clinicId),
     getCachedDepartments(user.clinicId),
     user.role === "admin"
@@ -37,6 +47,11 @@ export default async function StaffSettingsPage() {
           })
           .catch(() => null)
       : Promise.resolve(null),
+    resolveAssistantLauncher({ user, context: { type: "staff" } }),
+    resolveAssistantLauncher({
+      user,
+      context: { type: "doctor-schedule" },
+    }),
   ]);
 
   const departments = cachedDepts.filter((d) => !d.deleted_at && d.is_active);
@@ -62,24 +77,32 @@ export default async function StaffSettingsPage() {
             {t("membersAcrossDepartments", { members: staff.length, departments: departments?.length ?? 0 })}
           </p>
         </div>
-        <AddStaffDialog
-          departments={
-            (departments ?? []).map(({ id, name }) => ({ id, name }))
-          }
-          currentRole={user.role}
-          canCustomize={canCustomize}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <AssistantLauncherEntry resolution={staffAssistant} role={user.role} />
+          <AddStaffDialog
+            departments={
+              (departments ?? []).map(({ id, name }) => ({ id, name }))
+            }
+            currentRole={user.role}
+            canCustomize={canCustomize}
+          />
+        </div>
       </div>
 
-      <StaffByDepartment
-        staff={
-          staff as Parameters<typeof StaffByDepartment>[0]["staff"]
-        }
-        departments={departments ?? []}
-        currentUserId={user.id}
-        lastSeenMap={lastSeenMap ?? undefined}
-        isAdmin={user.role === "admin"}
-      />
+      <AssistantLauncherScope
+        context={scheduleAssistant?.context ?? null}
+        role={user.role}
+      >
+        <StaffByDepartment
+          staff={
+            staff as Parameters<typeof StaffByDepartment>[0]["staff"]
+          }
+          departments={departments ?? []}
+          currentUserId={user.id}
+          lastSeenMap={lastSeenMap ?? undefined}
+          isAdmin={user.role === "admin"}
+        />
+      </AssistantLauncherScope>
 
       <SettingsTrashSection
         items={trashItems}

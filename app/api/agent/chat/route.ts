@@ -26,6 +26,11 @@ import {
 } from "@/lib/ai/errors";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { createClient } from "@/lib/supabase/server";
+import {
+  parseAssistantPageContext,
+  patientIdFromAssistantPageContext,
+  type AssistantPageContext,
+} from "@/lib/ai/page-context";
 
 export const maxDuration = 60;
 
@@ -33,7 +38,10 @@ const textPartSchema = z.object({ type: z.literal("text"), text: z.string() }).s
 const requestSchema = z
   .object({
     id: z.string().uuid(),
-    patientId: z.string().uuid().nullable().optional(),
+    // Page context has its own strict discriminated-union parser. Keeping this
+    // field unknown here lets malformed/forward-version context be dropped
+    // without rejecting an otherwise valid Assistant turn.
+    context: z.unknown().optional(),
     message: z
       .object({
         id: z.string().min(1).max(200),
@@ -101,6 +109,7 @@ export async function POST(request: Request) {
     if (!userText || userText.length > 4_000) {
       return errorResponse("invalid_request", 400);
     }
+    const pageContext = parseAssistantPageContext(parsed.data.context);
 
     // P4.6A: an administrative turn runs on the cheaper, tighter operational
     // task class only when the turn actually *is* an operational query — the
@@ -138,7 +147,7 @@ export async function POST(request: Request) {
         user,
         conversationId: parsed.data.id,
         locale,
-        patientId: parsed.data.patientId,
+        patientId: patientIdFromAssistantPageContext(pageContext),
       }),
     ]);
     if (clinicError || !clinic) throw new AiConversationError("conversation_unavailable");
@@ -149,11 +158,21 @@ export async function POST(request: Request) {
       parts: [{ type: "text", text: userText }],
     };
     const uiMessages = [...conversation.messages, currentMessage];
+    // Patient context is the only variant that participates in the existing
+    // owner/clinic/RLS-backed conversation binding. Rebuild it from the
+    // validated conversation result before prompt injection; every other
+    // variant remains advisory and ephemeral for this turn.
+    const authorizedPageContext: AssistantPageContext | null =
+      pageContext?.type === "patient"
+        ? conversation.patientId
+          ? { type: "patient", patientId: conversation.patientId }
+          : null
+        : pageContext;
     const agent = await createStaffAgent({
       user,
       locale,
       clinicName: clinic.name,
-      patientId: conversation.patientId,
+      pageContext: authorizedPageContext,
       execution,
     });
     const result = await agent.stream({

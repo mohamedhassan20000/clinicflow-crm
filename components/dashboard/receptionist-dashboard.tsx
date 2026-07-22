@@ -27,6 +27,7 @@ type Appointment = Tables<"appointments"> & {
 };
 
 interface ReceptionistDashboardProps {
+  assistantLauncher?: React.ReactNode;
   fullName: string;
   todayCount: number;
   pendingCount: number;
@@ -45,6 +46,7 @@ interface ReceptionistDashboardProps {
 }
 
 export function ReceptionistDashboard({
+  assistantLauncher,
   fullName,
   todayCount,
   pendingCount,
@@ -76,7 +78,8 @@ export function ReceptionistDashboard({
             {t("welcomeBack")}{fullName}.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          {assistantLauncher}
           <Button asChild variant="outline" size="sm" className="gap-2">
             <Link href="/patients/new">
               <UserPlus className="h-4 w-4" />

@@ -108,7 +108,12 @@ export function CapabilityPanel({
         </Button>
       </div>
 
-      <div className="max-h-64 overflow-y-auto px-4 pb-3 pt-1 sm:px-5">
+      <div
+        className="max-h-64 overflow-y-auto px-4 pb-3 pt-1 sm:px-5"
+        tabIndex={0}
+        role="region"
+        aria-label={t("capabilitiesTitle")}
+      >
         {grouped.length === 0 ? (
           <p className="rounded-xl border border-border/70 bg-card px-3 py-2 text-xs text-muted-foreground">
             {t("capabilitiesEmpty")}

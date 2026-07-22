@@ -18,6 +18,10 @@ import {
 } from "@/lib/ai/tool-presentation";
 import type { PromptLocale } from "@/lib/ai/prompts/doctor";
 import type { AuthedUser } from "@/lib/rbac";
+import {
+  allowedClinicReports,
+  type ClinicReportId,
+} from "@/lib/ai/clinic-reports";
 
 /**
  * Why the financial group is absent, when it is. The distinction is the whole
@@ -77,6 +81,8 @@ export type AssistantCapabilities = {
   /** Bounded operational lists, counts, and reports. */
   operational: boolean;
   financial: FinancialCapabilityState;
+  /** Exact report ids the shared report policy authorizes for this user. */
+  allowedReportIds: readonly ClinicReportId[];
 };
 
 /**
@@ -150,6 +156,7 @@ const EMPTY: AssistantCapabilities = {
   clinicAnalytics: false,
   operational: false,
   financial: "not_applicable",
+  allowedReportIds: [],
 };
 
 /**
@@ -178,7 +185,10 @@ export async function resolveAssistantCapabilities(
   try {
     // Locale is passed to the mount so `capabilityDescription` is read in the
     // right language for the panel; it does not change *which* tools mount.
-    const { definitions } = await resolveToolMount({ user, locale });
+    const { definitions, grantedPermissions } = await resolveToolMount({
+      user,
+      locale,
+    });
     const toolNames = definitions.map((definition) => definition.name);
     const mounted = new Set(toolNames);
 
@@ -190,6 +200,12 @@ export async function resolveAssistantCapabilities(
       financial: FINANCIAL_TOOL_NAMES.some((name) => mounted.has(name))
         ? "available"
         : await explainFinancialAbsence(user),
+      allowedReportIds: mounted.has("run_clinic_report")
+        ? allowedClinicReports(user.role, {
+            financialGranted:
+              grantedPermissions?.has(AI_FINANCIAL_INSIGHTS_PERMISSION) ?? false,
+          })
+        : [],
     };
   } catch (error) {
     // Capabilities are presentation data. A failure here must degrade the

@@ -6,12 +6,13 @@ import { AnalyticsSection, type AnalyticsSectionProps } from "@/components/dashb
 import { useTranslations } from "next-intl";
 
 export interface ManagerDashboardProps extends AnalyticsSectionProps {
+  assistantLauncher?: React.ReactNode;
   fullName: string;
   showAnalytics?: boolean;
   showExportCsv?: boolean;
 }
 
-export function ManagerDashboard({ fullName, showAnalytics = true, showExportCsv = true, ...analyticsProps }: ManagerDashboardProps) {
+export function ManagerDashboard({ assistantLauncher, fullName, showAnalytics = true, showExportCsv = true, ...analyticsProps }: ManagerDashboardProps) {
   const t = useTranslations("dashboard");
   return (
     <div className="space-y-6">
@@ -20,13 +21,16 @@ export function ManagerDashboard({ fullName, showAnalytics = true, showExportCsv
           <h1 className="text-2xl font-semibold tracking-tight">{t("analytics")}</h1>
           <p className="text-sm text-muted-foreground">{t("welcomeBack")}{fullName}.</p>
         </div>
-        {showExportCsv && (
-          <a href="/appointments/export" download>
-            <Button variant="outline" size="sm" className="gap-2">
-              <Download className="h-4 w-4" />
-              {t("exportCsv")}</Button>
-          </a>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {assistantLauncher}
+          {showExportCsv && (
+            <a href="/appointments/export" download>
+              <Button variant="outline" size="sm" className="gap-2">
+                <Download className="h-4 w-4" />
+                {t("exportCsv")}</Button>
+            </a>
+          )}
+        </div>
       </div>
 
       {showAnalytics && <AnalyticsSection {...analyticsProps} />}

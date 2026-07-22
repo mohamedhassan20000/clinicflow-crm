@@ -10,6 +10,12 @@ import { DoctorDashboard } from "@/components/dashboard/doctor-dashboard";
 import { fetchDoctorDashboardStats } from "@/actions/doctor-dashboard";
 import { fetchReceptionInSessionBoard } from "@/actions/receptionist-dashboard";
 import { getTranslations } from "next-intl/server";
+import { AssistantLauncherEntry } from "@/components/assistant/assistant-launcher-entry";
+import {
+  resolveAssistantLauncher,
+  type AssistantLauncherResolution,
+} from "@/lib/ai/launchers";
+import type { UserRole } from "@/lib/rbac";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("protected");
@@ -195,11 +201,30 @@ function logAndReturn<T extends readonly unknown[]>(role: string, results: T): T
   return results;
 }
 
+function dashboardAssistantLauncher(
+  resolution: AssistantLauncherResolution | null,
+  role: UserRole,
+) {
+  if (!resolution) return null;
+  return (
+    <AssistantLauncherEntry
+      resolution={resolution}
+      role={role}
+    />
+  );
+}
+
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default async function DashboardPage() {
-  const t = await getTranslations("protected");
-  const user = await requireUser();
+  const [t, user] = await Promise.all([
+    getTranslations("protected"),
+    requireUser(),
+  ]);
+  const assistantPromise = resolveAssistantLauncher({
+    user,
+    context: { type: "dashboard" },
+  });
   const supabase = await createClient();
   const clinicId = user.clinicId;
 
@@ -460,6 +485,7 @@ export default async function DashboardPage() {
 
     return (
       <AdminDashboard
+        assistantLauncher={dashboardAssistantLauncher(await assistantPromise, user.role)}
         fullName={user.fullName}
         pendingCount={pendingCount ?? 0}
         todayAppointments={(todayAppts ?? []) as Parameters<typeof AdminDashboard>[0]["todayAppointments"]}
@@ -551,6 +577,7 @@ export default async function DashboardPage() {
 
     return (
       <ReceptionistDashboard
+        assistantLauncher={dashboardAssistantLauncher(await assistantPromise, user.role)}
         fullName={user.fullName}
         todayCount={todayCount ?? 0}
         pendingCount={pendingCount ?? 0}
@@ -576,6 +603,7 @@ export default async function DashboardPage() {
 
     return (
       <DoctorDashboard
+        assistantLauncher={dashboardAssistantLauncher(await assistantPromise, user.role)}
         fullName={user.fullName}
         clinicId={clinicId}
         doctorId={user.id}
@@ -734,6 +762,7 @@ export default async function DashboardPage() {
 
   return (
     <ManagerDashboard
+      assistantLauncher={dashboardAssistantLauncher(await assistantPromise, user.role)}
       clinicId={clinicId}
       fullName={user.fullName}
       todayCount={todayCount ?? 0}

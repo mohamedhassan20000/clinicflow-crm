@@ -57,7 +57,11 @@ export function staffTaskClassesForRole(role: UserRole): readonly AiTaskClass[] 
  */
 export async function resolveToolMount(
   ctx: DoctorToolContext,
-): Promise<{ definitions: AiToolDefinition[]; tools: Record<string, Tool> }> {
+): Promise<{
+  definitions: AiToolDefinition[];
+  tools: Record<string, Tool>;
+  grantedPermissions: ReadonlySet<AiUserPermissionKey>;
+}> {
   const entitlements = await getEntitlements(ctx.user.clinicId);
   const supportedTaskClasses = staffTaskClassesForRole(ctx.user.role);
   const activeTaskClasses: readonly AiTaskClass[] = ctx.taskClass
@@ -117,7 +121,7 @@ export async function resolveToolMount(
   for (const definition of definitions) {
     tools[definition.name] = harden(definition.name, buildContext, definition.build(buildContext));
   }
-  return { definitions, tools };
+  return { definitions, tools, grantedPermissions };
 }
 
 /**

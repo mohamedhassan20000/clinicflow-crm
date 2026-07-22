@@ -29,6 +29,9 @@ import { clinicLocaleFromRow, type ClinicLocale } from "@/lib/datetime";
 import type { Database } from "@/types/database";
 import { pathWithSearch, withReturnTo } from "@/lib/navigation/return-url";
 import { getTranslations } from "next-intl/server";
+import { AssistantLauncherEntry } from "@/components/assistant/assistant-launcher-entry";
+import { AssistantLauncherScope } from "@/components/assistant/assistant-launcher-scope";
+import { resolveAssistantLauncher } from "@/lib/ai/launchers";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("protected");
@@ -87,9 +90,19 @@ function parseLocalMonth(iso: string): Date {
   return new Date(y, m - 1, 1);
 }
 
+function formatLocalDate(date: Date): string {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
 export default async function AppointmentsPage({ searchParams }: PageProps) {
-  const t = await getTranslations("protected");
-  const user = await requireUser();
+  const [t, user] = await Promise.all([
+    getTranslations("protected"),
+    requireUser(),
+  ]);
   const isDoctor = user.role === "doctor";
   const supabase = await createClient();
   const { data: clinic } = await supabase
@@ -194,6 +207,30 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
   const departments = cachedDepartments
     .filter((d) => !d.deleted_at && d.is_active)
     .map((d) => ({ id: d.id, name: d.name, color: d.color }));
+
+  const contextRangeEnd = new Date(rangeEnd);
+  contextRangeEnd.setDate(contextRangeEnd.getDate() - 1);
+  const selectedDoctorId = isDoctor
+    ? user.id
+    : doctors.some((candidate) => candidate.id === doctor)
+      ? doctor
+      : undefined;
+  const assistantPromise = resolveAssistantLauncher({
+    user,
+    context: {
+      type: "appointments",
+      dateRange: {
+        from: formatLocalDate(rangeStart),
+        to: formatLocalDate(contextRangeEnd),
+      },
+      ...(statusFilter ? { status: statusFilter } : {}),
+      ...(selectedDoctorId ? { doctorId: selectedDoctorId } : {}),
+    },
+  });
+  const invoiceAssistantPromise = resolveAssistantLauncher({
+    user,
+    context: { type: "invoices", filter: "all" },
+  });
 
   let patientIds: string[] | null = null;
   const hasPatientFilter = !!file || !!nat || !!phone || !!name;
@@ -305,9 +342,17 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
       : view === "month"
         ? t("thismonth")
         : t("thisweek");
+  const [assistant, invoiceAssistant] = await Promise.all([
+    assistantPromise,
+    invoiceAssistantPromise,
+  ]);
 
   return (
-    <div className="space-y-6">
+    <AssistantLauncherScope
+      context={invoiceAssistant?.context ?? null}
+      role={user.role}
+    >
+      <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">{t("appointments")}</h1>
@@ -319,7 +364,15 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
             })}
           </p>
         </div>
-        <ViewSwitcher current={view} />
+        <div className="flex flex-wrap items-center gap-2">
+          {assistant ? (
+            <AssistantLauncherEntry
+              resolution={assistant}
+              role={user.role}
+            />
+          ) : null}
+          <ViewSwitcher current={view} />
+        </div>
       </div>
 
       <AppointmentsFilterBar
@@ -371,6 +424,7 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
       {canEditAppointments && displacedItems.length > 0 && (
         <DisplacedAppointments items={displacedItems} returnHref={currentAppointmentsUrl} />
       )}
-    </div>
+      </div>
+    </AssistantLauncherScope>
   );
 }

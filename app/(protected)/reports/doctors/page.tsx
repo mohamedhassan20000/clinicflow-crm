@@ -14,6 +14,8 @@ import { ReportPageHeader } from "@/components/reports/report-page-header";
 import { ReportSelectFilter } from "@/components/reports/report-select-filter";
 import { ReportsDateFilter } from "@/components/reports/reports-date-filter";
 import { getTranslations } from "next-intl/server";
+import { AssistantLauncherEntry } from "@/components/assistant/assistant-launcher-entry";
+import { resolveAssistantLauncher } from "@/lib/ai/launchers";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("protected");
@@ -31,10 +33,18 @@ export default async function DoctorPerformanceReportPage({ searchParams }: Page
   const range = resolveReportsRange(sp);
   const doctorId = cleanFilter(sp.doctor);
 
-  const [clinic, doctors, data] = await Promise.all([
+  const [clinic, doctors, data, assistant] = await Promise.all([
     getClinicPrintMeta(user),
     getDoctorOptions(user),
     getDoctorPerformanceData(range, doctorId),
+    resolveAssistantLauncher({
+      user,
+      context: {
+        type: "reports",
+        report: "doctor_performance",
+        range: { from: range.from, to: range.to },
+      },
+    }),
   ]);
 
   return (
@@ -42,6 +52,7 @@ export default async function DoctorPerformanceReportPage({ searchParams }: Page
       <ReportPageHeader
         title={t("doctorPerformanceReport")}
         description={t("doctorSessionsOutcomesRevenueAndClinic")}
+        actions={<AssistantLauncherEntry resolution={assistant} role={user.role} />}
       />
       <ReportsDateFilter range={range} />
       <ReportSelectFilter

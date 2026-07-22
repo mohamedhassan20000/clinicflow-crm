@@ -2,6 +2,15 @@ import { randomUUID } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { Database, Json } from "@/types/database";
+import {
+  AiConversationError,
+  ensureDoctorConversation,
+  persistDoctorTurn,
+} from "@/lib/ai/conversations";
+import {
+  parseAssistantPageContext,
+  patientIdFromAssistantPageContext,
+} from "@/lib/ai/page-context";
 
 // P4A two-clinic denial suite (§10's most important suite). Asserts:
 //   * agent_conversations / agent_messages are owner-scoped — every normal
@@ -479,6 +488,117 @@ describe("P4A doctor tools through live clinical RLS", () => {
 });
 
 describe("P4A agent conversation RLS", () => {
+  it("keeps P4.8A patient page context inside the existing live tenant/doctor boundary", async () => {
+    const ownContext = parseAssistantPageContext({
+      type: "patient",
+      patientId: patientDepartmentA,
+    });
+    await expect(ensureDoctorConversation({
+      supabase: doctorA,
+      user: {
+        id: doctorAId,
+        clinicId: clinicA,
+        email: `${doctorAId}@example.test`,
+        fullName: "Doctor A",
+        role: "doctor",
+        avatarUrl: null,
+        departmentId: departmentA,
+        mustChangePassword: false,
+      },
+      conversationId: randomUUID(),
+      locale: "en",
+      patientId: patientIdFromAssistantPageContext(ownContext),
+    })).resolves.toMatchObject({ patientId: patientDepartmentA, messages: [] });
+
+    const crossTenantContext = parseAssistantPageContext({
+      type: "patient",
+      patientId: patientClinicB,
+    });
+    await expect(ensureDoctorConversation({
+      supabase: doctorA,
+      user: {
+        id: doctorAId,
+        clinicId: clinicA,
+        email: `${doctorAId}@example.test`,
+        fullName: "Doctor A",
+        role: "doctor",
+        avatarUrl: null,
+        departmentId: departmentA,
+        mustChangePassword: false,
+      },
+      conversationId: randomUUID(),
+      locale: "en",
+      patientId: patientIdFromAssistantPageContext(crossTenantContext),
+    })).rejects.toEqual(new AiConversationError("invalid_patient_context"));
+  });
+
+  it.each([
+    { type: "appointments", dateRange: { from: "2026-07-01", to: "2026-07-07" } },
+    { type: "revenue", dateRange: { from: "2026-07-01", to: "2026-07-31" } },
+    { type: "reports", report: "no_shows", range: { from: "2026-07-01", to: "2026-07-31" } },
+    { type: "invoices", filter: "outstanding" },
+    { type: "staff" },
+    { type: "departments" },
+    { type: "doctor-schedule" },
+  ] as const)("keeps $type page context out of the persisted patient scope", async (pageContext) => {
+    const context = parseAssistantPageContext(pageContext);
+    expect(context).toEqual(pageContext);
+    if (!context) throw new Error(`Expected valid ${pageContext.type} page context`);
+    if (context.type === "revenue") {
+      expect(context).toEqual({
+        type: "revenue",
+        dateRange: { from: "2026-07-01", to: "2026-07-31" },
+      });
+      expect(context).not.toHaveProperty("filters");
+    }
+
+    const user = {
+      id: receptionistAId,
+      clinicId: clinicA,
+      email: `${receptionistAId}@example.test`,
+      fullName: "Receptionist A",
+      role: "receptionist" as const,
+      avatarUrl: null,
+      departmentId: null,
+      mustChangePassword: false,
+    };
+    const conversationId = randomUUID();
+    const patientId = patientIdFromAssistantPageContext(context);
+    const userText = `Question from ${pageContext.type}`;
+
+    await expect(ensureDoctorConversation({
+      supabase: receptionistA,
+      user,
+      conversationId,
+      locale: "en",
+      patientId,
+    })).resolves.toMatchObject({ patientId: null, messages: [] });
+
+    await persistDoctorTurn({
+      supabase: receptionistA,
+      user,
+      conversationId,
+      locale: "en",
+      patientId,
+      userText,
+      assistantText: "",
+    });
+
+    await expect(ensureDoctorConversation({
+      supabase: receptionistA,
+      user,
+      conversationId,
+      locale: "en",
+      patientId,
+    })).resolves.toMatchObject({
+      id: conversationId,
+      patientId: null,
+      messages: [
+        { role: "user", parts: [{ type: "text", text: userText }] },
+      ],
+    });
+  });
+
   it("lets the owner read their own conversation and messages", async () => {
     const conv = await doctorA.from("agent_conversations").select("id, user_id");
     expect(conv.error).toBeNull();

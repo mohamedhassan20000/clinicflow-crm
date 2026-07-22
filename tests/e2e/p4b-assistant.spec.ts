@@ -14,7 +14,13 @@ const service = createClient<Database>(localUrl, secretKey, {
 const suffix = `p4b-e2e-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 const password = "P4bAssistant12345!";
 const email = `${suffix}@example.com`;
-const ids = { clinic: randomUUID(), doctor: "", patient: randomUUID() };
+const managerEmail = `${suffix}-manager@example.com`;
+const ids = {
+  clinic: randomUUID(),
+  doctor: "",
+  manager: "",
+  patient: randomUUID(),
+};
 
 async function must<T>(result: PromiseLike<{ data: T | null; error: { message: string } | null }>) {
   const { data, error } = await result;
@@ -30,11 +36,12 @@ async function cleanup() {
   await service.from("profiles").delete().eq("clinic_id", ids.clinic);
   await service.from("clinics").delete().eq("id", ids.clinic);
   if (ids.doctor) await service.auth.admin.deleteUser(ids.doctor);
+  if (ids.manager) await service.auth.admin.deleteUser(ids.manager);
 }
 
-async function login(page: Page) {
+async function login(page: Page, accountEmail = email) {
   await page.goto("/login");
-  await page.locator('input[type="email"]').fill(email);
+  await page.locator('input[type="email"]').fill(accountEmail);
   await page.locator('input[type="password"]').fill(password);
   await page.getByRole("button", { name: /sign in|تسجيل الدخول/i }).click();
   await expect(page).toHaveURL(/\/dashboard/, { timeout: 10_000 });
@@ -102,6 +109,15 @@ test.beforeAll(async () => {
   const created = await service.auth.admin.createUser({ email, password, email_confirm: true });
   if (created.error || !created.data.user) throw new Error(created.error?.message ?? "User setup failed");
   ids.doctor = created.data.user.id;
+  const manager = await service.auth.admin.createUser({
+    email: managerEmail,
+    password,
+    email_confirm: true,
+  });
+  if (manager.error || !manager.data.user) {
+    throw new Error(manager.error?.message ?? "Manager setup failed");
+  }
+  ids.manager = manager.data.user.id;
   await must(service.from("clinics").insert({
     id: ids.clinic,
     name: `P4B E2E Clinic ${suffix}`,
@@ -120,6 +136,13 @@ test.beforeAll(async () => {
     clinic_id: ids.clinic,
     full_name: "P4B Test Doctor",
     role: "doctor",
+    must_change_password: false,
+  }));
+  await must(service.from("profiles").insert({
+    id: ids.manager,
+    clinic_id: ids.clinic,
+    full_name: "P4.8 Test Manager",
+    role: "manager",
     must_change_password: false,
   }));
   await must(service.from("patients").insert({
@@ -174,5 +197,48 @@ test("staff chat streams a mocked response and patient profile opens contextual 
       page.getByRole("heading", { level: 1, name: "المساعد السريري" }),
     ).toBeVisible();
     await assertCapabilityPanelA11y(page, "ar");
+  });
+});
+
+test("P4.8 top-level and nested launchers preserve focus and RTL placement", async ({ page }) => {
+  await login(page, managerEmail);
+
+  await test.step("English top-level dashboard launcher", async () => {
+    await page.goto("/dashboard");
+    const launcher = page.getByRole("button", { name: "Ask assistant" });
+    await launcher.click();
+    await expect(page.getByRole("heading", { name: "Dashboard assistant" })).toBeVisible();
+    await page.getByRole("button", { name: "Close" }).click();
+    await expect(launcher).toBeFocused();
+  });
+
+  await test.step("Arabic nested recurring-hours launcher", async () => {
+    await setAccountLocale(page, "ar");
+    await page.goto("/settings/staff");
+    await page.getByText("P4B Test Doctor", { exact: true }).click();
+    await page.getByRole("tab", { name: "جدول" }).click();
+    const nestedLauncher = page.getByRole("button", { name: "اسأل المساعد" });
+    await expect(nestedLauncher).toBeVisible();
+    await nestedLauncher.click();
+    await expect(page.getByRole("heading", { name: "مساعد جدول الطبيب" })).toBeVisible();
+
+    const dialogs = page.getByRole("dialog");
+    const assistantDialog = dialogs.last();
+    const box = await assistantDialog.boundingBox();
+    if (!box) throw new Error("nested assistant dialog has no layout box");
+    expect(box.x, "inline-end sheet should hug the left edge in RTL").toBeLessThan(8);
+
+    const a11y = await new AxeBuilder({ page })
+      .include('[data-slot="sheet-content"]')
+      .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+      .analyze();
+    expect(
+      a11y.violations.filter(
+        ({ impact }) => impact === "critical" || impact === "serious",
+      ),
+    ).toEqual([]);
+
+    await page.getByRole("button", { name: "إغلاق" }).last().click();
+    await expect(nestedLauncher).toBeFocused();
   });
 });

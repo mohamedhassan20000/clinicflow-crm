@@ -79,6 +79,7 @@ const DoctorDashboardCharts = dynamic(
 );
 
 export interface DoctorDashboardProps {
+  assistantLauncher?: React.ReactNode;
   fullName: string;
   clinicId: string;
   doctorId: string;
@@ -88,6 +89,7 @@ export interface DoctorDashboardProps {
 }
 
 export function DoctorDashboard({
+  assistantLauncher,
   fullName,
   clinicId,
   doctorId,
@@ -154,6 +156,7 @@ export function DoctorDashboard({
             {t("welcomeBack")}{formatDoctorName(fullName)} · {departmentName}
           </p>
         </div>
+        {assistantLauncher}
       </div>
 
       <DoctorQueue />

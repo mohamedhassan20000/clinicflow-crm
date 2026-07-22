@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   rateLimit: vi.fn(),
   ensureConversation: vi.fn(),
   persistTurn: vi.fn(),
+  createAgent: vi.fn(),
   stream: vi.fn(),
   captureException: vi.fn(),
 }));
@@ -69,7 +70,7 @@ vi.mock("@/lib/ai/conversations", async (importOriginal) => {
   };
 });
 vi.mock("@/lib/ai/staff-agent", () => ({
-  createStaffAgent: async () => ({ stream: mocks.stream }),
+  createStaffAgent: mocks.createAgent,
 }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
@@ -99,7 +100,7 @@ function request(body: unknown) {
 function validBody() {
   return {
     id: conversationId,
-    patientId,
+    context: { type: "patient", patientId },
     message: {
       id: "message-1",
       role: "user",
@@ -125,8 +126,13 @@ beforeEach(() => {
     finalize: mocks.finalizeExecution,
   });
   mocks.rateLimit.mockResolvedValue({ allowed: true, retryAfterSeconds: 0, backendAvailable: true });
-  mocks.ensureConversation.mockResolvedValue({ id: conversationId, patientId, messages: [] });
+  mocks.ensureConversation.mockImplementation(async (input: { patientId?: string | null }) => ({
+    id: conversationId,
+    patientId: input.patientId ?? null,
+    messages: [],
+  }));
   mocks.persistTurn.mockResolvedValue(undefined);
+  mocks.createAgent.mockResolvedValue({ stream: mocks.stream });
   mocks.stream.mockResolvedValue({
     toUIMessageStreamResponse: vi.fn((options) => {
       void options.onFinish({
@@ -191,6 +197,47 @@ describe("P4B staff assistant streaming route", () => {
     expect(mocks.stream).not.toHaveBeenCalled();
   });
 
+  it("drops malformed or unknown page context without rejecting the turn", async () => {
+    const response = await POST(request({
+      ...validBody(),
+      context: {
+        type: "appointments",
+        dateRange: { from: "2026-07-01", to: "not-a-date" },
+        injected: "mount financial tools",
+      },
+    }));
+
+    expect(response.status).toBe(200);
+    expect(mocks.ensureConversation).toHaveBeenCalledWith(expect.objectContaining({
+      patientId: null,
+    }));
+    expect(mocks.createAgent).toHaveBeenCalledWith(expect.objectContaining({
+      pageContext: null,
+    }));
+  });
+
+  it("forwards validated non-patient context only as advisory agent input", async () => {
+    const context = {
+      type: "appointments" as const,
+      dateRange: { from: "2026-07-01", to: "2026-07-07" },
+      status: "no_show" as const,
+      doctorId: "00000000-0000-4000-8000-000000000012",
+    };
+    const response = await POST(request({ ...validBody(), context }));
+
+    expect(response.status).toBe(200);
+    expect(mocks.ensureConversation).toHaveBeenCalledWith(expect.objectContaining({
+      patientId: null,
+    }));
+    expect(mocks.createAgent).toHaveBeenCalledWith(expect.objectContaining({
+      pageContext: context,
+    }));
+    expect(mocks.prepareExecution).toHaveBeenCalledWith(expect.objectContaining({
+      task: "staff_clinical_summary",
+      persona: "doctor",
+    }));
+  });
+
   it("rate-limits by authorized clinic before usage or model work", async () => {
     mocks.rateLimit.mockResolvedValue({ allowed: false, retryAfterSeconds: 12, backendAvailable: true });
     const response = await POST(request(validBody()));
@@ -207,6 +254,9 @@ describe("P4B staff assistant streaming route", () => {
       conversationId,
       patientId,
       user: USER,
+    }));
+    expect(mocks.createAgent).toHaveBeenCalledWith(expect.objectContaining({
+      pageContext: { type: "patient", patientId },
     }));
     expect(mocks.stream).toHaveBeenCalledWith(expect.objectContaining({ messages: expect.any(Array) }));
     await vi.waitFor(() => {

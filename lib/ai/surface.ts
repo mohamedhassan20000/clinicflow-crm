@@ -26,10 +26,13 @@ export type StaffAssistantSurfaceAccess =
 
 export async function getStaffAssistantSurfaceAccess(
   user: AuthedUser,
+  requiredFeatures: readonly string[] = [AI_ASSISTANT_FEATURE],
 ): Promise<StaffAssistantSurfaceAccess> {
   const entitlements = await getEntitlements(user.clinicId);
   if (!entitlements.subscriptionAllowed) return { state: "subscription_inactive" };
-  if (!hasFeature(entitlements, AI_ASSISTANT_FEATURE)) return { state: "upgrade" };
+  if (!requiredFeatures.every((feature) => hasFeature(entitlements, feature))) {
+    return { state: "upgrade" };
+  }
 
   const usage = await checkAiTurn(user.clinicId);
   if (usage.reason === "lookup_failed") return { state: "temporarily_unavailable" };
@@ -108,38 +111,6 @@ export async function resolveStaffAssistantPage(
     conversation: loaded.conversation,
     capabilities,
   };
-}
-
-export async function resolvePatientAssistantLauncher(input: {
-  user: AuthedUser;
-  patientId: string;
-}): Promise<{
-  access: Extract<StaffAssistantSurfaceAccess, { state: "available" }>;
-  conversation: LoadedDoctorConversation | null;
-} | null> {
-  if (input.user.role !== "doctor") return null;
-  try {
-    if ((await getPageVisibilityState(input.user, "assistant")) !== "visible") return null;
-
-    const access = await getStaffAssistantSurfaceAccess(input.user);
-    if (access.state !== "available") return null;
-
-    const loaded = await loadAssistantConversationForSurface({
-      user: input.user,
-      patientId: input.patientId,
-    });
-    if (!loaded.persistenceAvailable) return null;
-    return { access, conversation: loaded.conversation };
-  } catch (error) {
-    // The launcher is optional patient-page enhancement data. Any AI-specific
-    // dependency failure must leave the independently authorized patient
-    // record usable.
-    Sentry.captureException(error, {
-      tags: { area: "patient-assistant-launcher" },
-      extra: { clinicId: input.user.clinicId, role: input.user.role },
-    });
-    return null;
-  }
 }
 
 export type DoctorAssistantSurfaceAccess = StaffAssistantSurfaceAccess;

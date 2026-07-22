@@ -16,6 +16,8 @@ import { AddDepartmentDialog } from "@/components/settings/add-department-dialog
 import { SettingsTrashSection, type TrashItem } from "@/components/settings/settings-trash-section";
 import { THIRTY_DAYS_MS } from "@/lib/constants";
 import { getTranslations } from "next-intl/server";
+import { AssistantLauncherEntry } from "@/components/assistant/assistant-launcher-entry";
+import { resolveAssistantLauncher } from "@/lib/ai/launchers";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("protected");
@@ -26,7 +28,10 @@ export default async function DepartmentsSettingsPage() {
   const t = await getTranslations("protected");
   const user = await requireRole(["admin", "manager"]);
 
-  const allDepartments = await getCachedDepartments(user.clinicId);
+  const [allDepartments, assistant] = await Promise.all([
+    getCachedDepartments(user.clinicId),
+    resolveAssistantLauncher({ user, context: { type: "departments" } }),
+  ]);
 
   const cutoff = new Date(new Date().getTime() - THIRTY_DAYS_MS).toISOString();
   const departments = (allDepartments ?? []).filter((d) => !d.deleted_at);
@@ -49,7 +54,10 @@ export default async function DepartmentsSettingsPage() {
             {t("departmentCount", { count: departments?.length ?? 0 })}
           </p>
         </div>
-        <AddDepartmentDialog />
+        <div className="flex flex-wrap items-center gap-2">
+          <AssistantLauncherEntry resolution={assistant} role={user.role} />
+          <AddDepartmentDialog />
+        </div>
       </div>
 
       <div className="rounded-xl border border-border/50 overflow-hidden">

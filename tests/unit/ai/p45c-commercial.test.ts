@@ -27,6 +27,7 @@ describe("P4.5C commercial policy", () => {
   it("keeps a closed namespaced feature vocabulary", () => {
     expect(NAMESPACED_AI_FEATURES).toContain("ai.staff_assistant");
     expect(NAMESPACED_AI_FEATURES).toContain("ai.financial_insights");
+    expect(NAMESPACED_AI_FEATURES).toContain("ai.assistant_customization");
     expect(isKnownAiFeature("ai.hybrid_fallback")).toBe(true);
     expect(isKnownAiFeature("ai.tenant_selected_model")).toBe(false);
     expect(isAiFeatureKey("ai.tenant_selected_model")).toBe(true);

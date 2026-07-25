@@ -184,6 +184,51 @@ describe("createClinicScopedAdminClient", () => {
     });
   });
 
+  it("keeps both Assistant placement tables on the clinic-scoped path", async () => {
+    const { createClinicScopedAdminClient } = await import("@/lib/supabase/admin");
+    const admin = createClinicScopedAdminClient("clinic-a") as unknown as {
+      from: (table: string) => { select: (columns: string) => unknown };
+    };
+
+    for (const table of [
+      "assistant_launcher_settings",
+      "assistant_launcher_user_overrides",
+    ]) {
+      expect(() => admin.from(table).select("enabled")).not.toThrow();
+      expect(queryLog).toContainEqual({
+        table,
+        method: "eq",
+        args: ["clinic_id", "clinic-a"],
+      });
+    }
+  });
+
+  it("keeps scoped service-role access to Assistant placement read-only", async () => {
+    const { createClinicScopedAdminClient } = await import("@/lib/supabase/admin");
+    const admin = createClinicScopedAdminClient("clinic-a") as unknown as {
+      from: (table: string) => {
+        insert: (payload: unknown) => unknown;
+        update: (payload: unknown) => unknown;
+        delete: () => unknown;
+      };
+    };
+
+    for (const table of [
+      "assistant_launcher_settings",
+      "assistant_launcher_user_overrides",
+    ]) {
+      expect(() => admin.from(table).insert({ enabled: true })).toThrow(
+        /read-only access/i,
+      );
+      expect(() => admin.from(table).update({ enabled: false })).toThrow(
+        /read-only access/i,
+      );
+      expect(() => admin.from(table).delete()).toThrow(/read-only access/i);
+    }
+
+    expect(queryLog).toEqual([]);
+  });
+
   it("leaves global-or-assigned coupons for explicit caller scoping", async () => {
     const { createClinicScopedAdminClient } = await import("@/lib/supabase/admin");
     const admin = createClinicScopedAdminClient("clinic-a") as unknown as {

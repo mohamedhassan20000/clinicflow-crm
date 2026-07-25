@@ -1,4 +1,12 @@
 {
+  "assistant-launcher-settings": {
+    "areaNotAvailableForRole": "This Assistant launcher is not available for that role.",
+    "invalidUserOverride": "The selected staff override is invalid.",
+    "planDoesNotIncludeCustomization": "The current plan does not include Assistant customization.",
+    "primaryAdminOnly": "Only the clinic’s primary administrator can customize Assistant placement.",
+    "staffMemberOrAreaNotAvailable": "The staff member or Assistant launcher is not available.",
+    "weCouldNotCompleteThisRequestPleaseTryAgain": "We could not save the Assistant placement. Please try again."
+  },
   "ai-permissions": {
     "planDoesNotIncludeFinancialAi": "The current plan does not include financial AI insights.",
     "primaryAdminOnly": "Only the clinic’s primary administrator can manage AI permissions.",

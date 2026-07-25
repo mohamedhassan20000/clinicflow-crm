@@ -20,6 +20,7 @@ const PRO_AI_FEATURES = {
   "ai.hybrid_fallback": false,
   "ai.staff_analytics": true,
   "ai.financial_insights": true,
+  "ai.assistant_customization": true,
 } as const;
 const PRO_AI_LIMITS = {
   ai_credits_month: 1_620_000_000,
@@ -47,6 +48,26 @@ describe("entitlement resolution", () => {
       subscriptionAllowed: true,
     });
     expect(hasFeature(overridden, "ai_assistant")).toBe(false);
+
+    const professionalCustomizationOverride = resolveEntitlements({
+      clinicId: "clinic-1",
+      planSlug: "pro",
+      planFeatures: {
+        ai_assistant: false,
+        "ai.assistant_customization": false,
+      },
+      overrides: [
+        { feature_key: "ai_assistant", enabled: true },
+        { feature_key: "ai.assistant_customization", enabled: true },
+      ],
+      subscriptionAllowed: true,
+    });
+    expect(
+      hasFeature(
+        professionalCustomizationOverride,
+        "ai.assistant_customization",
+      ),
+    ).toBe(false);
   });
 
   it("requires the pro_ai umbrella and namespaced feature for provider modes", () => {
@@ -98,6 +119,7 @@ describe("entitlement resolution", () => {
     expect(hasAiProviderMode(proAi, "byok_strict")).toBe(true);
     // Hybrid is off by default in the plan catalog.
     expect(hasAiProviderMode(proAi, "hybrid")).toBe(false);
+    expect(hasFeature(proAi, "ai.assistant_customization")).toBe(true);
     expect(resolveAiRequestLimit(proAi)).toBe(1000);
   });
 

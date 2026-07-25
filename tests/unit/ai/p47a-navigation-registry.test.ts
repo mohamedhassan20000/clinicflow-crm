@@ -32,6 +32,7 @@ const PRO_AI_FEATURES = {
   "ai.staff_assistant": true,
   "ai.staff_analytics": true,
   "ai.financial_insights": true,
+  "ai.assistant_customization": true,
   whatsapp: true,
 };
 
@@ -168,7 +169,7 @@ describe("P4.7A navigation resolution — entitlement gate", () => {
 describe("P4.7A navigation resolution — primary-admin authority", () => {
   it("withholds AI and Customize settings from a secondary admin", async () => {
     const { resolveNavigationTarget } = await load({ primaryAdmin: false });
-    for (const id of ["settings_ai", "settings_customize"] as const) {
+    for (const id of ["settings_ai", "settings_assistant", "settings_customize"] as const) {
       const result = await resolveNavigationTarget(user("admin"), id, "en");
       expect(result.status).toBe("primary_admin_required");
       expect(result.href).toBeUndefined();
@@ -186,10 +187,11 @@ describe("P4.7A navigation resolution — primary-admin authority", () => {
     const { resolveNavigationTargets, isPrimaryClinicAdmin } = await load();
     const result = await resolveNavigationTargets(
       user("admin"),
-      ["settings_ai", "settings_customize"],
+      ["settings_ai", "settings_assistant", "settings_customize"],
       "en",
     );
     expect(result.get("settings_ai")?.status).toBe("available");
+    expect(result.get("settings_assistant")?.status).toBe("available");
     expect(result.get("settings_customize")?.status).toBe("available");
     expect(isPrimaryClinicAdmin).toHaveBeenCalledTimes(1);
   });

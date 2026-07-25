@@ -25,6 +25,7 @@ const PRO_AI_FEATURES = {
   "ai.staff_assistant": true,
   "ai.staff_analytics": true,
   "ai.financial_insights": true,
+  "ai.assistant_customization": true,
   whatsapp: true,
 };
 
@@ -131,6 +132,36 @@ describe("P4.7A help retrieval — finds the right article", () => {
 });
 
 describe("P4.7A help retrieval — role/entitlement/permission remove articles silently", () => {
+  it("finds the bilingual Assistant placement workflow only when entitled", async () => {
+    const { searchHelp } = await load();
+    const english = await searchHelp(user("admin"), {
+      query: "how do I hide the ask assistant button for a role",
+      locale: "en",
+    });
+    expect(english.map((result) => result.article_id)).toContain(
+      "customize-assistant-placement",
+    );
+
+    const arabic = await searchHelp(user("admin"), {
+      query: "كيف أخفي زر اسأل المساعد حسب الدور",
+      locale: "ar",
+    });
+    expect(arabic.map((result) => result.article_id)).toContain(
+      "customize-assistant-placement",
+    );
+
+    const withoutCustomization = await load({
+      features: { ...PRO_AI_FEATURES, "ai.assistant_customization": false },
+    });
+    const denied = await withoutCustomization.searchHelp(user("admin"), {
+      query: "customize assistant placement",
+      locale: "en",
+    });
+    expect(denied.map((result) => result.article_id)).not.toContain(
+      "customize-assistant-placement",
+    );
+  });
+
   it("never shows a receptionist an admin-only article (control page visibility)", async () => {
     const { searchHelp } = await load();
     const results = await searchHelp(user("receptionist"), {
@@ -195,10 +226,18 @@ describe("P4.7A help retrieval — role/entitlement/permission remove articles s
 describe("P4.7A help retrieval — primary-admin workflows are named but not taught", () => {
   it("withholds steps and links from a secondary admin for AI and Customize settings", async () => {
     const { searchHelp } = await load({ primaryAdmin: false });
-    for (const query of ["manage assistant settings", "hide a page from staff"]) {
+    for (const query of [
+      "manage assistant settings",
+      "customize assistant placement",
+      "hide a page from staff",
+    ]) {
       const results = await searchHelp(user("admin"), { query, locale: "en" });
       const article = results.find((result) =>
-        ["manage-ai-settings", "control-page-visibility"].includes(result.article_id),
+        [
+          "manage-ai-settings",
+          "customize-assistant-placement",
+          "control-page-visibility",
+        ].includes(result.article_id),
       );
       expect(article).toBeDefined();
       expect(article?.unavailable_reason).toBe("primary_admin_required");

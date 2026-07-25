@@ -150,6 +150,8 @@ export const ANALYTICS_ASSISTANT_ROLES = OPERATIONAL_ASSISTANT_ROLES;
 
 export const AI_STAFF_ANALYTICS_FEATURE = "ai.staff_analytics" as const;
 export const AI_FINANCIAL_INSIGHTS_FEATURE = "ai.financial_insights" as const;
+export const AI_ASSISTANT_CUSTOMIZATION_FEATURE =
+  "ai.assistant_customization" as const;
 
 /**
  * Per-tool re-check for the bounded operational list/count tools

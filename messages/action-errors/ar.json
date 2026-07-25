@@ -1,4 +1,12 @@
 {
+  "assistant-launcher-settings": {
+    "areaNotAvailableForRole": "موضع زر المساعد هذا غير متاح لذلك الدور.",
+    "invalidUserOverride": "تجاوز الموظف المحدد غير صالح.",
+    "planDoesNotIncludeCustomization": "لا تشمل الخطة الحالية تخصيص المساعد.",
+    "primaryAdminOnly": "يمكن لمسؤول العيادة الأساسي فقط تخصيص مواضع المساعد.",
+    "staffMemberOrAreaNotAvailable": "الموظف أو موضع زر المساعد غير متاح.",
+    "weCouldNotCompleteThisRequestPleaseTryAgain": "تعذر حفظ موضع المساعد. يُرجى المحاولة مرة أخرى."
+  },
   "ai-permissions": {
     "planDoesNotIncludeFinancialAi": "الباقة الحالية لا تشمل رؤى الذكاء الاصطناعي المالية.",
     "primaryAdminOnly": "يمكن لمسؤول العيادة الأساسي فقط إدارة صلاحيات الذكاء الاصطناعي.",

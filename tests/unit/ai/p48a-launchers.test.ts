@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   permission: vi.fn(),
   patientAccess: vi.fn(),
   persistenceReady: vi.fn(),
+  placement: vi.fn(),
   captureException: vi.fn(),
 }));
 
@@ -29,6 +30,9 @@ vi.mock("@/lib/ai/conversations", () => ({
 }));
 vi.mock("@/lib/ai/persistence-readiness", () => ({
   isAssistantPersistenceReady: mocks.persistenceReady,
+}));
+vi.mock("@/lib/ai/launcher-placement", () => ({
+  resolveAssistantLauncherPlacement: mocks.placement,
 }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({}) }));
 vi.mock("@sentry/nextjs", () => ({ captureException: mocks.captureException }));
@@ -70,6 +74,7 @@ beforeEach(() => {
   mocks.permission.mockResolvedValue(true);
   mocks.patientAccess.mockResolvedValue(undefined);
   mocks.persistenceReady.mockResolvedValue(true);
+  mocks.placement.mockResolvedValue(true);
 });
 
 describe("P4.8 launcher registry and visibility resolver", () => {
@@ -175,6 +180,24 @@ describe("P4.8 launcher registry and visibility resolver", () => {
       { ...USER, role: "manager" },
       ["ai_assistant", "ai.staff_analytics"],
     );
+  });
+
+  it("omits a placement-disabled launcher without weakening the host or Assistant gates", async () => {
+    mocks.placement.mockResolvedValue(false);
+
+    await expect(resolveAssistantLauncher({
+      user: USER,
+      context: { type: "dashboard" },
+    })).resolves.toBeNull();
+
+    expect(mocks.placement).toHaveBeenCalledWith({
+      user: USER,
+      area: "dashboard",
+      defaultEnabled: true,
+    });
+    expect(mocks.surfaceAccess).not.toHaveBeenCalled();
+    expect(mocks.loadConversation).not.toHaveBeenCalled();
+    expect(mocks.capabilities).not.toHaveBeenCalled();
   });
 
   it("keeps patient launchers doctor-only without loading a closed launcher's session", async () => {

@@ -21,6 +21,20 @@ describe("SettingsNav customize visibility", () => {
       "href",
       "/settings/customize",
     );
+    expect(screen.getByRole("link", { name: "Assistant placement" })).toHaveAttribute(
+      "href",
+      "/settings/assistant",
+    );
+  });
+
+  it("keeps the Assistant placement upgrade gate available to primary admins without AI", () => {
+    render(<SettingsNav canCustomize canManageAi={false} />);
+
+    expect(screen.getByRole("link", { name: "Assistant placement" })).toHaveAttribute(
+      "href",
+      "/settings/assistant",
+    );
+    expect(screen.queryByRole("link", { name: "AI provider" })).not.toBeInTheDocument();
   });
 
   it("shows the P3B messaging settings entry to both settings roles", () => {

@@ -95,6 +95,7 @@ export type NavigationTargetId =
   | "settings_messaging"
   | "settings_templates"
   | "settings_ai"
+  | "settings_assistant"
   | "notifications"
   | "profile"
   | "preferences";
@@ -472,6 +473,33 @@ export const NAVIGATION_TARGETS: readonly NavigationTarget[] = [
     keywords: {
       en: ["ai settings", "assistant settings", "api key", "financial insights permission", "ai usage"],
       ar: ["إعدادات الذكاء الاصطناعي", "إعدادات المساعد", "مفتاح", "صلاحية المؤشرات المالية", "استهلاك"],
+    },
+  },
+  {
+    id: "settings_assistant",
+    href: "/settings/assistant",
+    pageSlug: "settings",
+    roles: ["admin"],
+    requiresPrimaryClinicAdmin: true,
+    labels: { en: "Assistant placement", ar: "مواضع المساعد" },
+    breadcrumb: {
+      en: "Settings → Assistant placement",
+      ar: "الإعدادات ← مواضع المساعد",
+    },
+    keywords: {
+      en: [
+        "assistant placement",
+        "assistant launcher",
+        "ask assistant button",
+        "assistant role defaults",
+        "assistant per user",
+      ],
+      ar: [
+        "مواضع المساعد",
+        "زر اسأل المساعد",
+        "إعدادات المساعد حسب الدور",
+        "تخصيص المساعد للموظف",
+      ],
     },
   },
   {

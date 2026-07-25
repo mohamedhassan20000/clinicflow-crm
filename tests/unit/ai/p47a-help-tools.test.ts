@@ -400,6 +400,6 @@ describe("P4.7A corpus ↔ navigation registry integrity", () => {
     // Pins the count the implementation report and roadmap quote, so a corpus
     // that grows or shrinks forces the docs to be updated in the same change
     // rather than silently drifting (P4.7A review, finding P47A-L1).
-    expect(HELP_ARTICLES.length).toBe(19);
+    expect(HELP_ARTICLES.length).toBe(20);
   });
 });

@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AssistantPageContext } from "@/lib/ai/page-context";
 
@@ -143,5 +144,20 @@ describe("P4.8A reusable AssistantLauncher", () => {
     fireEvent.click(retry);
     expect(await screen.findByTestId("assistant-chat")).toBeVisible();
     expect(mocks.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps an enabled P4.9A placement keyboard-operable with a named, described dialog", async () => {
+    const user = userEvent.setup();
+    render(<AssistantLauncher {...BASE} context={{ type: "dashboard" }} />);
+
+    await user.tab();
+    const trigger = screen.getByRole("button", { name: "Ask assistant" });
+    expect(trigger).toHaveFocus();
+    await user.keyboard("{Enter}");
+
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveAccessibleName("Dashboard assistant");
+    expect(dialog).toHaveAccessibleDescription(/opened the dashboard/);
+    expect(await screen.findByTestId("assistant-chat")).toBeVisible();
   });
 });

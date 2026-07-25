@@ -1276,6 +1276,14 @@ const CLINIC_SCOPED_TABLES = new Set([
   "user_page_permissions",
 ]);
 
+// Placement is read through the tenant-scoped service client during Server
+// Component resolution, but configuration writes must retain the authenticated
+// primary admin's JWT so RLS and audit attribution share the same actor.
+const READ_ONLY_CLINIC_SCOPED_TABLES = new Set([
+  "assistant_launcher_settings",
+  "assistant_launcher_user_overrides",
+]);
+
 const JOIN_SCOPED_TABLES = new Set([
   "feedback",
   "medical_notes",
@@ -1297,6 +1305,7 @@ type AdminClient = ReturnType<typeof createAdminClient>;
 function assertKnownTable(table: string) {
   if (
     CLINIC_SCOPED_TABLES.has(table)
+    || READ_ONLY_CLINIC_SCOPED_TABLES.has(table)
     || JOIN_SCOPED_TABLES.has(table)
     || EXPLICIT_SCOPE_TABLES.has(table)
   ) {
@@ -1341,7 +1350,10 @@ function withClinicId(payload: unknown, clinicId: string): unknown {
 }
 
 function scopeQueryResult(result: unknown, table: string, clinicId: string) {
-  if (!CLINIC_SCOPED_TABLES.has(table)) return result;
+  if (
+    !CLINIC_SCOPED_TABLES.has(table)
+    && !READ_ONLY_CLINIC_SCOPED_TABLES.has(table)
+  ) return result;
 
   if (result && typeof result === "object" && "eq" in result) {
     return (result as { eq: (column: string, value: string) => unknown }).eq(
@@ -1397,6 +1409,19 @@ export function createClinicScopedAdminClient(clinicId: string): AdminClient {
 
             if (typeof builderProp !== "string" || typeof value !== "function") {
               return value;
+            }
+
+            if (
+              READ_ONLY_CLINIC_SCOPED_TABLES.has(table)
+              && (INSERT_METHODS.has(builderProp)
+                || builderProp === "update"
+                || builderProp === "delete")
+            ) {
+              return () => {
+                throw new Error(
+                  `createClinicScopedAdminClient provides read-only access to "${table}"; use an authenticated RLS client for placement mutations.`,
+                );
+              };
             }
 
             if (INSERT_METHODS.has(builderProp)) {

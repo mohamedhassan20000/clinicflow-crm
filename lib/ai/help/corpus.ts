@@ -4,7 +4,10 @@ import type { UserRole } from "@/lib/rbac";
 import type { AiUserPermissionKey } from "@/lib/ai/permissions";
 import type { NavigationTargetId } from "@/lib/ai/help/navigation";
 import { WHATSAPP_FEATURE } from "@/lib/ai/help/navigation";
-import { AI_FINANCIAL_INSIGHTS_FEATURE } from "@/lib/ai/authorization";
+import {
+  AI_ASSISTANT_CUSTOMIZATION_FEATURE,
+  AI_FINANCIAL_INSIGHTS_FEATURE,
+} from "@/lib/ai/authorization";
 
 /**
  * The curated ClinicFlow help corpus (P4.7A).
@@ -937,6 +940,65 @@ export const HELP_ARTICLES: readonly HelpArticle[] = [
         "صلاحية المؤشرات المالية",
         "من يسأل عن الإيرادات",
         "استهلاك المساعد",
+      ],
+    },
+  },
+  {
+    id: "customize-assistant-placement",
+    navigationTarget: "settings_assistant",
+    roles: ["admin"],
+    requiredFeatures: [AI_ASSISTANT_CUSTOMIZATION_FEATURE],
+    en: {
+      title: "Customize where Ask assistant appears",
+      summary:
+        "Choose which eligible product areas show a contextual Ask assistant button for each role or individual staff member.",
+      prerequisites: [
+        "You are the clinic's primary administrator.",
+        "The clinic's plan includes Assistant customization.",
+      ],
+      steps: [
+        "Open Settings from the sidebar and go to Assistant placement.",
+        "Under Role defaults, use the area-by-role matrix to show or hide an eligible launcher for that role.",
+        "Choose People to select an active staff member and set an individual override when needed.",
+        "Use Reset or Use role setting to remove an explicit choice and return to the inherited product or role default.",
+      ],
+      notes: [
+        "Launcher placement changes visibility only. It never grants page, patient, financial, Assistant, or tool access.",
+        "A personal override takes precedence over the role setting. Unsupported area and role combinations are not offered.",
+      ],
+      keywords: [
+        "assistant placement",
+        "show ask assistant button",
+        "hide assistant launcher",
+        "assistant by role",
+        "assistant per user",
+        "customize assistant",
+      ],
+    },
+    ar: {
+      title: "تخصيص مواضع زر «اسأل المساعد»",
+      summary:
+        "اختيار مناطق المنتج المؤهلة التي يظهر فيها زر «اسأل المساعد» السياقي حسب الدور أو حسب موظف بعينه.",
+      prerequisites: [
+        "أن تكون مسؤول العيادة الأساسي.",
+        "أن تشمل خطة العيادة تخصيص المساعد.",
+      ],
+      steps: [
+        "افتح «الإعدادات» من القائمة الجانبية وانتقل إلى «مواضع المساعد».",
+        "ضمن «إعدادات الأدوار»، استخدم مصفوفة المناطق والأدوار لإظهار زر مؤهل لذلك الدور أو إخفائه.",
+        "انتقل إلى «الأفراد» واختر موظفًا نشطًا لإضافة تجاوز فردي عند الحاجة.",
+        "استخدم «إعادة الضبط» أو «استخدام إعداد الدور» لإزالة الخيار الصريح والعودة إلى الإعداد الافتراضي الموروث.",
+      ],
+      notes: [
+        "تغيّر مواضع الزر الظهور فقط، ولا تمنح صلاحية للصفحات أو المرضى أو البيانات المالية أو المساعد أو الأدوات.",
+        "يتقدم التجاوز الفردي على إعداد الدور، ولا تظهر التركيبات غير المدعومة بين المنطقة والدور.",
+      ],
+      keywords: [
+        "مواضع المساعد",
+        "إظهار زر اسأل المساعد",
+        "إخفاء زر المساعد",
+        "المساعد حسب الدور",
+        "تخصيص المساعد للموظف",
       ],
     },
   },

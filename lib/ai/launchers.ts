@@ -35,6 +35,7 @@ import type { AuthedUser, UserRole } from "@/lib/rbac";
 import { getPageVisibilityState } from "@/lib/server-page-permissions";
 import { createClient } from "@/lib/supabase/server";
 import { isAssistantPersistenceReady } from "@/lib/ai/persistence-readiness";
+import { resolveAssistantLauncherPlacement } from "@/lib/ai/launcher-placement";
 
 export type AssistantLauncherDefinition = {
   area: AssistantPageContextType;
@@ -173,7 +174,6 @@ export async function resolveAssistantLauncherDefinition(input: {
   if (
     definition.area !== context.type ||
     definition.contextType !== context.type ||
-    !definition.defaultEnabled ||
     !definition.roles.includes(input.user.role)
   ) {
     return null;
@@ -185,6 +185,16 @@ export async function resolveAssistantLauncherDefinition(input: {
       getPageVisibilityState(input.user, definition.pageSlug),
     ]);
     if (assistantVisibility !== "visible" || sourceVisibility !== "visible") {
+      return null;
+    }
+
+    if (
+      !(await resolveAssistantLauncherPlacement({
+        user: input.user,
+        area: definition.area,
+        defaultEnabled: definition.defaultEnabled,
+      }))
+    ) {
       return null;
     }
 

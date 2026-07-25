@@ -553,6 +553,84 @@ export type Database = {
           },
         ]
       }
+      assistant_launcher_settings: {
+        Row: {
+          area: string
+          clinic_id: string
+          enabled: boolean
+          role: Database["public"]["Enums"]["user_role"]
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          area: string
+          clinic_id: string
+          enabled: boolean
+          role: Database["public"]["Enums"]["user_role"]
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          area?: string
+          clinic_id?: string
+          enabled?: boolean
+          role?: Database["public"]["Enums"]["user_role"]
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assistant_launcher_settings_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assistant_launcher_settings_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      assistant_launcher_user_overrides: {
+        Row: {
+          area: string
+          clinic_id: string
+          enabled: boolean
+          user_id: string
+        }
+        Insert: {
+          area: string
+          clinic_id: string
+          enabled: boolean
+          user_id: string
+        }
+        Update: {
+          area?: string
+          clinic_id?: string
+          enabled?: boolean
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assistant_launcher_user_overrides_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assistant_launcher_user_overrides_user_clinic_fk"
+            columns: ["user_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id", "clinic_id"]
+          },
+        ]
+      }
       appointment_services: {
         Row: {
           appointment_id: string

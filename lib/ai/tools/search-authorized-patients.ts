@@ -79,6 +79,17 @@ export function searchAuthorizedPatientsTool(ctx: DoctorToolContext) {
         params: { query_length: query.length, count: rows.length, confidence },
       });
 
+      // P4.10A: a high-confidence single match becomes the conversation's
+      // active patient, so a follow-up ("when was his last visit?") resolves to
+      // the same patient without re-asking. The id comes from the RLS-authorized
+      // RPC result, never from model free text, and it is only *proposed* here —
+      // the persistence layer writes it once the turn is saved. Anything less
+      // than a single high-confidence match leaves the context unchanged, so a
+      // namesake ambiguity never silently binds a patient.
+      if (confidence === "high" && rows.length === 1 && ctx.conversationId) {
+        ctx.contextRecorder?.proposePatient(rows[0].id, rows[0].full_name, "resolution");
+      }
+
       // Contact details only for a confident single match.
       //
       // P4.6C deliberately widened this from a near-exact lookup to a ranked

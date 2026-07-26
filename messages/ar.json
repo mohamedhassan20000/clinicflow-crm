@@ -732,7 +732,18 @@
     "capabilityGroupClinical": "رعاية المرضى",
     "capabilityGroupOperational": "عمليات العيادة",
     "capabilityGroupFinancial": "المالية",
-    "capabilityGroupGuidance": "المساعدة والإرشاد"
+    "capabilityGroupGuidance": "المساعدة والإرشاد",
+    "activeContextPatient": "المريض",
+    "activeContextAppointment": "الموعد",
+    "activeContextInvoice": "الفاتورة",
+    "activeContextStaff": "الموظف",
+    "activeContextDepartment": "القسم",
+    "activeContextReport": "التقرير",
+    "clearActiveContext": "مسح سياق {context} النشط",
+    "chooseActiveContext": "أيّ نتيجة تقصد؟",
+    "activeContextUpdated": "تم تحديث سياق المحادثة النشط.",
+    "activeContextCleared": "تم مسح سياق المحادثة النشط.",
+    "activeContextUpdateFailed": "تعذر تحديث سياق المحادثة. لم يُغيَّر أي شيء آخر."
   },
   "inbox": {
     "title": "صندوق الوارد",

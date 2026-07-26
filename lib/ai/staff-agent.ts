@@ -11,6 +11,12 @@ import {
   patientIdFromAssistantPageContext,
   type AssistantPageContext,
 } from "@/lib/ai/page-context";
+import {
+  activePatientId as activePatientIdFrom,
+  buildActiveContextPrompt,
+  type ActiveContext,
+  type ConversationContextRecorder,
+} from "@/lib/ai/conversation-context";
 
 type StaffAgentContext = {
   user: AuthedUser;
@@ -18,6 +24,12 @@ type StaffAgentContext = {
   clinicName: string;
   pageContext?: AssistantPageContext | null;
   execution: AiExecutionHandle;
+  /** The conversation this turn belongs to (P4.10A session context). */
+  conversationId?: string | null;
+  /** The persisted active-entity context for the conversation (P4.10A). */
+  activeContext?: ActiveContext | null;
+  /** Collects an active-context proposal produced during the turn (P4.10A). */
+  contextRecorder?: ConversationContextRecorder | null;
 };
 
 /**
@@ -29,6 +41,12 @@ export async function createStaffAgent(ctx: StaffAgentContext) {
     ? patientIdFromAssistantPageContext(ctx.pageContext ?? null)
     : null;
 
+  // P4.10A: the active patient defaults to the conversationally-resolved one and
+  // falls back to the patient-bound conversation (page launch). Advisory only —
+  // every patient tool re-authorizes the effective id on every call.
+  const activePatientId =
+    activePatientIdFrom(ctx.activeContext ?? null) ?? patientId;
+
   const tools = await buildStaffTools({
     user: ctx.user,
     locale: ctx.locale,
@@ -36,6 +54,10 @@ export async function createStaffAgent(ctx: StaffAgentContext) {
     // The registry filters the mount by task class, so the certified policy the
     // turn resolved to also decides which tools exist in it (P4.6A).
     taskClass: ctx.execution.taskPolicy.task,
+    conversationId: ctx.conversationId ?? null,
+    activePatientId,
+    activeContext: ctx.activeContext ?? null,
+    contextRecorder: ctx.contextRecorder ?? null,
   });
 
   return new ToolLoopAgent({
@@ -48,7 +70,9 @@ export async function createStaffAgent(ctx: StaffAgentContext) {
         clinicName: ctx.clinicName,
         doctorName: ctx.user.fullName,
         role: ctx.user.role,
-      }) + buildAssistantPageContextPrompt(ctx.pageContext ?? null, ctx.locale),
+      }) +
+      buildAssistantPageContextPrompt(ctx.pageContext ?? null, ctx.locale) +
+      buildActiveContextPrompt(ctx.activeContext ?? null, ctx.locale),
     tools,
     stopWhen: stepCountIs(ctx.execution.taskPolicy.maxSteps),
     temperature: ctx.execution.taskPolicy.temperature,

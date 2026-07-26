@@ -24,6 +24,31 @@ export type ClinicReportPolicy = {
   auditTable: string;
 };
 
+export const CLINIC_REPORT_LABELS: Record<
+  ClinicReportId,
+  { en: string; ar: string }
+> = {
+  cancellations: { en: "Cancellations report", ar: "تقرير الإلغاءات" },
+  no_shows: { en: "No-show report", ar: "تقرير عدم الحضور" },
+  revenue: { en: "Revenue report", ar: "تقرير الإيرادات" },
+  followups: { en: "Follow-ups report", ar: "تقرير المتابعات" },
+  doctor_performance: {
+    en: "Doctor performance report",
+    ar: "تقرير أداء الأطباء",
+  },
+  receptionist_performance: {
+    en: "Receptionist performance report",
+    ar: "تقرير أداء موظفي الاستقبال",
+  },
+};
+
+export function clinicReportLabel(
+  report: ClinicReportId,
+  locale: "ar" | "en",
+): string {
+  return CLINIC_REPORT_LABELS[report][locale];
+}
+
 export const CLINIC_REPORTS = {
   cancellations: {
     roles: ["admin", "manager", "receptionist"],

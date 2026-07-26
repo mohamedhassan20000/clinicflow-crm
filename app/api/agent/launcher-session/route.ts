@@ -128,6 +128,7 @@ export async function POST(request: Request) {
         initialConversationId:
           resolution.conversation?.id ?? crypto.randomUUID(),
         initialMessages: resolution.conversation?.messages ?? [],
+        initialActiveContext: resolution.conversation?.activeContext ?? {},
         historyTruncated:
           resolution.conversation?.historyTruncated ?? false,
         remaining: resolution.access.remaining,

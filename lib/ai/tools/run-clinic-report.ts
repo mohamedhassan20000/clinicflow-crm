@@ -31,10 +31,12 @@ import type { AuthedUser, UserRole } from "@/lib/rbac";
 import type { ResolvedDateRange } from "@/lib/date-range";
 import {
   allowedClinicReports,
+  clinicReportLabel,
   CLINIC_REPORT_IDS,
   CLINIC_REPORTS,
   type ClinicReportId,
 } from "@/lib/ai/clinic-reports";
+import { activeEntityId } from "@/lib/ai/conversation-context";
 
 export { CLINIC_REPORT_IDS, type ClinicReportId } from "@/lib/ai/clinic-reports";
 
@@ -160,7 +162,12 @@ export function runClinicReportTool(ctx: DoctorToolContext) {
     description:
       `Run one of the clinic's standard reports and return its computed results plus a link to the full report page. Available reports for this user: ${allowed.join(", ")}. Do not offer any report outside that list. Always offer the returned link so the user can open the full report.`,
     inputSchema: dateRangeInputSchema.extend({
-      report: z.enum(CLINIC_REPORT_IDS).describe("Which report to run."),
+      report: z
+        .enum(CLINIC_REPORT_IDS)
+        .optional()
+        .describe(
+          "Which report to run. Omit when the user refers to the active report in this conversation.",
+        ),
       doctor: z
         .string()
         .trim()
@@ -176,15 +183,35 @@ export function runClinicReportTool(ctx: DoctorToolContext) {
                   : ""
               }.`,
         ),
+      use_active_staff: z
+        .boolean()
+        .optional()
+        .describe(
+          "Set true only when the user explicitly scopes a doctor-capable report to the active staff member. Omit or set false for clinic-wide report results.",
+        ),
     }),
-    execute: async ({ report, doctor, ...rangeInput }) => {
-      const definition = REPORTS[report];
+    execute: async ({ report, doctor, use_active_staff, ...rangeInput }) => {
+      const activeReportId = activeEntityId(ctx.activeContext, "report");
+      const effectiveReport = (report ?? activeReportId) as ClinicReportId | null;
+      if (!effectiveReport || !CLINIC_REPORT_IDS.includes(effectiveReport)) {
+        return {
+          needs_clarification: true as const,
+          field: "report",
+          guidance:
+            "No report is active in this conversation. Ask the user which authorized report they want.",
+          candidates: allowed.map((id) => ({
+            id,
+            name: clinicReportLabel(id, ctx.locale),
+          })),
+        };
+      }
+      const definition = REPORTS[effectiveReport];
 
       // Role check first: an unavailable report must deny before any read.
       if (!definition.roles.includes(ctx.user.role)) {
         throw new AiToolAuthorizationError(
           "role_forbidden",
-          `Role "${ctx.user.role}" may not run the ${report} report.`,
+          `Role "${ctx.user.role}" may not run the ${effectiveReport} report.`,
         );
       }
       // One gate, asserted straight.
@@ -209,16 +236,35 @@ export function runClinicReportTool(ctx: DoctorToolContext) {
 
       const supabase = await createClient();
       const range = resolveToolDateRange(rangeInput);
+      const activeStaffId = activeEntityId(ctx.activeContext, "staff");
+      const effectiveDoctor =
+        doctor ??
+        (use_active_staff === true ? activeStaffId ?? undefined : undefined);
+
+      if (
+        definition.acceptsDoctor &&
+        use_active_staff === true &&
+        !doctor &&
+        !activeStaffId
+      ) {
+        return {
+          needs_clarification: true as const,
+          field: "doctor",
+          guidance:
+            "There is no active staff member in this conversation. Ask the user which doctor they mean.",
+          candidates: [],
+        };
+      }
 
       // Only resolve a doctor filter for reports whose core actually applies
       // one; otherwise a name would trigger a clarification about a filter that
       // could not have changed the answer.
       const doctorFilter = definition.acceptsDoctor
-        ? await resolveDoctorFilter(supabase, doctor)
+        ? await resolveDoctorFilter(supabase, effectiveDoctor)
         : ({ status: "unset", id: null } as const);
       const clarification =
-        doctor && definition.acceptsDoctor
-          ? filterClarification("doctor", doctor, doctorFilter)
+        effectiveDoctor && definition.acceptsDoctor
+          ? filterClarification("doctor", effectiveDoctor, doctorFilter)
           : null;
       if (clarification) return clarification;
 
@@ -228,23 +274,48 @@ export function runClinicReportTool(ctx: DoctorToolContext) {
         doctorId: doctorFilter.id,
       });
 
+      if (ctx.conversationId) {
+        if (effectiveReport !== activeReportId) {
+          ctx.contextRecorder?.propose(
+            "report",
+            effectiveReport,
+            clinicReportLabel(effectiveReport, ctx.locale),
+            "resolution",
+          );
+        }
+        if (doctorFilter.status === "resolved" && doctorFilter.trustedForContext) {
+          ctx.contextRecorder?.propose(
+            "staff",
+            doctorFilter.id,
+            doctorFilter.label,
+            "resolution",
+          );
+        }
+      }
+
       await logAgentTool({
         clinicId: ctx.user.clinicId,
         actorId: ctx.user.id,
         tool: "run_clinic_report",
         tableName: definition.auditTable,
         params: {
-          report,
+          report: effectiveReport,
           preset: range.preset,
           from: range.from,
           to: range.to,
           doctor_filtered: Boolean(doctorFilter.id),
-          doctor_filter_ignored: Boolean(doctor) && !definition.acceptsDoctor,
+          doctor_filter_ignored:
+            Boolean(effectiveDoctor) && !definition.acceptsDoctor,
+          from_active_context: {
+            report: !report && Boolean(activeReportId),
+            staff:
+              use_active_staff === true && !doctor && Boolean(activeStaffId),
+          },
         },
       });
 
       return {
-        report,
+        report: effectiveReport,
         // Says so out loud when a doctor name was given to a report that has no
         // doctor dimension, rather than answering as though it had been applied.
         doctor_filter_applied: Boolean(doctorFilter.id),

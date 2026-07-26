@@ -3,6 +3,12 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { UIMessage } from "ai";
 import type { AuthedUser } from "@/lib/rbac";
+import {
+  applyProposals,
+  parseActiveContext,
+  type ActiveContext,
+  type ActiveContextProposal,
+} from "@/lib/ai/conversation-context";
 import type { Database } from "@/types/database";
 
 const HISTORY_LIMIT = 40;
@@ -27,6 +33,7 @@ export type LoadedDoctorConversation = {
   title: string | null;
   messages: UIMessage[];
   historyTruncated: boolean;
+  activeContext: ActiveContext;
 };
 
 type LoadedMessageHistory = {
@@ -76,7 +83,7 @@ export async function loadLatestDoctorConversation(input: {
 }): Promise<LoadedDoctorConversation | null> {
   let query = input.supabase
     .from("agent_conversations")
-    .select("id, patient_id, title")
+    .select("id, patient_id, title, active_context")
     .eq("clinic_id", input.user.clinicId)
     .eq("user_id", input.user.id)
     .eq("persona", "doctor")
@@ -99,6 +106,7 @@ export async function loadLatestDoctorConversation(input: {
     title: data.title,
     messages: history.messages,
     historyTruncated: history.truncated,
+    activeContext: parseActiveContext(data.active_context),
   };
 }
 
@@ -141,10 +149,15 @@ export async function ensureDoctorConversation(input: {
   conversationId: string;
   locale: "ar" | "en";
   patientId?: string | null;
-}): Promise<{ id: string; patientId: string | null; messages: UIMessage[] }> {
+}): Promise<{
+  id: string;
+  patientId: string | null;
+  messages: UIMessage[];
+  activeContext: ActiveContext;
+}> {
   const { data: existing, error: existingError } = await input.supabase
     .from("agent_conversations")
-    .select("id, patient_id")
+    .select("id, patient_id, active_context")
     .eq("id", input.conversationId)
     .eq("clinic_id", input.user.clinicId)
     .eq("user_id", input.user.id)
@@ -168,6 +181,7 @@ export async function ensureDoctorConversation(input: {
       id: existing.id,
       patientId: existing.patient_id,
       messages: history.messages,
+      activeContext: parseActiveContext(existing.active_context),
     };
   }
 
@@ -180,8 +194,15 @@ export async function ensureDoctorConversation(input: {
   }
 
   // Keep a first turn virtual until the model completes. This prevents an abort
-  // or model/tool error from leaving an empty conversation row behind.
-  return { id: input.conversationId, patientId: requestedPatientId, messages: [] };
+  // or model/tool error from leaving an empty conversation row behind. No row
+  // exists yet, so there is no persisted active context; a patient-bound turn
+  // still resolves its default from the requested patient id via the route.
+  return {
+    id: input.conversationId,
+    patientId: requestedPatientId,
+    messages: [],
+    activeContext: {},
+  };
 }
 
 export async function persistDoctorTurn(input: {
@@ -192,6 +213,14 @@ export async function persistDoctorTurn(input: {
   patientId: string | null;
   userText: string;
   assistantText: string;
+  /**
+   * A server-derived active-context proposal recorded by a tool during the turn
+   * (P4.10A), e.g. a high-confidence patient resolution. Applied to the row's
+   * session context once, here, so the next turn resolves the same entity.
+   */
+  contextProposal?: ActiveContextProposal | null;
+  /** P4.10B may resolve more than one entity type during the same turn. */
+  contextProposals?: readonly ActiveContextProposal[];
 }): Promise<void> {
   const { error: createError } = await input.supabase
     .from("agent_conversations")
@@ -212,7 +241,7 @@ export async function persistDoctorTurn(input: {
   // Re-select it through the normal owner/clinic/persona scope before writing.
   const { data: conversation, error: conversationError } = await input.supabase
     .from("agent_conversations")
-    .select("id, patient_id")
+    .select("id, patient_id, active_context")
     .eq("id", input.conversationId)
     .eq("clinic_id", input.user.clinicId)
     .eq("user_id", input.user.id)
@@ -222,6 +251,20 @@ export async function persistDoctorTurn(input: {
   if (conversationError || !conversation || conversation.patient_id !== input.patientId) {
     throw new AiConversationError("persistence_failed");
   }
+
+  // P4.10A: fold a tool's active-context proposal (e.g. a high-confidence
+  // patient resolution) into the persisted slot, so the next turn resolves the
+  // same entity. The id is server-derived from an RLS-authorized lookup, never
+  // asserted by the model. A patient-bound conversation needs no slot written
+  // here: its active patient is the re-authorized `patient_id` column, which the
+  // route uses as the default when no conversational slot exists. A turn with no
+  // proposal leaves the stored context untouched.
+  const currentContext = parseActiveContext(conversation.active_context);
+  const proposals = input.contextProposals ??
+    (input.contextProposal ? [input.contextProposal] : []);
+  const nextContext = applyProposals(currentContext, proposals);
+  const contextChanged =
+    JSON.stringify(nextContext) !== JSON.stringify(currentContext);
 
   const rows: Database["public"]["Tables"]["agent_messages"]["Insert"][] = [
     {
@@ -247,7 +290,12 @@ export async function persistDoctorTurn(input: {
 
   const { error: touchError } = await input.supabase
     .from("agent_conversations")
-    .update({ updated_at: new Date().toISOString() })
+    .update({
+      updated_at: new Date().toISOString(),
+      ...(contextChanged
+        ? { active_context: nextContext as Database["public"]["Tables"]["agent_conversations"]["Update"]["active_context"] }
+        : {}),
+    })
     .eq("id", input.conversationId)
     .eq("clinic_id", input.user.clinicId)
     .eq("user_id", input.user.id);

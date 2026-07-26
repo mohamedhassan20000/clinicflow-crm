@@ -26,9 +26,15 @@ function escapeIlikePattern(value: string): string {
 export function searchPatientVisitsTool(ctx: DoctorToolContext) {
   return tool({
     description:
-      "Search one patient's clinical notes and appointments. Provide the patient id, a free-text query to match note content, and optionally a date range (inclusive). Returns matching notes (date, author, excerpt) and appointments the current user is authorized to see.",
+      "Search one patient's clinical notes and appointments. Provide a free-text query to match note content, and optionally a date range (inclusive). Omit patient_id to use the conversation's active patient (e.g. \"this patient\"); provide it to search a different patient. Returns matching notes (date, author, excerpt) and appointments the current user is authorized to see.",
     inputSchema: z.object({
-      patient_id: z.string().uuid().describe("The patient's id."),
+      patient_id: z
+        .string()
+        .uuid()
+        .optional()
+        .describe(
+          "The patient's id. Omit to use the active patient from the current conversation context.",
+        ),
       query: z
         .string()
         .trim()
@@ -48,6 +54,20 @@ export function searchPatientVisitsTool(ctx: DoctorToolContext) {
     }),
     execute: async ({ patient_id, query, from, to }) => {
       await assertDoctorToolAccess(ctx.user);
+
+      // P4.10A: fall back to the conversation's active patient when the id is
+      // omitted. The effective id is re-authorized below (visibility probe +
+      // RLS), so the context is an advisory default that can never widen access.
+      const effectivePatientId = patient_id ?? ctx.activePatientId ?? null;
+      if (!effectivePatientId) {
+        return {
+          needs_clarification: true as const,
+          field: "patient_id",
+          message:
+            "No patient is in context. Ask the user which patient they mean, or search for them by name first.",
+        };
+      }
+
       const supabase = await createClient();
 
       // Confirm the patient is visible to this user before searching, so the
@@ -55,7 +75,7 @@ export function searchPatientVisitsTool(ctx: DoctorToolContext) {
       const { data: patient } = await supabase
         .from("patients")
         .select("id")
-        .eq("id", patient_id)
+        .eq("id", effectivePatientId)
         .eq("clinic_id", ctx.user.clinicId)
         .maybeSingle();
 
@@ -65,7 +85,14 @@ export function searchPatientVisitsTool(ctx: DoctorToolContext) {
         tool: "search_patient_visits",
         tableName: "medical_notes",
         recordId: patient?.id ?? null,
-        params: { patient_id, query, from: from ?? null, to: to ?? null, found: Boolean(patient) },
+        params: {
+          patient_id: effectivePatientId,
+          from_active_context: !patient_id,
+          query,
+          from: from ?? null,
+          to: to ?? null,
+          found: Boolean(patient),
+        },
       });
 
       if (!patient) {

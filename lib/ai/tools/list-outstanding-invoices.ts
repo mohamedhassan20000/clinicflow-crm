@@ -11,6 +11,7 @@ import {
   describeRange,
   resolveToolDateRange,
 } from "@/lib/ai/tools/range";
+import { activeEntityId } from "@/lib/ai/conversation-context";
 
 const MAX_LIMIT = 25;
 
@@ -39,6 +40,19 @@ export function listOutstandingInvoicesTool(ctx: DoctorToolContext) {
     description:
       "List completed appointments that still carry an outstanding balance, largest first. Returns patient name, outstanding amount, and how many days old the balance is — nothing else. Capped at 25 rows. Covers all time unless a date range is given. Counts the same appointments as get_revenue_summary, so the two always reconcile.",
     inputSchema: z.object({
+      invoice_id: z
+        .string()
+        .uuid()
+        .optional()
+        .describe(
+          "Optional invoice id explicitly named by the user (the underlying completed appointment id). Do not copy the active context id into this field; use use_active_invoice instead.",
+        ),
+      use_active_invoice: z
+        .boolean()
+        .optional()
+        .describe(
+          "Set true only when the user explicitly refers to the active invoice or balance. Omit or set false for clinic-wide totals and broad outstanding-balance lists.",
+        ),
       limit: z
         .number()
         .int()
@@ -52,9 +66,29 @@ export function listOutstandingInvoicesTool(ctx: DoctorToolContext) {
       date_from: dateRangeInputSchema.shape.date_from,
       date_to: dateRangeInputSchema.shape.date_to,
     }),
-    execute: async ({ limit, preset, date_from, date_to }) => {
+    execute: async ({
+      invoice_id,
+      use_active_invoice,
+      limit,
+      preset,
+      date_from,
+      date_to,
+    }) => {
       await assertFinancialInsightsAccess(ctx.user);
       const supabase = await createClient();
+      const activeInvoiceId = activeEntityId(ctx.activeContext, "invoice");
+      const effectiveInvoiceId =
+        invoice_id ?? (use_active_invoice === true ? activeInvoiceId : null);
+
+      if (use_active_invoice === true && !invoice_id && !activeInvoiceId) {
+        return {
+          needs_clarification: true,
+          field: "invoice_id",
+          guidance:
+            "There is no active invoice in this conversation. Ask the user which invoice or balance they mean.",
+          candidates: [],
+        };
+      }
 
       const range = preset
         ? resolveToolDateRange({ preset, date_from, date_to })
@@ -69,6 +103,7 @@ export function listOutstandingInvoicesTool(ctx: DoctorToolContext) {
         .eq("status", "completed")
         .gt("outstanding_amount", 0);
 
+      if (effectiveInvoiceId) query = query.eq("id", effectiveInvoiceId);
       if (range) {
         query = query
           .gte("scheduled_at", range.start.toISOString())
@@ -98,6 +133,24 @@ export function listOutstandingInvoicesTool(ctx: DoctorToolContext) {
           : null,
       }));
 
+      if (
+        rows.length === 1 &&
+        !truncated &&
+        !invoice_id &&
+        !activeInvoiceId &&
+        ctx.conversationId
+      ) {
+        const invoice = rows[0]!;
+        ctx.contextRecorder?.propose(
+          "invoice",
+          invoice.appointment_id,
+          invoice.patient_name
+            ? `${invoice.patient_name} · ${invoice.outstanding_amount}`
+            : String(invoice.outstanding_amount),
+          "resolution",
+        );
+      }
+
       await logAgentTool({
         clinicId: ctx.user.clinicId,
         actorId: ctx.user.id,
@@ -107,6 +160,11 @@ export function listOutstandingInvoicesTool(ctx: DoctorToolContext) {
           limit,
           count: rows.length,
           scope: range ? range.preset : "all_time",
+          invoice_filtered: Boolean(effectiveInvoiceId),
+          from_active_context:
+            use_active_invoice === true &&
+            !invoice_id &&
+            Boolean(activeInvoiceId),
         },
       });
 

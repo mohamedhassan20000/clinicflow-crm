@@ -19,18 +19,39 @@ const RECENT_LIMIT = 10;
 export function getPatientSummaryTool(ctx: DoctorToolContext) {
   return tool({
     description:
-      "Retrieve a clinical summary for one patient by id: demographics (age/gender/blood type only), recent appointments, recent clinical notes (by date and author), recent follow-up outcomes, and active packages. Returns only patients the current user is authorized to see.",
+      "Retrieve a clinical summary for one patient: demographics (age/gender/blood type only), recent appointments, recent clinical notes (by date and author), recent follow-up outcomes, and active packages. Returns only patients the current user is authorized to see. Omit patient_id to use the conversation's active patient (e.g. when the user says \"this patient\" or refers to them by pronoun); provide it explicitly to summarize a different patient.",
     inputSchema: z.object({
-      patient_id: z.string().uuid().describe("The patient's id."),
+      patient_id: z
+        .string()
+        .uuid()
+        .optional()
+        .describe(
+          "The patient's id. Omit to use the active patient from the current conversation context.",
+        ),
     }),
     execute: async ({ patient_id }) => {
       await assertDoctorToolAccess(ctx.user);
+
+      // P4.10A: fall back to the conversation's active patient when the model
+      // omits the id. The effective id is still re-authorized below exactly as a
+      // named id is (clinic scope + doctor-scoping RLS), so the context is an
+      // advisory default only and can never widen access.
+      const effectivePatientId = patient_id ?? ctx.activePatientId ?? null;
+      if (!effectivePatientId) {
+        return {
+          needs_clarification: true as const,
+          field: "patient_id",
+          message:
+            "No patient is in context. Ask the user which patient they mean, or search for them by name first.",
+        };
+      }
+
       const supabase = await createClient();
 
       const { data: patient } = await supabase
         .from("patients")
         .select("id, full_name, date_of_birth, blood_type, clinic_id")
-        .eq("id", patient_id)
+        .eq("id", effectivePatientId)
         .eq("clinic_id", ctx.user.clinicId)
         .maybeSingle();
 
@@ -40,7 +61,11 @@ export function getPatientSummaryTool(ctx: DoctorToolContext) {
         tool: "get_patient_summary",
         tableName: "patients",
         recordId: patient?.id ?? null,
-        params: { patient_id, found: Boolean(patient) },
+        params: {
+          patient_id: effectivePatientId,
+          from_active_context: !patient_id,
+          found: Boolean(patient),
+        },
       });
 
       if (!patient) {

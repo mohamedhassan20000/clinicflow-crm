@@ -736,7 +736,18 @@
     "capabilityGroupClinical": "Patient care",
     "capabilityGroupOperational": "Clinic operations",
     "capabilityGroupFinancial": "Finance",
-    "capabilityGroupGuidance": "Help & guidance"
+    "capabilityGroupGuidance": "Help & guidance",
+    "activeContextPatient": "Patient",
+    "activeContextAppointment": "Appointment",
+    "activeContextInvoice": "Invoice",
+    "activeContextStaff": "Staff",
+    "activeContextDepartment": "Department",
+    "activeContextReport": "Report",
+    "clearActiveContext": "Clear active {context} context",
+    "chooseActiveContext": "Which one do you mean?",
+    "activeContextUpdated": "Active conversation context updated.",
+    "activeContextCleared": "Active conversation context cleared.",
+    "activeContextUpdateFailed": "The conversation context could not be updated. Nothing else was changed."
   },
   "inbox": {
     "title": "Inbox",

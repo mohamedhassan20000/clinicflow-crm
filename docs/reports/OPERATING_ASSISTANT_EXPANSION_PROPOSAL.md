@@ -1,7 +1,7 @@
 # ClinicFlow Operating-Assistant Expansion — Architecture & Roadmap Proposal
 
 **Date:** 2026-07-20
-**Status:** Approved direction (founder-approved 2026-07-20, including the §16–§17 additions). Sections 1–17 are the pre-implementation analysis required before broadening the assistant. The only code implemented alongside this proposal is **P4.6C Wave 1** (patient entity search — §6, migration `20260720120000_p46c_entity_search.sql`). Everything else is roadmap-planned in `docs/AI_AGENT_PLAN.md` (§8) and not implemented.
+**Status:** Approved direction (founder-approved 2026-07-20, including the §16–§17 additions). Sections 1–17 retain the pre-implementation analysis that defined the expansion. **Implementation update (2026-07-26): P4.6 through P4.10 are implemented; P4.10B completes the §16 entity coverage and context UX.** Current normative status lives in `docs/AI_AGENT_PLAN.md`; implementation details for this phase are in `docs/reports/P4_10A_IMPLEMENTATION.md` and `docs/reports/P4_10B_IMPLEMENTATION.md`.
 **Companion revision:** `docs/AI_AGENT_PLAN.md` — *Revised: 2026-07-20* entry (adds P4.6C, P4.8, P4.9).
 
 ---
@@ -170,6 +170,8 @@ All keys resolve true only under `pro_ai` (AI is the exclusive top-tier differen
 - **Later (normal sub-phase branch/PR/review workflow):** P4.6A/B, P4.7, P4.8, P4.9, P4.10, P4.11 as ordered above; staff/department/service ranked search (P4.6A); patient-facing AI (P5).
 
 ## 16. Conversational entity context / session memory (P4.10 — founder addition, approved 2026-07-20)
+
+**Implementation status (2026-07-26): complete through P4.10B.** The implementation keeps `display_label` strictly UI-only, uses only internal ids/slugs in advisory model context, revalidates explicit choices and every tool invocation server-side, and adds no schema or policy beyond the P4.10A `active_context` column and archive trigger.
 
 **Goal:** "Open Mohamed Hassan" → "when was his last visit?" → "what medications is he taking?" → "book him for next Thursday" all refer to the same patient, until the user naturally switches ("now show me Sara's file").
 

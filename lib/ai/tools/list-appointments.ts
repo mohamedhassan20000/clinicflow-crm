@@ -16,6 +16,7 @@ import {
   describeRange,
   resolveToolDateRange,
 } from "@/lib/ai/tools/range";
+import { activeEntityId } from "@/lib/ai/conversation-context";
 
 /** Hard row cap. The assistant summarizes; it is not a bulk export path. */
 const ROW_CAP = 50;
@@ -35,6 +36,19 @@ export function listAppointmentsTool(ctx: DoctorToolContext) {
     description:
       "List individual appointments in a date range, optionally filtered by status, doctor, or department. Doctor and department may be given by name; when a name is ambiguous the tool returns candidates and asks you to have the user choose rather than guessing. Returns at most 50 appointments with schedule, status, patient name, file number, doctor, and department. Use get_appointment_stats for counts and rates instead of listing and counting yourself.",
     inputSchema: dateRangeInputSchema.extend({
+      appointment_id: z
+        .string()
+        .uuid()
+        .optional()
+        .describe(
+          "Optional appointment id explicitly named by the user. Do not copy the active context id into this field; use use_active_appointment instead.",
+        ),
+      use_active_appointment: z
+        .boolean()
+        .optional()
+        .describe(
+          "Set true only when the user explicitly refers to the active appointment (for example, “this appointment”). Omit or set false for broad appointment lists.",
+        ),
       status: z
         .enum(["pending", "confirmed", "completed", "cancelled", "no_show"])
         .optional()
@@ -46,6 +60,12 @@ export function listAppointmentsTool(ctx: DoctorToolContext) {
         .max(120)
         .optional()
         .describe("Optional doctor name or id."),
+      use_active_staff: z
+        .boolean()
+        .optional()
+        .describe(
+          "Set true only when the user explicitly scopes the request to the active staff member. Omit or set false for clinic-wide or otherwise broad lists.",
+        ),
       department: z
         .string()
         .trim()
@@ -53,21 +73,78 @@ export function listAppointmentsTool(ctx: DoctorToolContext) {
         .max(120)
         .optional()
         .describe("Optional department name or id."),
+      use_active_department: z
+        .boolean()
+        .optional()
+        .describe(
+          "Set true only when the user explicitly scopes the request to the active department. Omit or set false for clinic-wide or otherwise broad lists.",
+        ),
     }),
-    execute: async ({ status, doctor, department, ...rangeInput }) => {
+    execute: async ({
+      appointment_id,
+      use_active_appointment,
+      status,
+      doctor,
+      use_active_staff,
+      department,
+      use_active_department,
+      ...rangeInput
+    }) => {
       await assertAnalyticsToolAccess(ctx.user);
       const supabase = await createClient();
       const range = resolveToolDateRange(rangeInput);
+      const activeAppointmentId = activeEntityId(ctx.activeContext, "appointment");
+      const activeStaffId = activeEntityId(ctx.activeContext, "staff");
+      const activeDepartmentId = activeEntityId(ctx.activeContext, "department");
+      const effectiveAppointmentId =
+        appointment_id ??
+        (use_active_appointment === true ? activeAppointmentId : null);
+      const effectiveDoctor =
+        doctor ??
+        (use_active_staff === true ? activeStaffId ?? undefined : undefined);
+      const effectiveDepartment =
+        department ??
+        (use_active_department === true
+          ? activeDepartmentId ?? undefined
+          : undefined);
 
-      const doctorFilter = await resolveDoctorFilter(supabase, doctor);
-      const doctorClarification = doctor
-        ? filterClarification("doctor", doctor, doctorFilter)
+      if (use_active_appointment === true && !appointment_id && !activeAppointmentId) {
+        return {
+          needs_clarification: true,
+          field: "appointment_id",
+          guidance:
+            "There is no active appointment in this conversation. Ask the user which appointment they mean.",
+          candidates: [],
+        };
+      }
+      if (use_active_staff === true && !doctor && !activeStaffId) {
+        return {
+          needs_clarification: true,
+          field: "doctor",
+          guidance:
+            "There is no active staff member in this conversation. Ask the user which staff member they mean.",
+          candidates: [],
+        };
+      }
+      if (use_active_department === true && !department && !activeDepartmentId) {
+        return {
+          needs_clarification: true,
+          field: "department",
+          guidance:
+            "There is no active department in this conversation. Ask the user which department they mean.",
+          candidates: [],
+        };
+      }
+
+      const doctorFilter = await resolveDoctorFilter(supabase, effectiveDoctor);
+      const doctorClarification = effectiveDoctor
+        ? filterClarification("doctor", effectiveDoctor, doctorFilter)
         : null;
       if (doctorClarification) return doctorClarification;
 
-      const departmentFilter = await resolveDepartmentFilter(supabase, department);
-      const departmentClarification = department
-        ? filterClarification("department", department, departmentFilter)
+      const departmentFilter = await resolveDepartmentFilter(supabase, effectiveDepartment);
+      const departmentClarification = effectiveDepartment
+        ? filterClarification("department", effectiveDepartment, departmentFilter)
         : null;
       if (departmentClarification) return departmentClarification;
 
@@ -81,6 +158,7 @@ export function listAppointmentsTool(ctx: DoctorToolContext) {
         .gte("scheduled_at", range.start.toISOString())
         .lte("scheduled_at", range.end.toISOString());
 
+      if (effectiveAppointmentId) query = query.eq("id", effectiveAppointmentId);
       if (status) query = query.eq("status", status);
       if (doctorFilter.id) query = query.eq("doctor_id", doctorFilter.id);
       if (departmentFilter.id) query = query.eq("department_id", departmentFilter.id);
@@ -97,6 +175,50 @@ export function listAppointmentsTool(ctx: DoctorToolContext) {
       const fetched = data ?? [];
       const truncated = fetched.length > ROW_CAP;
       const rows = truncated ? fetched.slice(0, ROW_CAP) : fetched;
+
+      if (ctx.conversationId) {
+        if (doctorFilter.status === "resolved" && doctorFilter.trustedForContext) {
+          ctx.contextRecorder?.propose(
+            "staff",
+            doctorFilter.id,
+            doctorFilter.label,
+            "resolution",
+          );
+        }
+        if (
+          departmentFilter.status === "resolved" &&
+          departmentFilter.trustedForContext
+        ) {
+          ctx.contextRecorder?.propose(
+            "department",
+            departmentFilter.id,
+            departmentFilter.label,
+            "resolution",
+          );
+        }
+        // A single row derived from RLS-authorized filters is a deterministic
+        // resolution. A model-supplied appointment id is deliberately excluded:
+        // like P4.10A's patient tools, it may authorize this one call but may
+        // never become trusted stored context.
+        if (
+          rows.length === 1 &&
+          !truncated &&
+          !appointment_id &&
+          !activeAppointmentId
+        ) {
+          const row = rows[0]!;
+          const label = [row.patients?.full_name, row.scheduled_at]
+            .filter(Boolean)
+            .join(" · ");
+          ctx.contextRecorder?.propose(
+            "appointment",
+            row.id,
+            label || row.id,
+            "resolution",
+          );
+        }
+      }
+
       await logAgentTool({
         clinicId: ctx.user.clinicId,
         actorId: ctx.user.id,
@@ -107,6 +229,19 @@ export function listAppointmentsTool(ctx: DoctorToolContext) {
           from: range.from,
           to: range.to,
           status: status ?? null,
+          appointment_filtered: Boolean(effectiveAppointmentId),
+          from_active_context: {
+            appointment:
+              use_active_appointment === true &&
+              !appointment_id &&
+              Boolean(activeAppointmentId),
+            staff:
+              use_active_staff === true && !doctor && Boolean(activeStaffId),
+            department:
+              use_active_department === true &&
+              !department &&
+              Boolean(activeDepartmentId),
+          },
           doctor_filtered: Boolean(doctorFilter.id),
           department_filtered: Boolean(departmentFilter.id),
           count: rows.length,

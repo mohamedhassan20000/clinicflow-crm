@@ -1238,6 +1238,7 @@ export async function listOrphanedSignupUsers(): Promise<
 
 const CLINIC_SCOPED_TABLES = new Set([
   "ai_usage_events",
+  "ai_workflow_runs",
   "ai_budget_periods",
   "ai_clinic_provider_policies",
   "ai_commercial_terms",

@@ -10,6 +10,7 @@ export const NAMESPACED_AI_FEATURES = [
   "ai.staff_analytics",
   "ai.financial_insights",
   "ai.assistant_customization",
+  "ai.workflows",
   "ai.followup_generation",
   "ai.scheduling",
 ] as const;

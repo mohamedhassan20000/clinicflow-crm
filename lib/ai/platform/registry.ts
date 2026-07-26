@@ -167,6 +167,18 @@ const TASK_POLICIES = {
     temperature: 0.2,
     privacyPolicyVersion: "clinical-zdr-no-training-v1",
   },
+  staff_workflow: {
+    ...STAFF_POLICY_BASE,
+    task: "staff_workflow",
+    version: "p411a-staff-workflow-policy-v1",
+    allowedPersonas: ["doctor", "administrative_staff"],
+    // One planning turn, one orchestration-tool call, and one final response.
+    // Nested registry tools execute server-side and do not create extra model
+    // steps or bypass the provider reservation made for this task class.
+    maxInputTokensPerStep: 32_000,
+    maxOutputTokens: 1_200,
+    maxSteps: 3,
+  },
   patient_booking: {
     task: "patient_booking",
     version: "p45b-patient-policy-reserved-v1",
@@ -231,7 +243,8 @@ export function getCertifiedModelRoute(
       ? undefined
       : policy.task === "staff_clinical_summary" ||
           policy.task === "staff_administrative" ||
-          policy.task === "staff_operational_query"
+          policy.task === "staff_operational_query" ||
+          policy.task === "staff_workflow"
         ? process.env.AI_MODEL_DOCTOR?.trim()
         : process.env.AI_MODEL_PATIENT?.trim();
   const alias = legacyOverride

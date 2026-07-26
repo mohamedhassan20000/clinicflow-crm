@@ -54,14 +54,15 @@ describe("P4.9B patient-details Ask Assistant regression", () => {
 });
 
 describe("P4.9B phase boundary", () => {
-  // P4.9B added neither conversational memory nor workflow execution. Session
-  // memory (`active_context`) arrived later with P4.10A and is now expected, so
-  // this guard tracks only the still-unstarted P4.11 workflow objects.
-  it("does not add workflow execution (P4.11)", () => {
+  // P4.11A now owns the read-only workflow engine and ledger. This regression
+  // guard tracks the still-unstarted P4.11B action/confirmation surface.
+  it("does not add P4.11B action execution or workflow UI", () => {
     const databaseTypes = readFileSync("types/database.ts", "utf8");
     const commercialPolicy = readFileSync("lib/ai/commercial-policy.ts", "utf8");
 
-    expect(databaseTypes).not.toContain("ai_workflow_runs");
-    expect(commercialPolicy).not.toContain('"ai.workflows"');
+    expect(databaseTypes).toContain("ai_workflow_runs");
+    expect(commercialPolicy).toContain('"ai.workflows"');
+    expect(commercialPolicy).not.toContain('"ai.workflow_actions"');
+    expect(databaseTypes).not.toContain("workflow_action_steps");
   });
 });

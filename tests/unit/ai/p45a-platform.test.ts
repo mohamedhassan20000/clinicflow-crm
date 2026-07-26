@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   reconcile: vi.fn(),
   resolveCredential: vi.fn(),
   captureException: vi.fn(),
+  hasFeature: vi.fn(),
 }));
 
 vi.mock("ai", () => ({ gateway: mocks.gateway }));
@@ -15,7 +16,7 @@ vi.mock("@sentry/nextjs", () => ({ captureException: mocks.captureException }));
 vi.mock("@/lib/ai/usage", () => ({ assertAiTurnAllowed: mocks.assertAllowed }));
 vi.mock("@/lib/entitlements", () => ({
   getEntitlements: vi.fn().mockResolvedValue({}),
-  hasFeature: vi.fn().mockReturnValue(true),
+  hasFeature: mocks.hasFeature,
   hasAiProviderMode: vi.fn().mockReturnValue(true),
 }));
 vi.mock("@/lib/ai/platform/provider-connections", () => ({
@@ -71,6 +72,7 @@ beforeEach(() => {
     remaining: 10,
   });
   mocks.resolveCredential.mockResolvedValue({ mode: "managed" });
+  mocks.hasFeature.mockReturnValue(true);
   mocks.reserve.mockResolvedValue({
     data: [{
       reservation_id: RESERVATION_ID,
@@ -164,6 +166,22 @@ describe("P4.5A managed Gateway provider", () => {
 });
 
 describe("P4.5A cost and atomic execution accounting", () => {
+  it("fails before reservation when a workflow task loses ai.workflows", async () => {
+    mocks.hasFeature.mockImplementation(
+      (_entitlements: unknown, feature: string) => feature !== "ai.workflows",
+    );
+    await expect(
+      prepareAiExecution({
+        user: USER,
+        requestId: REQUEST_ID,
+        task: "staff_workflow",
+        persona: "doctor",
+        surface: "staff_assistant",
+      }),
+    ).rejects.toMatchObject({ reason: "feature_not_entitled" });
+    expect(mocks.reserve).not.toHaveBeenCalled();
+  });
+
   it("uses cache-aware actual cost and cache-free worst-case reservations", () => {
     const policy = getTaskPolicy("staff_clinical_summary", "doctor");
     const route = getCertifiedModelRoute(policy);

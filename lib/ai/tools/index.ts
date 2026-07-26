@@ -61,27 +61,60 @@ export async function resolveToolMount(
   definitions: AiToolDefinition[];
   tools: Record<string, Tool>;
   grantedPermissions: ReadonlySet<AiUserPermissionKey>;
+  workflowStepDefinitions: AiToolDefinition[];
+  workflowStepTools: Record<string, Tool>;
 }> {
   const entitlements = await getEntitlements(ctx.user.clinicId);
   const supportedTaskClasses = staffTaskClassesForRole(ctx.user.role);
   const activeTaskClasses: readonly AiTaskClass[] = ctx.taskClass
-    ? supportedTaskClasses.includes(ctx.taskClass)
+    ? ctx.taskClass === "staff_workflow" ||
+      supportedTaskClasses.includes(ctx.taskClass)
       ? [ctx.taskClass]
       : []
     : supportedTaskClasses;
 
+  const featureAndRoleAllowed = (definition: AiToolDefinition) =>
+    definition.roles.includes(ctx.user.role) &&
+    definition.requiredFeatures.every((feature) =>
+      hasFeature(entitlements, feature),
+    );
+
   const candidates = AI_TOOL_REGISTRY.filter(
     (definition) =>
-      definition.roles.includes(ctx.user.role) &&
+      featureAndRoleAllowed(definition) &&
       // Task-class gate. `taskClasses` was previously declared on every entry
       // and read by nothing, so the documented contract that a task class
       // constrains the tool surface was not actually enforced anywhere — the
       // mount happened to look right only because roles aligned. Metadata that
       // has never executed is wrong by the time P4.7's capability panel and
       // P4.11's workflow steps depend on it, so it is enforced now.
-      definition.taskClasses.some((taskClass) => activeTaskClasses.includes(taskClass)) &&
-      definition.requiredFeatures.every((feature) => hasFeature(entitlements, feature)),
+      definition.taskClasses.some((taskClass) =>
+        activeTaskClasses.includes(taskClass),
+      ) &&
+      // A workflow turn exposes only the orchestrator. Action/read step tools
+      // exist solely in the hidden server mount below.
+      (ctx.taskClass !== "staff_workflow" ||
+        definition.workflow.kind === "orchestrator"),
   );
+
+  // A workflow-class turn exposes only the orchestrator to the model. Its
+  // nested read-tool union is resolved with the same registry gates and held in
+  // a server closure, so the model cannot bypass plan validation or the ledger
+  // by calling those tools as peers.
+  const workflowStepCandidates =
+    ctx.taskClass === "staff_workflow"
+      ? AI_TOOL_REGISTRY.filter(
+          (definition) =>
+            featureAndRoleAllowed(definition) &&
+            (definition.workflow.kind === "read" ||
+              definition.workflow.kind === "action") &&
+            (definition.workflow.kind === "action"
+              ? definition.taskClasses.includes("staff_workflow")
+              : definition.taskClasses.some((taskClass) =>
+                  supportedTaskClasses.includes(taskClass),
+                )),
+        )
+      : [];
 
   // Permission lookups hit the database, so resolve each distinct key once.
   //
@@ -91,7 +124,7 @@ export async function resolveToolMount(
   // the tool is not. Declared rather than "resolve every key always", so a
   // doctor's mount issues no financial-permission read at all.
   const permissionKeys = new Set<AiUserPermissionKey>();
-  for (const definition of candidates) {
+  for (const definition of [...candidates, ...workflowStepCandidates]) {
     if (definition.requiredUserPermission) {
       permissionKeys.add(definition.requiredUserPermission);
     }
@@ -111,17 +144,58 @@ export async function resolveToolMount(
       !definition.requiredUserPermission ||
       permissions.get(definition.requiredUserPermission) === true,
   );
+  const workflowStepDefinitions = workflowStepCandidates.filter(
+    (definition) =>
+      !definition.requiredUserPermission ||
+      permissions.get(definition.requiredUserPermission) === true,
+  );
 
   const grantedPermissions: ReadonlySet<AiUserPermissionKey> = new Set(
     [...permissionKeys].filter((key) => permissions.get(key) === true),
   );
-  const buildContext: DoctorToolContext = { ...ctx, grantedPermissions };
-
   const tools: Record<string, Tool> = {};
+  const workflowStepTools: Record<string, Tool> = {};
+  const stepBuildContext: DoctorToolContext = {
+    ...ctx,
+    grantedPermissions,
+    workflowStepMount: null,
+  };
+  for (const definition of workflowStepDefinitions) {
+    workflowStepTools[definition.name] = harden(
+      definition.name,
+      stepBuildContext,
+      definition.build(stepBuildContext),
+    );
+  }
+  const buildContext: DoctorToolContext = {
+    ...ctx,
+    grantedPermissions,
+    workflowStepMount:
+      ctx.taskClass === "staff_workflow"
+        ? () => ({
+            definitions: workflowStepDefinitions,
+            tools: workflowStepTools,
+          })
+        : ctx.workflowStepMount,
+  };
   for (const definition of definitions) {
     tools[definition.name] = harden(definition.name, buildContext, definition.build(buildContext));
   }
-  return { definitions, tools, grantedPermissions };
+  return {
+    definitions,
+    tools,
+    grantedPermissions,
+    workflowStepDefinitions,
+    workflowStepTools,
+  };
+}
+
+export async function resolveWorkflowStepMount(ctx: DoctorToolContext) {
+  const mount = await resolveToolMount({ ...ctx, taskClass: "staff_workflow" });
+  return {
+    definitions: mount.workflowStepDefinitions,
+    tools: mount.workflowStepTools,
+  };
 }
 
 /**

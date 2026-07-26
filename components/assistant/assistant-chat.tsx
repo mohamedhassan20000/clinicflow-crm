@@ -23,12 +23,13 @@ import {
   Wallet,
   X,
 } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { formatClinicDateTime } from "@/lib/datetime";
 import type { StaffAssistantUIMessage } from "@/lib/ai/staff-agent";
 import type { AssistantCapabilities } from "@/lib/ai/capabilities";
 import type { AssistantErrorCode } from "@/lib/ai/errors";
@@ -48,6 +49,11 @@ import {
   chooseAssistantConversationContext,
   clearAssistantConversationContext,
 } from "@/actions/assistant-context";
+import { confirmAssistantWorkflow } from "@/actions/assistant-workflows";
+import type {
+  WorkflowExecutionResult,
+  WorkflowPlan,
+} from "@/lib/ai/workflows/types";
 
 type AssistantChatProps = {
   initialConversationId: string;
@@ -326,6 +332,10 @@ function ToolActivity({
         name,
       )
     : [];
+  const workflowInput =
+    complete && name === "execute_read_only_workflow"
+      ? (part as { input?: { plan?: unknown } }).input
+      : null;
 
   return (
     <div
@@ -384,6 +394,13 @@ function ToolActivity({
             </li>
           ))}
         </ul>
+      ) : null}
+
+      {complete && workflowInput?.plan ? (
+        <WorkflowConfirmation
+          output={(part as { output?: unknown }).output}
+          plan={workflowInput.plan}
+        />
       ) : null}
 
       {contextChoices.length > 0 ? (
@@ -446,6 +463,224 @@ function ToolActivity({
         </Link>
       ) : null}
     </div>
+  );
+}
+
+type WorkflowActionPreview = {
+  action: "send_appointment_reminders" | "send_invoice_reminders" | "create_pending_booking";
+  draft_status: string;
+  count?: number;
+  items?: Array<{
+    patient_name?: string;
+    scheduled_at?: string;
+    scheduled_at_label?: string;
+    outstanding_amount?: number;
+    channels?: string[];
+  }>;
+  booking?: {
+    patient_name?: string;
+    doctor_name?: string;
+    scheduled_at?: string;
+    scheduled_at_label?: string;
+    duration_minutes?: number;
+  };
+};
+
+function workflowActions(output: unknown): WorkflowActionPreview[] {
+  if (!output || typeof output !== "object" || Array.isArray(output)) return [];
+  const steps = (output as { steps?: unknown }).steps;
+  if (!Array.isArray(steps)) return [];
+  return steps.flatMap((step) => {
+    if (!step || typeof step !== "object") return [];
+    const value = (step as { output?: unknown }).output;
+    if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+    const action = (value as { action?: unknown }).action;
+    return action === "send_appointment_reminders" ||
+      action === "send_invoice_reminders" ||
+      action === "create_pending_booking"
+      ? [value as WorkflowActionPreview]
+      : [];
+  });
+}
+
+function WorkflowConfirmation({
+  output,
+  plan,
+}: {
+  output: unknown;
+  plan: unknown;
+}) {
+  const t = useTranslations("assistant");
+  const locale = useLocale();
+  const initial =
+    output && typeof output === "object" && !Array.isArray(output)
+      ? (output as Partial<WorkflowExecutionResult>)
+      : null;
+  const [result, setResult] = useState<WorkflowExecutionResult | null>(null);
+  const [state, setState] = useState<
+    | "idle"
+    | "working"
+    | "success"
+    | "error"
+    | "stale"
+    | "expired"
+    | "internal"
+  >("idle");
+  const shown = result ?? initial;
+  const resultActions = workflowActions(shown);
+  const actions =
+    resultActions.length > 0 ? resultActions : workflowActions(initial);
+  const canConfirm =
+    typeof initial?.run_id === "string" &&
+    initial.requires_confirmation === true &&
+    state !== "success";
+  const descriptionId = useId();
+
+  if (actions.length === 0) return null;
+
+  function scheduledAtLabel(value?: string, serverLabel?: string): string {
+    if (serverLabel) return serverLabel;
+    if (!value) return "";
+    return formatClinicDateTime(
+      value,
+      { locale },
+      { dateStyle: "medium", timeStyle: "short" },
+    );
+  }
+
+  async function confirm() {
+    if (!canConfirm || state === "working") return;
+    setState("working");
+    const response = await confirmAssistantWorkflow({
+      runId: initial!.run_id,
+      plan: plan as WorkflowPlan,
+    });
+    if (response.ok) {
+      setResult(response.result);
+      setState(response.result.state === "succeeded" ? "success" : "error");
+      return;
+    }
+    setState(
+      response.reason === "preview_stale"
+        ? "stale"
+        : response.reason === "preview_expired"
+          ? "expired"
+          : response.reason === "internal_error"
+            ? "internal"
+            : "error",
+    );
+  }
+
+  return (
+    <section className="mt-2 border-t border-current/15 pt-2" aria-labelledby={descriptionId}>
+      <p id={descriptionId} className="font-semibold text-foreground">
+        {result ? t("workflowResultTitle") : t("workflowPreviewTitle")}
+      </p>
+      <p className="mt-1 leading-5">
+        {result ? t("workflowResultDescription") : t("workflowPreviewDescription")}
+      </p>
+      <ul className="mt-2 space-y-2">
+        {actions.map((action, actionIndex) => (
+          <li
+            key={`${action.action}-${actionIndex}`}
+            className="rounded-lg border border-border/70 bg-background/80 p-2"
+          >
+            <p className="font-medium text-foreground">
+              {t(
+                action.action === "send_appointment_reminders"
+                  ? "workflowAppointmentReminders"
+                  : action.action === "send_invoice_reminders"
+                    ? "workflowInvoiceReminders"
+                    : "workflowPendingBooking",
+                { count: action.count ?? 1 },
+              )}
+            </p>
+            {action.booking ? (
+              <p className="mt-1">
+                {action.booking.patient_name} · {action.booking.doctor_name} ·{" "}
+                <bdi>
+                  {scheduledAtLabel(
+                    action.booking.scheduled_at,
+                    action.booking.scheduled_at_label,
+                  )}
+                </bdi>
+              </p>
+            ) : null}
+            {action.items?.length ? (
+              <ul className="mt-1 space-y-1">
+                {action.items.map((item, index) => (
+                  <li key={`${item.patient_name ?? "item"}-${index}`}>
+                    {item.patient_name ?? t("workflowUnknownRecipient")}
+                    {item.scheduled_at ? (
+                      <>
+                        {" · "}
+                        <bdi>
+                          {scheduledAtLabel(
+                            item.scheduled_at,
+                            item.scheduled_at_label,
+                          )}
+                        </bdi>
+                      </>
+                    ) : null}
+                    {item.channels?.length
+                      ? ` · ${item.channels.join(" + ")}`
+                      : ` · ${t("workflowNoReachableChannel")}`}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+
+      {state === "stale" ? (
+        <p role="alert" className="mt-2 text-amber-700 dark:text-amber-300">
+          {t("workflowPreviewStale")}
+        </p>
+      ) : state === "expired" ? (
+        <p role="alert" className="mt-2 text-amber-700 dark:text-amber-300">
+          {t("workflowPreviewExpired")}
+        </p>
+      ) : state === "internal" ? (
+        <p role="alert" className="mt-2 text-destructive">
+          {t("workflowInternalError")}
+        </p>
+      ) : state === "error" ? (
+        <p role="alert" className="mt-2 text-destructive">
+          {result?.resumable
+            ? t("workflowPartialFailure")
+            : t("workflowConfirmationFailed")}
+        </p>
+      ) : state === "success" ? (
+        <p role="status" className="mt-2 font-medium text-emerald-700 dark:text-emerald-300">
+          {t("workflowCompleted")}
+        </p>
+      ) : null}
+
+      {(canConfirm || result?.resumable) &&
+      state !== "stale" &&
+      state !== "expired" ? (
+        <Button
+          type="button"
+          size="sm"
+          className="mt-3 min-h-11"
+          disabled={state === "working"}
+          aria-describedby={descriptionId}
+          onClick={() => void confirm()}
+        >
+          {state === "working"
+            ? t("workflowConfirming")
+            : result?.resumable
+              ? t("workflowResume")
+              : t("workflowConfirm")}
+        </Button>
+      ) : null}
+      {!result ? (
+        <p className="mt-2 leading-5 text-muted-foreground">
+          {t("workflowConfirmationWarning")}
+        </p>
+      ) : null}
+    </section>
   );
 }
 
@@ -618,6 +853,15 @@ function suggestionsFor({
     ];
   } else {
     general = [];
+    if (mounted.has("send_appointment_reminders")) {
+      general.push(t("suggestAppointmentWorkflow"));
+    }
+    if (mounted.has("send_invoice_reminders")) {
+      general.push(t("suggestInvoiceWorkflow"));
+    }
+    if (mounted.has("create_pending_booking")) {
+      general.push(t("suggestBookingWorkflow"));
+    }
     if (mounted.has("get_clinic_summary")) general.push(t("suggestClinicSummary"));
     if (mounted.has("list_appointments")) general.push(t("suggestTodaysAppointments"));
     if (mounted.has("count_new_patients")) general.push(t("suggestNewPatients"));
@@ -700,6 +944,13 @@ function ChatSession({
   // The panel is offered only where there is a server-resolved capability set to
   // show — the assistant page, not the doctor patient sheet (capabilities null).
   const showCapabilityToggle = (capabilities?.items.length ?? 0) > 0;
+  const hasConfirmedActions = capabilities?.toolNames.some((name) =>
+    [
+      "send_appointment_reminders",
+      "send_invoice_reminders",
+      "create_pending_booking",
+    ].includes(name),
+  ) ?? false;
   const transport = useMemo(
     () =>
       new DefaultChatTransport<StaffAssistantUIMessage>({
@@ -839,7 +1090,7 @@ function ChatSession({
       <div className="flex flex-wrap items-center gap-2 border-b border-border/60 px-4 py-3 sm:px-5">
         <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/8 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
           <ShieldCheck className="size-3.5" aria-hidden="true" />
-          {t("readOnly")}
+          {hasConfirmedActions ? t("confirmationRequired") : t("readOnly")}
         </span>
         {patient ? (
           <span className="truncate rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">

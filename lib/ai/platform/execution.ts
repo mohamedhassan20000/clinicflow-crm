@@ -22,7 +22,10 @@ import { logAiProviderFallback, reconcileAiBudget, reserveAiBudget } from "@/lib
 import type { AuthedUser } from "@/lib/rbac";
 import type { Database } from "@/types/database";
 import { getEntitlements, hasAiProviderMode, hasFeature } from "@/lib/entitlements";
-import { AI_ASSISTANT_FEATURE } from "@/lib/ai/authorization";
+import {
+  AI_ASSISTANT_FEATURE,
+  AI_WORKFLOWS_FEATURE,
+} from "@/lib/ai/authorization";
 
 const RESERVATION_LEASE_SECONDS = 600;
 
@@ -170,6 +173,30 @@ export function isHelpIntent(text: string | null | undefined): boolean {
 }
 
 /**
+ * Conservative P4.11A workflow-intent detector.
+ *
+ * A workflow turn changes both the certified cost envelope and the model mount,
+ * so a plain conjunction is intentionally insufficient. The user must ask for
+ * explicit sequencing or a multi-step/in-one-go operation. False negatives
+ * remain safe: the ordinary task classes still expose their standalone tools.
+ */
+const WORKFLOW_INTENT_RE = new RegExp(
+  [
+    "\\b(and then|then (?:send|show|find|run|check|summari[sz]e|create|book)|after that|in one go|multi.?step|workflow)\\b",
+    "\\b(first .{0,120} then)\\b",
+    "\\b(find|list|run|generate|check|show)\\b.{0,160}\\b(and|then)\\b.{0,40}\\b(summari[sz]e|compare|show|find|list|run|check|send|notify|create|book)\\b",
+    "(ثم|وبعد ذلك|بعدها|دفعة واحدة|خطوات متعددة|سير عمل)",
+    "(أولاً|اولا).{0,120}(ثم|بعدها)",
+    "(ابحث|اعرض|أعرض|شغل|شغّل|أنشئ|انشئ).{0,160}(?:\\s+و\\s+|ثم).{0,40}(لخص|لخّص|قارن|اعرض|أعرض|ابحث|أرسل|ارسل|أبلغ|ابلغ)",
+  ].join("|"),
+  "iu",
+);
+
+export function isWorkflowIntent(text: string | null | undefined): boolean {
+  return typeof text === "string" && WORKFLOW_INTENT_RE.test(text);
+}
+
+/**
  * Resolves the certified task class for a staff turn.
  *
  * Doctors always route to the clinical class. Administrative personas route by
@@ -194,7 +221,11 @@ export function isHelpIntent(text: string | null | undefined): boolean {
  */
 export function staffTaskForRole(
   role: AuthedUser["role"],
-  options: { analyticsEntitled?: boolean; messageText?: string | null } = {},
+  options: {
+    analyticsEntitled?: boolean;
+    workflowsEntitled?: boolean;
+    messageText?: string | null;
+  } = {},
 ): {
   task: AiTaskClass;
   persona: AiPersona;
@@ -207,6 +238,16 @@ export function staffTaskForRole(
   if (isHelpIntent(options.messageText)) {
     return {
       task: "staff_help",
+      persona: role === "doctor" ? "doctor" : "administrative_staff",
+    };
+  }
+
+  if (
+    options.workflowsEntitled === true &&
+    isWorkflowIntent(options.messageText)
+  ) {
+    return {
+      task: "staff_workflow",
       persona: role === "doctor" ? "doctor" : "administrative_staff",
     };
   }
@@ -265,6 +306,8 @@ export async function prepareAiExecution(input: {
   if (
     !hasFeature(entitlements, AI_ASSISTANT_FEATURE) ||
     !hasFeature(entitlements, "ai.staff_assistant") ||
+    (input.task === "staff_workflow" &&
+      !hasFeature(entitlements, AI_WORKFLOWS_FEATURE)) ||
     !hasAiProviderMode(entitlements, credential.mode)
   ) {
     throw new AiToolAuthorizationError("feature_not_entitled");

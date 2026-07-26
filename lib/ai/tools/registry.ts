@@ -31,11 +31,16 @@ import { getNavigationTargetTool } from "@/lib/ai/tools/get-navigation-target";
 
 // P4.7B capability transparency.
 import { listMyCapabilitiesTool } from "@/lib/ai/tools/list-my-capabilities";
+import { executeReadOnlyWorkflowTool } from "@/lib/ai/workflows/tool";
+import { sendAppointmentRemindersWorkflowTool } from "@/lib/ai/workflows/actions/send-appointment-reminders";
+import { sendInvoiceRemindersWorkflowTool } from "@/lib/ai/workflows/actions/send-invoice-reminders";
+import { createPendingBookingWorkflowTool } from "@/lib/ai/workflows/actions/create-pending-booking";
 
 import {
   AI_FINANCIAL_INSIGHTS_FEATURE,
   AI_STAFF_ANALYTICS_FEATURE,
   AI_ASSISTANT_FEATURE,
+  AI_WORKFLOWS_FEATURE,
 } from "@/lib/ai/authorization";
 
 /**
@@ -88,6 +93,16 @@ export type AiToolDefinition = {
    * `resolveToolMount`, not decorative — see the task-class gate there.
    */
   taskClasses: readonly AiTaskClass[];
+  /**
+   * P4.11A workflow vocabulary. Read tools may be nested by the server
+   * orchestrator; the orchestrator itself is registry-mounted but can never be
+   * nested as a step. Cost units are deterministic execution-complexity caps,
+   * separate from the provider-token ceiling reserved by `staff_workflow`.
+   */
+  workflow: {
+    kind: "read" | "action" | "orchestrator";
+    costUnits: number;
+  };
   capabilityDescription: { en: string; ar: string };
 };
 
@@ -137,8 +152,76 @@ const HELP_TASKS: readonly AiTaskClass[] = [
   "staff_operational_query",
   "staff_help",
 ];
+const WORKFLOW_TASKS: readonly AiTaskClass[] = ["staff_workflow"];
+
+const READ_COST_1 = { kind: "read", costUnits: 1 } as const;
+const READ_COST_2 = { kind: "read", costUnits: 2 } as const;
+const READ_COST_3 = { kind: "read", costUnits: 3 } as const;
+const ORCHESTRATOR = { kind: "orchestrator", costUnits: 0 } as const;
+const ACTION_COST_2 = { kind: "action", costUnits: 2 } as const;
+const ACTION_COST_3 = { kind: "action", costUnits: 3 } as const;
 
 export const AI_TOOL_REGISTRY: readonly AiToolDefinition[] = [
+  // ---- P4.11 server-authoritative orchestration ---------------------------
+  {
+    name: "execute_read_only_workflow",
+    build: executeReadOnlyWorkflowTool,
+    roles: ALL_STAFF,
+    requiredFeatures: [AI_ASSISTANT_FEATURE, AI_WORKFLOWS_FEATURE],
+    taskClasses: WORKFLOW_TASKS,
+    workflow: ORCHESTRATOR,
+    capabilityDescription: {
+      en: "Preview and run a bounded, server-authorized multi-step workflow.",
+      ar: "معاينة وتشغيل سير عمل محدود متعدد الخطوات ومصرح به من الخادم.",
+    },
+  },
+  {
+    name: "send_appointment_reminders",
+    build: sendAppointmentRemindersWorkflowTool,
+    roles: ["admin", "receptionist"],
+    requiredFeatures: [
+      AI_ASSISTANT_FEATURE,
+      AI_WORKFLOWS_FEATURE,
+      AI_STAFF_ANALYTICS_FEATURE,
+    ],
+    taskClasses: WORKFLOW_TASKS,
+    workflow: ACTION_COST_3,
+    capabilityDescription: {
+      en: "Preview and, only after confirmation, send appointment reminders.",
+      ar: "معاينة تذكيرات المواعيد وإرسالها فقط بعد التأكيد.",
+    },
+  },
+  {
+    name: "send_invoice_reminders",
+    build: sendInvoiceRemindersWorkflowTool,
+    roles: ["admin", "manager"],
+    requiredFeatures: [
+      AI_ASSISTANT_FEATURE,
+      AI_WORKFLOWS_FEATURE,
+      AI_STAFF_ANALYTICS_FEATURE,
+      AI_FINANCIAL_INSIGHTS_FEATURE,
+    ],
+    requiredUserPermission: "ai.financial_insights",
+    taskClasses: WORKFLOW_TASKS,
+    workflow: ACTION_COST_3,
+    capabilityDescription: {
+      en: "Preview and, only after confirmation, send overdue-invoice reminders.",
+      ar: "معاينة تذكيرات الفواتير المتأخرة وإرسالها فقط بعد التأكيد.",
+    },
+  },
+  {
+    name: "create_pending_booking",
+    build: createPendingBookingWorkflowTool,
+    roles: ["admin", "receptionist"],
+    requiredFeatures: [AI_ASSISTANT_FEATURE, AI_WORKFLOWS_FEATURE],
+    taskClasses: WORKFLOW_TASKS,
+    workflow: ACTION_COST_2,
+    capabilityDescription: {
+      en: "Preview and create a pending appointment without notifying the patient.",
+      ar: "معاينة وإنشاء موعد معلّق دون إشعار المريض.",
+    },
+  },
+
   // ---- P4 tools (unchanged behavior, now declared) ------------------------
   {
     name: "search_authorized_patients",
@@ -146,6 +229,7 @@ export const AI_TOOL_REGISTRY: readonly AiToolDefinition[] = [
     roles: ALL_STAFF,
     requiredFeatures: [AI_ASSISTANT_FEATURE],
     taskClasses: SHARED_TASKS,
+    workflow: READ_COST_2,
     capabilityDescription: {
       en: "Find a patient by name, file number, or phone — including partial, misspelled, Arabic or English spellings.",
       ar: "البحث عن مريض بالاسم أو رقم الملف أو الهاتف — بما في ذلك الكتابة الجزئية أو الخاطئة بالعربية أو الإنجليزية.",
@@ -157,6 +241,7 @@ export const AI_TOOL_REGISTRY: readonly AiToolDefinition[] = [
     roles: ["doctor"],
     requiredFeatures: [AI_ASSISTANT_FEATURE],
     taskClasses: CLINICAL_TASKS,
+    workflow: READ_COST_3,
     capabilityDescription: {
       en: "Summarize a patient's clinical record.",
       ar: "تلخيص السجل السريري للمريض.",
@@ -168,6 +253,7 @@ export const AI_TOOL_REGISTRY: readonly AiToolDefinition[] = [
     roles: ["doctor"],
     requiredFeatures: [AI_ASSISTANT_FEATURE],
     taskClasses: CLINICAL_TASKS,
+    workflow: READ_COST_3,
     capabilityDescription: {
       en: "Search a patient's previous visits and notes.",
       ar: "البحث في زيارات المريض السابقة وملاحظاتها.",
@@ -179,6 +265,7 @@ export const AI_TOOL_REGISTRY: readonly AiToolDefinition[] = [
     roles: ["doctor"],
     requiredFeatures: [AI_ASSISTANT_FEATURE],
     taskClasses: CLINICAL_TASKS,
+    workflow: READ_COST_2,
     capabilityDescription: {
       en: "List your own upcoming appointments.",
       ar: "عرض مواعيدك القادمة.",
@@ -190,6 +277,7 @@ export const AI_TOOL_REGISTRY: readonly AiToolDefinition[] = [
     roles: ALL_STAFF,
     requiredFeatures: [AI_ASSISTANT_FEATURE],
     taskClasses: SHARED_TASKS,
+    workflow: READ_COST_2,
     capabilityDescription: {
       en: "Check open appointment slots on a given date.",
       ar: "التحقق من المواعيد المتاحة في تاريخ محدد.",
@@ -203,6 +291,7 @@ export const AI_TOOL_REGISTRY: readonly AiToolDefinition[] = [
     roles: ANALYTICS,
     requiredFeatures: [AI_ASSISTANT_FEATURE, AI_STAFF_ANALYTICS_FEATURE],
     taskClasses: OPERATIONAL_TASKS,
+    workflow: READ_COST_2,
     capabilityDescription: {
       en: "Give an operational overview of the clinic: departments, staff, patient and appointment counts, and trends.",
       ar: "تقديم نظرة تشغيلية عامة على العيادة: الأقسام والموظفون وأعداد المرضى والمواعيد والاتجاهات.",
@@ -214,6 +303,7 @@ export const AI_TOOL_REGISTRY: readonly AiToolDefinition[] = [
     roles: ANALYTICS,
     requiredFeatures: [AI_ASSISTANT_FEATURE, AI_STAFF_ANALYTICS_FEATURE],
     taskClasses: OPERATIONAL_TASKS,
+    workflow: READ_COST_2,
     capabilityDescription: {
       en: "Break patient totals down by department, blood type, or assigned doctor (small groups are hidden).",
       ar: "توزيع أعداد المرضى حسب القسم أو فصيلة الدم أو الطبيب المعالج (تُخفى المجموعات الصغيرة).",
@@ -225,6 +315,7 @@ export const AI_TOOL_REGISTRY: readonly AiToolDefinition[] = [
     roles: ANALYTICS,
     requiredFeatures: [AI_ASSISTANT_FEATURE, AI_STAFF_ANALYTICS_FEATURE],
     taskClasses: OPERATIONAL_TASKS,
+    workflow: READ_COST_2,
     capabilityDescription: {
       en: "Report appointment totals, no-show and cancellation rates, by status, doctor, or department.",
       ar: "عرض إجماليات المواعيد ونسب عدم الحضور والإلغاء حسب الحالة أو الطبيب أو القسم.",
@@ -236,6 +327,7 @@ export const AI_TOOL_REGISTRY: readonly AiToolDefinition[] = [
     roles: ADMINISTRATIVE,
     requiredFeatures: [AI_ASSISTANT_FEATURE, AI_STAFF_ANALYTICS_FEATURE],
     taskClasses: OPERATIONAL_TASKS,
+    workflow: READ_COST_2,
     capabilityDescription: {
       en: "List appointments for a date range, filtered by status, doctor, or department.",
       ar: "عرض المواعيد ضمن فترة زمنية مع تصفية حسب الحالة أو الطبيب أو القسم.",
@@ -247,6 +339,7 @@ export const AI_TOOL_REGISTRY: readonly AiToolDefinition[] = [
     roles: ADMINISTRATIVE,
     requiredFeatures: [AI_ASSISTANT_FEATURE, AI_STAFF_ANALYTICS_FEATURE],
     taskClasses: OPERATIONAL_TASKS,
+    workflow: READ_COST_1,
     capabilityDescription: {
       en: "Count new patient registrations in a period and compare with the previous one.",
       ar: "حساب عدد المرضى الجدد خلال فترة ومقارنتها بالفترة السابقة.",
@@ -260,6 +353,7 @@ export const AI_TOOL_REGISTRY: readonly AiToolDefinition[] = [
     roles: ["admin", "receptionist"],
     requiredFeatures: [AI_ASSISTANT_FEATURE, AI_STAFF_ANALYTICS_FEATURE],
     taskClasses: OPERATIONAL_TASKS,
+    workflow: READ_COST_2,
     capabilityDescription: {
       en: "Show follow-ups still awaiting a call, or those already recorded with a given outcome.",
       ar: "عرض المتابعات التي تنتظر الاتصال أو المتابعات المسجلة بنتيجة محددة.",
@@ -274,6 +368,7 @@ export const AI_TOOL_REGISTRY: readonly AiToolDefinition[] = [
     // financial), but its advertised report list depends on it.
     describedByUserPermissions: ["ai.financial_insights"],
     taskClasses: OPERATIONAL_TASKS,
+    workflow: READ_COST_3,
     capabilityDescription: {
       en: "Run a standard clinic report (cancellations, no-shows, follow-ups, performance, revenue) and link to it.",
       ar: "تشغيل أحد تقارير العيادة القياسية (الإلغاءات، عدم الحضور، المتابعات، الأداء، الإيرادات) مع رابط التقرير.",
@@ -293,6 +388,7 @@ export const AI_TOOL_REGISTRY: readonly AiToolDefinition[] = [
     roles: ALL_STAFF,
     requiredFeatures: [AI_ASSISTANT_FEATURE],
     taskClasses: HELP_TASKS,
+    workflow: READ_COST_1,
     capabilityDescription: {
       en: "Explain how to use ClinicFlow — step-by-step instructions for a feature, from the product's official help articles.",
       ar: "شرح كيفية استخدام كلينيك فلو — خطوات تفصيلية لأي ميزة، من مقالات المساعدة الرسمية للمنتج.",
@@ -304,6 +400,7 @@ export const AI_TOOL_REGISTRY: readonly AiToolDefinition[] = [
     roles: ALL_STAFF,
     requiredFeatures: [AI_ASSISTANT_FEATURE],
     taskClasses: HELP_TASKS,
+    workflow: READ_COST_1,
     capabilityDescription: {
       en: "Tell you where a feature lives in ClinicFlow and whether your account can open it.",
       ar: "تحديد مكان أي ميزة داخل كلينيك فلو وما إذا كان حسابك يستطيع فتحها.",
@@ -324,6 +421,7 @@ export const AI_TOOL_REGISTRY: readonly AiToolDefinition[] = [
     roles: ALL_STAFF,
     requiredFeatures: [AI_ASSISTANT_FEATURE],
     taskClasses: HELP_TASKS,
+    workflow: READ_COST_1,
     capabilityDescription: {
       en: "List everything your account is authorized to ask across the assistant's supported task types.",
       ar: "عرض كل ما يُصرّح لحسابك بطلبه عبر أنواع المهام التي يدعمها المساعد.",
@@ -342,6 +440,7 @@ export const AI_TOOL_REGISTRY: readonly AiToolDefinition[] = [
     ],
     requiredUserPermission: "ai.financial_insights",
     taskClasses: OPERATIONAL_TASKS,
+    workflow: READ_COST_2,
     capabilityDescription: {
       en: "Report revenue, deposits, and outstanding balances for a period.",
       ar: "عرض الإيرادات والدفعات المقدمة والمبالغ المستحقة خلال فترة.",
@@ -358,6 +457,7 @@ export const AI_TOOL_REGISTRY: readonly AiToolDefinition[] = [
     ],
     requiredUserPermission: "ai.financial_insights",
     taskClasses: OPERATIONAL_TASKS,
+    workflow: READ_COST_2,
     capabilityDescription: {
       en: "Compare two periods' revenue and explain the change from measured figures.",
       ar: "مقارنة إيرادات فترتين وتفسير الفرق استنادًا إلى أرقام فعلية.",
@@ -374,6 +474,7 @@ export const AI_TOOL_REGISTRY: readonly AiToolDefinition[] = [
     ],
     requiredUserPermission: "ai.financial_insights",
     taskClasses: OPERATIONAL_TASKS,
+    workflow: READ_COST_2,
     capabilityDescription: {
       en: "List the largest outstanding patient balances and how old they are.",
       ar: "عرض أكبر المبالغ المستحقة على المرضى ومدة تأخرها.",

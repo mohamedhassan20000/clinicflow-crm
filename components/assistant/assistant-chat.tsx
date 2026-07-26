@@ -21,6 +21,7 @@ import {
   TriangleAlert,
   UserRound,
   Wallet,
+  X,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
@@ -39,10 +40,19 @@ import {
 import type { PermissionUserRole } from "@/lib/page-permissions";
 import { CapabilityPanel } from "@/components/assistant/capability-panel";
 import type { AssistantPageContext } from "@/lib/ai/page-context";
+import type {
+  ActiveContext,
+  ActiveContextEntityType,
+} from "@/lib/ai/conversation-context";
+import {
+  chooseAssistantConversationContext,
+  clearAssistantConversationContext,
+} from "@/actions/assistant-context";
 
 type AssistantChatProps = {
   initialConversationId: string;
   initialMessages: StaffAssistantUIMessage[];
+  initialActiveContext?: ActiveContext;
   pageContext?: AssistantPageContext | null;
   contextLabel?: string | null;
   remaining: number;
@@ -62,6 +72,7 @@ type SessionState = {
   id: string;
   messages: StaffAssistantUIMessage[];
   historyTruncated: boolean;
+  activeContext: ActiveContext;
 };
 
 type PatientChatContext = { id: string; name: string } | null;
@@ -71,6 +82,88 @@ type StaffAssistantToolPart = Extract<
   StaffAssistantPart,
   { type: `tool-${string}` } | { type: "dynamic-tool" }
 >;
+
+type ContextChoice = {
+  entityType: ActiveContextEntityType;
+  entityId: string;
+  label: string;
+};
+
+const CONTEXT_TYPE_ORDER: readonly ActiveContextEntityType[] = [
+  "patient",
+  "appointment",
+  "invoice",
+  "staff",
+  "department",
+  "report",
+];
+const EMPTY_ACTIVE_CONTEXT: ActiveContext = {};
+
+const CONTEXT_TYPE_COPY_KEYS: Record<ActiveContextEntityType, string> = {
+  patient: "activeContextPatient",
+  appointment: "activeContextAppointment",
+  invoice: "activeContextInvoice",
+  staff: "activeContextStaff",
+  department: "activeContextDepartment",
+  report: "activeContextReport",
+};
+
+/**
+ * Extracts only explicit clarification candidates from structured tool output.
+ * A click still supplies no trusted label/id: the server action re-reads the
+ * candidate through the authenticated RLS client and derives the canonical
+ * UI-only label before persisting it.
+ */
+export function contextChoicesForToolResult(
+  output: unknown,
+  toolName: string,
+): ContextChoice[] {
+  if (!output || typeof output !== "object") return [];
+  const value = output as Record<string, unknown>;
+  const patientCandidates = Array.isArray(value.patients)
+    ? value.patients
+    : null;
+
+  if (
+    toolName === "search_authorized_patients" &&
+    value.confidence !== "high" &&
+    patientCandidates
+  ) {
+    return patientCandidates.flatMap((candidate) => {
+      if (!candidate || typeof candidate !== "object") return [];
+      const row = candidate as Record<string, unknown>;
+      if (typeof row.id !== "string" || typeof row.full_name !== "string") return [];
+      const detail = [row.file_number, row.phone]
+        .filter((item): item is string => typeof item === "string" && item.length > 0)
+        .join(" · ");
+      return [{
+        entityType: "patient" as const,
+        entityId: row.id,
+        label: detail ? `${row.full_name} · ${detail}` : row.full_name,
+      }];
+    });
+  }
+
+  if (value.needs_clarification !== true || !Array.isArray(value.candidates)) {
+    return [];
+  }
+  const entityType =
+    value.field === "doctor"
+      ? "staff"
+      : value.field === "department"
+        ? "department"
+        : value.field === "report"
+          ? "report"
+          : null;
+  if (!entityType) return [];
+
+  return value.candidates.flatMap((candidate) => {
+    if (!candidate || typeof candidate !== "object") return [];
+    const row = candidate as Record<string, unknown>;
+    if (typeof row.id !== "string" || typeof row.name !== "string") return [];
+    return [{ entityType, entityId: row.id, label: row.name }];
+  });
+}
 
 function createConversationId() {
   return crypto.randomUUID();
@@ -191,7 +284,15 @@ function noticeText(
  * fields exist so an answer stays honest about what it did *not* see; a model
  * that summarizes loosely would silently drop exactly those caveats.
  */
-function ToolActivity({ part }: { part: StaffAssistantToolPart }) {
+function ToolActivity({
+  part,
+  onChooseContext,
+  contextMutationBusy,
+}: {
+  part: StaffAssistantToolPart;
+  onChooseContext: (choice: ContextChoice) => void;
+  contextMutationBusy: boolean;
+}) {
   const t = useTranslations("assistant");
   const complete = part.state === "output-available";
   const failed = part.state === "output-error";
@@ -219,6 +320,12 @@ function ToolActivity({ part }: { part: StaffAssistantToolPart }) {
   const failureCopy = failed
     ? t(isAssistantErrorCode(errorText) ? errorCopyKey(errorText) : "errorGeneric")
     : null;
+  const contextChoices = complete
+    ? contextChoicesForToolResult(
+        (part as { output?: unknown }).output,
+        name,
+      )
+    : [];
 
   return (
     <div
@@ -279,6 +386,27 @@ function ToolActivity({ part }: { part: StaffAssistantToolPart }) {
         </ul>
       ) : null}
 
+      {contextChoices.length > 0 ? (
+        <div className="mt-2 border-t border-current/15 pt-2">
+          <p className="font-medium text-foreground/80">
+            {t("chooseActiveContext")}
+          </p>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {contextChoices.map((choice) => (
+              <button
+                key={`${choice.entityType}:${choice.entityId}`}
+                type="button"
+                disabled={contextMutationBusy}
+                onClick={() => onChooseContext(choice)}
+                className="min-h-9 rounded-full border border-border/80 bg-background px-3 py-1 text-start font-medium text-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50"
+              >
+                {choice.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       {citations.length > 0 ? (
         <div className="mt-2 border-t border-current/15 pt-2">
           <p className="font-medium text-foreground/80">{t("helpSources")}</p>
@@ -321,7 +449,15 @@ function ToolActivity({ part }: { part: StaffAssistantToolPart }) {
   );
 }
 
-function MessageBubble({ message }: { message: StaffAssistantUIMessage }) {
+function MessageBubble({
+  message,
+  onChooseContext,
+  contextMutationBusy,
+}: {
+  message: StaffAssistantUIMessage;
+  onChooseContext: (choice: ContextChoice) => void;
+  contextMutationBusy: boolean;
+}) {
   const t = useTranslations("assistant");
   const isUser = message.role === "user";
   return (
@@ -351,7 +487,14 @@ function MessageBubble({ message }: { message: StaffAssistantUIMessage }) {
             );
           }
           if (isToolUIPart(part)) {
-            return <ToolActivity key={part.toolCallId} part={part} />;
+            return (
+              <ToolActivity
+                key={part.toolCallId}
+                part={part}
+                onChooseContext={onChooseContext}
+                contextMutationBusy={contextMutationBusy}
+              />
+            );
           }
           return null;
         })}
@@ -545,6 +688,10 @@ function ChatSession({
   const router = useRouter();
   const [input, setInput] = useState("");
   const [announcement, setAnnouncement] = useState("");
+  const [activeContext, setActiveContext] = useState<ActiveContext>(
+    session.activeContext,
+  );
+  const [contextMutationBusy, setContextMutationBusy] = useState(false);
   const [capabilitiesOpen, setCapabilitiesOpen] = useState(false);
   const capabilityPanelId = useId();
   const capabilityToggleRef = useRef<HTMLButtonElement>(null);
@@ -627,6 +774,51 @@ function ChatSession({
     void sendMessage({ text });
   }
 
+  async function chooseContext(choice: ContextChoice) {
+    if (busy || contextMutationBusy) return;
+    setContextMutationBusy(true);
+    try {
+      const result = await chooseAssistantConversationContext({
+        conversationId: session.id,
+        entityType: choice.entityType,
+        entityId: choice.entityId,
+      });
+      if (result.success) {
+        setActiveContext(result.activeContext);
+        setAnnouncement(t("activeContextUpdated"));
+        router.refresh();
+      } else {
+        setAnnouncement(t("activeContextUpdateFailed"));
+      }
+    } catch {
+      setAnnouncement(t("activeContextUpdateFailed"));
+    } finally {
+      setContextMutationBusy(false);
+    }
+  }
+
+  async function clearContext(entityType: ActiveContextEntityType) {
+    if (busy || contextMutationBusy) return;
+    setContextMutationBusy(true);
+    try {
+      const result = await clearAssistantConversationContext({
+        conversationId: session.id,
+        entityType,
+      });
+      if (result.success) {
+        setActiveContext(result.activeContext);
+        setAnnouncement(t("activeContextCleared"));
+        router.refresh();
+      } else {
+        setAnnouncement(t("activeContextUpdateFailed"));
+      }
+    } catch {
+      setAnnouncement(t("activeContextUpdateFailed"));
+    } finally {
+      setContextMutationBusy(false);
+    }
+  }
+
   const suggestions = suggestionsFor({
     t,
     patient,
@@ -654,6 +846,31 @@ function ChatSession({
             {t("patientContext", { patient: patient.name })}
           </span>
         ) : null}
+        {CONTEXT_TYPE_ORDER.flatMap((entityType) => {
+          const slot = activeContext[entityType];
+          if (!slot) return [];
+          return [
+            <span
+              key={entityType}
+              className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-full border border-primary/20 bg-primary/7 ps-2.5 pe-1 py-1 text-xs font-medium text-primary"
+            >
+              <span className="truncate">
+                {t(CONTEXT_TYPE_COPY_KEYS[entityType])}: {slot.display_label}
+              </span>
+              <button
+                type="button"
+                disabled={busy || contextMutationBusy}
+                onClick={() => void clearContext(entityType)}
+                className="grid size-7 shrink-0 place-items-center rounded-full text-primary/75 transition-colors hover:bg-primary/10 hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring disabled:opacity-50"
+                aria-label={t("clearActiveContext", {
+                  context: t(CONTEXT_TYPE_COPY_KEYS[entityType]),
+                })}
+              >
+                <X className="size-3.5" aria-hidden="true" />
+              </button>
+            </span>,
+          ];
+        })}
         <span className="ms-auto text-xs tabular-nums text-muted-foreground">
           {t("remaining", { count: remaining })}
         </span>
@@ -748,7 +965,12 @@ function ChatSession({
               </p>
             ) : null}
             {messages.map((message) => (
-              <MessageBubble key={message.id} message={message} />
+              <MessageBubble
+                key={message.id}
+                message={message}
+                onChooseContext={(choice) => void chooseContext(choice)}
+                contextMutationBusy={contextMutationBusy || busy}
+              />
             ))}
             {status === "submitted" ? (
               <div className="flex items-center gap-3 text-sm text-muted-foreground">
@@ -813,6 +1035,7 @@ function ChatSession({
 export function AssistantChat({
   initialConversationId,
   initialMessages,
+  initialActiveContext = EMPTY_ACTIVE_CONTEXT,
   pageContext = null,
   contextLabel = null,
   remaining,
@@ -828,12 +1051,25 @@ export function AssistantChat({
     id: initialConversationId,
     messages: initialMessages,
     historyTruncated,
+    activeContext: initialActiveContext,
   });
+  const renderedSession =
+    session.id === initialConversationId
+      ? { ...session, activeContext: initialActiveContext }
+      : session;
+  // Server refreshes after a completed turn can add/switch context. Keying the
+  // session by the validated slot metadata resets only the chat shell's local
+  // context state when that server snapshot changes, without an effect-driven
+  // state mirror or any client trust in the labels.
+  const activeContextVersion = CONTEXT_TYPE_ORDER.map((entityType) => {
+    const slot = renderedSession.activeContext[entityType];
+    return slot ? `${entityType}:${slot.entity_id}:${slot.set_at}` : "";
+  }).join("|");
 
   return (
     <ChatSession
-      key={session.id}
-      session={session}
+      key={`${renderedSession.id}:${activeContextVersion}`}
+      session={renderedSession}
       patient={patient}
       pageContext={pageContext}
       remaining={remaining}
@@ -844,6 +1080,7 @@ export function AssistantChat({
         id: createConversationId(),
         messages: [],
         historyTruncated: false,
+        activeContext: {},
       })}
     />
   );

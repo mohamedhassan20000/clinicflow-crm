@@ -20,6 +20,7 @@ import {
   persistDoctorTurn,
 } from "@/lib/ai/conversations";
 import { createStaffAgent } from "@/lib/ai/staff-agent";
+import { ConversationContextRecorder } from "@/lib/ai/conversation-context";
 import {
   AiToolAuthorizationError,
   type AssistantErrorCode,
@@ -168,12 +169,19 @@ export async function POST(request: Request) {
           ? { type: "patient", patientId: conversation.patientId }
           : null
         : pageContext;
+    // P4.10A: collects an active-context proposal (e.g. a high-confidence
+    // patient resolution) produced by a tool during this turn; applied when the
+    // turn is persisted so the next turn resolves the same entity.
+    const contextRecorder = new ConversationContextRecorder();
     const agent = await createStaffAgent({
       user,
       locale,
       clinicName: clinic.name,
       pageContext: authorizedPageContext,
       execution,
+      conversationId: conversation.id,
+      activeContext: conversation.activeContext,
+      contextRecorder,
     });
     const result = await agent.stream({
       messages: await convertToModelMessages(uiMessages),
@@ -249,6 +257,7 @@ export async function POST(request: Request) {
             patientId: conversation.patientId,
             userText,
             assistantText,
+            contextProposals: contextRecorder.takeAll(),
           });
         } catch (error) {
           Sentry.captureException(error, {

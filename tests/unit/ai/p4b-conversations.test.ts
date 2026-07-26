@@ -107,7 +107,7 @@ describe("P4B conversation hardening", () => {
       conversationId,
       locale: "en",
       patientId,
-    })).resolves.toEqual({ id: conversationId, patientId, messages: [] });
+    })).resolves.toEqual({ id: conversationId, patientId, messages: [], activeContext: {} });
     expect(upsert).not.toHaveBeenCalled();
   });
 

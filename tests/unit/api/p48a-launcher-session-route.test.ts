@@ -169,6 +169,7 @@ describe("P4.8 deferred launcher session route", () => {
     expect(response.headers.get("cache-control")).toBe("private, no-store");
     await expect(response.json()).resolves.toEqual({
       initialConversationId: "00000000-0000-4000-8000-000000000010",
+      initialActiveContext: {},
       initialMessages: [{
         id: "assistant-1",
         role: "assistant",

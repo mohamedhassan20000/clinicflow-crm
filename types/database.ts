@@ -11,6 +11,7 @@ export type Database = {
     Tables: {
       agent_conversations: {
         Row: {
+          active_context: Json
           clinic_id: string
           created_at: string
           id: string
@@ -23,6 +24,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          active_context?: Json
           clinic_id: string
           created_at?: string
           id?: string
@@ -35,6 +37,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          active_context?: Json
           clinic_id?: string
           created_at?: string
           id?: string

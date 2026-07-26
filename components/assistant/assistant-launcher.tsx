@@ -15,6 +15,7 @@ import {
 import type { AssistantCapabilities } from "@/lib/ai/capabilities";
 import type { LaunchableAssistantPageContext } from "@/lib/ai/page-context";
 import type { StaffAssistantUIMessage } from "@/lib/ai/staff-agent";
+import type { ActiveContext } from "@/lib/ai/conversation-context";
 import type { PermissionUserRole } from "@/lib/page-permissions";
 
 type AssistantChatModule = typeof import("@/components/assistant/assistant-chat");
@@ -22,6 +23,7 @@ type AssistantChatModule = typeof import("@/components/assistant/assistant-chat"
 type LauncherSession = {
   initialConversationId: string;
   initialMessages: StaffAssistantUIMessage[];
+  initialActiveContext: ActiveContext;
   historyTruncated: boolean;
   remaining: number;
   capabilities: AssistantCapabilities | null;
@@ -151,6 +153,7 @@ export function AssistantLauncher({
           <Chat
             initialConversationId={session.initialConversationId}
             initialMessages={session.initialMessages}
+            initialActiveContext={session.initialActiveContext}
             historyTruncated={session.historyTruncated}
             pageContext={context}
             contextLabel={contextLabel}

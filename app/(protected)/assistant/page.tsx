@@ -54,6 +54,7 @@ export default async function AssistantPage() {
           <AssistantChat
             initialConversationId={conversation?.id ?? crypto.randomUUID()}
             initialMessages={(conversation?.messages ?? []) as StaffAssistantUIMessage[]}
+            initialActiveContext={conversation?.activeContext ?? {}}
             historyTruncated={conversation?.historyTruncated ?? false}
             remaining={access.remaining}
             role={user.role}

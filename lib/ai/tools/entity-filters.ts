@@ -16,7 +16,17 @@ import type { Database } from "@/types/database";
  */
 export type FilterResolution =
   | { status: "unset"; id: null }
-  | { status: "resolved"; id: string; label: string }
+  | {
+      status: "resolved";
+      id: string;
+      label: string;
+      /**
+       * Only deterministic ranked resolution may create conversation context.
+       * A UUID supplied by the model is revalidated for this call but is never
+       * promoted into trusted session state.
+       */
+      trustedForContext: boolean;
+    }
   | { status: "ambiguous"; id: null; candidates: { id: string; name: string }[] }
   | { status: "not_found"; id: null };
 
@@ -40,7 +50,12 @@ async function resolveRanked(
   const confidence = classifyConfidence(candidates.map((row) => row.score));
   if (confidence === "high") {
     const top = candidates[0]!;
-    return { status: "resolved", id: top.id, label: rowLabel(top) };
+    return {
+      status: "resolved",
+      id: top.id,
+      label: rowLabel(top),
+      trustedForContext: true,
+    };
   }
   return {
     status: "ambiguous",
@@ -75,7 +90,7 @@ function verifiedId(
 ): FilterResolution {
   if (error) throw new Error(`${entity} lookup failed.`);
   if (typeof label !== "string") return { status: "not_found", id: null };
-  return { status: "resolved", id, label };
+  return { status: "resolved", id, label, trustedForContext: false };
 }
 
 export async function resolveDoctorFilter(

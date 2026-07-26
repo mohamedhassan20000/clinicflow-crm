@@ -54,11 +54,13 @@ describe("P4.9B patient-details Ask Assistant regression", () => {
 });
 
 describe("P4.9B phase boundary", () => {
-  it("does not add conversational memory or workflow execution", () => {
+  // P4.9B added neither conversational memory nor workflow execution. Session
+  // memory (`active_context`) arrived later with P4.10A and is now expected, so
+  // this guard tracks only the still-unstarted P4.11 workflow objects.
+  it("does not add workflow execution (P4.11)", () => {
     const databaseTypes = readFileSync("types/database.ts", "utf8");
     const commercialPolicy = readFileSync("lib/ai/commercial-policy.ts", "utf8");
 
-    expect(databaseTypes).not.toContain("active_context");
     expect(databaseTypes).not.toContain("ai_workflow_runs");
     expect(commercialPolicy).not.toContain('"ai.workflows"');
   });

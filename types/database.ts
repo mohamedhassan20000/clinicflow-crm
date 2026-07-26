@@ -556,6 +556,94 @@ export type Database = {
           },
         ]
       }
+      ai_workflow_runs: {
+        Row: {
+          ai_request_id: string | null
+          clinic_id: string
+          completed_at: string | null
+          confirmed_at: string | null
+          confirmed_by: string | null
+          cost_units: number
+          created_at: string
+          dry_run_snapshot_hash: string | null
+          error_code: string | null
+          id: string
+          mode: string
+          plan: Json
+          started_at: string | null
+          state: string
+          step_count: number
+          step_states: Json
+          task_class: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          ai_request_id?: string | null
+          clinic_id: string
+          completed_at?: string | null
+          confirmed_at?: string | null
+          confirmed_by?: string | null
+          cost_units: number
+          created_at?: string
+          dry_run_snapshot_hash?: string | null
+          error_code?: string | null
+          id?: string
+          mode: string
+          plan: Json
+          started_at?: string | null
+          state: string
+          step_count: number
+          step_states?: Json
+          task_class?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          ai_request_id?: string | null
+          clinic_id?: string
+          completed_at?: string | null
+          confirmed_at?: string | null
+          confirmed_by?: string | null
+          cost_units?: number
+          created_at?: string
+          dry_run_snapshot_hash?: string | null
+          error_code?: string | null
+          id?: string
+          mode?: string
+          plan?: Json
+          started_at?: string | null
+          state?: string
+          step_count?: number
+          step_states?: Json
+          task_class?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_workflow_runs_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_workflow_runs_confirmation_clinic_fkey"
+            columns: ["confirmed_by", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id", "clinic_id"]
+          },
+          {
+            foreignKeyName: "ai_workflow_runs_user_clinic_fkey"
+            columns: ["user_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id", "clinic_id"]
+          },
+        ]
+      }
       assistant_launcher_settings: {
         Row: {
           area: string
@@ -691,6 +779,8 @@ export type Database = {
       }
       appointments: {
         Row: {
+          ai_workflow_run_id: string | null
+          ai_workflow_step_id: string | null
           cancellation_reason: string | null
           cancelled_at: string | null
           cancelled_by: string | null
@@ -733,6 +823,8 @@ export type Database = {
           updated_by: string | null
         }
         Insert: {
+          ai_workflow_run_id?: string | null
+          ai_workflow_step_id?: string | null
           cancellation_reason?: string | null
           cancelled_at?: string | null
           cancelled_by?: string | null
@@ -775,6 +867,8 @@ export type Database = {
           updated_by?: string | null
         }
         Update: {
+          ai_workflow_run_id?: string | null
+          ai_workflow_step_id?: string | null
           cancellation_reason?: string | null
           cancelled_at?: string | null
           cancelled_by?: string | null
@@ -817,6 +911,13 @@ export type Database = {
           updated_by?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "appointments_ai_workflow_run_clinic_fkey"
+            columns: ["ai_workflow_run_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "ai_workflow_runs"
+            referencedColumns: ["id", "clinic_id"]
+          },
           {
             foreignKeyName: "appointments_cancelled_by_fkey"
             columns: ["cancelled_by"]

@@ -4,6 +4,7 @@ import { getLocale } from "next-intl/server";
 import { z } from "zod";
 import {
   AI_STAFF_ANALYTICS_FEATURE,
+  AI_WORKFLOWS_FEATURE,
   authorizeStaffAssistant,
 } from "@/lib/ai/authorization";
 import { getEntitlements, hasFeature } from "@/lib/entitlements";
@@ -120,6 +121,7 @@ export async function POST(request: Request) {
     const entitlements = await getEntitlements(user.clinicId);
     const { task, persona } = staffTaskForRole(user.role, {
       analyticsEntitled: hasFeature(entitlements, AI_STAFF_ANALYTICS_FEATURE),
+      workflowsEntitled: hasFeature(entitlements, AI_WORKFLOWS_FEATURE),
       messageText: userText,
     });
     execution = await prepareAiExecution({

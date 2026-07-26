@@ -19,6 +19,7 @@ async function loadAuth(opts: {
   user: typeof DOCTOR | null;
   subscriptionAllowed?: boolean;
   aiFeature?: boolean;
+  workflowFeature?: boolean;
   visibility?: "visible" | "hidden" | "lookup_failed";
 }) {
   vi.resetModules();
@@ -30,7 +31,10 @@ async function loadAuth(opts: {
     getEntitlements: vi.fn(async () => ({
       clinicId: DOCTOR.clinicId,
       planSlug: "pro_ai",
-      features: { ai_assistant: opts.aiFeature ?? true },
+      features: {
+        ai_assistant: opts.aiFeature ?? true,
+        "ai.workflows": opts.workflowFeature ?? true,
+      },
       limits: {},
       subscriptionAllowed: opts.subscriptionAllowed ?? true,
     })),
@@ -99,6 +103,22 @@ describe("authorizeStaffAssistant", () => {
     await expect(
       assertClinicalToolAccess({ ...DOCTOR, role: "admin" as never }),
     ).rejects.toMatchObject({ reason: "role_forbidden" });
+  });
+
+  it("requires ai.workflows in addition to the complete staff-assistant spine", async () => {
+    const denied = await loadAuth({
+      user: DOCTOR,
+      workflowFeature: false,
+    });
+    await expect(denied.assertWorkflowAccess(DOCTOR)).rejects.toMatchObject({
+      reason: "feature_not_entitled",
+    });
+
+    const allowed = await loadAuth({
+      user: DOCTOR,
+      workflowFeature: true,
+    });
+    await expect(allowed.assertWorkflowAccess(DOCTOR)).resolves.toBeUndefined();
   });
 });
 

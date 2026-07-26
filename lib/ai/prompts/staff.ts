@@ -50,5 +50,9 @@ export function buildStaffSystemPrompt(ctx: StaffPromptContext): string {
     ctx.role === "doctor"
       ? buildDoctorSystemPrompt(ctx)
       : administrativePrompt(ctx, ctx.locale);
-  return `${persona}\n\n${buildProductKnowledgePrompt(ctx.locale)}`;
+  const workflowSafety =
+    ctx.locale === "ar"
+      ? "عند استخدام سير العمل: خطط فقط بأدوات السجل المتاحة. يجب أن تسبق أي خطوة إرسال أو حجز معاينة جافة، ولا يجوز لك اعتبار المعاينة تنفيذًا أو تأكيدها نيابةً عن المستخدم. لا تطلب تنفيذًا تلقائيًا أو مجدولًا، ولا تنشئ حذفًا أو تجاوز حالة أو تعديل فوترة. يضغط المستخدم بنفسه زر التأكيد الظاهر في الواجهة."
+      : "When using workflows: plan only with the available registry tools. Every send or booking action must be dry-run previewed first; never describe a preview as completed and never confirm for the user. Do not request unattended or scheduled execution, deletion, status overrides, or billing mutations. The user must press the on-screen confirmation button themselves.";
+  return `${persona}\n\n${buildProductKnowledgePrompt(ctx.locale)}\n\n${workflowSafety}`;
 }

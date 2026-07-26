@@ -30,13 +30,18 @@ vi.mock("next-intl/server", () => ({ getLocale: async () => "en" }));
 vi.mock("@/lib/ai/authorization", () => ({
   authorizeStaffAssistant: mocks.authorize,
   AI_STAFF_ANALYTICS_FEATURE: "ai.staff_analytics",
+  AI_WORKFLOWS_FEATURE: "ai.workflows",
 }));
 // P4.6A: the route reads entitlements to pick the certified task class.
 vi.mock("@/lib/entitlements", () => ({
   getEntitlements: async () => ({
     clinicId: "clinic-1",
     planSlug: "pro_ai",
-    features: { ai_assistant: true, "ai.staff_analytics": true },
+    features: {
+      ai_assistant: true,
+      "ai.staff_analytics": true,
+      "ai.workflows": false,
+    },
     limits: {},
     subscriptionAllowed: true,
   }),

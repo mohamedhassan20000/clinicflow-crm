@@ -148,6 +148,7 @@ export const FINANCIAL_TOOL_NAMES = [
   "get_revenue_summary",
   "compare_revenue_periods",
   "list_outstanding_invoices",
+  "send_invoice_reminders",
 ] as const;
 
 const EMPTY: AssistantCapabilities = {
@@ -185,10 +186,25 @@ export async function resolveAssistantCapabilities(
   try {
     // Locale is passed to the mount so `capabilityDescription` is read in the
     // right language for the panel; it does not change *which* tools mount.
-    const { definitions, grantedPermissions } = await resolveToolMount({
+    const baseMount = await resolveToolMount({
       user,
       locale,
     });
+    const workflowMount = await resolveToolMount({
+      user,
+      locale,
+      taskClass: "staff_workflow",
+    });
+    const definitions = [
+      ...baseMount.definitions,
+      ...(workflowMount.workflowStepDefinitions ?? []).filter(
+        (definition) => definition.workflow.kind === "action",
+      ),
+    ];
+    const grantedPermissions = new Set([
+      ...(baseMount.grantedPermissions ?? []),
+      ...(workflowMount.grantedPermissions ?? []),
+    ]);
     const toolNames = definitions.map((definition) => definition.name);
     const mounted = new Set(toolNames);
 

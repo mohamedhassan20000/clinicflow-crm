@@ -6,6 +6,7 @@ import { AiToolAuthorizationError } from "@/lib/ai/errors";
 import { getPageVisibilityState } from "@/lib/server-page-permissions";
 import { LEGACY_AI_ASSISTANT_FEATURE } from "@/lib/ai/commercial-policy";
 import { hasAiUserPermission } from "@/lib/ai/permissions";
+import type { PageSlug } from "@/lib/page-permissions";
 
 /** Every normal clinic role may use its role-appropriate Assistant persona. */
 export const STAFF_ASSISTANT_ROLES: readonly UserRole[] = [
@@ -152,6 +153,40 @@ export const AI_STAFF_ANALYTICS_FEATURE = "ai.staff_analytics" as const;
 export const AI_FINANCIAL_INSIGHTS_FEATURE = "ai.financial_insights" as const;
 export const AI_ASSISTANT_CUSTOMIZATION_FEATURE =
   "ai.assistant_customization" as const;
+export const AI_WORKFLOWS_FEATURE = "ai.workflows" as const;
+
+/**
+ * P4.11A workflow envelope. The workflow entitlement is additive to the full
+ * staff-assistant spine; it never replaces role, subscription, visibility, or
+ * tool-specific checks. Every nested tool re-runs those checks again.
+ */
+export async function assertWorkflowAccess(user: AuthedUser): Promise<void> {
+  await assertStaffToolAccess(user);
+  const entitlements = await getEntitlements(user.clinicId);
+  if (!hasFeature(entitlements, AI_WORKFLOWS_FEATURE)) {
+    throw new AiToolAuthorizationError("feature_not_entitled");
+  }
+}
+
+/** Mutation-capable workflow steps are narrower than the workflow envelope. */
+export async function assertWorkflowActionAccess(
+  user: AuthedUser,
+  page: Extract<PageSlug, "appointments" | "inbox" | "reports" | "revenue">,
+  roles: readonly UserRole[],
+): Promise<void> {
+  if (!roles.includes(user.role)) {
+    throw new AiToolAuthorizationError(
+      "role_forbidden",
+      `Role "${user.role}" may not perform this workflow action.`,
+    );
+  }
+  await assertWorkflowAccess(user);
+  const visibility = await getPageVisibilityState(user, page);
+  if (visibility === "hidden") throw new AiToolAuthorizationError("page_hidden");
+  if (visibility === "lookup_failed") {
+    throw new AiToolAuthorizationError("lookup_failed");
+  }
+}
 
 /**
  * Per-tool re-check for the bounded operational list/count tools

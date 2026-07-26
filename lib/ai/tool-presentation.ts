@@ -63,6 +63,24 @@ export const ASSISTANT_TOOL_PRESENTATION: Readonly<
   // no clinic data, and it frames what the assistant can do rather than reporting
   // a record.
   list_my_capabilities: { labelKey: "toolCapabilities", group: "guidance" },
+
+  // P4.11 workflow envelope; action previews add their own confirmation card.
+  execute_read_only_workflow: {
+    labelKey: "toolWorkflow",
+    group: "operational",
+  },
+  send_appointment_reminders: {
+    labelKey: "toolAppointmentReminderWorkflow",
+    group: "operational",
+  },
+  send_invoice_reminders: {
+    labelKey: "toolInvoiceReminderWorkflow",
+    group: "financial",
+  },
+  create_pending_booking: {
+    labelKey: "toolPendingBookingWorkflow",
+    group: "operational",
+  },
 };
 
 export function presentationFor(toolName: string): AssistantToolPresentation {

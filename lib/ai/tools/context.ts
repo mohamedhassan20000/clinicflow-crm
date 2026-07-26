@@ -11,6 +11,20 @@ import type {
   ConversationContextRecorder,
 } from "@/lib/ai/conversation-context";
 import type { Database } from "@/types/database";
+import type { Tool } from "ai";
+
+export type WorkflowMountDefinition = {
+  name: string;
+  workflow: {
+    kind: "read" | "action" | "orchestrator";
+    costUnits: number;
+  };
+};
+
+export type WorkflowStepMount = {
+  definitions: readonly WorkflowMountDefinition[];
+  tools: Readonly<Record<string, Tool>>;
+};
 
 /**
  * Server-resolved context every doctor tool closes over. Identity is captured
@@ -85,6 +99,14 @@ export type DoctorToolContext = {
    * free text. Omitted by callers that do not persist context.
    */
   contextRecorder?: ConversationContextRecorder | null;
+  /**
+   * P4.11A internal-only nested mount. The workflow orchestrator receives the
+   * caller's already-resolved read-tool union without exposing those tools as
+   * peer model calls in the dedicated workflow task class.
+   */
+  workflowStepMount?: (() => WorkflowStepMount) | null;
+  /** Content-free link to the provider-budget reservation for this turn. */
+  aiRequestId?: string | null;
 };
 
 /** ISO calendar date, e.g. "2026-07-18". */

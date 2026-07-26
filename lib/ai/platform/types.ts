@@ -19,6 +19,11 @@ export type AiTaskClass =
    * only, no clinic data at all — which is why it also routes to a cheaper model.
    */
   | "staff_help"
+  /**
+   * P4.11A: server-authoritative planning and execution of a bounded,
+   * read-only workflow over the caller's resolved typed-tool mount.
+   */
+  | "staff_workflow"
   | "patient_booking"
   | "patient_faq";
 

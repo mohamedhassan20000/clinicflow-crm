@@ -58,6 +58,7 @@ export async function createStaffAgent(ctx: StaffAgentContext) {
     activePatientId,
     activeContext: ctx.activeContext ?? null,
     contextRecorder: ctx.contextRecorder ?? null,
+    aiRequestId: ctx.execution.requestId,
   });
 
   return new ToolLoopAgent({

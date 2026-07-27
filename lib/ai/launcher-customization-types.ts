@@ -6,11 +6,13 @@ export const ASSISTANT_CUSTOMIZATION_ROLES = [
   "manager",
   "receptionist",
   "doctor",
+  "assistant",
 ] as const satisfies readonly UserRole[];
 
 export type AssistantLauncherRoleSetting = {
   area: AssistantPageContextType;
-  defaultEnabled: boolean;
+  /** Per-role product default; a role absent here is unsupported for this area. */
+  defaultEnabledByRole: Partial<Record<UserRole, boolean>>;
   eligibleRoles: readonly UserRole[];
   roleSettings: Partial<Record<UserRole, boolean>>;
 };

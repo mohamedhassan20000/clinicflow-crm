@@ -1275,12 +1275,16 @@ const CLINIC_SCOPED_TABLES = new Set([
   "user_ai_permissions",
   "user_customizations",
   "user_page_permissions",
+  "user_report_permissions",
 ]);
 
-// Placement is read through the tenant-scoped service client during Server
-// Component resolution, but configuration writes must retain the authenticated
-// primary admin's JWT so RLS and audit attribution share the same actor.
+// These tables may be read through the tenant-scoped service client, but their
+// writes must retain their narrower boundary: Assistant placement writes use
+// the authenticated primary admin's JWT, supervision writes use the atomic
+// replacement RPC, and activity events remain append-only.
 const READ_ONLY_CLINIC_SCOPED_TABLES = new Set([
+  "activity_events",
+  "assistant_doctor_assignments",
   "assistant_launcher_settings",
   "assistant_launcher_user_overrides",
 ]);

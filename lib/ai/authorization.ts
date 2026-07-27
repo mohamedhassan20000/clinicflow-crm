@@ -14,10 +14,15 @@ export const STAFF_ASSISTANT_ROLES: readonly UserRole[] = [
   "manager",
   "doctor",
   "receptionist",
+  "assistant",
 ];
 
-/** Clinical summaries and visit search remain doctor-only tools. */
-export const CLINICAL_ASSISTANT_ROLES: readonly UserRole[] = ["doctor"];
+/**
+ * Clinical summaries and visit search. Doctors, plus assistants acting within
+ * their assigned doctors' scope (enforced by RLS + tool asserts). An assistant
+ * never gains clinic-wide clinical access — the union scope still applies.
+ */
+export const CLINICAL_ASSISTANT_ROLES: readonly UserRole[] = ["doctor", "assistant"];
 
 export const AI_ASSISTANT_FEATURE = LEGACY_AI_ASSISTANT_FEATURE;
 

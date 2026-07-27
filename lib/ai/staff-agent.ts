@@ -37,7 +37,8 @@ type StaffAgentContext = {
  * plan entitlements and the caller's per-user AI permissions (P4.6A).
  */
 export async function createStaffAgent(ctx: StaffAgentContext) {
-  const patientId = ctx.user.role === "doctor"
+  const patientId =
+    ctx.user.role === "doctor" || ctx.user.role === "assistant"
     ? patientIdFromAssistantPageContext(ctx.pageContext ?? null)
     : null;
 

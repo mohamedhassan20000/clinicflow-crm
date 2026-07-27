@@ -2,28 +2,55 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Loader2, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useTranslations } from "next-intl";
 import {
   saveUserPageVisibilityChanges,
   type StaffPagePermissionsRow,
 } from "@/actions/page-permissions";
+import {
+  resetUserVisibilityToDefaults,
+  saveUserReportVisibilityChanges,
+  type StaffReportPermissionsRow,
+} from "@/actions/report-permissions";
+import { REPORT_CATALOG, reportDefaultVisibleForRole } from "@/lib/reports/catalog";
+
+const REPORT_TITLE_KEYS: Record<string, string> = Object.fromEntries(
+  Object.values(REPORT_CATALOG).map((entry) => [entry.id, entry.titleKey]),
+);
 
 export function PageVisibilityCustomizer({
   staff,
+  reports,
   initialSelectedId,
 }: {
   staff: StaffPagePermissionsRow[];
+  reports: StaffReportPermissionsRow[];
   initialSelectedId?: string;
 }) {
   const t = useTranslations("settings");
+  const tReports = useTranslations("reports");
   const tNav = useTranslations("nav.tenant");
   const [rows, setRows] = useState(staff);
   const [savedRows, setSavedRows] = useState(staff);
+  const [reportRows, setReportRows] = useState(reports);
+  const [savedReportRows, setSavedReportRows] = useState(reports);
+  const [confirmReset, setConfirmReset] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const [selectedId, setSelectedId] = useState(
     initialSelectedId && staff.some((member) => member.id === initialSelectedId)
       ? initialSelectedId
@@ -96,6 +123,125 @@ export function PageVisibilityCustomizer({
         setSavedRows(rows);
         toast.success(t("pageVisibilitySaved"));
       }
+    });
+  }
+
+  // ── Report visibility (only meaningful when the Reports page is enabled) ────
+  const selectedReport = useMemo(
+    () => reportRows.find((member) => member.id === selected?.id),
+    [reportRows, selected?.id],
+  );
+  const selectedSavedReport = useMemo(
+    () => savedReportRows.find((member) => member.id === selected?.id),
+    [savedReportRows, selected?.id],
+  );
+  // Reads the LIVE local page toggle so hiding Reports hides the config section
+  // immediately, before saving.
+  const reportsPageEnabled = Boolean(
+    selected?.permissions.find((p) => p.slug === "reports")?.isVisible,
+  );
+  const hasReportChanges = Boolean(
+    selectedReport &&
+      selectedSavedReport &&
+      selectedReport.permissions.some((permission) => {
+        const saved = selectedSavedReport.permissions.find(
+          (item) => item.reportId === permission.reportId,
+        );
+        return saved && saved.isVisible !== permission.isVisible;
+      }),
+  );
+
+  function handleReportToggle(reportId: string, next: boolean) {
+    if (!selected) return;
+    setReportRows((current) =>
+      current.map((member) =>
+        member.id === selected.id
+          ? {
+              ...member,
+              permissions: member.permissions.map((permission) =>
+                permission.reportId === reportId
+                  ? { ...permission, isVisible: next }
+                  : permission,
+              ),
+            }
+          : member,
+      ),
+    );
+  }
+
+  function handleReportSave() {
+    if (!selected || !selectedReport || !selectedSavedReport) return;
+    const changes = selectedReport.permissions
+      .filter((permission) => {
+        const saved = selectedSavedReport.permissions.find(
+          (item) => item.reportId === permission.reportId,
+        );
+        return saved && saved.isVisible !== permission.isVisible;
+      })
+      .map((permission) => ({
+        reportId: permission.reportId,
+        isVisible: permission.isVisible,
+      }));
+    if (changes.length === 0) return;
+    startTransition(async () => {
+      const result = await saveUserReportVisibilityChanges(selected.id, changes);
+      if (result.error) {
+        toast.error(result.error);
+        setReportRows(savedReportRows);
+      } else {
+        setSavedReportRows(reportRows);
+        toast.success(t("pageVisibilitySaved"));
+      }
+    });
+  }
+
+  function handleReset() {
+    if (!selected || resetting) return; // prevent duplicate submissions
+    setResetting(true);
+    startTransition(async () => {
+      const result = await resetUserVisibilityToDefaults(selected.id);
+      setResetting(false);
+      setConfirmReset(false);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      // Reflect the restored role defaults locally for the selected employee:
+      // all role pages become visible; each report returns to its role default.
+      const defaultedRows = (list: StaffPagePermissionsRow[]) =>
+        list.map((member) =>
+          member.id === selected.id
+            ? {
+                ...member,
+                permissions: member.permissions.map((permission) => ({
+                  ...permission,
+                  isVisible: true,
+                })),
+              }
+            : member,
+        );
+      const defaultedReports = (list: StaffReportPermissionsRow[]) =>
+        list.map((member) =>
+          member.id === selected.id
+            ? {
+                ...member,
+                permissions: member.permissions.map((permission) => ({
+                  ...permission,
+                  isVisible: reportDefaultVisibleForRole(
+                    permission.reportId,
+                    selected.role as Parameters<
+                      typeof reportDefaultVisibleForRole
+                    >[1],
+                  ),
+                })),
+              }
+            : member,
+        );
+      setRows((c) => defaultedRows(c));
+      setSavedRows((c) => defaultedRows(c));
+      setReportRows((c) => defaultedReports(c));
+      setSavedReportRows((c) => defaultedReports(c));
+      toast.success(t("customizeResetDone"));
     });
   }
 
@@ -179,27 +325,134 @@ export function PageVisibilityCustomizer({
               );
             })}
           </div>
-          <div className="flex items-center justify-end gap-2 border-t border-border/50 px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/50 px-4 py-3">
             <Button
               type="button"
-              variant="outline"
-              disabled={!hasChanges || isSaving}
-              onClick={() => setRows(savedRows)}
+              variant="ghost"
+              size="sm"
+              className="gap-1.5 text-muted-foreground"
+              disabled={isSaving || resetting}
+              onClick={() => setConfirmReset(true)}
             >
-              {t("discard")}
+              {resetting ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <RotateCcw className="h-3.5 w-3.5" />
+              )}
+              {t("customizeResetButton")}
             </Button>
-            <Button
-              type="button"
-              disabled={!hasChanges || isSaving}
-              onClick={handleSave}
-              className="gap-2"
-            >
-              {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
-              {t("saveChanges")}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!hasChanges || isSaving}
+                onClick={() => setRows(savedRows)}
+              >
+                {t("discard")}
+              </Button>
+              <Button
+                type="button"
+                disabled={!hasChanges || isSaving}
+                onClick={handleSave}
+                className="gap-2"
+              >
+                {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+                {t("saveChanges")}
+              </Button>
+            </div>
           </div>
+
+          {/* Report visibility — only when this employee's Reports page is on. */}
+          {reportsPageEnabled && selectedReport && selectedReport.permissions.length > 0 && (
+            <div className="border-t border-border/50">
+              <div className="px-4 py-3">
+                <h3 className="text-sm font-semibold">{t("reportVisibility")}</h3>
+                <p className="text-xs text-muted-foreground">
+                  {t("chooseWhichReportsThisEmployeeCanOpen")}
+                </p>
+              </div>
+              <div className="divide-y divide-border/50">
+                {selectedReport.permissions.map((permission) => (
+                  <div
+                    key={permission.reportId}
+                    className="flex items-center justify-between gap-4 px-4 py-3"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium">
+                        {tReports(
+                          (REPORT_TITLE_KEYS[permission.reportId] ??
+                            permission.reportId) as never,
+                        )}
+                      </p>
+                      {(permission.financial || permission.administrative) && (
+                        <p className="text-xs text-muted-foreground">
+                          {permission.financial
+                            ? t("financialReportNote")
+                            : t("administrativeReportNote")}
+                        </p>
+                      )}
+                    </div>
+                    <Switch
+                      checked={permission.isVisible}
+                      disabled={isSaving || resetting}
+                      onCheckedChange={(next) =>
+                        handleReportToggle(permission.reportId, next)
+                      }
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center justify-end gap-2 border-t border-border/50 px-4 py-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={!hasReportChanges || isSaving}
+                  onClick={() => setReportRows(savedReportRows)}
+                >
+                  {t("discard")}
+                </Button>
+                <Button
+                  type="button"
+                  disabled={!hasReportChanges || isSaving}
+                  onClick={handleReportSave}
+                  className="gap-2"
+                >
+                  {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+                  {t("saveChanges")}
+                </Button>
+              </div>
+            </div>
+          )}
         </section>
       )}
+
+      <AlertDialog open={confirmReset} onOpenChange={setConfirmReset}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("customizeResetTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("customizeResetDescription", {
+                name: selected?.fullName ?? "",
+              })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={resetting}>{t("cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault();
+                handleReset();
+              }}
+              disabled={resetting}
+            >
+              {resetting ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              ) : null}
+              {t("customizeResetConfirm")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

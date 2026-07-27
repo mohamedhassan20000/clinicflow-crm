@@ -10,7 +10,7 @@ import { createServerActionMocks } from "../helpers/server-action-mocks";
 type MockUser = {
   id: string;
   clinicId: string;
-  role: "admin" | "receptionist" | "manager" | "doctor";
+  role: "admin" | "receptionist" | "manager" | "doctor" | "assistant";
   departmentId?: string | null;
   email?: string;
   fullName?: string;
@@ -97,7 +97,7 @@ async function loadTools(
 const opts = {} as never;
 
 describe("role-specific Assistant tool registration", () => {
-  it("mounts clinical tools only for doctors", async () => {
+  it("mounts clinical tools only for doctors and assistants", async () => {
     const doctor = await loadTools(DOCTOR);
     expect(Object.keys(doctor.staffTools)).toEqual([
       "search_authorized_patients",
@@ -111,6 +111,10 @@ describe("role-specific Assistant tool registration", () => {
       "get_navigation_target",
       "list_my_capabilities",
     ]);
+    const assistant = await loadTools({ ...DOCTOR, role: "assistant" });
+    expect(Object.keys(assistant.staffTools)).toEqual(
+      Object.keys(doctor.staffTools),
+    );
 
     for (const role of ["admin", "manager", "receptionist"] as const) {
       const staff = await loadTools({ ...DOCTOR, role });

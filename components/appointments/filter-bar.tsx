@@ -33,6 +33,7 @@ const STATUS_OPTIONS: { value: AppointmentStatus; labelKey: string }[] = [
   { value: "completed", labelKey: "statusCompleted" },
   { value: "cancelled", labelKey: "statusCancelled" },
   { value: "no_show", labelKey: "statusNoShow" },
+  { value: "replaced", labelKey: "statusReplaced" },
 ];
 
 interface Props {

@@ -1,0 +1,11 @@
+-- Phase 6: introduce the `replaced` appointment status.
+--
+-- Own migration: PostgreSQL cannot use a newly added enum value in the same
+-- transaction that introduced it, so the columns, trigger, RPC and index changes
+-- that reference 'replaced' live in the next migration.
+--
+-- `replaced` is a terminal, historical status (like `cancelled`): the original
+-- appointment stays intact in history while a linked replacement becomes the
+-- active appointment. It is a dedicated reschedule event and is deliberately NOT
+-- counted as cancelled / completed / no-show / lost / revenue anywhere.
+alter type public.appointment_status add value if not exists 'replaced';

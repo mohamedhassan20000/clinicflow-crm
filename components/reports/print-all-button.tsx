@@ -7,6 +7,8 @@ export type ReportPrintSection =
   | "cancellation"
   | "no-show"
   | "revenue"
+  | "my-performance"
+  | "my-assistant-performance"
   | "followups"
   | "doctor-performance"
   | "receptionist-performance";

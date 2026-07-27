@@ -25,7 +25,7 @@ export default async function AssistantPage() {
   if (resolution.state === "hidden") redirect("/dashboard");
   const { access, conversation, capabilities } = resolution;
 
-  const isClinical = user.role === "doctor";
+  const isClinical = user.role === "doctor" || user.role === "assistant";
 
   return (
     <div className="space-y-6">

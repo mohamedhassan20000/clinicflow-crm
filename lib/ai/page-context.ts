@@ -57,6 +57,7 @@ const appointmentsContextSchema = z
         "completed",
         "cancelled",
         "no_show",
+        "replaced",
       ])
       .optional(),
     doctorId: UUID.optional(),

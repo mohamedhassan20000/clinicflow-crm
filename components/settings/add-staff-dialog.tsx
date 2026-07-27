@@ -41,6 +41,7 @@ import type { Tables } from "@/types/database";
 import { useTranslations } from "next-intl";
 
 type Department = Pick<Tables<"departments">, "id" | "name">;
+type DoctorOption = { id: string; full_name: string };
 
 interface CreatedSnapshot {
   staffId: string;
@@ -52,10 +53,12 @@ interface CreatedSnapshot {
 
 export function AddStaffDialog({
   departments,
+  doctors,
   currentRole,
   canCustomize,
 }: {
   departments: Department[];
+  doctors: DoctorOption[];
   currentRole: string;
   canCustomize: boolean;
 }) {
@@ -183,6 +186,7 @@ export function AddStaffDialog({
             </SheetHeader>
             <div className="flex-1 overflow-y-auto px-8 py-6">
               <CreateStaffForm
+                doctors={doctors}
                 action={createStaff}
                 departments={departments}
                 canCreateAdmin={currentRole === "admin"}

@@ -366,13 +366,23 @@ describe("P4.7A corpus ↔ navigation registry integrity", () => {
       .filter(([, pages]) => pages.includes("patients"))
       .map(([role]) => role);
 
-    expect(rolesWithPatientsPage).toEqual(["admin", "receptionist", "doctor"]);
+    // Assistant shares the doctor's Patients page (scoped to assigned doctors).
+    expect(rolesWithPatientsPage).toEqual([
+      "admin",
+      "receptionist",
+      "doctor",
+      "assistant",
+    ]);
     expect(registration.roles).toEqual(["admin", "receptionist"]);
-    expect(registration.en.notes.join(" ")).toMatch(/Doctors can view patient files/i);
+    expect(registration.en.notes.join(" ")).toMatch(
+      /Doctors and assistants can view patient files/i,
+    );
     expect(registration.en.notes.join(" ")).toMatch(
       /Managers cannot access the Patients page/i,
     );
-    expect(registration.ar.notes.join(" ")).toMatch(/يمكن للأطباء عرض ملفات المرضى/);
+    expect(registration.ar.notes.join(" ")).toMatch(
+      /يمكن للأطباء والمساعدين عرض ملفات المرضى/,
+    );
     expect(registration.ar.notes.join(" ")).toMatch(
       /لا يمكن للمديرين الوصول إلى صفحة «المرضى»/,
     );

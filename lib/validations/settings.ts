@@ -6,31 +6,49 @@ const optionalPhone = z.string().optional().nullable().refine((value) => !value 
 
 // ── Staff ────────────────────────────────────────────────────────────────────
 
-export const createStaffSchema = z.object({
+const staffFields = {
   full_name: z.string().min(2, "validation.tooSmall").max(100),
+  role: z.enum(["admin", "doctor", "receptionist", "manager", "assistant"], {
+    error: "validation.required",
+  }),
+  department_id: z.string().uuid().optional().nullable(),
+  // Assistant-only: the supervising doctors whose data scope this assistant may
+  // read (union). Ignored for non-assistant roles. Drives DATA SCOPE only.
+  supervising_doctor_ids: z.array(z.string().uuid()).optional(),
+  phone: optionalPhone,
+} as const;
+
+function requireAssistantSupervisorIds<
+  T extends { role: string; supervising_doctor_ids?: string[] },
+>(data: T, ctx: z.RefinementCtx) {
+  if (
+    data.role === "assistant" &&
+    (data.supervising_doctor_ids?.length ?? 0) === 0
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["supervising_doctor_ids"],
+      message: "validation.required",
+    });
+  }
+}
+
+export const createStaffSchema = z.object({
+  ...staffFields,
   email: z.string().email("validation.invalidEmail"),
   temporary_password: z
     .string()
     .min(8, "validation.tooSmall")
     .regex(/[A-Z]/, "validation.invalidFormat")
     .regex(/[0-9]/, "validation.invalidFormat"),
-  role: z.enum(["admin", "doctor", "receptionist", "manager"], {
-    error: "validation.required",
-  }),
-  department_id: z.string().uuid().optional().nullable(),
-  phone: optionalPhone,
-});
-
-export type CreateStaffValues = z.infer<typeof createStaffSchema>;
+}).superRefine(requireAssistantSupervisorIds);
 
 export const updateStaffSchema = z.object({
-  full_name: z.string().min(2).max(100),
-  role: z.enum(["admin", "doctor", "receptionist", "manager"]),
-  department_id: z.string().uuid().optional().nullable(),
-  phone: optionalPhone,
+  ...staffFields,
   is_active: z.boolean(),
-});
+}).superRefine(requireAssistantSupervisorIds);
 
+export type CreateStaffValues = z.infer<typeof createStaffSchema>;
 export type UpdateStaffValues = z.infer<typeof updateStaffSchema>;
 
 // ── Department ───────────────────────────────────────────────────────────────

@@ -154,6 +154,7 @@ describe("P4.6B capability resolution", () => {
     expect(capabilities.allowedReportIds).toEqual([
       "cancellations",
       "no_shows",
+      "followups",
       "doctor_performance",
       "receptionist_performance",
     ]);
@@ -185,6 +186,7 @@ describe("P4.6B capability resolution", () => {
       "cancellations",
       "no_shows",
       "revenue",
+      "followups",
       "doctor_performance",
       "receptionist_performance",
     ]);
@@ -218,11 +220,11 @@ describe("P4.6B capability resolution", () => {
     expect(capabilities.financial).toBe("not_applicable");
   });
 
-  it("excludes managers from pending follow-ups, matching the dashboard RPC", async () => {
+  it("includes pending follow-ups for managers, matching the dashboard RPC", async () => {
     const { capabilities } = await loadCapabilities(user("manager"), {
       financialPermission: true,
     });
-    expect(capabilities.toolNames).not.toContain("list_pending_followups");
+    expect(capabilities.toolNames).toContain("list_pending_followups");
   });
 
   it("gives doctors no clinic analytics and no financial story", async () => {

@@ -184,7 +184,7 @@ test("Arabic marketing typography uses only Thmanyah at the intended weights", a
 
   const aiPlanGap = await page.locator("#pricing article").filter({ hasText: "خطة Pro + AI" }).evaluate((card) => {
     const lastFeature = card.querySelector("li:last-child");
-    const cta = card.querySelector("a");
+    const cta = card.querySelector("button");
     if (!lastFeature || !cta) throw new Error("Arabic AI plan spacing probes are missing");
     return cta.getBoundingClientRect().top - lastFeature.getBoundingClientRect().bottom;
   });
@@ -514,11 +514,15 @@ test("MP5 calling-code columns stay aligned on a 320px light surface", async ({ 
   await page.reload();
   await ensureEnglishLanding(page);
 
-  const earlyAccessButton = page
+  const heroEarlyAccessButton = page
     .getByRole("button", { name: "Request early access" })
     .filter({ visible: true })
     .first();
   await page.waitForLoadState("networkidle");
+  await heroEarlyAccessButton.click();
+  const earlyAccessButton = page.getByRole("button", {
+    name: "Request an invitation",
+  });
   await earlyAccessButton.click();
   await expect(earlyAccessButton).toHaveAttribute("aria-expanded", "true");
   const dialog = page.getByRole("dialog");

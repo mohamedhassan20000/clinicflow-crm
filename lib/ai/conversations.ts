@@ -121,7 +121,7 @@ export async function assertDoctorPatientContextAccess(input: {
   user: AuthedUser;
   patientId: string;
 }): Promise<void> {
-  if (input.user.role !== "doctor") {
+  if (input.user.role !== "doctor" && input.user.role !== "assistant") {
     throw new AiConversationError("invalid_patient_context");
   }
 
@@ -136,6 +136,7 @@ export async function assertDoctorPatientContextAccess(input: {
     throw new AiConversationError("invalid_patient_context");
   }
   if (
+    input.user.role === "doctor" &&
     patient.assigned_doctor_id !== input.user.id &&
     (!input.user.departmentId || patient.department_id !== input.user.departmentId)
   ) {
@@ -168,7 +169,11 @@ export async function ensureDoctorConversation(input: {
   if (existingError) throw new AiConversationError("persistence_failed");
   const requestedPatientId = input.patientId ?? null;
 
-  if (requestedPatientId && input.user.role !== "doctor") {
+  if (
+    requestedPatientId &&
+    input.user.role !== "doctor" &&
+    input.user.role !== "assistant"
+  ) {
     throw new AiConversationError("invalid_patient_context");
   }
 

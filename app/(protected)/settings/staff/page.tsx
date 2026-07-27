@@ -57,6 +57,24 @@ export default async function StaffSettingsPage() {
   const departments = cachedDepts.filter((d) => !d.deleted_at && d.is_active);
   const cutoff = new Date(new Date().getTime() - THIRTY_DAYS_MS).toISOString();
   const staff = allStaff.filter((s) => !s.deleted_at);
+  // Active doctors are the assignable supervisors for the assistant role.
+  const doctors = allStaff
+    .filter((s) => s.role === "doctor" && s.is_active && !s.deleted_at)
+    .map((s) => ({ id: s.id, full_name: s.full_name }));
+
+  // Current supervising-doctor assignments per assistant, for the edit form.
+  const assignmentsByAssistant: Record<string, string[]> = {};
+  if (staff.some((s) => s.role === "assistant")) {
+    const { data: assignmentRows } = await createClinicScopedAdminClient(
+      user.clinicId,
+    )
+      .from("assistant_doctor_assignments")
+      .select("assistant_id, doctor_id")
+      .eq("clinic_id", user.clinicId);
+    for (const row of assignmentRows ?? []) {
+      (assignmentsByAssistant[row.assistant_id] ??= []).push(row.doctor_id);
+    }
+  }
   const trashedStaff = allStaff.filter(
     (s) => s.deleted_at && s.deleted_at > cutoff,
   );
@@ -83,6 +101,7 @@ export default async function StaffSettingsPage() {
             departments={
               (departments ?? []).map(({ id, name }) => ({ id, name }))
             }
+            doctors={doctors}
             currentRole={user.role}
             canCustomize={canCustomize}
           />
@@ -98,6 +117,8 @@ export default async function StaffSettingsPage() {
             staff as Parameters<typeof StaffByDepartment>[0]["staff"]
           }
           departments={departments ?? []}
+          doctors={doctors}
+          assignmentsByAssistant={assignmentsByAssistant}
           currentUserId={user.id}
           lastSeenMap={lastSeenMap ?? undefined}
           isAdmin={user.role === "admin"}

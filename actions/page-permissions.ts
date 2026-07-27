@@ -335,6 +335,21 @@ export async function resetUserPageVisibilityToRoleDefaults(
   targetUserId: string,
 ): Promise<PagePermissionResult> {
   const user = await requireMutationRole("admin");
+  if (!(await isPrimaryClinicAdmin(user.id, user.clinicId))) {
+    return {
+      error: await actionError(
+        "page-permissions.onlyThePrimaryClinicAdminCanCustomizePageVisibility",
+      ),
+    };
+  }
+  const primaryAdminId = await getPrimaryClinicAdminId(user.clinicId);
+  if (targetUserId === primaryAdminId) {
+    return {
+      error: await actionError(
+        "page-permissions.thePrimaryClinicAdminCannotBeCustomized",
+      ),
+    };
+  }
   const adminClient = createClinicScopedAdminClient(user.clinicId);
   const { data: target, error: targetError } = await adminClient
     .from("profiles")
@@ -344,10 +359,6 @@ export async function resetUserPageVisibilityToRoleDefaults(
     .single();
 
   if (targetError || !target) return { error: await actionError("page-permissions.staffMemberNotFound") };
-  if (user.role === "manager" && target.role === "admin") {
-    return { error: await actionError("page-permissions.onlyAdminsCanResetAdminUsers") };
-  }
-
   const { error: deleteError } = await adminClient
     .from("user_page_permissions")
     .delete()

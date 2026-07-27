@@ -23,6 +23,9 @@ export default async function OnboardingPage() {
   ]);
   const departments = cachedDepartments.filter((department) => !department.deleted_at && department.is_active);
   const staff = cachedStaff.filter((member) => !member.deleted_at);
+  const doctors = cachedStaff
+    .filter((member) => member.role === "doctor" && member.is_active && !member.deleted_at)
+    .map((member) => ({ id: member.id, full_name: member.full_name }));
 
   return <div className="mx-auto max-w-5xl space-y-8 p-6 lg:p-10">
     <header><p className="text-sm font-medium text-primary">{t("clinicSetup")}</p><h1 className="mt-1 text-3xl font-bold tracking-tight">{t("buildYourClinicWorkspace")}</h1><p className="mt-2 text-muted-foreground">{t("theseStepsAreSafeToRepeat")}</p></header>
@@ -31,7 +34,7 @@ export default async function OnboardingPage() {
 
     <section className="rounded-xl border bg-card p-6"><h2 className="text-xl font-semibold">{t("2DepartmentsAndServices")}</h2><p className="mb-5 mt-1 text-sm text-muted-foreground">{t("createYourCareStructureAndPrice")}</p><div className="flex flex-wrap gap-3"><AddDepartmentDialog /><AddServiceDialog departments={departments} /><AddInsuranceDialog /></div></section>
 
-    <section className="rounded-xl border bg-card p-6"><h2 className="text-xl font-semibold">{t("3DoctorsStaffAndSchedules")}</h2><p className="mb-5 mt-1 text-sm text-muted-foreground">{t("inviteYourTeamThenOpenA")}</p><div className="mb-5"><AddStaffDialog departments={departments} currentRole={user.role} canCustomize={canCustomize} /></div><StaffByDepartment staff={staff as Parameters<typeof StaffByDepartment>[0]["staff"]} departments={departments} currentUserId={user.id} isAdmin /></section>
+    <section className="rounded-xl border bg-card p-6"><h2 className="text-xl font-semibold">{t("3DoctorsStaffAndSchedules")}</h2><p className="mb-5 mt-1 text-sm text-muted-foreground">{t("inviteYourTeamThenOpenA")}</p><div className="mb-5"><AddStaffDialog departments={departments} doctors={doctors} currentRole={user.role} canCustomize={canCustomize} /></div><StaffByDepartment staff={staff as Parameters<typeof StaffByDepartment>[0]["staff"]} departments={departments} doctors={doctors} assignmentsByAssistant={{}} currentUserId={user.id} isAdmin /></section>
 
     <section className="rounded-xl border border-primary/30 bg-primary/5 p-6"><h2 className="text-xl font-semibold">{t("readyToStart")}</h2><p className="mb-5 mt-1 text-sm text-muted-foreground">{t("completingSetupUnlocksTheDashboardThis")}</p><form action={completeOnboarding}><Button size="lg">{t("completeSetup")}</Button></form></section>
   </div>;

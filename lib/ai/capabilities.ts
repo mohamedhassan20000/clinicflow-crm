@@ -22,6 +22,7 @@ import {
   allowedClinicReports,
   type ClinicReportId,
 } from "@/lib/ai/clinic-reports";
+import { getVisibleReportIds } from "@/lib/server-report-permissions";
 
 /**
  * Why the financial group is absent, when it is. The distinction is the whole
@@ -217,10 +218,13 @@ export async function resolveAssistantCapabilities(
         ? "available"
         : await explainFinancialAbsence(user),
       allowedReportIds: mounted.has("run_clinic_report")
-        ? allowedClinicReports(user.role, {
-            financialGranted:
-              grantedPermissions?.has(AI_FINANCIAL_INSIGHTS_PERMISSION) ?? false,
-          })
+        ? await visibleAllowedReportIds(
+            user,
+            allowedClinicReports(user.role, {
+              financialGranted:
+                grantedPermissions?.has(AI_FINANCIAL_INSIGHTS_PERMISSION) ?? false,
+            }),
+          )
         : [],
     };
   } catch (error) {
@@ -241,6 +245,20 @@ export async function resolveAssistantCapabilities(
  * inferring from the mount, because the mount collapses the two causes into a
  * single absence.
  */
+/**
+ * Discovery must honor per-user report visibility, not only role/entitlement:
+ * a report an admin hid for this employee is not advertised as a capability.
+ * Authorization is still re-checked in the tool's execute(); this filters the
+ * presented list so the two agree.
+ */
+async function visibleAllowedReportIds(
+  user: AuthedUser,
+  roleAllowed: ClinicReportId[],
+): Promise<ClinicReportId[]> {
+  const visible = new Set(await getVisibleReportIds(user));
+  return roleAllowed.filter((id) => visible.has(id));
+}
+
 async function explainFinancialAbsence(
   user: AuthedUser,
 ): Promise<Exclude<FinancialCapabilityState, "available">> {

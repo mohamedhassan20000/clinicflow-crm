@@ -519,7 +519,7 @@ export default async function DashboardPage() {
     );
   }
 
-  if (user.role === "receptionist") {
+  if (user.role === "receptionist" || user.role === "assistant") {
     const today = todayBounds();
     const next2h = nextNHoursBounds(2);
 
@@ -531,7 +531,7 @@ export default async function DashboardPage() {
       { data: pendingAppts },
       { data: next2hAppts },
       inSessionGroups,
-    ] = logAndReturn("receptionist", await Promise.all([
+    ] = logAndReturn(user.role, await Promise.all([
       supabase
         .from("appointments")
         .select("id", { count: "exact", head: true })
@@ -552,21 +552,27 @@ export default async function DashboardPage() {
         .lte("scheduled_at", today.end),
       supabase
         .from("appointments")
-        .select("*, patients(full_name), profiles!doctor_id(full_name)")
+        .select(
+          "id, clinic_id, patient_id, doctor_id, scheduled_at, status, insurance_provider_id, updated_at, duration_minutes, patients(full_name), profiles!doctor_id(full_name)",
+        )
         .eq("clinic_id", clinicId)
         .gte("scheduled_at", today.start)
         .lte("scheduled_at", today.end)
         .order("scheduled_at"),
       supabase
         .from("appointments")
-        .select("*, patients(full_name), profiles!doctor_id(full_name)")
+        .select(
+          "id, clinic_id, patient_id, doctor_id, scheduled_at, status, insurance_provider_id, updated_at, duration_minutes, patients(full_name), profiles!doctor_id(full_name)",
+        )
         .eq("clinic_id", clinicId)
         .eq("status", "pending")
         .order("scheduled_at")
         .limit(20),
       supabase
         .from("appointments")
-        .select("*, patients(full_name), profiles!doctor_id(full_name)")
+        .select(
+          "id, clinic_id, patient_id, doctor_id, scheduled_at, status, insurance_provider_id, updated_at, duration_minutes, patients(full_name), profiles!doctor_id(full_name)",
+        )
         .eq("clinic_id", clinicId)
         .gte("scheduled_at", next2h.start)
         .lte("scheduled_at", next2h.end)
@@ -579,6 +585,8 @@ export default async function DashboardPage() {
       <ReceptionistDashboard
         assistantLauncher={dashboardAssistantLauncher(await assistantPromise, user.role)}
         fullName={user.fullName}
+        currentUserRole={user.role}
+        canCreatePatients={user.role === "receptionist"}
         todayCount={todayCount ?? 0}
         pendingCount={pendingCount ?? 0}
         confirmedCount={confirmedCount ?? 0}
@@ -592,7 +600,7 @@ export default async function DashboardPage() {
 
   if (user.role === "doctor") {
     const thisMonth = monthBounds(0);
-    const deptId = user.departmentId ?? "";
+    const deptId = user.departmentId;
 
     const [initial, { data: deptInfo }] = await Promise.all([
       fetchDoctorDashboardStats(clinicId, user.id, deptId, thisMonth.start, thisMonth.end),

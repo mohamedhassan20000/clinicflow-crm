@@ -230,6 +230,7 @@ export function staffTaskForRole(
   task: AiTaskClass;
   persona: AiPersona;
 } {
+  const isClinicalRole = role === "doctor" || role === "assistant";
   // Help routing is checked before the persona split because "how do I use
   // this?" is the same question from every role, and answering it out of the
   // clinical budget is the exact waste P4.7 exists to stop. The persona still
@@ -238,7 +239,7 @@ export function staffTaskForRole(
   if (isHelpIntent(options.messageText)) {
     return {
       task: "staff_help",
-      persona: role === "doctor" ? "doctor" : "administrative_staff",
+      persona: isClinicalRole ? "doctor" : "administrative_staff",
     };
   }
 
@@ -248,11 +249,11 @@ export function staffTaskForRole(
   ) {
     return {
       task: "staff_workflow",
-      persona: role === "doctor" ? "doctor" : "administrative_staff",
+      persona: isClinicalRole ? "doctor" : "administrative_staff",
     };
   }
 
-  if (role === "doctor") {
+  if (isClinicalRole) {
     return { task: "staff_clinical_summary", persona: "doctor" };
   }
 

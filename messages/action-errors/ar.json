@@ -52,6 +52,9 @@
     "failedToCheckForConflicts": "تعذر إكمال الطلب. يُرجى المحاولة مرة أخرى.",
     "failedToConfirmAppointment": "تعذر إكمال الطلب. يُرجى المحاولة مرة أخرى.",
     "failedToCreateAppointmentPleaseTryAgain": "تعذر إكمال الطلب. يُرجى المحاولة مرة أخرى.",
+    "failedToLoadReplacementHistory": "تعذر تحميل سجل الاستبدال. يُرجى المحاولة مرة أخرى.",
+    "replacementTimeMustBeInTheFuture": "يجب أن يكون وقت الاستبدال في المستقبل.",
+    "onlyFutureOpenAppointmentsCanBeReplaced": "لا يمكن استبدال إلا موعد مستقبلي قيد الانتظار أو مؤكد.",
     "failedToDismissAppointment": "تعذر إكمال الطلب. يُرجى المحاولة مرة أخرى.",
     "failedToMarkAppointmentAsArrived": "تعذر إكمال الطلب. يُرجى المحاولة مرة أخرى.",
     "failedToUpdateStatus": "تعذر إكمال الطلب. يُرجى المحاولة مرة أخرى.",
@@ -77,6 +80,7 @@
     "thisDoctorIsAlreadyBookedDuringTheSelectedSessionTime": "الطبيب محجوز خلال وقت الجلسة المحدد. اختر وقتًا مختلفًا.",
     "thisDoctorNeedsA15MinuteRecoveryBufferWindowBetween": "يحتاج الطبيب إلى فاصل 15 دقيقة بين المواعيد. اختر وقتًا مختلفًا.",
     "thisPatientAlreadyHasAnotherAppointmentAtTheSameTime": "لدى هذا المريض موعد آخر في الوقت نفسه. اختر وقتًا مختلفًا.",
+    "validationError": "بيانات استبدال الموعد غير صالحة.",
     "weCouldNotCompleteThisRequestPleaseTryAgain": "تعذر إكمال الطلب. يُرجى المحاولة مرة أخرى.",
     "youCanOnlyUpdateYourOwnAppointments": "يمكنك تحديث مواعيدك فقط."
   },

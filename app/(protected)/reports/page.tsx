@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
-import { requireRole } from "@/lib/rbac";
-import { canSeePerformanceReports } from "@/types/reports";
+import { requireReportsIndexAccess } from "@/lib/reports/access";
 import { ReportsIndex } from "@/components/reports/reports-index";
 import { getTranslations } from "next-intl/server";
 
@@ -10,7 +9,7 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function ReportsPage() {
-  const user = await requireRole(["admin", "manager", "receptionist"]);
+  const { visibleOpenableReportIds } = await requireReportsIndexAccess();
 
-  return <ReportsIndex canSeePerformanceReports={canSeePerformanceReports(user.role)} />;
+  return <ReportsIndex visibleReportIds={visibleOpenableReportIds} />;
 }

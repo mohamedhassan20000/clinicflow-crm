@@ -43,7 +43,7 @@ function firstRelation<T>(value: T | T[] | null): T | null {
 }
 
 export async function fetchReceptionInSessionBoard(): Promise<ReceptionInSessionGroup[]> {
-  const user = await requireRole(["admin", "receptionist"]);
+  const user = await requireRole(["admin", "receptionist", "assistant"]);
   const supabase = await createClient();
 
   const { data, error } = await supabase

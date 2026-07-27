@@ -29,9 +29,14 @@ export type DisplacedAppointmentItem = {
 interface DisplacedAppointmentsProps {
   items: DisplacedAppointmentItem[];
   returnHref?: string;
+  canDismiss?: boolean;
 }
 
-export function DisplacedAppointments({ items, returnHref = "/appointments" }: DisplacedAppointmentsProps) {
+export function DisplacedAppointments({
+  items,
+  returnHref = "/appointments",
+  canDismiss = true,
+}: DisplacedAppointmentsProps) {
   const t = useTranslations("appointments");
   const { formatTime } = useClinicSettings();
   const [collapsed, setCollapsed] = useState(false);
@@ -131,16 +136,18 @@ export function DisplacedAppointments({ items, returnHref = "/appointments" }: D
                         <RefreshCw className="h-3 w-3" />
                         {t("rebook")}</Link>
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-                      disabled={isPending}
-                      onClick={() => handleDismiss(item.id)}
-                      title={t("dismiss")}
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </Button>
+                    {canDismiss ? (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                        disabled={isPending}
+                        onClick={() => handleDismiss(item.id)}
+                        title={t("dismiss")}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
+                    ) : null}
                   </div>
                 </div>
               );

@@ -50,7 +50,7 @@ export function listAppointmentsTool(ctx: DoctorToolContext) {
           "Set true only when the user explicitly refers to the active appointment (for example, “this appointment”). Omit or set false for broad appointment lists.",
         ),
       status: z
-        .enum(["pending", "confirmed", "completed", "cancelled", "no_show"])
+        .enum(["pending", "confirmed", "completed", "cancelled", "no_show", "replaced"])
         .optional()
         .describe("Optional appointment status filter."),
       doctor: z

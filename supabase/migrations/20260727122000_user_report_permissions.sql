@@ -1,0 +1,67 @@
+-- Phase 1: per-user report visibility, mirroring user_page_permissions.
+--
+-- Report access requires BOTH this per-user visibility flag AND the caller's
+-- authorized data scope (enforced independently by the scope-aware report RPCs).
+-- Visibility never grants authorization; it only hides an otherwise-authorized
+-- report. `report_id` is a free-form text key owned by the code-side report
+-- catalog (lib/reports/catalog.ts) so new reports need no schema change.
+create table if not exists public.user_report_permissions (
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  report_id text not null,
+  is_visible boolean not null default true,
+  clinic_id uuid not null references public.clinics(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (user_id, report_id)
+);
+create index if not exists user_report_permissions_clinic_id_idx
+  on public.user_report_permissions (clinic_id);
+
+create or replace function public.touch_user_report_permissions_updated_at()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+drop trigger if exists touch_user_report_permissions_updated_at
+  on public.user_report_permissions;
+create trigger touch_user_report_permissions_updated_at
+before update on public.user_report_permissions
+for each row
+execute function public.touch_user_report_permissions_updated_at();
+
+alter table public.user_report_permissions enable row level security;
+
+drop policy if exists "Users can read own report permissions"
+  on public.user_report_permissions;
+create policy "Users can read own report permissions"
+  on public.user_report_permissions
+  for select
+  using (user_id = auth.uid());
+
+drop policy if exists "Admins can manage clinic report permissions"
+  on public.user_report_permissions;
+create policy "Admins can manage clinic report permissions"
+  on public.user_report_permissions
+  for all
+  using (
+    exists (
+      select 1
+      from public.profiles p
+      where p.id = auth.uid()
+        and p.clinic_id = user_report_permissions.clinic_id
+        and p.role = 'admin'
+    )
+  )
+  with check (
+    exists (
+      select 1
+      from public.profiles p
+      where p.id = auth.uid()
+        and p.clinic_id = user_report_permissions.clinic_id
+        and p.role = 'admin'
+    )
+  );

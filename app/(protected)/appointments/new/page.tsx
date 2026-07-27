@@ -26,7 +26,7 @@ interface PageProps {
 
 export default async function NewAppointmentPage({ searchParams }: PageProps) {
   const t = await getTranslations("protected");
-  const user = await requireRole(["admin", "receptionist"]);
+  const user = await requireRole(["admin", "receptionist", "manager", "assistant"]);
   const { patient_id, doctor_id, dept_id, insurance_id, returnTo } = await searchParams;
   const allowedParentPaths = [
     "/appointments",
@@ -58,8 +58,17 @@ export default async function NewAppointmentPage({ searchParams }: PageProps) {
       getClinicWorkingHours(),
     ]);
 
+  // Assistants may only book for the doctors they are actively assigned to, so
+  // the doctor dropdown is scoped to their supervised set. (RLS independently
+  // rejects any out-of-scope doctor_id, so this is UX, not the security gate.)
+  let supervisedDoctorIds: Set<string> | null = null;
+  if (user.role === "assistant") {
+    const { data: supervised } = await supabase.rpc("auth_supervised_doctor_ids");
+    supervisedDoctorIds = new Set((supervised as string[] | null) ?? []);
+  }
   const doctors = cachedStaff
     .filter((s) => s.role === "doctor" && s.is_active && !s.deleted_at)
+    .filter((s) => !supervisedDoctorIds || supervisedDoctorIds.has(s.id))
     .map((s) => ({ id: s.id, full_name: s.full_name, department_id: s.department_id }));
   const departments = cachedDepartments
     .filter((d) => !d.deleted_at && d.is_active)

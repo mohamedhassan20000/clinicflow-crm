@@ -12,6 +12,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/appointments/status-badge";
 import { AppointmentActions } from "@/components/appointments/appointment-actions";
+import { ReplacementChain } from "@/components/appointments/replacement-chain";
+import { ActivityTimeline } from "@/components/activity/activity-timeline";
 import { DeleteConfirmDialog } from "@/components/appointments/delete-confirm-dialog";
 import { softDeleteAppointment, restoreAppointment } from "@/actions/appointments";
 import type { Tables } from "@/types/database";
@@ -32,6 +34,8 @@ export type AppointmentForDetail = Pick<
   | "duration_minutes"
   | "package_id"
   | "package_session_number"
+  | "replaces_appointment_id"
+  | "replaced_by_appointment_id"
 > & {
   patients: {
     full_name: string;
@@ -54,7 +58,7 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   canEdit: boolean;
   currentUserId?: string;
-  currentUserRole?: "admin" | "receptionist" | "manager" | "doctor";
+  currentUserRole?: "admin" | "receptionist" | "manager" | "doctor" | "assistant";
   onDeleted?: () => void;
 }
 
@@ -212,6 +216,11 @@ export function AppointmentDetailDialog({
               </div>
             </section>
 
+            {(appt.replaced_by_appointment_id ||
+              appt.replaces_appointment_id) && (
+              <ReplacementChain key={appt.id} appointmentId={appt.id} />
+            )}
+
             {packageInfo && (
               <section className="space-y-2">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -244,6 +253,9 @@ export function AppointmentDetailDialog({
               </section>
             )}
 
+            {/* Activity trail (Phase 8D) */}
+            <ActivityTimeline entityType="appointment" entityId={apptId} />
+
             {/* Status actions */}
             {(canEdit || currentUserRole === "doctor") && (
               <div className="pt-1" onClick={(e) => e.stopPropagation()}>
@@ -252,6 +264,8 @@ export function AppointmentDetailDialog({
                   currentStatus={appt.status}
                   patientId={appt.patient_id}
                   doctorId={appt.doctor_id}
+                  scheduledAt={appt.scheduled_at}
+                  durationMinutes={appt.duration_minutes}
                   currentUserId={currentUserId}
                   currentUserRole={currentUserRole}
                   onActionComplete={() => onOpenChange(false)}

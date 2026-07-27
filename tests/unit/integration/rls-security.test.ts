@@ -675,6 +675,30 @@ describe("RLS security integration", () => {
     expect(adminProfile?.full_name).toBe("RLS Admin");
   });
 
+  it("records last login through the RPC while direct protected-field writes remain blocked", async () => {
+    for (const key of ["admin", "manager"] as const) {
+      const direct = await clients[key]
+        .from("profiles")
+        .update({ last_login_at: new Date(0).toISOString() })
+        .eq("id", userIds[key]);
+      expect(direct.error).not.toBeNull();
+
+      const rpc = await clients[key].rpc("record_own_last_login");
+      expect(rpc.error).toBeNull();
+      expect(rpc.data).toBe(true);
+
+      const { data } = await service
+        .from("profiles")
+        .select("last_login_at")
+        .eq("id", userIds[key])
+        .single();
+      expect(data?.last_login_at).not.toBeNull();
+      expect(new Date(data!.last_login_at!).getTime()).toBeGreaterThan(
+        Date.now() - 30_000,
+      );
+    }
+  });
+
   it("scopes medical note reads to admin clinic-wide and doctor allowed patient scope", async () => {
     const adminNotes = await clients.admin
       .from("medical_notes")

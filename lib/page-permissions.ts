@@ -1,4 +1,17 @@
-export type PermissionUserRole = "admin" | "receptionist" | "manager" | "doctor";
+export type PermissionUserRole =
+  | "admin"
+  | "receptionist"
+  | "manager"
+  | "doctor"
+  | "assistant";
+
+export const PERMISSION_USER_ROLES: readonly PermissionUserRole[] = [
+  "admin",
+  "receptionist",
+  "manager",
+  "doctor",
+  "assistant",
+];
 
 export type PageSlug =
   | "dashboard"
@@ -13,47 +26,159 @@ export type PageSlug =
 
 /**
  * P2C — a page definition is authorization data, and carries no display copy.
+ * The label lives in the message catalog (`nav.tenant.<slug>`), never here.
  *
- * The label lived here until P2C and was the reason the sidebar could not be translated: it was
- * resolved on the server and serialized into the client as a finished English string. Every consumer
- * now translates `nav.tenant.<slug>` from the message catalog instead, so the page's name and the
- * page's permissions are no longer the same object's problem.
+ * Future-proof page catalog: this is the SINGLE registration point for a page.
+ * `defaultVisibilityByRole` is role-keyed so a new page (or a new role) only has
+ * to be declared here to participate everywhere — navigation, role defaults,
+ * Customize, the permissions UI, and Reset to Product Defaults all derive from
+ * this catalog. Nothing downstream hardcodes a per-role page list.
  */
 export type PageDefinition = {
   slug: PageSlug;
   href: string;
   alwaysVisible?: boolean;
+  defaultVisibilityByRole: Record<PermissionUserRole, boolean>;
 };
 
-export const PAGE_DEFINITIONS: PageDefinition[] = [
-  { slug: "dashboard", href: "/dashboard", alwaysVisible: true },
-  { slug: "patients", href: "/patients" },
-  { slug: "appointments", href: "/appointments" },
-  { slug: "assistant", href: "/assistant" },
-  { slug: "inbox", href: "/inbox" },
-  { slug: "followups", href: "/followups" },
-  { slug: "revenue", href: "/revenue" },
-  { slug: "reports", href: "/reports" },
-  { slug: "settings", href: "/settings" },
+/** Shorthand builder so the catalog stays scannable. */
+function visibility(
+  roles: Partial<Record<PermissionUserRole, boolean>>,
+): Record<PermissionUserRole, boolean> {
+  return {
+    admin: roles.admin ?? false,
+    receptionist: roles.receptionist ?? false,
+    manager: roles.manager ?? false,
+    doctor: roles.doctor ?? false,
+    assistant: roles.assistant ?? false,
+  };
+}
+
+export const PAGE_CATALOG: readonly PageDefinition[] = [
+  {
+    slug: "dashboard",
+    href: "/dashboard",
+    alwaysVisible: true,
+    defaultVisibilityByRole: visibility({
+      admin: true,
+      receptionist: true,
+      manager: true,
+      doctor: true,
+      assistant: true,
+    }),
+  },
+  {
+    slug: "patients",
+    href: "/patients",
+    defaultVisibilityByRole: visibility({
+      admin: true,
+      receptionist: true,
+      doctor: true,
+      assistant: true,
+    }),
+  },
+  {
+    slug: "appointments",
+    href: "/appointments",
+    // Manager gains Appointments (P-role-expansion). Authorization unchanged.
+    defaultVisibilityByRole: visibility({
+      admin: true,
+      receptionist: true,
+      manager: true,
+      doctor: true,
+      assistant: true,
+    }),
+  },
+  {
+    slug: "assistant",
+    href: "/assistant",
+    defaultVisibilityByRole: visibility({
+      admin: true,
+      receptionist: true,
+      manager: true,
+      doctor: true,
+      assistant: true,
+    }),
+  },
+  {
+    slug: "inbox",
+    href: "/inbox",
+    defaultVisibilityByRole: visibility({ admin: true, receptionist: true }),
+  },
+  {
+    slug: "followups",
+    href: "/followups",
+    // Manager gains Follow-ups (P-role-expansion). Authorization unchanged.
+    defaultVisibilityByRole: visibility({
+      admin: true,
+      receptionist: true,
+      manager: true,
+      doctor: true,
+      assistant: true,
+    }),
+  },
+  {
+    slug: "revenue",
+    href: "/revenue",
+    defaultVisibilityByRole: visibility({ admin: true, manager: true }),
+  },
+  {
+    slug: "reports",
+    href: "/reports",
+    // Doctor + Assistant gain Reports (scoped to their authorized data).
+    defaultVisibilityByRole: visibility({
+      admin: true,
+      receptionist: true,
+      manager: true,
+      doctor: true,
+      assistant: true,
+    }),
+  },
+  {
+    slug: "settings",
+    href: "/settings",
+    defaultVisibilityByRole: visibility({ admin: true, manager: true }),
+  },
 ];
 
-export const ROLE_PAGE_SLUGS: Record<PermissionUserRole, PageSlug[]> = {
-  admin: ["dashboard", "patients", "appointments", "assistant", "inbox", "followups", "revenue", "reports", "settings"],
-  receptionist: ["dashboard", "patients", "appointments", "assistant", "inbox", "followups", "reports"],
-  doctor: ["dashboard", "patients", "appointments", "assistant", "followups"],
-  manager: ["dashboard", "assistant", "revenue", "reports", "settings"],
-};
+/**
+ * Back-compat alias. `PAGE_DEFINITIONS` remains the flat page list consumers
+ * iterate for navigation/labels; it is now a view over {@link PAGE_CATALOG}.
+ */
+export const PAGE_DEFINITIONS: readonly PageDefinition[] = PAGE_CATALOG;
+
+/** Derived role → default-visible-slugs map (single source: the catalog). */
+export const ROLE_PAGE_SLUGS: Record<PermissionUserRole, PageSlug[]> =
+  PERMISSION_USER_ROLES.reduce(
+    (acc, role) => {
+      acc[role] = PAGE_CATALOG.filter(
+        (page) => page.defaultVisibilityByRole[role],
+      ).map((page) => page.slug);
+      return acc;
+    },
+    {} as Record<PermissionUserRole, PageSlug[]>,
+  );
+
+function isPermissionUserRole(
+  role: string | null | undefined,
+): role is PermissionUserRole {
+  return (
+    role === "admin" ||
+    role === "receptionist" ||
+    role === "doctor" ||
+    role === "manager" ||
+    role === "assistant"
+  );
+}
 
 export function getRolePageSlugs(role: string | null | undefined): PageSlug[] {
-  if (role === "admin" || role === "receptionist" || role === "doctor" || role === "manager") {
-    return ROLE_PAGE_SLUGS[role];
-  }
+  if (isPermissionUserRole(role)) return ROLE_PAGE_SLUGS[role];
   return ["dashboard"];
 }
 
 export function getRolePages(role: string | null | undefined): PageDefinition[] {
   const allowed = new Set(getRolePageSlugs(role));
-  return PAGE_DEFINITIONS.filter((page) => allowed.has(page.slug));
+  return PAGE_CATALOG.filter((page) => allowed.has(page.slug));
 }
 
 export function getPageSlugFromPath(pathname: string): PageSlug | null {

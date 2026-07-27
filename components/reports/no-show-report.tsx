@@ -33,6 +33,8 @@ export function NoShowReport({
           { label: t("appointments"), value: formatNumber(data.totalAppointments, locale) },
           { label: t("noShows2"), value: formatNumber(data.noShowCount, locale) },
           { label: t("noShowRate"), value: formatPercent(data.noShowRate, locale) },
+          { label: t("replaced2"), value: formatNumber(data.replacedCount, locale) },
+          { label: t("replacementRate"), value: formatPercent(data.replacementRate, locale) },
         ]}
       />
 

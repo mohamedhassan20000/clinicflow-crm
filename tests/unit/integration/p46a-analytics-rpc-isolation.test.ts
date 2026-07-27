@@ -90,6 +90,7 @@ function patientRow(
 let adminA: Client;
 let managerA: Client;
 let receptionistA: Client;
+let assistantA: Client;
 let adminB: Client;
 let adminBasic: Client;
 let adminSkew: Client;
@@ -109,10 +110,11 @@ async function cleanup() {
 }
 
 beforeAll(async () => {
-  const [a, m, r, b, basic, skew] = await Promise.all([
+  const [a, m, r, assistant, b, basic, skew] = await Promise.all([
     createUser("admin-a"),
     createUser("manager-a"),
     createUser("receptionist-a"),
+    createUser("assistant-a"),
     createUser("admin-b"),
     createUser("admin-basic"),
     createUser("admin-skew"),
@@ -120,6 +122,7 @@ beforeAll(async () => {
   adminA = a.client;
   managerA = m.client;
   receptionistA = r.client;
+  assistantA = assistant.client;
   adminB = b.client;
   adminBasic = basic.client;
   adminSkew = skew.client;
@@ -165,6 +168,7 @@ beforeAll(async () => {
     { id: a.id, clinic_id: clinicA, full_name: "P46A Admin A", role: "admin" },
     { id: m.id, clinic_id: clinicA, full_name: "P46A Manager A", role: "manager" },
     { id: r.id, clinic_id: clinicA, full_name: "P46A Receptionist A", role: "receptionist" },
+    { id: assistant.id, clinic_id: clinicA, full_name: "P46A Assistant A", role: "assistant" },
     { id: b.id, clinic_id: clinicB, full_name: "P46A Admin B", role: "admin" },
     { id: basic.id, clinic_id: clinicBasic, full_name: "P46A Admin Basic", role: "admin" },
     { id: skew.id, clinic_id: clinicSkew, full_name: "P46A Admin Skew", role: "admin" },
@@ -619,6 +623,20 @@ describe("P4.6A aggregate RPC role matrix", () => {
     const result = await receptionistA.rpc("ai_get_revenue_summary", RANGE);
     expect(result.error).not.toBeNull();
     expect(result.error?.message).toContain("Not authorized for financial analytics");
+  });
+
+  it("refuses assistants every clinic-wide analytics scope at the database boundary", async () => {
+    for (const p_scope of [
+      "operational",
+      "clinic_analytics",
+      "financial",
+    ] as const) {
+      const result = await assistantA.rpc(
+        "ai_assert_analytics_caller" as never,
+        { p_scope } as never,
+      );
+      expect(result.error?.code).toBe("42501");
+    }
   });
 
   it("refuses an unsupported grouping instead of silently defaulting", async () => {

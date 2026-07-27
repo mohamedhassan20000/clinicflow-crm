@@ -3,7 +3,9 @@
 import { memo, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { Repeat } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ReplaceAppointmentDialog } from "@/components/appointments/replace-appointment-dialog";
 import { cn } from "@/lib/utils";
 import {
   arriveAppointment,
@@ -29,7 +31,7 @@ import { SettleOutstandingDialog } from "@/components/patients/settle-outstandin
 import { useTranslations } from "next-intl";
 
 type Status = Database["public"]["Enums"]["appointment_status"];
-type UserRole = "admin" | "receptionist" | "manager" | "doctor";
+type UserRole = "admin" | "receptionist" | "manager" | "doctor" | "assistant";
 type RestorableStatus = Extract<Status, "pending" | "confirmed" | "arrived" | "in_session">;
 type PendingAction =
   | "confirm"
@@ -40,13 +42,15 @@ type PendingAction =
   | "no_show"
   | "undo";
 
-const TERMINAL: Status[] = ["completed", "cancelled", "no_show"];
+const TERMINAL: Status[] = ["completed", "cancelled", "no_show", "replaced"];
 
 function AppointmentActionsInner({
   appointmentId,
   currentStatus,
   patientId,
   doctorId,
+  scheduledAt,
+  durationMinutes,
   currentUserId,
   currentUserRole = "receptionist",
   onActionComplete,
@@ -55,6 +59,8 @@ function AppointmentActionsInner({
   currentStatus: Status;
   patientId?: string;
   doctorId?: string;
+  scheduledAt?: string;
+  durationMinutes?: number;
   currentUserId?: string;
   currentUserRole?: UserRole;
   /** @deprecated kept for back-compat */
@@ -68,6 +74,7 @@ function AppointmentActionsInner({
   const [cancelOpen, setCancelOpen] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [noShowOpen, setNoShowOpen] = useState(false);
+  const [replaceOpen, setReplaceOpen] = useState(false);
   const [isNoShow, setIsNoShow] = useState(false);
   const [optimisticStatus, setOptimisticStatus] = useState<Status | null>(null);
   const [conflictModalOpen, setConflictModalOpen] = useState(false);
@@ -86,6 +93,18 @@ function AppointmentActionsInner({
   const hasPendingAction = pendingAction !== null;
   const isFrontDesk =
     currentUserRole === "admin" || currentUserRole === "receptionist";
+  // Non-financial operational status actions (confirm / check-in / cancel /
+  // no-show). Managers and assistants operate their scoped appointments; the
+  // data layer (RLS + scoped guards) still limits an assistant to their assigned
+  // doctors' appointments.
+  const canOperate =
+    isFrontDesk ||
+    currentUserRole === "manager" ||
+    currentUserRole === "assistant";
+  const canReplace = canOperate || currentUserRole === "doctor";
+  // Completion opens the billing dialog — a financial action. Assistants are
+  // excluded (kept read-only for financials); managers/front-desk may complete.
+  const canComplete = isFrontDesk || currentUserRole === "manager";
   const isAssignedDoctor =
     currentUserRole === "doctor" &&
     effectiveStatus === "arrived" &&
@@ -123,7 +142,7 @@ function AppointmentActionsInner({
     return () => {
       active = false;
     };
-  }, [billingOpen, appointmentId, ctx]);
+  }, [billingOpen, appointmentId, ctx, t]);
 
   if (isTerminal || isUndoing) return null;
 
@@ -416,19 +435,27 @@ function AppointmentActionsInner({
     });
   }
 
-  const showConfirm = isFrontDesk && effectiveStatus === "pending";
-  const showArrive = isFrontDesk && effectiveStatus === "confirmed";
+  const showConfirm = canOperate && effectiveStatus === "pending";
+  const showArrive = canOperate && effectiveStatus === "confirmed";
   const showComplete =
-    isFrontDesk &&
+    canComplete &&
     (effectiveStatus === "confirmed" ||
       effectiveStatus === "arrived" ||
       effectiveStatus === "in_session");
   const showCancel =
-    isFrontDesk &&
+    canOperate &&
     (effectiveStatus === "pending" ||
       effectiveStatus === "confirmed");
-  const showNoShow = isFrontDesk && effectiveStatus === "confirmed";
+  const showNoShow = canOperate && effectiveStatus === "confirmed";
   const showStartSession = isAssignedDoctor;
+  // Replace is a dedicated reschedule workflow, only for a FUTURE pending/
+  // confirmed appointment. Non-financial → available to the same operators.
+  const showReplace =
+    canReplace &&
+    (effectiveStatus === "pending" || effectiveStatus === "confirmed") &&
+    !!doctorId &&
+    !!scheduledAt &&
+    new Date(scheduledAt) > new Date();
 
   if (
     !showConfirm &&
@@ -436,7 +463,8 @@ function AppointmentActionsInner({
     !showComplete &&
     !showCancel &&
     !showNoShow &&
-    !showStartSession
+    !showStartSession &&
+    !showReplace
   ) {
     return null;
   }
@@ -515,7 +543,33 @@ function AppointmentActionsInner({
           >
             {t("cancel")}</Button>
         )}
+        {showReplace && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-6 gap-1 px-2 text-[10px] font-semibold"
+            disabled={hasPendingAction}
+            onClick={() => setReplaceOpen(true)}
+          >
+            <Repeat className="size-3" aria-hidden="true" />
+            {t("replace")}</Button>
+        )}
       </div>
+
+      {showReplace && scheduledAt && doctorId && (
+        <ReplaceAppointmentDialog
+          open={replaceOpen}
+          onOpenChange={setReplaceOpen}
+          appointmentId={appointmentId}
+          doctorId={doctorId}
+          defaultScheduledAt={scheduledAt}
+          defaultDurationMinutes={durationMinutes ?? 30}
+          onReplaced={() => {
+            onActionComplete?.();
+            router.refresh();
+          }}
+        />
+      )}
 
       <BillingDialog
         open={billingOpen}

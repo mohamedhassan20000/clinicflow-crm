@@ -22,7 +22,7 @@ const areaSchema = z.enum([
   "departments",
   "doctor-schedule",
 ]);
-const roleSchema = z.enum(["admin", "manager", "receptionist", "doctor"]);
+const roleSchema = z.enum(["admin", "manager", "receptionist", "doctor", "assistant"]);
 const rolePlacementSchema = z.object({
   area: areaSchema,
   role: roleSchema,
@@ -118,6 +118,34 @@ export async function setAssistantRoleLauncherPlacement(
       );
 
   if (result.error) return genericFailure();
+  revalidatePath("/settings/assistant");
+  return { success: true };
+}
+
+/**
+ * Restores the official ClinicFlow placement defaults by removing every persisted
+ * role setting and per-user override for the clinic. Resolution then falls back
+ * to the code-owned `defaultEnabledByRole` map — this restores defaults, it does
+ * NOT enable everything.
+ */
+export async function resetAssistantLauncherPlacement(): Promise<AssistantLauncherSettingsActionResult> {
+  const access = await requireCustomizationAdmin();
+  if ("error" in access) return { error: access.error };
+  const { user } = access;
+  const client = await createClient();
+
+  const [roleDelete, userDelete] = await Promise.all([
+    client
+      .from("assistant_launcher_settings")
+      .delete()
+      .eq("clinic_id", user.clinicId),
+    client
+      .from("assistant_launcher_user_overrides")
+      .delete()
+      .eq("clinic_id", user.clinicId),
+  ]);
+
+  if (roleDelete.error || userDelete.error) return genericFailure();
   revalidatePath("/settings/assistant");
   return { success: true };
 }

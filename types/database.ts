@@ -9,6 +9,72 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      activity_events: {
+        Row: {
+          action: string
+          actor_id: string | null
+          actor_role: Database["public"]["Enums"]["user_role"] | null
+          clinic_id: string
+          doctor_id: string | null
+          entity_id: string
+          entity_type: string
+          id: string
+          is_system: boolean
+          metadata: Json
+          new_state: Json | null
+          occurred_at: string
+          patient_id: string | null
+          previous_state: Json | null
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          actor_role?: Database["public"]["Enums"]["user_role"] | null
+          clinic_id: string
+          doctor_id?: string | null
+          entity_id: string
+          entity_type: string
+          id?: string
+          is_system?: boolean
+          metadata?: Json
+          new_state?: Json | null
+          occurred_at?: string
+          patient_id?: string | null
+          previous_state?: Json | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          actor_role?: Database["public"]["Enums"]["user_role"] | null
+          clinic_id?: string
+          doctor_id?: string | null
+          entity_id?: string
+          entity_type?: string
+          id?: string
+          is_system?: boolean
+          metadata?: Json
+          new_state?: Json | null
+          occurred_at?: string
+          patient_id?: string | null
+          previous_state?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_events_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_events_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       agent_conversations: {
         Row: {
           active_context: Json
@@ -644,6 +710,59 @@ export type Database = {
           },
         ]
       }
+      assistant_doctor_assignments: {
+        Row: {
+          assistant_id: string
+          clinic_id: string
+          created_at: string
+          created_by: string | null
+          doctor_id: string
+        }
+        Insert: {
+          assistant_id: string
+          clinic_id: string
+          created_at?: string
+          created_by?: string | null
+          doctor_id: string
+        }
+        Update: {
+          assistant_id?: string
+          clinic_id?: string
+          created_at?: string
+          created_by?: string | null
+          doctor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assistant_doctor_assignments_assistant_id_fkey"
+            columns: ["assistant_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assistant_doctor_assignments_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assistant_doctor_assignments_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assistant_doctor_assignments_doctor_id_fkey"
+            columns: ["doctor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       assistant_launcher_settings: {
         Row: {
           area: string
@@ -801,6 +920,7 @@ export type Database = {
           no_showed_at: string | null
           no_showed_by: string | null
           notes: string | null
+          original_appointment_id: string | null
           outstanding_amount: number | null
           package_id: string | null
           package_session_number: number | null
@@ -811,6 +931,8 @@ export type Database = {
           payment_note: string | null
           reminder_sent_at: string | null
           reminders_sent: Json
+          replaced_by_appointment_id: string | null
+          replaces_appointment_id: string | null
           scheduled_at: string
           secondary_amount: number
           secondary_payment_method:
@@ -845,6 +967,7 @@ export type Database = {
           no_showed_at?: string | null
           no_showed_by?: string | null
           notes?: string | null
+          original_appointment_id?: string | null
           outstanding_amount?: number | null
           package_id?: string | null
           package_session_number?: number | null
@@ -855,6 +978,8 @@ export type Database = {
           payment_note?: string | null
           reminder_sent_at?: string | null
           reminders_sent?: Json
+          replaced_by_appointment_id?: string | null
+          replaces_appointment_id?: string | null
           scheduled_at: string
           secondary_amount?: number
           secondary_payment_method?:
@@ -889,6 +1014,7 @@ export type Database = {
           no_showed_at?: string | null
           no_showed_by?: string | null
           notes?: string | null
+          original_appointment_id?: string | null
           outstanding_amount?: number | null
           package_id?: string | null
           package_session_number?: number | null
@@ -899,6 +1025,8 @@ export type Database = {
           payment_note?: string | null
           reminder_sent_at?: string | null
           reminders_sent?: Json
+          replaced_by_appointment_id?: string | null
+          replaces_appointment_id?: string | null
           scheduled_at?: string
           secondary_amount?: number
           secondary_payment_method?:
@@ -975,6 +1103,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "appointments_original_appointment_id_fkey"
+            columns: ["original_appointment_id"]
+            isOneToOne: false
+            referencedRelation: "appointments"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "appointments_package_id_fkey"
             columns: ["package_id"]
             isOneToOne: false
@@ -986,6 +1121,20 @@ export type Database = {
             columns: ["patient_id"]
             isOneToOne: false
             referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointments_replaced_by_appointment_id_fkey"
+            columns: ["replaced_by_appointment_id"]
+            isOneToOne: false
+            referencedRelation: "appointments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointments_replaces_appointment_id_fkey"
+            columns: ["replaces_appointment_id"]
+            isOneToOne: false
+            referencedRelation: "appointments"
             referencedColumns: ["id"]
           },
           {
@@ -3346,6 +3495,48 @@ export type Database = {
           },
         ]
       }
+      user_report_permissions: {
+        Row: {
+          clinic_id: string
+          created_at: string
+          is_visible: boolean
+          report_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          clinic_id: string
+          created_at?: string
+          is_visible?: boolean
+          report_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          clinic_id?: string
+          created_at?: string
+          is_visible?: boolean
+          report_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_report_permissions_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_report_permissions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_ui_preferences: {
         Row: {
           created_at: string
@@ -3478,6 +3669,11 @@ export type Database = {
         Args: never
         Returns: Database["public"]["Enums"]["user_role"]
       }
+      auth_supervised_doctor_ids: { Args: never; Returns: string[] }
+      replace_assistant_doctor_assignments: {
+        Args: { p_assistant_id: string; p_doctor_ids: string[] }
+        Returns: undefined
+      }
       claim_appointment_reminder: {
         Args: {
           p_appointment_id: string
@@ -3589,6 +3785,19 @@ export type Database = {
         }
         Returns: boolean
       }
+      get_appointment_replacement_chain: {
+        Args: { p_appointment_id: string }
+        Returns: {
+          chain_position: number
+          doctor_id: string
+          doctor_name: string | null
+          id: string
+          replaced_by_appointment_id: string | null
+          replaces_appointment_id: string | null
+          scheduled_at: string
+          status: Database["public"]["Enums"]["appointment_status"]
+        }[]
+      }
       get_cancellation_report: {
         Args: { p_end: string; p_start: string }
         Returns: Json
@@ -3629,6 +3838,18 @@ export type Database = {
           unread_count: number
           window_expires_at: string | null
         }[]
+      }
+      get_my_assistant_performance: {
+        Args: { p_end: string; p_start: string }
+        Returns: Json
+      }
+      get_my_performance_summary: {
+        Args: { p_end: string; p_start: string }
+        Returns: Json
+      }
+      get_my_revenue_summary: {
+        Args: { p_end: string; p_start: string }
+        Returns: Json
       }
       get_no_show_report: {
         Args: { p_end: string; p_start: string }
@@ -3924,6 +4145,17 @@ export type Database = {
         }
         Returns: boolean
       }
+      replace_appointment: {
+        Args: {
+          p_department_id?: string
+          p_doctor_id?: string
+          p_duration_minutes?: number
+          p_notes?: string
+          p_original_id: string
+          p_scheduled_at: string
+        }
+        Returns: string
+      }
       request_clinic_invitation: {
         Args: {
           p_clinic_name: string
@@ -4029,6 +4261,7 @@ export type Database = {
         | "completed"
         | "cancelled"
         | "no_show"
+        | "replaced"
       blood_type: "A+" | "A-" | "B+" | "B-" | "AB+" | "AB-" | "O+" | "O-"
       clinic_channel_status: "pending" | "active" | "error"
       clinic_invitation_status: "pending" | "accepted" | "revoked" | "expired"
@@ -4050,7 +4283,7 @@ export type Database = {
       subscription_status: "trialing" | "active" | "past_due" | "cancelled"
       template_approval_status: "draft" | "submitted" | "approved" | "rejected"
       usage_metric: "ai_messages" | "wa_messages" | "sms_messages" | "emails"
-      user_role: "admin" | "receptionist" | "manager" | "doctor"
+      user_role: "admin" | "receptionist" | "manager" | "doctor" | "assistant"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -4188,6 +4421,7 @@ export const Constants = {
         "completed",
         "cancelled",
         "no_show",
+        "replaced",
       ],
       blood_type: ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"],
       clinic_channel_status: ["pending", "active", "error"],
@@ -4211,7 +4445,7 @@ export const Constants = {
       subscription_status: ["trialing", "active", "past_due", "cancelled"],
       template_approval_status: ["draft", "submitted", "approved", "rejected"],
       usage_metric: ["ai_messages", "wa_messages", "sms_messages", "emails"],
-      user_role: ["admin", "receptionist", "manager", "doctor"],
+      user_role: ["admin", "receptionist", "manager", "doctor", "assistant"],
     },
   },
 } as const

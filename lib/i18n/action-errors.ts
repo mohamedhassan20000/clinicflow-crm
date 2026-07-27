@@ -41,6 +41,7 @@ export async function actionAppointmentStatus(status: string): Promise<string> {
     completed: "statusCompleted",
     cancelled: "statusCancelled",
     no_show: "statusNoShow",
+    replaced: "statusReplaced",
   };
   return keys[status] ? statusT(keys[status] as never) : status;
 }

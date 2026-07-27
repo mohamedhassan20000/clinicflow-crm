@@ -39,6 +39,8 @@ export default async function AppointmentsReportPage({
   const patientHref = resolveReturnTo(returnTo, patientPath, [patientPath]);
   const user = await requireUser();
   const isDoctor = user.role === "doctor";
+  const isScopedClinical =
+    user.role === "doctor" || user.role === "assistant";
   const supabase = await createClient();
 
   const { data: patient } = await supabase
@@ -59,11 +61,11 @@ export default async function AppointmentsReportPage({
     if (!canAccess) notFound();
   }
 
-  // Doctors see a simplified view without billing; non-doctors see full payment data
+  // Scoped clinical roles see a simplified view without billing.
   let apptQuery = supabase
     .from("appointments")
     .select(
-      isDoctor
+      isScopedClinical
         ? t("idscheduledatstatuscancellationreason")
         : t("idscheduledatstatuspaymentmethod"),
     )
@@ -79,9 +81,9 @@ export default async function AppointmentsReportPage({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const appts = (appointments ?? []) as any[];
 
-  // Fetch settlements for non-doctors
+  // Fetch settlements only for roles authorized to view billing.
   const settlementsByAppt: Record<string, SettlementEntry[]> = {};
-  if (!isDoctor) {
+  if (!isScopedClinical) {
     const { data: settlements } = await supabase
       .from("outstanding_settlements")
       .select("id, appointment_id, settled_at, amount, payment_method, note")
@@ -139,7 +141,7 @@ export default async function AppointmentsReportPage({
       <ReportDateFilter from={from} to={to} />
 
       {/* Screen view */}
-      {isDoctor ? (
+      {isScopedClinical ? (
         <div className="print:hidden">
           <DoctorApptList appts={appts} timeFormat={timeFormat} clinicLocale={clinicLocale} />
         </div>
@@ -154,9 +156,9 @@ export default async function AppointmentsReportPage({
 
       {/* Print table — same black-border style as revenue */}
       <div className="hidden print:block">
-        {isDoctor && appts.length === 0 ? (
+        {isScopedClinical && appts.length === 0 ? (
           <p className="text-sm">{t("noAppointmentsMatchTheSelectedDate")}</p>
-        ) : isDoctor ? (
+        ) : isScopedClinical ? (
           <DoctorApptPrintTable appts={appts} clinicLocale={clinicLocale} />
         ) : null}
       </div>

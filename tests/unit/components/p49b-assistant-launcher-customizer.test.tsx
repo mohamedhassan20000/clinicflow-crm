@@ -24,13 +24,18 @@ const DATA: AssistantLauncherCustomizationData = {
   roleSettings: [
     {
       area: "patient",
-      defaultEnabled: true,
+      defaultEnabledByRole: { doctor: true },
       eligibleRoles: ["doctor"],
       roleSettings: {},
     },
     {
       area: "dashboard",
-      defaultEnabled: true,
+      defaultEnabledByRole: {
+        admin: true,
+        manager: true,
+        receptionist: true,
+        doctor: true,
+      },
       eligibleRoles: ["admin", "manager", "receptionist", "doctor"],
       roleSettings: { manager: false },
     },

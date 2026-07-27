@@ -44,7 +44,7 @@ export default async function MessagingSettingsPage() {
   const canManageReminders = user.role === "admin" || user.role === "manager";
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto w-full max-w-3xl space-y-6">
       <div>
         <h2 className="font-semibold">{settingsT("messagingSettingsTitle")}</h2>
         <p className="text-sm text-muted-foreground">

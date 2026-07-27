@@ -5,9 +5,20 @@ import { Loader2, RotateCcw, ShieldCheck, Sparkles, UserRound } from "lucide-rea
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import {
+  resetAssistantLauncherPlacement,
   setAssistantRoleLauncherPlacement,
   setAssistantUserLauncherOverride,
 } from "@/actions/assistant-launcher-settings";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -37,6 +48,7 @@ const ROLE_KEYS: Record<UserRole, string> = {
   manager: "roleManager",
   receptionist: "roleReceptionist",
   doctor: "roleDoctor",
+  assistant: "roleAssistant",
 };
 
 type PlacementValue = boolean | null;
@@ -52,7 +64,32 @@ export function AssistantLauncherCustomizer({
     initialData.staff[0]?.id,
   );
   const [pendingKey, setPendingKey] = useState<string | null>(null);
+  const [confirmReset, setConfirmReset] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const [, startTransition] = useTransition();
+
+  function handleReset() {
+    setResetting(true);
+    startTransition(async () => {
+      const result = await resetAssistantLauncherPlacement();
+      setResetting(false);
+      setConfirmReset(false);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      // Every persisted override was removed → the UI now reflects the code
+      // defaults: clear role settings and per-user overrides locally.
+      setData((current) => ({
+        roleSettings: current.roleSettings.map((setting) => ({
+          ...setting,
+          roleSettings: {},
+        })),
+        staff: current.staff.map((member) => ({ ...member, overrides: {} })),
+      }));
+      toast.success(t("assistantPlacementResetDone"));
+    });
+  }
   const selectedUser = useMemo(
     () =>
       data.staff.find((member) => member.id === selectedUserId) ??
@@ -70,7 +107,7 @@ export function AssistantLauncherCustomizer({
 
   function inheritedValue(area: AssistantPageContextType, role: UserRole) {
     const row = data.roleSettings.find((setting) => setting.area === area);
-    return row?.roleSettings[role] ?? row?.defaultEnabled ?? false;
+    return row?.roleSettings[role] ?? row?.defaultEnabledByRole[role] ?? false;
   }
 
   function updateRoleState(
@@ -162,20 +199,63 @@ export function AssistantLauncherCustomizer({
 
   return (
     <div className="space-y-5">
-      <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3">
-        <ShieldCheck
-          className="mt-0.5 size-5 shrink-0 text-primary"
-          aria-hidden="true"
-        />
-        <div>
-          <p className="text-sm font-medium">
-            {t("assistantCustomizationVisibilityOnlyTitle")}
-          </p>
-          <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
-            {t("assistantCustomizationVisibilityOnlyDescription")}
-          </p>
+      <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3">
+        <div className="flex items-start gap-3">
+          <ShieldCheck
+            className="mt-0.5 size-5 shrink-0 text-primary"
+            aria-hidden="true"
+          />
+          <div>
+            <p className="text-sm font-medium">
+              {t("assistantCustomizationVisibilityOnlyTitle")}
+            </p>
+            <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
+              {t("assistantCustomizationVisibilityOnlyDescription")}
+            </p>
+          </div>
         </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="gap-1.5"
+          disabled={pendingKey !== null || resetting}
+          onClick={() => setConfirmReset(true)}
+        >
+          {resetting ? (
+            <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+          ) : (
+            <RotateCcw className="size-3.5" aria-hidden="true" />
+          )}
+          {t("assistantPlacementResetButton")}
+        </Button>
       </div>
+
+      <AlertDialog open={confirmReset} onOpenChange={setConfirmReset}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("assistantPlacementResetTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("assistantPlacementResetDescription")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={resetting}>{t("cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault();
+                if (!resetting) handleReset();
+              }}
+              disabled={resetting}
+            >
+              {resetting ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              ) : null}
+              {t("assistantPlacementResetConfirm")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Tabs defaultValue="roles">
         <TabsList aria-label={t("assistantCustomizationTabsLabel")}>
@@ -235,7 +315,8 @@ export function AssistantLauncherCustomizer({
                       {ASSISTANT_CUSTOMIZATION_ROLES.map((role) => {
                         const eligible = setting.eligibleRoles.includes(role);
                         const explicit = setting.roleSettings[role];
-                        const checked = explicit ?? setting.defaultEnabled;
+                        const checked =
+                          explicit ?? setting.defaultEnabledByRole[role] ?? false;
                         const key = `role:${setting.area}:${role}`;
                         return (
                           <td key={role} className="px-3 py-3 text-center">

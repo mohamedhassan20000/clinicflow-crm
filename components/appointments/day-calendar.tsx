@@ -88,7 +88,7 @@ interface Props {
   date: Date;
   canEdit: boolean;
   currentUserId?: string;
-  currentUserRole?: "admin" | "receptionist" | "manager" | "doctor";
+  currentUserRole?: "admin" | "receptionist" | "manager" | "doctor" | "assistant";
   clinicHours?: ClinicWorkingHoursValues;
   newAppointmentHref?: string;
 }
@@ -276,7 +276,7 @@ function DayBucketCell({
   bucketMin: number;
   canEdit: boolean;
   currentUserId?: string;
-  currentUserRole?: "admin" | "receptionist" | "manager" | "doctor";
+  currentUserRole?: "admin" | "receptionist" | "manager" | "doctor" | "assistant";
 }) {
   const t = useTranslations("appointments");
   const [showAllOpen, setShowAllOpen] = useState(false);

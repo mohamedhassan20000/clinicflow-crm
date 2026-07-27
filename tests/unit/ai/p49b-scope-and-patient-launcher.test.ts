@@ -4,16 +4,17 @@ import { ASSISTANT_LAUNCHER_REGISTRY } from "@/lib/ai/launchers";
 import { buildAssistantPageContextPrompt } from "@/lib/ai/page-context";
 
 describe("P4.9B patient-details Ask Assistant regression", () => {
-  it("keeps patient placement on the existing doctor-only clinical launcher contract", () => {
+  it("keeps patient placement on the doctor clinical launcher, with assistant supported but default OFF", () => {
     const patient = ASSISTANT_LAUNCHER_REGISTRY.find(
       (definition) => definition.area === "patient",
     );
     expect(patient).toMatchObject({
       contextType: "patient",
       pageSlug: "patients",
-      roles: ["doctor"],
-      defaultEnabled: true,
+      roles: ["doctor", "assistant"],
     });
+    // Doctor stays enabled by default; the assistant (scoped) is supported but OFF.
+    expect(patient?.defaultEnabledByRole).toEqual({ doctor: true, assistant: false });
   });
 
   it("attaches the already-authorized patient id and immediately explains this-patient references", () => {

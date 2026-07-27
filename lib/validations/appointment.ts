@@ -17,6 +17,21 @@ export const appointmentSchema = z.object({
 
 export type AppointmentFormValues = z.infer<typeof appointmentSchema>;
 
+/** The dedicated Replace workflow: a new slot (and optionally a new doctor). */
+export const replaceAppointmentSchema = z.object({
+  original_id: z.string().uuid("validation.invalidFormat"),
+  doctor_id: z.string().uuid("validation.invalidFormat"),
+  department_id: z.string().uuid().optional().nullable(),
+  scheduled_at: z
+    .string()
+    .min(1, "validation.tooSmall")
+    .refine((v) => !isNaN(Date.parse(v)), "validation.invalidFormat"),
+  duration_minutes: z.number().int().min(15).max(240).default(30),
+  notes: z.string().max(1000).optional().nullable(),
+});
+
+export type ReplaceAppointmentValues = z.infer<typeof replaceAppointmentSchema>;
+
 export const PAYMENT_METHODS = [
   "cash",
   "credit_card",
@@ -120,4 +135,7 @@ export const STATUS_TRANSITIONS: Record<string, string[]> = {
   completed: [],
   cancelled: [],
   no_show: [],
+  // `replaced` is terminal and is only ever reached through the dedicated
+  // replace workflow (replace_appointment RPC), never via a status transition.
+  replaced: [],
 };

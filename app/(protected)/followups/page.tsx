@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
 import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
 import { requireUser } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
@@ -126,9 +125,13 @@ function normalizeDashboardPayload(payload: unknown): FollowupsDashboardPayload 
 
 export default async function FollowupsPage({ searchParams }: PageProps) {
   const user = await requireUser();
-  if (user.role === "manager") redirect("/dashboard");
 
   const isDoctor = user.role === "doctor";
+  const isAssistant = user.role === "assistant";
+  // Doctors and assistants get a data-scoped, read-only follow-ups view (RLS
+  // filters to their own / their assigned doctors' follow-ups). Managers now
+  // operate follow-ups like admins/receptionists.
+  const isScopedViewer = isDoctor || isAssistant;
 
   const sp = await searchParams;
   const scope = ((sp.scope as Scope) ?? "day") as Scope;
@@ -139,9 +142,14 @@ export default async function FollowupsPage({ searchParams }: PageProps) {
   const file = sp.file?.trim() ?? "";
   const nat = sp.nat?.trim() ?? "";
   const phone = sp.phone?.trim() ?? "";
-  // Doctors are always scoped to their own department
-  const filterDept = isDoctor ? (user.departmentId ?? null) : (sp.dept?.trim() || null);
-  const filterDoctor = isDoctor ? null : (sp.doctor?.trim() || null);
+  // Doctors are always scoped to their own department; assistants are scoped by
+  // RLS to their assigned doctors, so no app-layer dept/doctor filter is applied.
+  const filterDept = isDoctor
+    ? (user.departmentId ?? null)
+    : isScopedViewer
+      ? null
+      : (sp.dept?.trim() || null);
+  const filterDoctor = isScopedViewer ? null : (sp.doctor?.trim() || null);
   const filterOutcome = (() => {
     const v = sp.outcome?.trim();
     if (v === "all_fine" || v === "has_problem" || v === "no_response") return v;
@@ -197,7 +205,7 @@ export default async function FollowupsPage({ searchParams }: PageProps) {
         .eq("clinic_id", user.clinicId)
         .eq("is_active", true)
         .order("name"),
-      isDoctor
+      isScopedViewer
         ? Promise.resolve({ data: [] })
         : supabase
             .from("profiles")
@@ -235,13 +243,15 @@ export default async function FollowupsPage({ searchParams }: PageProps) {
       scope={scope}
       dateInput={dateStr || ""}
       activeDept={filterDept}
-      hideScopeFilters={isDoctor}
+      hideScopeFilters={isScopedViewer}
       activeOutcome={filterOutcome}
       activeQuery={name || q || file || nat || phone}
       range={{
         start: range.start.toISOString(),
         end: range.end.toISOString(),
       }}
+      // Doctors are read-only; assistants operate their assigned doctors'
+      // follow-ups (RLS + scoped action guards enforce the union scope).
       readOnly={isDoctor}
       clinicName={clinic?.name ?? ""}
       clinicAddress={clinic?.address ?? null}

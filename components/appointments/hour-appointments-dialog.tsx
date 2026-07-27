@@ -34,7 +34,7 @@ function PopupAppointmentRow({
   appt: AppointmentForDetail;
   canEdit: boolean;
   currentUserId?: string;
-  currentUserRole?: "admin" | "receptionist" | "manager" | "doctor";
+  currentUserRole?: "admin" | "receptionist" | "manager" | "doctor" | "assistant";
   onDeleted: (id: string) => void;
 }) {
   const t = useTranslations("appointments");
@@ -125,6 +125,8 @@ function PopupAppointmentRow({
                 currentStatus={appt.status}
                 patientId={appt.patient_id}
                 doctorId={appt.doctor_id}
+                scheduledAt={appt.scheduled_at}
+                durationMinutes={appt.duration_minutes}
                 currentUserId={currentUserId}
                 currentUserRole={currentUserRole}
                 hasInsurance={Boolean(appt.insurance_provider_id)}
@@ -187,7 +189,7 @@ export function HourAppointmentsDialog({
   onOpenChange: (v: boolean) => void;
   canEdit: boolean;
   currentUserId?: string;
-  currentUserRole?: "admin" | "receptionist" | "manager" | "doctor";
+  currentUserRole?: "admin" | "receptionist" | "manager" | "doctor" | "assistant";
 }) {
   const t = useTranslations("appointments");
   const { formatSlotTime } = useClinicSettings();

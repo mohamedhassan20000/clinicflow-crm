@@ -13,6 +13,8 @@ type DepartmentLite = Pick<Tables<"departments">, "id" | "name"> & {
 interface Props {
   staff: StaffMember[];
   departments: DepartmentLite[];
+  doctors: { id: string; full_name: string }[];
+  assignmentsByAssistant: Record<string, string[]>;
   currentUserId: string;
   lastSeenMap?: Record<string, string | null>;
   isAdmin?: boolean;
@@ -28,6 +30,8 @@ function isManagementRole(role: string) {
 export function StaffByDepartment({
   staff,
   departments,
+  doctors,
+  assignmentsByAssistant,
   currentUserId,
   lastSeenMap,
   isAdmin,
@@ -66,6 +70,8 @@ export function StaffByDepartment({
           subtitle={t("adminAndManagerAccounts")}
         >
           <StaffTable
+            doctors={doctors}
+            assignmentsByAssistant={assignmentsByAssistant}
             staff={groups.management}
             departments={deptOptions}
             currentUserId={currentUserId}
@@ -92,6 +98,8 @@ export function StaffByDepartment({
               />
             ) : (
               <StaffTable
+            doctors={doctors}
+            assignmentsByAssistant={assignmentsByAssistant}
                 staff={members}
                 departments={deptOptions}
                 currentUserId={currentUserId}
@@ -111,6 +119,8 @@ export function StaffByDepartment({
           subtitle={t("membersNotCurrentlyLinkedToA")}
         >
           <StaffTable
+            doctors={doctors}
+            assignmentsByAssistant={assignmentsByAssistant}
             staff={groups.unassigned}
             departments={deptOptions}
             currentUserId={currentUserId}

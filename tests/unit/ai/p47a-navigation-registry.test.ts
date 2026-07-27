@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from "vitest";
 // and checks that a link is handed out only when every applicable gate passes, and that
 // the reason for a denial is reported honestly and distinctly.
 
-type Role = "admin" | "manager" | "receptionist" | "doctor";
+type Role = "admin" | "manager" | "receptionist" | "doctor" | "assistant";
 
 type MockUser = { id: string; clinicId: string; role: Role };
 
@@ -23,6 +23,9 @@ type LoadOptions = {
   subscriptionAllowed?: boolean;
   /** page_slug -> visibility. Any slug absent defaults to "visible". */
   visibility?: Partial<Record<string, "visible" | "hidden" | "lookup_failed">>;
+  reportVisibility?: Partial<
+    Record<string, "visible" | "hidden" | "lookup_failed">
+  >;
   primaryAdmin?: boolean;
   primaryLookupFails?: boolean;
 };
@@ -56,6 +59,13 @@ async function load(options: LoadOptions = {}) {
     async (_u: unknown, slug: string) => options.visibility?.[slug] ?? "visible",
   );
   vi.doMock("@/lib/server-page-permissions", () => ({ getPageVisibilityState }));
+  const getReportVisibilityState = vi.fn(
+    async (_u: unknown, reportId: string) =>
+      options.reportVisibility?.[reportId] ?? "visible",
+  );
+  vi.doMock("@/lib/server-report-permissions", () => ({
+    getReportVisibilityState,
+  }));
   const isPrimaryClinicAdmin = options.primaryLookupFails
     ? vi.fn(async () => {
         throw new Error("primary lookup failed");
@@ -64,7 +74,12 @@ async function load(options: LoadOptions = {}) {
   vi.doMock("@/lib/primary-admin", () => ({ isPrimaryClinicAdmin }));
 
   const mod = await import("@/lib/ai/help/navigation");
-  return { ...mod, getPageVisibilityState, isPrimaryClinicAdmin };
+  return {
+    ...mod,
+    getPageVisibilityState,
+    getReportVisibilityState,
+    isPrimaryClinicAdmin,
+  };
 }
 
 describe("P4.7A navigation registry integrity", () => {
@@ -128,6 +143,24 @@ describe("P4.7A navigation resolution — role gate", () => {
       expect(result.status).toBe("role_forbidden");
       expect(result.href).toBeUndefined();
     }
+  });
+
+  it("links assistants only to their scoped operational surfaces", async () => {
+    const { resolveNavigationTarget } = await load();
+    for (const id of [
+      "patients_list",
+      "appointments_calendar",
+      "appointment_new",
+      "followups",
+      "reports_index",
+    ] as const) {
+      await expect(
+        resolveNavigationTarget(user("assistant"), id, "en"),
+      ).resolves.toMatchObject({ status: "available" });
+    }
+    await expect(
+      resolveNavigationTarget(user("assistant"), "revenue", "en"),
+    ).resolves.toMatchObject({ status: "role_forbidden" });
   });
 });
 
@@ -216,6 +249,19 @@ describe("P4.7A navigation resolution — page visibility gate (the headline hon
     });
     const result = await resolveNavigationTarget(user("manager"), "reports_index", "en");
     expect(result.status).toBe("lookup_failed");
+    expect(result.href).toBeUndefined();
+  });
+
+  it("withholds a report detail route hidden by its per-user report override", async () => {
+    const { resolveNavigationTarget } = await load({
+      reportVisibility: { cancellations: "hidden" },
+    });
+    const result = await resolveNavigationTarget(
+      user("assistant"),
+      "reports_cancellations",
+      "en",
+    );
+    expect(result.status).toBe("hidden_by_admin");
     expect(result.href).toBeUndefined();
   });
 

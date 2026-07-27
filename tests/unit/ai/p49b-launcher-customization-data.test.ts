@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
       error: null as unknown,
     },
     profiles: {
-      data: [] as Array<{ id: string; full_name: string; role: "admin" | "manager" | "receptionist" | "doctor" }>,
+      data: [] as Array<{ id: string; full_name: string; role: "admin" | "manager" | "receptionist" | "doctor" | "assistant" }>,
       error: null as unknown,
     },
   },
@@ -102,7 +102,7 @@ describe("P4.9B customization read model", () => {
       "doctor-schedule",
     ]);
     expect(result.roleSettings.find((row) => row.area === "patient")).toMatchObject({
-      eligibleRoles: ["doctor"],
+      eligibleRoles: ["doctor", "assistant"],
       roleSettings: { doctor: false },
     });
     expect(result.roleSettings.find((row) => row.area === "revenue")?.roleSettings)
@@ -128,8 +128,29 @@ describe("P4.9B customization read model", () => {
       ["is_active", true],
       ["is_deleted", false],
       ["deleted_at", null],
-      ["role", ["admin", "manager", "receptionist", "doctor"]],
     ]));
+    expect(profiles?.filters.some(([column]) => column === "role")).toBe(false);
+  });
+
+  it("loads Assistant staff without sending the new enum literal in a filter", async () => {
+    mocks.results.profiles.data = [
+      {
+        id: "33333333-3333-4333-8333-333333333333",
+        full_name: "Assistant Noor",
+        role: "assistant",
+      },
+    ];
+
+    const result = await getAssistantLauncherCustomization(USER);
+
+    expect(result.staff).toEqual([
+      expect.objectContaining({
+        fullName: "Assistant Noor",
+        role: "assistant",
+      }),
+    ]);
+    const profiles = mocks.queries.find((query) => query.table === "profiles");
+    expect(profiles?.filters.some(([column]) => column === "role")).toBe(false);
   });
 
   it("fails closed when any placement or staff read fails", async () => {

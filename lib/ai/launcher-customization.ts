@@ -34,7 +34,6 @@ export async function getAssistantLauncherCustomization(
       .eq("is_active", true)
       .eq("is_deleted", false)
       .is("deleted_at", null)
-      .in("role", ["admin", "manager", "receptionist", "doctor"])
       .order("full_name"),
   ]);
 
@@ -56,7 +55,7 @@ export async function getAssistantLauncherCustomization(
     }
     return {
       area: definition.area,
-      defaultEnabled: definition.defaultEnabled,
+      defaultEnabledByRole: definition.defaultEnabledByRole,
       eligibleRoles: [...definition.roles],
       roleSettings: settings,
     };

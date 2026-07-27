@@ -9,6 +9,8 @@ export const CLINIC_REPORT_IDS = [
   "cancellations",
   "no_shows",
   "revenue",
+  "my_revenue",
+  "my_performance",
   "followups",
   "doctor_performance",
   "receptionist_performance",
@@ -31,6 +33,8 @@ export const CLINIC_REPORT_LABELS: Record<
   cancellations: { en: "Cancellations report", ar: "تقرير الإلغاءات" },
   no_shows: { en: "No-show report", ar: "تقرير عدم الحضور" },
   revenue: { en: "Revenue report", ar: "تقرير الإيرادات" },
+  my_revenue: { en: "My revenue report", ar: "تقرير إيراداتي" },
+  my_performance: { en: "My performance report", ar: "تقرير أدائي" },
   followups: { en: "Follow-ups report", ar: "تقرير المتابعات" },
   doctor_performance: {
     en: "Doctor performance report",
@@ -71,8 +75,31 @@ export const CLINIC_REPORTS = {
     href: "/reports/revenue",
     auditTable: "appointments",
   },
+  my_revenue: {
+    // Doctor-oriented, self/assigned-scoped revenue. Never admin/manager — those
+    // use the clinic-wide `revenue` report. Scope is enforced by RLS in the
+    // dedicated RPC; no doctor dimension (the aggregate is already the caller's
+    // own / their supervised-doctor union).
+    roles: ["doctor", "assistant"],
+    financial: true,
+    acceptsDoctor: false,
+    href: "/reports/my-revenue",
+    auditTable: "appointments",
+  },
+  my_performance: {
+    // Doctor-oriented, self-scoped operational performance. Never admin/manager
+    // (they use the clinic-wide `doctor_performance` report) and never
+    // assistant. The scope is enforced by RLS + an explicit `doctor_id`
+    // predicate in the dedicated RPC; no doctor dimension (the aggregate is the
+    // caller's own).
+    roles: ["doctor"],
+    financial: false,
+    acceptsDoctor: false,
+    href: "/reports/my-performance",
+    auditTable: "appointments",
+  },
   followups: {
-    roles: ["admin", "receptionist"],
+    roles: ["admin", "manager", "receptionist"],
     financial: false,
     acceptsDoctor: false,
     href: "/reports/follow-ups",

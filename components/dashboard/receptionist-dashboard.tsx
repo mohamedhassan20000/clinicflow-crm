@@ -20,6 +20,7 @@ import { formatDoctorName } from "@/lib/format-doctor";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
 import type { ReceptionInSessionGroup } from "@/actions/receptionist-dashboard";
 import { useTranslations } from "next-intl";
+import type { UserRole } from "@/lib/rbac";
 
 type Appointment = Tables<"appointments"> & {
   patients: { full_name: string } | null;
@@ -29,6 +30,8 @@ type Appointment = Tables<"appointments"> & {
 interface ReceptionistDashboardProps {
   assistantLauncher?: React.ReactNode;
   fullName: string;
+  currentUserRole: Extract<UserRole, "receptionist" | "assistant">;
+  canCreatePatients: boolean;
   todayCount: number;
   pendingCount: number;
   confirmedCount: number;
@@ -48,6 +51,8 @@ interface ReceptionistDashboardProps {
 export function ReceptionistDashboard({
   assistantLauncher,
   fullName,
+  currentUserRole,
+  canCreatePatients,
   todayCount,
   pendingCount,
   confirmedCount,
@@ -80,11 +85,13 @@ export function ReceptionistDashboard({
         </div>
         <div className="flex flex-wrap gap-2">
           {assistantLauncher}
-          <Button asChild variant="outline" size="sm" className="gap-2">
-            <Link href="/patients/new">
-              <UserPlus className="h-4 w-4" />
-              {t("newPatient")}</Link>
-          </Button>
+          {canCreatePatients ? (
+            <Button asChild variant="outline" size="sm" className="gap-2">
+              <Link href="/patients/new">
+                <UserPlus className="h-4 w-4" />
+                {t("newPatient")}</Link>
+            </Button>
+          ) : null}
           <Button asChild size="sm" className="gap-2">
             <Link href="/appointments/new">
               <CalendarPlus className="h-4 w-4" />
@@ -187,7 +194,7 @@ export function ReceptionistDashboard({
                       currentStatus={appt.status}
                       patientId={appt.patient_id}
                       doctorId={appt.doctor_id}
-                      currentUserRole="receptionist"
+                      currentUserRole={currentUserRole}
                       hasInsurance={Boolean(appt.insurance_provider_id)}
                     />
                   </div>
@@ -234,7 +241,7 @@ export function ReceptionistDashboard({
                     currentStatus={appt.status}
                     patientId={appt.patient_id}
                     doctorId={appt.doctor_id}
-                    currentUserRole="receptionist"
+                    currentUserRole={currentUserRole}
                     hasInsurance={Boolean(appt.insurance_provider_id)}
                   />
                 </div>

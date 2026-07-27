@@ -83,7 +83,7 @@ export interface DoctorDashboardProps {
   fullName: string;
   clinicId: string;
   doctorId: string;
-  departmentId: string;
+  departmentId: string | null;
   departmentName: string;
   initial: DoctorDashboardStats;
 }

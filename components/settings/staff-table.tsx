@@ -94,13 +94,15 @@ function initials(name: string) {
 interface StaffTableProps {
   staff: StaffMember[];
   departments: Department[];
+  doctors: { id: string; full_name: string }[];
+  assignmentsByAssistant: Record<string, string[]>;
   currentUserId: string;
   lastSeenMap?: Record<string, string | null>;
   isAdmin?: boolean;
 }
 
 
-export function StaffTable({ staff, departments, currentUserId, lastSeenMap, isAdmin }: StaffTableProps) {
+export function StaffTable({ staff, departments, doctors, assignmentsByAssistant, currentUserId, lastSeenMap, isAdmin }: StaffTableProps) {
   const t = useTranslations("settings");
   const [editTarget, setEditTarget] = useState<StaffMember | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<StaffMember | null>(null);
@@ -366,9 +368,18 @@ export function StaffTable({ staff, departments, currentUserId, lastSeenMap, isA
             <EditStaffForm
               action={updateStaff.bind(null, editTarget.id)}
               departments={departments}
+              doctors={doctors}
+              initialSupervisingDoctorIds={
+                assignmentsByAssistant[editTarget.id] ?? []
+              }
               defaultValues={{
                 full_name: editTarget.full_name,
-                role: editTarget.role as "admin" | "doctor" | "receptionist" | "manager",
+                role: editTarget.role as
+                  | "admin"
+                  | "doctor"
+                  | "receptionist"
+                  | "manager"
+                  | "assistant",
                 department_id: editTarget.department_id ?? null,
                 phone: editTarget.phone ?? null,
                 is_active: editTarget.is_active,

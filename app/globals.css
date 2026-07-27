@@ -1018,6 +1018,8 @@ body:has(.forced-dark-scope) .toaster {
   body[data-printing="cancellation"] [data-report-section="cancellation"],
   body[data-printing="no-show"] [data-report-section="no-show"],
   body[data-printing="revenue"] [data-report-section="revenue"],
+  body[data-printing="my-performance"] [data-report-section="my-performance"],
+  body[data-printing="my-assistant-performance"] [data-report-section="my-assistant-performance"],
   body[data-printing="followups"] [data-report-section="followups"],
   body[data-printing="doctor-performance"] [data-report-section="doctor-performance"],
   body[data-printing="receptionist-performance"] [data-report-section="receptionist-performance"] {

@@ -15,7 +15,10 @@ const ROLE_LABELS = {
 } as const;
 
 function administrativePrompt(ctx: StaffPromptContext, locale: PromptLocale): string {
-  const role = ctx.role === "doctor" ? null : ROLE_LABELS[ctx.role];
+  const role =
+    ctx.role === "doctor" || ctx.role === "assistant"
+      ? null
+      : ROLE_LABELS[ctx.role];
   if (locale === "ar") {
     return `أنت مساعد كلينيك فلو الإداري لعيادة ${ctx.clinicName}، وتساعد ${role?.ar ?? "موظف العيادة"} ${ctx.doctorName}.
 
@@ -47,7 +50,7 @@ When reporting figures: state the values exactly as returned, never infer a figu
  */
 export function buildStaffSystemPrompt(ctx: StaffPromptContext): string {
   const persona =
-    ctx.role === "doctor"
+    ctx.role === "doctor" || ctx.role === "assistant"
       ? buildDoctorSystemPrompt(ctx)
       : administrativePrompt(ctx, ctx.locale);
   const workflowSafety =

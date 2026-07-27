@@ -33,6 +33,8 @@ export function CancellationReport({
           { label: t("appointments"), value: formatNumber(data.totalAppointments, locale) },
           { label: t("cancelled2"), value: formatNumber(data.cancelledCount, locale) },
           { label: t("cancellationRate"), value: formatPercent(data.cancellationRate, locale) },
+          { label: t("replaced2"), value: formatNumber(data.replacedCount, locale) },
+          { label: t("replacementRate"), value: formatPercent(data.replacementRate, locale) },
         ]}
       />
 

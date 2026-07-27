@@ -106,7 +106,13 @@ export type AiToolDefinition = {
   capabilityDescription: { en: string; ar: string };
 };
 
-const ALL_STAFF: readonly UserRole[] = ["admin", "manager", "receptionist", "doctor"];
+const ALL_STAFF: readonly UserRole[] = [
+  "admin",
+  "manager",
+  "receptionist",
+  "doctor",
+  "assistant",
+];
 const ADMINISTRATIVE: readonly UserRole[] = ["admin", "manager", "receptionist"];
 const ANALYTICS: readonly UserRole[] = ["admin", "manager"];
 const FINANCIAL: readonly UserRole[] = ["admin", "manager"];
@@ -238,7 +244,7 @@ export const AI_TOOL_REGISTRY: readonly AiToolDefinition[] = [
   {
     name: "get_patient_summary",
     build: getPatientSummaryTool,
-    roles: ["doctor"],
+    roles: ["doctor", "assistant"],
     requiredFeatures: [AI_ASSISTANT_FEATURE],
     taskClasses: CLINICAL_TASKS,
     workflow: READ_COST_3,
@@ -250,7 +256,7 @@ export const AI_TOOL_REGISTRY: readonly AiToolDefinition[] = [
   {
     name: "search_patient_visits",
     build: searchPatientVisitsTool,
-    roles: ["doctor"],
+    roles: ["doctor", "assistant"],
     requiredFeatures: [AI_ASSISTANT_FEATURE],
     taskClasses: CLINICAL_TASKS,
     workflow: READ_COST_3,
@@ -262,13 +268,13 @@ export const AI_TOOL_REGISTRY: readonly AiToolDefinition[] = [
   {
     name: "list_doctor_appointments",
     build: listDoctorAppointmentsTool,
-    roles: ["doctor"],
+    roles: ["doctor", "assistant"],
     requiredFeatures: [AI_ASSISTANT_FEATURE],
     taskClasses: CLINICAL_TASKS,
     workflow: READ_COST_2,
     capabilityDescription: {
-      en: "List your own upcoming appointments.",
-      ar: "عرض مواعيدك القادمة.",
+      en: "List appointments in your authorized clinical scope.",
+      ar: "عرض المواعيد ضمن نطاقك السريري المصرح به.",
     },
   },
   {
@@ -347,10 +353,8 @@ export const AI_TOOL_REGISTRY: readonly AiToolDefinition[] = [
   },
   {
     name: "list_pending_followups",
-    // Managers are excluded because get_followups_dashboard denies them; the
-    // assistant must not reach data the same user is refused in the UI.
     build: listPendingFollowupsTool,
-    roles: ["admin", "receptionist"],
+    roles: ["admin", "manager", "receptionist"],
     requiredFeatures: [AI_ASSISTANT_FEATURE, AI_STAFF_ANALYTICS_FEATURE],
     taskClasses: OPERATIONAL_TASKS,
     workflow: READ_COST_2,

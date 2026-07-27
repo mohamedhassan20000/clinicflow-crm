@@ -11,18 +11,21 @@ import {
   type DoctorToolContext,
 } from "@/lib/ai/tools/context";
 import { activeEntityId } from "@/lib/ai/conversation-context";
+import { AiToolAuthorizationError } from "@/lib/ai/errors";
 
 const APPT_LIMIT = 100;
 
 /**
- * list_doctor_appointments(date_range) — doctor (§6.3 row 3). The doctor's own
- * id comes from the session, never from the model, so this tool can only ever
- * list the caller's own schedule. RLS is the backstop.
+ * list_doctor_appointments(date_range) — scoped clinical schedule. Doctors are
+ * locked to their own id; assistants are locked to the union returned by
+ * auth_supervised_doctor_ids(). RLS is the independent backstop.
  */
 export function listDoctorAppointmentsTool(ctx: DoctorToolContext) {
   return tool({
     description:
-      "List the current doctor's own appointments within a date range (inclusive), ordered by time. Returns appointment date, status, duration, and patient name.",
+      ctx.user.role === "assistant"
+        ? "List appointments for your assigned supervising doctors within a date range (inclusive), ordered by time. Returns appointment date, status, duration, and patient name."
+        : "List the current doctor's own appointments within a date range (inclusive), ordered by time. Returns appointment date, status, duration, and patient name.",
     inputSchema: z.object({
       from: z.string().regex(ISO_DATE_RE).describe("Inclusive start date (YYYY-MM-DD)."),
       to: z.string().regex(ISO_DATE_RE).describe("Inclusive end date (YYYY-MM-DD)."),
@@ -64,10 +67,25 @@ export function listDoctorAppointmentsTool(ctx: DoctorToolContext) {
         .from("appointments")
         .select("id, scheduled_at, status, duration_minutes, patients(full_name)")
         .eq("clinic_id", ctx.user.clinicId)
-        .eq("doctor_id", ctx.user.id) // own schedule only — not a model parameter
         .is("deleted_at", null)
         .gte("scheduled_at", bounds.start)
         .lte("scheduled_at", bounds.end);
+      if (ctx.user.role === "doctor") {
+        query = query.eq("doctor_id", ctx.user.id);
+      } else if (ctx.user.role === "assistant") {
+        const { data: supervisedDoctorIds, error: scopeError } =
+          await supabase.rpc("auth_supervised_doctor_ids");
+        if (scopeError) {
+          throw new AiToolAuthorizationError(
+            "lookup_failed",
+            "The assistant supervision scope could not be verified.",
+          );
+        }
+        if ((supervisedDoctorIds ?? []).length === 0) {
+          return { appointments: [] };
+        }
+        query = query.in("doctor_id", supervisedDoctorIds ?? []);
+      }
       if (effectiveAppointmentId) query = query.eq("id", effectiveAppointmentId);
       const { data } = await query
         .order("scheduled_at", { ascending: true })

@@ -11,6 +11,7 @@ import { requireMutationRole, requireRole } from "@/lib/rbac";
 import {
   appointmentSchema,
   billingSchema,
+  replaceAppointmentSchema,
   STATUS_TRANSITIONS,
   type AppointmentFormValues,
   type BillingValues,
@@ -180,6 +181,7 @@ async function validateAppointmentSlot(
   values: AppointmentValues,
   clinicId: string,
   timeZone: string,
+  excludeAppointmentId?: string,
 ): Promise<ActionResult> {
   const supabase = await createClient();
   const startTime = new Date(values.scheduled_at);
@@ -210,15 +212,19 @@ async function validateAppointmentSlot(
     timeZone,
   );
 
-  const { data: sameDay, error } = await supabase
+  let sameDayQuery = supabase
     .from("appointments")
-    .select("scheduled_at, duration_minutes")
+    .select("id, scheduled_at, duration_minutes")
     .eq("doctor_id", values.doctor_id)
     .eq("clinic_id", clinicId)
     .is("deleted_at", null)
     .in("status", ["confirmed", "arrived", "in_session"])
     .gte("scheduled_at", dayStart.toISOString())
     .lte("scheduled_at", dayEnd.toISOString());
+  if (excludeAppointmentId) {
+    sameDayQuery = sameDayQuery.neq("id", excludeAppointmentId);
+  }
+  const { data: sameDay, error } = await sameDayQuery;
 
   if (error) {
     return {
@@ -256,7 +262,7 @@ export async function createAppointment(
   _prev: ActionResult | null,
   formData: FormData,
 ): Promise<ActionResult> {
-  const user = await requireMutationRole(["admin", "receptionist"]);
+  const user = await requireMutationRole(["admin", "receptionist", "manager", "assistant"]);
 
   const durationRaw = formData.get("duration_minutes");
   const raw = {
@@ -354,6 +360,277 @@ export async function createAppointment(
   redirect("/appointments");
 }
 
+/**
+ * Dedicated Replace workflow: creates a linked replacement appointment at a new
+ * time (and optionally a new doctor), marks the original `replaced`, and keeps
+ * the original intact in history. The narrowly scoped, atomic
+ * `replace_appointment` RPC re-derives the caller's clinic, role, and doctor
+ * scope from auth state; no caller may point the replacement at an out-of-scope
+ * doctor.
+ */
+export async function replaceAppointment(
+  input: unknown,
+): Promise<ActionResult & { appointmentId?: string }> {
+  const user = await requireMutationRole([
+    "admin",
+    "receptionist",
+    "manager",
+    "doctor",
+    "assistant",
+  ]);
+
+  const parsed = replaceAppointmentSchema.safeParse(input);
+  if (!parsed.success) {
+    return { error: await actionError("appointments.validationError") };
+  }
+
+  // Business rule: only a FUTURE appointment may be replaced. The RPC re-checks
+  // this against the stored row too (defense in depth).
+  if (new Date(parsed.data.scheduled_at) <= new Date()) {
+    return {
+      error: await actionError(
+        "appointments.replacementTimeMustBeInTheFuture",
+      ),
+    };
+  }
+
+  const supabase = await createClient();
+  const { data: original, error: originalError } = await supabase
+    .from("appointments")
+    .select("id, doctor_id, status, scheduled_at")
+    .eq("id", parsed.data.original_id)
+    .eq("clinic_id", user.clinicId)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (originalError || !original) {
+    return { error: await actionError("appointments.appointmentNotFound") };
+  }
+  if (
+    (original.status !== "pending" && original.status !== "confirmed") ||
+    new Date(original.scheduled_at) <= new Date()
+  ) {
+    return {
+      error: await actionError(
+        "appointments.onlyFutureOpenAppointmentsCanBeReplaced",
+      ),
+    };
+  }
+
+  const clinicTimeZone = await getClinicTimeZone(user.clinicId);
+  const clinicHours = await getClinicWorkingHours();
+  if (clinicHours.some((day) => day.open)) {
+    const appointmentDate = toZonedTime(
+      parsed.data.scheduled_at,
+      clinicTimeZone,
+    );
+    const dayOfWeek = appointmentDate.getDay();
+    if (!clinicHours.find((day) => day.day_of_week === dayOfWeek)?.open) {
+      return {
+        error: await actionError("appointments.clinicClosedOnDay", {
+          day: await actionWeekday(dayOfWeek),
+        }),
+      };
+    }
+  }
+
+  const slot = await validateAppointmentSlot(
+    {
+      patient_id: "00000000-0000-0000-0000-000000000000",
+      doctor_id: parsed.data.doctor_id,
+      scheduled_at: parsed.data.scheduled_at,
+      duration_minutes: parsed.data.duration_minutes,
+      department_id: parsed.data.department_id ?? null,
+    } as AppointmentValues,
+    user.clinicId,
+    clinicTimeZone,
+    parsed.data.original_id,
+  );
+  if (slot.error) return slot;
+
+  const { data: newId, error } = await supabase.rpc("replace_appointment", {
+    p_original_id: parsed.data.original_id,
+    p_scheduled_at: parsed.data.scheduled_at,
+    p_doctor_id: parsed.data.doctor_id,
+    p_duration_minutes: parsed.data.duration_minutes,
+    p_department_id: parsed.data.department_id ?? undefined,
+    p_notes: parsed.data.notes ?? undefined,
+  });
+
+  if (error) {
+    if (error.code === "23505") {
+      return {
+        error: await actionError(
+          "appointments.thisDoctorAlreadyHasAnAppointmentAtThatTimePlease",
+        ),
+      };
+    }
+    if (error.message?.toLowerCase().includes("future")) {
+      return {
+        error: await actionError(
+          "appointments.replacementTimeMustBeInTheFuture",
+        ),
+      };
+    }
+    if (error.message?.toLowerCase().includes("pending or confirmed")) {
+      return {
+        error: await actionError("appointments.onlyFutureOpenAppointmentsCanBeReplaced"),
+      };
+    }
+    return { error: await actionError("appointments.failedToCreateAppointmentPleaseTryAgain") };
+  }
+
+  // Notify the patient of the new (confirmed) appointment. The original is now
+  // `replaced`, so the reminder pipeline (confirmed-only) drops it automatically
+  // — no double notification.
+  if (typeof newId === "string") {
+    await notifyAppointmentEvent({
+      clinicId: user.clinicId,
+      appointmentId: newId,
+      event: "created",
+    });
+  }
+
+  revalidatePath("/appointments");
+  return { success: true, appointmentId: typeof newId === "string" ? newId : undefined };
+}
+
+export type ReplacementDoctorOption = {
+  id: string;
+  fullName: string;
+};
+
+export type ReplacementChainItem = {
+  id: string;
+  status: AppointmentStatus;
+  scheduledAt: string;
+  doctorId: string;
+  doctorName: string | null;
+  replacesAppointmentId: string | null;
+  replacedByAppointmentId: string | null;
+  chainPosition: number;
+};
+
+/**
+ * Doctor choices for the Replace dialog. This is presentation data only; the
+ * replace_appointment RPC independently re-derives and enforces the same scope.
+ */
+export async function getReplacementDoctorOptions(
+  appointmentId: string,
+): Promise<ActionResult & { data?: ReplacementDoctorOption[] }> {
+  const user = await requireRole([
+    "admin",
+    "receptionist",
+    "manager",
+    "doctor",
+    "assistant",
+  ]);
+  const parsedId = replaceAppointmentSchema.shape.original_id.safeParse(
+    appointmentId,
+  );
+  if (!parsedId.success) {
+    return { error: await actionError("appointments.validationError") };
+  }
+
+  const supabase = await createClient();
+  const { data: original, error: originalError } = await supabase
+    .from("appointments")
+    .select("doctor_id")
+    .eq("id", parsedId.data)
+    .eq("clinic_id", user.clinicId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (originalError || !original) {
+    return { error: await actionError("appointments.appointmentNotFound") };
+  }
+
+  let allowedDoctorIds: string[] | null = null;
+  if (user.role === "doctor") {
+    allowedDoctorIds = original.doctor_id === user.id ? [user.id] : [];
+  } else if (user.role === "assistant") {
+    const { data, error } = await supabase.rpc(
+      "auth_supervised_doctor_ids",
+    );
+    if (error) {
+      return { error: await actionError("appointments.failedToValidateDoctor") };
+    }
+    allowedDoctorIds = (data as string[] | null) ?? [];
+  }
+
+  if (allowedDoctorIds?.length === 0) {
+    return { data: [] };
+  }
+
+  let doctorQuery = supabase
+    .from("profiles")
+    .select("id, full_name")
+    .eq("clinic_id", user.clinicId)
+    .eq("role", "doctor")
+    .eq("is_active", true)
+    .eq("is_deleted", false)
+    .is("deleted_at", null)
+    .order("full_name");
+  if (allowedDoctorIds) {
+    doctorQuery = doctorQuery.in("id", allowedDoctorIds);
+  }
+  const { data: doctors, error } = await doctorQuery;
+  if (error) {
+    return { error: await actionError("appointments.failedToValidateDoctor") };
+  }
+
+  return {
+    data: (doctors ?? []).map((doctor) => ({
+      id: doctor.id,
+      fullName: doctor.full_name,
+    })),
+  };
+}
+
+/** Ordered original -> ... -> active replacement history, still RLS-scoped. */
+export async function getAppointmentReplacementChain(
+  appointmentId: string,
+): Promise<ActionResult & { data?: ReplacementChainItem[] }> {
+  await requireRole([
+    "admin",
+    "receptionist",
+    "manager",
+    "doctor",
+    "assistant",
+  ]);
+  const parsedId = replaceAppointmentSchema.shape.original_id.safeParse(
+    appointmentId,
+  );
+  if (!parsedId.success) {
+    return { error: await actionError("appointments.validationError") };
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc(
+    "get_appointment_replacement_chain",
+    { p_appointment_id: parsedId.data },
+  );
+  if (error) {
+    return {
+      error: await actionError(
+        "appointments.failedToLoadReplacementHistory",
+      ),
+    };
+  }
+
+  return {
+    data: (data ?? []).map((item) => ({
+      id: item.id,
+      status: item.status,
+      scheduledAt: item.scheduled_at,
+      doctorId: item.doctor_id,
+      doctorName: item.doctor_name,
+      replacesAppointmentId: item.replaces_appointment_id,
+      replacedByAppointmentId: item.replaced_by_appointment_id,
+      chainPosition: item.chain_position,
+    })),
+  };
+}
+
 export type BillingInput = BillingValues;
 
 function lineItemTotal(items: LineItemValues[]): number {
@@ -371,7 +648,7 @@ export async function updateAppointmentStatus(
   cancellationReason?: string | null,
   noShowReason?: string | null,
 ): Promise<ActionResult> {
-  const user = await requireMutationRole(["admin", "receptionist"]);
+  const user = await requireMutationRole(["admin", "receptionist", "manager", "assistant"]);
 
   const supabase = await createClient();
 
@@ -549,7 +826,7 @@ export async function updateAppointmentStatus(
 }
 
 export async function softDeleteAppointment(id: string): Promise<ActionResult> {
-  const user = await requireMutationRole(["admin", "receptionist"]);
+  const user = await requireMutationRole(["admin", "receptionist", "manager"]);
   const supabase = await createClient();
 
   const { data: appt, error: fetchError } = await supabase
@@ -598,7 +875,7 @@ export async function softDeleteAppointment(id: string): Promise<ActionResult> {
 }
 
 export async function restoreAppointment(id: string): Promise<ActionResult> {
-  const user = await requireMutationRole(["admin", "receptionist"]);
+  const user = await requireMutationRole(["admin", "receptionist", "manager"]);
   const supabase = await createClient();
   const { error } = await supabase
     .from("appointments")
@@ -644,7 +921,7 @@ export async function undoAppointmentStatus(
   id: string,
   targetStatus: Extract<AppointmentStatus, "pending" | "confirmed" | "arrived" | "in_session">,
 ): Promise<ActionResult> {
-  const user = await requireMutationRole(["admin", "receptionist", "doctor"]);
+  const user = await requireMutationRole(["admin", "receptionist", "doctor", "manager"]);
   const supabase = await createClient();
 
   const { data: appt } = await supabase
@@ -677,7 +954,7 @@ export async function undoAppointmentStatus(
 }
 
 export async function arriveAppointment(id: string): Promise<ActionResult> {
-  const user = await requireMutationRole(["admin", "receptionist"]);
+  const user = await requireMutationRole(["admin", "receptionist", "manager", "assistant"]);
   const supabase = await createClient();
 
   const { data: appt } = await supabase
@@ -757,7 +1034,7 @@ export async function undoInvoiceCompletion(
   id: string,
   targetStatus: InvoiceUndoStatus,
 ): Promise<ActionResult> {
-  const user = await requireMutationRole(["admin", "receptionist"]);
+  const user = await requireMutationRole(["admin", "receptionist", "manager"]);
   const supabase = await createClient();
 
   const { data: appt } = await supabase
@@ -810,7 +1087,7 @@ export type SendInvoiceResult = ActionResult & {
 export async function sendInvoiceToPatient(
   appointmentId: string,
 ): Promise<SendInvoiceResult> {
-  const user = await requireMutationRole(["admin", "receptionist"]);
+  const user = await requireMutationRole(["admin", "receptionist", "manager"]);
   const supabase = await createClient();
 
   const { data: appt } = await supabase
@@ -861,7 +1138,7 @@ export async function sendInvoiceToPatient(
 }
 
 export async function permanentDeleteAppointment(id: string): Promise<ActionResult> {
-  const user = await requireMutationRole(["admin", "receptionist"]);
+  const user = await requireMutationRole(["admin", "receptionist", "manager"]);
   const supabase = await createClient();
 
   const { data: appt, error: fetchError } = await supabase
@@ -892,7 +1169,7 @@ export async function permanentDeleteAppointment(id: string): Promise<ActionResu
 }
 
 export async function emptyAppointmentsTrash(): Promise<ActionResult> {
-  const user = await requireMutationRole(["admin", "receptionist"]);
+  const user = await requireMutationRole(["admin", "receptionist", "manager"]);
   const supabase = await createClient();
 
   const { data: trashedAppointments, error: selectError } = await supabase
@@ -984,7 +1261,7 @@ export interface BillingContext {
 export async function getBillingContext(
   appointmentId: string,
 ): Promise<{ data?: BillingContext; error?: string }> {
-  const user = await requireRole(["admin", "receptionist"]);
+  const user = await requireRole(["admin", "receptionist", "manager"]);
   const supabase = await createClient();
 
   const { data: appt, error: apptError } = await supabase
@@ -1098,7 +1375,7 @@ export async function checkSameDayPatient(
   scheduledAt: string,
 ): Promise<{ hasSameDay: boolean }> {
   try {
-    const user = await requireRole(["admin", "receptionist"]);
+    const user = await requireRole(["admin", "receptionist", "manager", "assistant"]);
     const supabase = await createClient();
 
     const date = new Date(scheduledAt);
@@ -1113,7 +1390,7 @@ export async function checkSameDayPatient(
       .eq("patient_id", patientId)
       .eq("clinic_id", user.clinicId)
       .is("deleted_at", null)
-      .not("status", "in", '("cancelled","no_show")')
+      .not("status", "in", '("cancelled","no_show","replaced")')
       .gte("scheduled_at", dayStart.toISOString())
       .lte("scheduled_at", dayEnd.toISOString())
       .limit(1);
@@ -1144,7 +1421,7 @@ export async function getConflictingPendingAppointments(
   appointmentId: string,
 ): Promise<{ data?: ConflictingAppointment[]; error?: string }> {
   try {
-    const user = await requireRole(["admin", "receptionist"]);
+    const user = await requireRole(["admin", "receptionist", "manager", "assistant"]);
     const supabase = await createClient();
 
     // Fetch the target appointment
@@ -1203,7 +1480,7 @@ export async function confirmAndDisplaceConflicts(
   appointmentId: string,
   conflictingIds: string[],
 ): Promise<ActionResult> {
-  const user = await requireMutationRole(["admin", "receptionist"]);
+  const user = await requireMutationRole(["admin", "receptionist", "manager", "assistant"]);
   const supabase = await createClient();
 
   // Confirm the target appointment
@@ -1255,7 +1532,7 @@ export async function confirmAndDisplaceConflicts(
  * Permanently removes a displaced appointment from the rebook queue.
  */
 export async function dismissDisplacedAppointment(id: string): Promise<ActionResult> {
-  const user = await requireMutationRole(["admin", "receptionist"]);
+  const user = await requireMutationRole(["admin", "receptionist", "manager"]);
   const supabase = await createClient();
 
   const { error } = await supabase

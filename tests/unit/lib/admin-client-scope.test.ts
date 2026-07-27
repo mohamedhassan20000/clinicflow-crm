@@ -1,4 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import * as ts from "typescript";
 
 const queryLog: { table: string; method: string; args: unknown[] }[] = [];
 
@@ -34,6 +37,67 @@ class QueryBuilder {
     queryLog.push({ table: this.table, method: "eq", args });
     return this;
   }
+}
+
+function sourceFilesUnder(directory: string): string[] {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) return sourceFilesUnder(path);
+    return /\.tsx?$/.test(entry.name) ? [path] : [];
+  });
+}
+
+function clinicScopedAdminTablesUsedBySource(): Set<string> {
+  const tables = new Set<string>();
+
+  for (const file of ["actions", "app", "lib"].flatMap(sourceFilesUnder)) {
+    const source = ts.createSourceFile(
+      file,
+      readFileSync(file, "utf8"),
+      ts.ScriptTarget.Latest,
+      true,
+    );
+    const scopedClientNames = new Set<string>();
+
+    const collectScopedClients = (node: ts.Node): void => {
+      if (
+        ts.isVariableDeclaration(node)
+        && ts.isIdentifier(node.name)
+        && node.initializer
+        && ts.isCallExpression(node.initializer)
+        && ts.isIdentifier(node.initializer.expression)
+        && node.initializer.expression.text === "createClinicScopedAdminClient"
+      ) {
+        scopedClientNames.add(node.name.text);
+      }
+      ts.forEachChild(node, collectScopedClients);
+    };
+    collectScopedClients(source);
+
+    const collectTables = (node: ts.Node): void => {
+      if (
+        ts.isCallExpression(node)
+        && ts.isPropertyAccessExpression(node.expression)
+        && node.expression.name.text === "from"
+        && ts.isStringLiteral(node.arguments[0])
+      ) {
+        const receiver = node.expression.expression;
+        const isNamedScopedClient =
+          ts.isIdentifier(receiver) && scopedClientNames.has(receiver.text);
+        const isDirectScopedClient =
+          ts.isCallExpression(receiver)
+          && ts.isIdentifier(receiver.expression)
+          && receiver.expression.text === "createClinicScopedAdminClient";
+        if (isNamedScopedClient || isDirectScopedClient) {
+          tables.add(node.arguments[0].text);
+        }
+      }
+      ts.forEachChild(node, collectTables);
+    };
+    collectTables(source);
+  }
+
+  return tables;
 }
 
 vi.mock("server-only", () => ({}));
@@ -146,6 +210,20 @@ describe("createClinicScopedAdminClient", () => {
     );
   });
 
+  it("classifies every literal table queried through the scoped admin client", async () => {
+    const { createClinicScopedAdminClient } = await import("@/lib/supabase/admin");
+    const admin = createClinicScopedAdminClient("clinic-a") as unknown as {
+      from: (table: string) => unknown;
+    };
+    const tables = clinicScopedAdminTablesUsedBySource();
+
+    expect(tables).toContain("user_report_permissions");
+    expect(tables).toContain("assistant_doctor_assignments");
+    for (const table of tables) {
+      expect(() => admin.from(table), table).not.toThrow();
+    }
+  });
+
   it("classifies every clinic-owned P1A table for fail-closed admin access", async () => {
     const { createClinicScopedAdminClient } = await import("@/lib/supabase/admin");
     const admin = createClinicScopedAdminClient("clinic-a") as unknown as {
@@ -200,6 +278,48 @@ describe("createClinicScopedAdminClient", () => {
         method: "eq",
         args: ["clinic_id", "clinic-a"],
       });
+    }
+  });
+
+  it("classifies every clinic-owned table added by the roles/reports/assistant extension", async () => {
+    const { createClinicScopedAdminClient } = await import("@/lib/supabase/admin");
+    const admin = createClinicScopedAdminClient("clinic-a") as unknown as {
+      from: (table: string) => { select: (columns: string) => unknown };
+    };
+
+    for (const table of [
+      "assistant_doctor_assignments",
+      "user_report_permissions",
+      "activity_events",
+    ]) {
+      expect(() => admin.from(table).select("clinic_id")).not.toThrow();
+      expect(queryLog).toContainEqual({
+        table,
+        method: "eq",
+        args: ["clinic_id", "clinic-a"],
+      });
+    }
+  });
+
+  it("keeps supervision assignments and activity events on their narrow write boundaries", async () => {
+    const { createClinicScopedAdminClient } = await import("@/lib/supabase/admin");
+    const admin = createClinicScopedAdminClient("clinic-a") as unknown as {
+      from: (table: string) => {
+        insert: (payload: unknown) => unknown;
+        update: (payload: unknown) => unknown;
+        delete: () => unknown;
+      };
+    };
+
+    for (const table of [
+      "assistant_doctor_assignments",
+      "activity_events",
+    ]) {
+      expect(() => admin.from(table).insert({ clinic_id: "clinic-a" })).toThrow(
+        /read-only access/i,
+      );
+      expect(() => admin.from(table).update({})).toThrow(/read-only access/i);
+      expect(() => admin.from(table).delete()).toThrow(/read-only access/i);
     }
   });
 

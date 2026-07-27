@@ -66,7 +66,7 @@ interface WeekCalendarProps {
   weekStart: Date;
   canEdit: boolean;
   currentUserId?: string;
-  currentUserRole?: "admin" | "receptionist" | "manager" | "doctor";
+  currentUserRole?: "admin" | "receptionist" | "manager" | "doctor" | "assistant";
   clinicHours?: ClinicWorkingHoursValues;
   newAppointmentHref?: string;
 }
@@ -312,7 +312,7 @@ function HourBucketRow({
   bucketMin: number;
   canEdit: boolean;
   currentUserId?: string;
-  currentUserRole?: "admin" | "receptionist" | "manager" | "doctor";
+  currentUserRole?: "admin" | "receptionist" | "manager" | "doctor" | "assistant";
 }) {
   const t = useTranslations("appointments");
   const [showAllOpen, setShowAllOpen] = useState(false);
@@ -370,7 +370,7 @@ export function AppointmentCard({
   appt: Appointment;
   canEdit: boolean;
   currentUserId?: string;
-  currentUserRole?: "admin" | "receptionist" | "manager" | "doctor";
+  currentUserRole?: "admin" | "receptionist" | "manager" | "doctor" | "assistant";
   compact?: boolean;
 }) {
   const t = useTranslations("appointments");
@@ -514,6 +514,8 @@ export function AppointmentCard({
                 currentStatus={appt.status}
                 patientId={appt.patient_id}
                 doctorId={appt.doctor_id}
+                scheduledAt={appt.scheduled_at}
+                durationMinutes={appt.duration_minutes}
                 currentUserId={currentUserId}
                 currentUserRole={currentUserRole}
                 hasInsurance={Boolean(appt.insurance_provider_id)}

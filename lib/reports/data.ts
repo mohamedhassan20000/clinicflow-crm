@@ -12,6 +12,10 @@ import type {
   DoctorPerformanceReportResponse,
   DoctorPerformanceRow,
   FollowupsReportResponse,
+  MyAssistantPerformanceReportResponse,
+  MyAssistantPerformanceRow,
+  MyPerformanceSummaryReportResponse,
+  MyRevenueSummaryReportResponse,
   NoShowByDoctor,
   NoShowReportResponse,
   ReceptionistPerformanceReportResponse,
@@ -44,6 +48,8 @@ export const EMPTY_CANCELLATION: CancellationReportResponse = {
   totalAppointments: 0,
   cancelledCount: 0,
   cancellationRate: 0,
+  replacedCount: 0,
+  replacementRate: 0,
   byDoctor: [],
   byReason: [],
 };
@@ -52,6 +58,8 @@ export const EMPTY_NO_SHOW: NoShowReportResponse = {
   totalAppointments: 0,
   noShowCount: 0,
   noShowRate: 0,
+  replacedCount: 0,
+  replacementRate: 0,
   byDoctor: [],
 };
 
@@ -67,6 +75,42 @@ export const EMPTY_REVENUE: RevenueSummaryReportResponse = {
   transactionCount: 0,
   settlementCount: 0,
   methodBreakdown: [],
+};
+
+export const EMPTY_MY_REVENUE: MyRevenueSummaryReportResponse = {
+  totalAmount: 0,
+  primaryTotal: 0,
+  secondaryTotal: 0,
+  insuranceTotal: 0,
+  depositTotal: 0,
+  outstandingTotal: 0,
+  grossTotal: 0,
+  transactionCount: 0,
+  methodBreakdown: [],
+};
+
+export const EMPTY_MY_PERFORMANCE: MyPerformanceSummaryReportResponse = {
+  appointmentCount: 0,
+  completedCount: 0,
+  cancelledCount: 0,
+  cancellationRate: 0,
+  noShowCount: 0,
+  noShowRate: 0,
+  replacedCount: 0,
+  replacementRate: 0,
+  uniquePatients: 0,
+  activeDays: 0,
+  averagePatientsPerDay: 0,
+  followupsEligible: 0,
+  followupsCompleted: 0,
+  followupCompletionRate: 0,
+  overdueFollowups: 0,
+  previousCompletedCount: 0,
+  completedTrendPct: null,
+};
+
+export const EMPTY_MY_ASSISTANT_PERFORMANCE: MyAssistantPerformanceReportResponse = {
+  assistants: [],
 };
 
 export const EMPTY_FOLLOWUPS: FollowupsReportResponse = {
@@ -124,6 +168,12 @@ function toString(value: unknown) {
   return typeof value === "string" ? value : "";
 }
 
+function toNullableNumber(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 function toNullableString(value: unknown) {
   return typeof value === "string" ? value : null;
 }
@@ -139,6 +189,8 @@ export function normalizeCancellationReport(value: unknown): CancellationReportR
     totalAppointments: toNumber(raw.totalAppointments),
     cancelledCount: toNumber(raw.cancelledCount),
     cancellationRate: toNumber(raw.cancellationRate),
+    replacedCount: toNumber(raw.replacedCount),
+    replacementRate: toNumber(raw.replacementRate),
     byDoctor: normalizeArray<CancellationByDoctor>(raw.byDoctor, (row) => ({
       doctorId: toString(row.doctorId),
       doctorName: toString(row.doctorName),
@@ -159,6 +211,8 @@ export function normalizeNoShowReport(value: unknown): NoShowReportResponse {
     totalAppointments: toNumber(raw.totalAppointments),
     noShowCount: toNumber(raw.noShowCount),
     noShowRate: toNumber(raw.noShowRate),
+    replacedCount: toNumber(raw.replacedCount),
+    replacementRate: toNumber(raw.replacementRate),
     byDoctor: normalizeArray<NoShowByDoctor>(raw.byDoctor, (row) => ({
       doctorId: toString(row.doctorId),
       doctorName: toString(row.doctorName),
@@ -186,6 +240,74 @@ export function normalizeRevenueSummary(value: unknown): RevenueSummaryReportRes
       method: toString(row.method),
       amount: toNumber(row.amount),
     })).filter((row) => row.method.length > 0),
+  };
+}
+
+export function normalizeMyRevenueSummary(value: unknown): MyRevenueSummaryReportResponse {
+  const raw = toRecord(value);
+  return {
+    totalAmount: toNumber(raw.totalAmount),
+    primaryTotal: toNumber(raw.primaryTotal),
+    secondaryTotal: toNumber(raw.secondaryTotal),
+    insuranceTotal: toNumber(raw.insuranceTotal),
+    depositTotal: toNumber(raw.depositTotal),
+    outstandingTotal: toNumber(raw.outstandingTotal),
+    grossTotal: toNumber(raw.grossTotal),
+    transactionCount: toNumber(raw.transactionCount),
+    methodBreakdown: normalizeArray<RevenueMethodBreakdown>(raw.methodBreakdown, (row) => ({
+      method: toString(row.method),
+      amount: toNumber(row.amount),
+    })).filter((row) => row.method.length > 0),
+  };
+}
+
+export function normalizeMyPerformanceSummary(
+  value: unknown,
+): MyPerformanceSummaryReportResponse {
+  const raw = toRecord(value);
+  return {
+    appointmentCount: toNumber(raw.appointmentCount),
+    completedCount: toNumber(raw.completedCount),
+    cancelledCount: toNumber(raw.cancelledCount),
+    cancellationRate: toNumber(raw.cancellationRate),
+    noShowCount: toNumber(raw.noShowCount),
+    noShowRate: toNumber(raw.noShowRate),
+    replacedCount: toNumber(raw.replacedCount),
+    replacementRate: toNumber(raw.replacementRate),
+    uniquePatients: toNumber(raw.uniquePatients),
+    activeDays: toNumber(raw.activeDays),
+    averagePatientsPerDay: toNumber(raw.averagePatientsPerDay),
+    followupsEligible: toNumber(raw.followupsEligible),
+    followupsCompleted: toNumber(raw.followupsCompleted),
+    followupCompletionRate: toNumber(raw.followupCompletionRate),
+    overdueFollowups: toNumber(raw.overdueFollowups),
+    previousCompletedCount: toNumber(raw.previousCompletedCount),
+    // Preserved as null (no prior baseline) rather than coerced to 0.
+    completedTrendPct: toNullableNumber(raw.completedTrendPct),
+  };
+}
+
+export function normalizeMyAssistantPerformance(
+  value: unknown,
+): MyAssistantPerformanceReportResponse {
+  const raw = toRecord(value);
+  return {
+    assistants: normalizeArray<MyAssistantPerformanceRow>(raw.assistants, (row) => ({
+      assistantId: toString(row.assistantId),
+      assistantName: toString(row.assistantName),
+      totalActions: toNumber(row.totalActions),
+      appointmentsBooked: toNumber(row.appointmentsBooked),
+      confirmations: toNumber(row.confirmations),
+      checkIns: toNumber(row.checkIns),
+      completions: toNumber(row.completions),
+      cancellations: toNumber(row.cancellations),
+      noShows: toNumber(row.noShows),
+      reschedules: toNumber(row.reschedules),
+      replacements: toNumber(row.replacements),
+      statusChanges: toNumber(row.statusChanges),
+      followUpsRecorded: toNumber(row.followUpsRecorded),
+      followUpUpdates: toNumber(row.followUpUpdates),
+    })).filter((row) => row.assistantId.length > 0),
   };
 }
 
@@ -343,6 +465,9 @@ export async function getCancellationReportData(
     totalAppointments: doctorRow?.total ?? 0,
     cancelledCount: doctorRow?.cancelled ?? 0,
     cancellationRate: doctorRow?.rate ?? 0,
+    // Replacement is a range-level reschedule KPI, carried through unchanged.
+    replacedCount: report.replacedCount,
+    replacementRate: report.replacementRate,
     byDoctor: doctorRow ? [doctorRow] : [],
     byReason: Array.from(reasonCounts.entries())
       .map(([reason, count]) => ({ reason, count }))
@@ -364,6 +489,8 @@ export async function getNoShowReportData(range: ReportDateRange, doctorId: stri
     totalAppointments: doctorRow?.total ?? 0,
     noShowCount: doctorRow?.noShow ?? 0,
     noShowRate: doctorRow?.rate ?? 0,
+    replacedCount: report.replacedCount,
+    replacementRate: report.replacementRate,
     byDoctor: doctorRow ? [doctorRow] : [],
   };
 }
@@ -383,6 +510,55 @@ export async function getRevenueSummaryData(
 
   if (error) throw new Error(error.message);
   return data ? normalizeRevenueSummary(data) : EMPTY_REVENUE;
+}
+
+/**
+ * "My Revenue" — doctor/assistant self-scoped collected revenue. The dedicated
+ * `get_my_revenue_summary` RPC is SECURITY INVOKER over RLS-scoped appointments
+ * and hard-denies non-doctor/assistant callers, so the scope is enforced in the
+ * database regardless of who invokes this helper. No doctor filter: the result
+ * is already the caller's own / their supervised-doctor union.
+ */
+export async function getMyRevenueSummaryData(range: ReportDateRange) {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("get_my_revenue_summary", dateRangeToRpcArgs(range));
+  if (error) throw new Error(error.message);
+  return data ? normalizeMyRevenueSummary(data) : EMPTY_MY_REVENUE;
+}
+
+/**
+ * "My Performance" — a doctor's own operational KPIs (Phase 8B). The dedicated
+ * `get_my_performance_summary` RPC is SECURITY INVOKER and hard-denies every
+ * role except `doctor`, filtering to the caller's own sessions in the database.
+ * No doctor filter here: the scope is the caller themselves by construction.
+ */
+export async function getMyPerformanceSummaryData(range: ReportDateRange) {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc(
+    "get_my_performance_summary",
+    dateRangeToRpcArgs(range),
+  );
+  if (error) throw new Error(error.message);
+  return data ? normalizeMyPerformanceSummary(data) : EMPTY_MY_PERFORMANCE;
+}
+
+/**
+ * "My Assistant Performance" (Phase 8C) — the operational activity of the
+ * assistants assigned to the calling doctor, each shown separately. The dedicated
+ * `get_my_assistant_performance` RPC is SECURITY DEFINER, hard-denies every role
+ * except `doctor`, and constrains every read to the caller's own clinic and own
+ * doctor_id, so it never widens data access. Counts come from the Phase 8D
+ * activity trail; activity an assistant performed for a different doctor never
+ * enters this report.
+ */
+export async function getMyAssistantPerformanceData(range: ReportDateRange) {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc(
+    "get_my_assistant_performance",
+    dateRangeToRpcArgs(range),
+  );
+  if (error) throw new Error(error.message);
+  return data ? normalizeMyAssistantPerformance(data) : EMPTY_MY_ASSISTANT_PERFORMANCE;
 }
 
 export async function getFollowupsReportData(range: ReportDateRange, outcome: FollowupOutcome | null) {

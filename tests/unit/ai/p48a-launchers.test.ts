@@ -90,7 +90,16 @@ describe("P4.8 launcher registry and visibility resolver", () => {
       "departments",
       "doctor-schedule",
     ]);
-    expect(ASSISTANT_LAUNCHER_REGISTRY.every((entry) => entry.defaultEnabled)).toBe(true);
+    // Every supported role has a per-role default, and the originally-shipped
+    // combinations still default ON (new combinations default OFF).
+    expect(
+      ASSISTANT_LAUNCHER_REGISTRY.every((entry) =>
+        entry.roles.every((role) => role in entry.defaultEnabledByRole),
+      ),
+    ).toBe(true);
+    const patient = ASSISTANT_LAUNCHER_REGISTRY.find((e) => e.area === "patient")!;
+    expect(patient.defaultEnabledByRole.doctor).toBe(true);
+    expect(patient.defaultEnabledByRole.assistant).toBe(false);
     expect(ASSISTANT_LAUNCHER_REGISTRY.every((entry) =>
       entry.requiredFeatures.includes("ai_assistant"),
     )).toBe(true);
@@ -118,7 +127,6 @@ describe("P4.8 launcher registry and visibility resolver", () => {
   it.each([
     ["revenue", "receptionist"],
     ["revenue", "doctor"],
-    ["reports", "doctor"],
     ["invoices", "manager"],
     ["invoices", "receptionist"],
     ["invoices", "doctor"],
@@ -270,12 +278,14 @@ describe("P4.8 launcher registry and visibility resolver", () => {
     },
   );
 
-  it("does not invent appointments access for managers", async () => {
+  it("supports the appointments launcher for managers when placement is enabled", async () => {
+    // Manager gained the Appointments page in this work, so the combination is
+    // now supported (product default OFF; here placement is mocked ON). This is
+    // placement visibility, not authorization — the tools still re-check role.
     await expect(resolveAssistantLauncher({
       user: { ...USER, role: "manager" },
       context: { type: "appointments", dateRange: RANGE },
-    })).resolves.toBeNull();
-    expect(mocks.visibility).not.toHaveBeenCalled();
+    })).resolves.toMatchObject({ context: { type: "appointments" } });
   });
 
   it.each(["admin", "manager", "receptionist", "doctor"] as const)(
@@ -344,7 +354,7 @@ describe("P4.8 launcher registry and visibility resolver", () => {
         roles: ["doctor"],
         requiredFeatures: ["ai_assistant", "ai.staff_analytics"],
         requiredUserPermission: "ai.financial_insights",
-        defaultEnabled: true,
+        defaultEnabledByRole: { doctor: true },
       },
     })).resolves.toBeNull();
     expect(mocks.surfaceAccess).toHaveBeenCalledWith(USER, [

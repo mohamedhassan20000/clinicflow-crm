@@ -52,6 +52,9 @@
     "failedToCheckForConflicts": "Failed to check for conflicts.",
     "failedToConfirmAppointment": "Failed to confirm appointment.",
     "failedToCreateAppointmentPleaseTryAgain": "Failed to create appointment. Please try again.",
+    "failedToLoadReplacementHistory": "Could not load replacement history. Please try again.",
+    "replacementTimeMustBeInTheFuture": "The replacement time must be in the future.",
+    "onlyFutureOpenAppointmentsCanBeReplaced": "Only a future pending or confirmed appointment can be replaced.",
     "failedToDismissAppointment": "Failed to dismiss appointment.",
     "failedToMarkAppointmentAsArrived": "Failed to mark appointment as arrived.",
     "failedToUpdateStatus": "Failed to update status.",
@@ -77,6 +80,7 @@
     "thisDoctorIsAlreadyBookedDuringTheSelectedSessionTime": "This doctor is already booked during the selected session time. Please choose a different time slot.",
     "thisDoctorNeedsA15MinuteRecoveryBufferWindowBetween": "This doctor needs a 15-minute recovery/buffer window between appointments. Please choose a different time slot.",
     "thisPatientAlreadyHasAnotherAppointmentAtTheSameTime": "This patient already has another appointment at the same time. Pick a different slot.",
+    "validationError": "The replacement details are invalid.",
     "weCouldNotCompleteThisRequestPleaseTryAgain": "We could not complete this request. Please try again.",
     "youCanOnlyUpdateYourOwnAppointments": "You can only update your own appointments."
   },

@@ -8,7 +8,7 @@ import { createServerActionMocks } from "../helpers/server-action-mocks";
 // clarification contract for ambiguous entity filters, and an audit row per
 // invocation. The model is never exercised; execute() is driven directly.
 
-type Role = "admin" | "manager" | "receptionist" | "doctor";
+type Role = "admin" | "manager" | "receptionist" | "doctor" | "assistant";
 
 type MockUser = {
   id: string;
@@ -169,9 +169,9 @@ describe("P4.6A registration matrix", () => {
     }
   });
 
-  it("excludes managers from follow-ups, matching the underlying RPC denial", async () => {
+  it("includes follow-ups for managers after the Phase 2 RPC authorization", async () => {
     const { tools } = await load(user("manager"));
-    expect(Object.keys(tools)).not.toContain("list_pending_followups");
+    expect(Object.keys(tools)).toContain("list_pending_followups");
   });
 
   it("gives doctors no P4.6 tools at all — only their P4 clinical set", async () => {
@@ -188,6 +188,25 @@ describe("P4.6A registration matrix", () => {
       // P4.7A help/navigation ride on ai_assistant for every role, doctors
       // included — a doctor may ask how to use the app just like anyone else;
       // P4.7B's list_my_capabilities rides on the same base entitlement.
+      "search_help",
+      "get_navigation_target",
+      "list_my_capabilities",
+    ]);
+  });
+
+  it("keeps assistants on the scoped clinical/help set with no clinic-wide analytics", async () => {
+    const { tools } = await load(user("assistant"), {
+      financialPermission: true,
+    });
+    for (const name of [...OPERATIONAL_TOOLS, ...FINANCIAL_TOOLS]) {
+      expect(Object.keys(tools)).not.toContain(name);
+    }
+    expect(Object.keys(tools)).toEqual([
+      "search_authorized_patients",
+      "get_patient_summary",
+      "search_patient_visits",
+      "list_doctor_appointments",
+      "check_availability",
       "search_help",
       "get_navigation_target",
       "list_my_capabilities",
@@ -657,13 +676,15 @@ describe("P4.6A run_clinic_report", () => {
     expect(mocks.state.rpc).not.toHaveBeenCalled();
   });
 
-  it("denies a manager the follow-ups report, matching the RPC's own denial", async () => {
-    const { tools, mocks } = await load(user("manager"));
+  it("runs the follow-ups report for managers after the Phase 2 RPC authorization", async () => {
+    const { tools } = await load(user("manager"));
 
     await expect(
       tools.run_clinic_report!.execute!({ report: "followups", preset: "this_month" }, opts),
-    ).resolves.toMatchObject({ permission_denied: true, reason: "role_forbidden" });
-    expect(mocks.state.rpc).not.toHaveBeenCalled();
+    ).resolves.toMatchObject({
+      report: "followups",
+      link: expect.stringContaining("/reports/follow-ups?"),
+    });
   });
 
   it("requires the financial gate for the revenue report even for a manager with the entitlement", async () => {

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { requireRole } from "@/lib/rbac";
+import { requireReportAccess } from "@/lib/reports/access";
 import {
   getClinicPrintMeta,
   getFollowupsReportData,
@@ -26,7 +26,7 @@ type PageProps = {
 
 export default async function FollowupsReportPage({ searchParams }: PageProps) {
   const t = await getTranslations("protected");
-  const user = await requireRole(["admin", "manager", "receptionist"]);
+  const user = await requireReportAccess("followups");
   const sp = await searchParams;
   const range = resolveReportsRange(sp);
   const outcome = parseFollowupOutcome(sp.outcome);

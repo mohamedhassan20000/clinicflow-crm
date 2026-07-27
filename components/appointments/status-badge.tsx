@@ -36,6 +36,11 @@ const STATUS_CONFIG: Record<
     labelKey: "statusNoShow",
     className: "bg-muted text-foreground/80 border-calendar-grid",
   },
+  replaced: {
+    labelKey: "statusReplaced",
+    className:
+      "bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800/40 dark:text-slate-300 dark:border-slate-700",
+  },
 };
 
 export function StatusBadge({ status }: { status: AppointmentStatus }) {

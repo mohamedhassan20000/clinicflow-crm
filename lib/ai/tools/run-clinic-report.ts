@@ -23,6 +23,8 @@ import {
   getCancellationReportData,
   getDoctorPerformanceData,
   getFollowupsReportData,
+  getMyPerformanceSummaryData,
+  getMyRevenueSummaryData,
   getNoShowReportData,
   getReceptionistPerformanceData,
   getRevenueSummaryData,
@@ -37,6 +39,7 @@ import {
   type ClinicReportId,
 } from "@/lib/ai/clinic-reports";
 import { activeEntityId } from "@/lib/ai/conversation-context";
+import { getReportVisibilityState } from "@/lib/server-report-permissions";
 
 export { CLINIC_REPORT_IDS, type ClinicReportId } from "@/lib/ai/clinic-reports";
 
@@ -45,8 +48,8 @@ type ReportDefinition = {
   /**
    * Roles allowed to run the report. These mirror the role guards inside the
    * underlying report RPCs exactly — the assistant is never a way around a
-   * denial the same user would hit on the reports page. Note `followups`
-   * excludes managers and `revenue` excludes receptionists for that reason.
+   * denial the same user would hit on the reports page. Financial AI remains
+   * narrower than page access, so `revenue` excludes receptionists.
    */
   roles: readonly UserRole[];
   financial: boolean;
@@ -87,6 +90,21 @@ const REPORTS: Record<ClinicReportId, ReportDefinition> = {
     id: "revenue",
     ...CLINIC_REPORTS.revenue,
     run: ({ range, doctorId }) => getRevenueSummaryData(range, doctorId, null),
+  },
+  my_revenue: {
+    id: "my_revenue",
+    ...CLINIC_REPORTS.my_revenue,
+    // No doctor dimension: the RLS-scoped RPC already returns the caller's own /
+    // supervised-doctor union revenue.
+    run: ({ range }) => getMyRevenueSummaryData(range),
+  },
+  my_performance: {
+    id: "my_performance",
+    ...CLINIC_REPORTS.my_performance,
+    // No doctor dimension: the RLS-scoped RPC already returns the caller's own
+    // operational KPIs. (Doctors do not mount run_clinic_report today, so this
+    // definition is defensive/consistent — the role gate denies anyone else.)
+    run: ({ range }) => getMyPerformanceSummaryData(range),
   },
   followups: {
     id: "followups",
@@ -212,6 +230,21 @@ export function runClinicReportTool(ctx: DoctorToolContext) {
         throw new AiToolAuthorizationError(
           "role_forbidden",
           `Role "${ctx.user.role}" may not run the ${effectiveReport} report.`,
+        );
+      }
+
+      // Per-user report visibility is an independent second gate on top of the
+      // role/data authorization: an admin may hide an otherwise-authorized
+      // report for this specific employee. Re-checked on every invocation so a
+      // report hidden mid-conversation denies immediately.
+      const reportVisibility = await getReportVisibilityState(
+        ctx.user,
+        effectiveReport,
+      );
+      if (reportVisibility !== "visible") {
+        throw new AiToolAuthorizationError(
+          reportVisibility === "lookup_failed" ? "lookup_failed" : "page_hidden",
+          `The ${effectiveReport} report is not available to this user.`,
         );
       }
       // One gate, asserted straight.

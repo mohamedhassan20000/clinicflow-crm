@@ -217,7 +217,7 @@ export async function fetchDoctorDashboardQueue(): Promise<DoctorDashboardQueue>
 export async function fetchDoctorDashboardStats(
   clinicId: string,
   doctorId: string,
-  departmentId: string,
+  departmentId: string | null,
   start: string,
   end: string,
 ): Promise<DoctorDashboardStats> {
@@ -226,6 +226,16 @@ export async function fetchDoctorDashboardStats(
   const todayRange = buildDateRange("today");
   const weekRange = buildDateRange("week");
   const monthRange = buildDateRange("month");
+  const departmentAppointments = departmentId
+    ? supabase
+        .from("appointments")
+        .select("id, scheduled_at, status, patient_id, paid_amount, insurance_amount, secondary_amount")
+        .eq("clinic_id", clinicId)
+        .eq("department_id", departmentId)
+        .gte("scheduled_at", start)
+        .lte("scheduled_at", end)
+        .neq("status", "replaced")
+    : Promise.resolve({ data: [], error: null });
 
   const [
     { count: todayAppts },
@@ -243,7 +253,8 @@ export async function fetchDoctorDashboardStats(
       .eq("doctor_id", doctorId)
       .gte("scheduled_at", todayRange.start)
       .lte("scheduled_at", todayRange.end)
-      .neq("status", "cancelled"),
+      .neq("status", "cancelled")
+      .neq("status", "replaced"),
     supabase
       .from("appointments")
       .select("id", { count: "exact", head: true })
@@ -251,7 +262,8 @@ export async function fetchDoctorDashboardStats(
       .eq("doctor_id", doctorId)
       .gte("scheduled_at", weekRange.start)
       .lte("scheduled_at", weekRange.end)
-      .neq("status", "cancelled"),
+      .neq("status", "cancelled")
+      .neq("status", "replaced"),
     supabase
       .from("appointments")
       .select("id", { count: "exact", head: true })
@@ -259,27 +271,24 @@ export async function fetchDoctorDashboardStats(
       .eq("doctor_id", doctorId)
       .gte("scheduled_at", monthRange.start)
       .lte("scheduled_at", monthRange.end)
-      .neq("status", "cancelled"),
+      .neq("status", "cancelled")
+      .neq("status", "replaced"),
     supabase
       .from("appointments")
       .select("id, scheduled_at, status, patient_id, paid_amount, insurance_amount, secondary_amount")
       .eq("clinic_id", clinicId)
       .eq("doctor_id", doctorId)
       .gte("scheduled_at", start)
-      .lte("scheduled_at", end),
-    supabase
-      .from("appointments")
-      .select("id, scheduled_at, status, patient_id, paid_amount, insurance_amount, secondary_amount")
-      .eq("clinic_id", clinicId)
-      .eq("department_id", departmentId)
-      .gte("scheduled_at", start)
-      .lte("scheduled_at", end),
+      .lte("scheduled_at", end)
+      .neq("status", "replaced"),
+    departmentAppointments,
     supabase
       .from("appointments")
       .select("patient_id")
       .eq("clinic_id", clinicId)
       .gte("scheduled_at", start)
-      .lte("scheduled_at", end),
+      .lte("scheduled_at", end)
+      .neq("status", "replaced"),
     supabase
       .from("follow_ups")
       .select("outcome, appointment:appointments!appointment_id(doctor_id)")
@@ -334,7 +343,7 @@ export async function fetchDoctorDashboardStats(
     current.setDate(current.getDate() + 1);
   }
   for (const a of myAppts ?? []) {
-    if (a.status === "cancelled") continue;
+    if (a.status === "cancelled" || a.status === "replaced") continue;
     const key = new Date(a.scheduled_at).toLocaleDateString("en-US", {
       timeZone: DEFAULT_TIME_ZONE,
       month: "short",
@@ -343,7 +352,7 @@ export async function fetchDoctorDashboardStats(
     if (myByDay.has(key)) myByDay.set(key, (myByDay.get(key) ?? 0) + 1);
   }
   for (const a of deptAppts ?? []) {
-    if (a.status === "cancelled") continue;
+    if (a.status === "cancelled" || a.status === "replaced") continue;
     const key = new Date(a.scheduled_at).toLocaleDateString("en-US", {
       timeZone: DEFAULT_TIME_ZONE,
       month: "short",

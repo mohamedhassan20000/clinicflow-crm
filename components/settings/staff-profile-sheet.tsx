@@ -54,6 +54,7 @@ const ROLE_LABEL_KEYS: Record<string, string> = {
   doctor: "roleDoctor",
   receptionist: "roleReceptionist",
   manager: "roleManager",
+  assistant: "roleAssistant",
 };
 
 const ROLE_COLORS: Record<string, string> = {
@@ -61,6 +62,7 @@ const ROLE_COLORS: Record<string, string> = {
   doctor: "bg-blue-500/10 text-blue-700 border-blue-500/20",
   receptionist: "bg-sky-500/10 text-sky-700 border-sky-500/20",
   manager: "bg-amber-500/10 text-amber-700 border-amber-500/20",
+  assistant: "bg-teal-500/10 text-teal-700 border-teal-500/20",
 };
 
 function fmt(iso: string | null | undefined) {

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { requireRole } from "@/lib/rbac";
+import { requireReportAccess } from "@/lib/reports/access";
 import {
   ALL_FILTER_VALUE,
   cleanFilter,
@@ -28,7 +28,7 @@ type PageProps = {
 
 export default async function DoctorPerformanceReportPage({ searchParams }: PageProps) {
   const t = await getTranslations("protected");
-  const user = await requireRole(["admin", "manager"]);
+  const user = await requireReportAccess("doctor_performance");
   const sp = await searchParams;
   const range = resolveReportsRange(sp);
   const doctorId = cleanFilter(sp.doctor);

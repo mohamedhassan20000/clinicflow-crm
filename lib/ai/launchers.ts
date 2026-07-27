@@ -41,98 +41,140 @@ export type AssistantLauncherDefinition = {
   area: AssistantPageContextType;
   contextType: AssistantPageContextType;
   pageSlug: PageSlug;
+  /**
+   * Roles for which placement is *supported* in this area (a toggle is shown).
+   * Derived from the keys of `defaultEnabledByRole`. Roles outside this set are
+   * fundamentally unsupported and render a disabled placeholder in the settings
+   * matrix. Being supported is not authorization — resolution still re-checks
+   * role, features, permission, and page visibility.
+   */
   roles: readonly UserRole[];
   requiredFeatures: readonly string[];
   requiredUserPermission?: AiUserPermissionKey;
-  defaultEnabled: boolean;
+  /**
+   * Per-role product default. Current shipped combinations stay enabled;
+   * newly-introduced combinations (assistant everywhere it is supported, and
+   * manager on Appointments) default OFF so behavior does not change until an
+   * admin turns them on. A "Reset to Product Defaults" restores exactly this map.
+   */
+  defaultEnabledByRole: Partial<Record<UserRole, boolean>>;
 };
 
-const ALL_STAFF: readonly UserRole[] = [
-  "admin",
-  "manager",
-  "receptionist",
-  "doctor",
-];
+type RoleDefaults = Partial<Record<UserRole, boolean>>;
 
-/** Code-owned defaults for the complete P4.8 launcher rollout. */
+/** Builds a definition, deriving `roles` from the default map's keys. */
+function launcher(
+  def: Omit<AssistantLauncherDefinition, "roles" | "defaultEnabledByRole"> & {
+    defaultEnabledByRole: RoleDefaults;
+  },
+): AssistantLauncherDefinition {
+  return {
+    ...def,
+    roles: Object.keys(def.defaultEnabledByRole) as UserRole[],
+  };
+}
+
+/** Code-owned defaults for the complete launcher rollout (single source). */
 export const ASSISTANT_LAUNCHER_REGISTRY: readonly AssistantLauncherDefinition[] = [
-  {
+  launcher({
     area: "patient",
     contextType: "patient",
     pageSlug: "patients",
-    roles: ["doctor"],
     requiredFeatures: [AI_ASSISTANT_FEATURE],
-    defaultEnabled: true,
-  },
-  {
+    // Assistant added (clinical patient context, scoped) — default OFF.
+    defaultEnabledByRole: { doctor: true, assistant: false },
+  }),
+  launcher({
     area: "appointments",
     contextType: "appointments",
     pageSlug: "appointments",
-    roles: ["admin", "receptionist", "doctor"],
     requiredFeatures: [AI_ASSISTANT_FEATURE],
-    defaultEnabled: true,
-  },
-  {
+    // Manager + assistant are new supported combinations — default OFF.
+    defaultEnabledByRole: {
+      admin: true,
+      receptionist: true,
+      doctor: true,
+      manager: false,
+      assistant: false,
+    },
+  }),
+  launcher({
     area: "dashboard",
     contextType: "dashboard",
     pageSlug: "dashboard",
-    roles: ALL_STAFF,
     requiredFeatures: [AI_ASSISTANT_FEATURE],
-    defaultEnabled: true,
-  },
-  {
+    // Assistant is new — default OFF; the four existing staff roles stay ON.
+    defaultEnabledByRole: {
+      admin: true,
+      manager: true,
+      receptionist: true,
+      doctor: true,
+      assistant: false,
+    },
+  }),
+  launcher({
     area: "revenue",
     contextType: "revenue",
     pageSlug: "revenue",
-    roles: ["admin", "manager"],
     requiredFeatures: [AI_ASSISTANT_FEATURE, AI_FINANCIAL_INSIGHTS_FEATURE],
     requiredUserPermission: AI_FINANCIAL_INSIGHTS_PERMISSION,
-    defaultEnabled: true,
-  },
-  {
+    // Financial: only admin/manager are supported at all.
+    defaultEnabledByRole: { admin: true, manager: true },
+  }),
+  launcher({
     area: "reports",
     contextType: "reports",
     pageSlug: "reports",
-    roles: ["admin", "manager", "receptionist"],
     requiredFeatures: [AI_ASSISTANT_FEATURE, AI_STAFF_ANALYTICS_FEATURE],
-    defaultEnabled: true,
-  },
-  {
+    // Doctor + assistant now have a (scoped) Reports page — supported, default OFF.
+    defaultEnabledByRole: {
+      admin: true,
+      manager: true,
+      receptionist: true,
+      doctor: false,
+      assistant: false,
+    },
+  }),
+  launcher({
     area: "invoices",
     contextType: "invoices",
     pageSlug: "appointments",
     // The shipped invoice surface is the front-desk billing dialog. Of its
     // admin/receptionist hosts, only admins may hold financial AI access.
-    roles: ["admin"],
     requiredFeatures: [AI_ASSISTANT_FEATURE, AI_FINANCIAL_INSIGHTS_FEATURE],
     requiredUserPermission: AI_FINANCIAL_INSIGHTS_PERMISSION,
-    defaultEnabled: true,
-  },
-  {
+    defaultEnabledByRole: { admin: true },
+  }),
+  launcher({
     area: "staff",
     contextType: "staff",
     pageSlug: "settings",
-    roles: ["admin", "manager"],
     requiredFeatures: [AI_ASSISTANT_FEATURE, AI_STAFF_ANALYTICS_FEATURE],
-    defaultEnabled: true,
-  },
-  {
+    defaultEnabledByRole: { admin: true, manager: true },
+  }),
+  launcher({
     area: "departments",
     contextType: "departments",
     pageSlug: "settings",
-    roles: ["admin", "manager"],
     requiredFeatures: [AI_ASSISTANT_FEATURE, AI_STAFF_ANALYTICS_FEATURE],
-    defaultEnabled: true,
-  },
-  {
+    defaultEnabledByRole: { admin: true, manager: true },
+  }),
+  launcher({
     area: "doctor-schedule",
     contextType: "doctor-schedule",
     pageSlug: "settings",
-    roles: ["admin", "manager"],
     requiredFeatures: [AI_ASSISTANT_FEATURE, AI_STAFF_ANALYTICS_FEATURE],
-    defaultEnabled: true,
-  },
+    defaultEnabledByRole: { admin: true, manager: true },
+  }),
 ];
+
+/** The product-default placement for one area and role (false if unsupported). */
+export function launcherDefaultEnabled(
+  definition: AssistantLauncherDefinition,
+  role: UserRole,
+): boolean {
+  return definition.defaultEnabledByRole[role] ?? false;
+}
 
 export type AssistantLauncherResolution = {
   context: LaunchableAssistantPageContext;
@@ -192,7 +234,7 @@ export async function resolveAssistantLauncherDefinition(input: {
       !(await resolveAssistantLauncherPlacement({
         user: input.user,
         area: definition.area,
-        defaultEnabled: definition.defaultEnabled,
+        defaultEnabled: launcherDefaultEnabled(definition, input.user.role),
       }))
     ) {
       return null;

@@ -35,6 +35,9 @@ export const STAFF_TASK_CLASSES_BY_ROLE = {
   manager: ["staff_administrative", "staff_operational_query", "staff_help"],
   receptionist: ["staff_administrative", "staff_operational_query", "staff_help"],
   doctor: ["staff_clinical_summary", "staff_help"],
+  // Assistant mirrors the doctor's clinical scope; RLS + auth_supervised_doctor_ids
+  // restrict every tool to the assigned doctors' data (never clinic-wide).
+  assistant: ["staff_clinical_summary", "staff_help"],
 } as const satisfies Record<UserRole, readonly AiTaskClass[]>;
 
 export function staffTaskClassesForRole(role: UserRole): readonly AiTaskClass[] {

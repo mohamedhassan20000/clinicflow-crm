@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { requireActiveSubscription } from "@/lib/billing/subscriptions";
 
-export type UserRole = "admin" | "receptionist" | "manager" | "doctor";
+export type UserRole = "admin" | "receptionist" | "manager" | "doctor" | "assistant";
 
 export type AuthedUser = {
   id: string;

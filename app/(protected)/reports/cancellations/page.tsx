@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { requireRole } from "@/lib/rbac";
+import { requireReportAccess, reportScopeLockedToSelf } from "@/lib/reports/access";
 import {
   ALL_FILTER_VALUE,
   cleanFilter,
@@ -28,14 +28,17 @@ type PageProps = {
 
 export default async function CancellationReportPage({ searchParams }: PageProps) {
   const t = await getTranslations("protected");
-  const user = await requireRole(["admin", "manager", "receptionist"]);
+  const user = await requireReportAccess("cancellations");
   const sp = await searchParams;
   const range = resolveReportsRange(sp);
-  const doctorId = cleanFilter(sp.doctor);
+  // Doctors/assistants are locked to their own scope (RLS): ignore any doctor
+  // filter and never load the clinic-wide doctor list for them.
+  const scopeLocked = reportScopeLockedToSelf(user.role);
+  const doctorId = scopeLocked ? null : cleanFilter(sp.doctor);
 
   const [clinic, doctors, data, assistant] = await Promise.all([
     getClinicPrintMeta(user),
-    getDoctorOptions(user),
+    scopeLocked ? Promise.resolve([]) : getDoctorOptions(user),
     getCancellationReportData(user, range, doctorId),
     resolveAssistantLauncher({
       user,
@@ -55,13 +58,15 @@ export default async function CancellationReportPage({ searchParams }: PageProps
         actions={<AssistantLauncherEntry resolution={assistant} role={user.role} />}
       />
       <ReportsDateFilter range={range} />
-      <ReportSelectFilter
-        name="doctor"
-        label={t("doctor")}
-        value={doctorId ?? ALL_FILTER_VALUE}
-        allLabel={t("allDoctors")}
-        options={doctors}
-      />
+      {scopeLocked ? null : (
+        <ReportSelectFilter
+          name="doctor"
+          label={t("doctor")}
+          value={doctorId ?? ALL_FILTER_VALUE}
+          allLabel={t("allDoctors")}
+          options={doctors}
+        />
+      )}
       <CancellationReport data={data} range={range} clinic={clinic} />
     </div>
   );

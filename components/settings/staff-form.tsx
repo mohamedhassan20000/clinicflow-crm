@@ -36,10 +36,68 @@ import { formatDoctorName } from "@/lib/format-doctor";
 import { useTranslations } from "next-intl";
 
 type Department = Pick<Tables<"departments">, "id" | "name">;
-type StaffRole = "admin" | "doctor" | "receptionist" | "manager";
+type DoctorOption = { id: string; full_name: string };
+type StaffRole = "admin" | "doctor" | "receptionist" | "manager" | "assistant";
 
 function usesDepartment(role: StaffRole) {
-  return role !== "admin" && role !== "manager";
+  // Assistants are scoped by doctor assignment, not by department.
+  return role !== "admin" && role !== "manager" && role !== "assistant";
+}
+
+/**
+ * Multi-select of supervising doctors, shown only for the assistant role. Drives
+ * the assistant's data scope (union of assigned doctors). Purely presentational;
+ * the server re-validates every id against same-clinic active doctors.
+ */
+function SupervisingDoctorsField({
+  doctors,
+  value,
+  onChange,
+  disabled,
+  label,
+  emptyLabel,
+}: {
+  doctors: DoctorOption[];
+  value: string[];
+  onChange: (ids: string[]) => void;
+  disabled?: boolean;
+  label: string;
+  emptyLabel: string;
+}) {
+  function toggle(id: string, checked: boolean) {
+    if (checked) onChange(Array.from(new Set([...value, id])));
+    else onChange(value.filter((v) => v !== id));
+  }
+  return (
+    <FormItem className="sm:col-span-2">
+      <FormLabel>{label}</FormLabel>
+      {doctors.length === 0 ? (
+        <p className="text-sm text-muted-foreground">{emptyLabel}</p>
+      ) : (
+        <div className="grid max-h-48 gap-1.5 overflow-y-auto rounded-lg border border-border/60 p-3 sm:grid-cols-2">
+          {doctors.map((doctor) => {
+            const checked = value.includes(doctor.id);
+            return (
+              <label
+                key={doctor.id}
+                className="flex items-center gap-2 text-sm"
+              >
+                <input
+                  type="checkbox"
+                  className="size-4 rounded border-border"
+                  checked={checked}
+                  disabled={disabled}
+                  onChange={(e) => toggle(doctor.id, e.target.checked)}
+                />
+                <span className="truncate">{doctor.full_name}</span>
+              </label>
+            );
+          })}
+        </div>
+      )}
+      <FormMessage />
+    </FormItem>
+  );
 }
 
 // ── Create staff form ────────────────────────────────────────────────────────
@@ -54,6 +112,7 @@ interface CreatedSnapshot {
 interface CreateStaffFormProps {
   action: (prev: ActionResult | null, fd: FormData) => Promise<ActionResult>;
   departments: Department[];
+  doctors: DoctorOption[];
   canCreateAdmin?: boolean;
   onSuccess?: () => void;
   onCreated?: (staffId: string, snapshot: CreatedSnapshot) => void;
@@ -62,6 +121,7 @@ interface CreateStaffFormProps {
 export function CreateStaffForm({
   action,
   departments,
+  doctors,
   canCreateAdmin = true,
   onSuccess,
   onCreated,
@@ -78,11 +138,13 @@ export function CreateStaffForm({
       temporary_password: "",
       role: "receptionist",
       department_id: null,
+      supervising_doctor_ids: [],
       phone: "",
     },
   });
   const selectedRole = useWatch({ control: form.control, name: "role" });
   const showDepartment = usesDepartment(selectedRole);
+  const showSupervisingDoctors = selectedRole === "assistant";
 
   useEffect(() => {
     if (!showDepartment) {
@@ -124,6 +186,11 @@ export function CreateStaffForm({
     fd.set("role", values.role);
     if (usesDepartment(values.role) && values.department_id) {
       fd.set("department_id", values.department_id);
+    }
+    if (values.role === "assistant") {
+      for (const id of values.supervising_doctor_ids ?? []) {
+        fd.append("supervising_doctor_ids", id);
+      }
     }
     if (values.phone) fd.set("phone", values.phone);
     startTransition(() => formAction(fd));
@@ -210,12 +277,29 @@ export function CreateStaffForm({
                     <SelectItem value="doctor">{t("doctor")}</SelectItem>
                     <SelectItem value="receptionist">{t("receptionist")}</SelectItem>
                     <SelectItem value="manager">{t("manager")}</SelectItem>
+                    <SelectItem value="assistant">{t("roleAssistant")}</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormMessage />
               </FormItem>
             )}
           />
+          {showSupervisingDoctors && (
+            <FormField
+              control={form.control}
+              name="supervising_doctor_ids"
+              render={({ field }) => (
+                <SupervisingDoctorsField
+                  doctors={doctors}
+                  value={field.value ?? []}
+                  onChange={field.onChange}
+                  disabled={isPending}
+                  label={t("supervisingDoctors")}
+                  emptyLabel={t("noDoctorsToAssign")}
+                />
+              )}
+            />
+          )}
           {showDepartment && (
             <FormField
               control={form.control}
@@ -287,14 +371,18 @@ export function CreateStaffForm({
 interface EditStaffFormProps {
   action: (prev: ActionResult | null, fd: FormData) => Promise<ActionResult>;
   departments: Department[];
+  doctors: DoctorOption[];
   defaultValues: UpdateStaffValues;
+  initialSupervisingDoctorIds?: string[];
   onSuccess?: () => void;
 }
 
 export function EditStaffForm({
   action,
   departments,
+  doctors,
   defaultValues,
+  initialSupervisingDoctorIds = [],
   onSuccess,
 }: EditStaffFormProps) {
   const t = useTranslations("settings");
@@ -303,10 +391,14 @@ export function EditStaffForm({
 
   const form = useForm<UpdateStaffValues>({
     resolver: zodResolver(updateStaffSchema),
-    defaultValues,
+    defaultValues: {
+      ...defaultValues,
+      supervising_doctor_ids: initialSupervisingDoctorIds,
+    },
   });
   const selectedRole = useWatch({ control: form.control, name: "role" });
   const showDepartment = usesDepartment(selectedRole);
+  const showSupervisingDoctors = selectedRole === "assistant";
 
   useEffect(() => {
     if (!showDepartment) {
@@ -333,6 +425,11 @@ export function EditStaffForm({
     fd.set("role", values.role);
     if (usesDepartment(values.role) && values.department_id) {
       fd.set("department_id", values.department_id);
+    }
+    if (values.role === "assistant") {
+      for (const id of values.supervising_doctor_ids ?? []) {
+        fd.append("supervising_doctor_ids", id);
+      }
     }
     if (values.phone) fd.set("phone", values.phone);
     fd.set("is_active", String(values.is_active));
@@ -383,12 +480,29 @@ export function EditStaffForm({
                     <SelectItem value="doctor">{t("doctor")}</SelectItem>
                     <SelectItem value="receptionist">{t("receptionist")}</SelectItem>
                     <SelectItem value="manager">{t("manager")}</SelectItem>
+                    <SelectItem value="assistant">{t("roleAssistant")}</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormMessage />
               </FormItem>
             )}
           />
+          {showSupervisingDoctors && (
+            <FormField
+              control={form.control}
+              name="supervising_doctor_ids"
+              render={({ field }) => (
+                <SupervisingDoctorsField
+                  doctors={doctors}
+                  value={field.value ?? []}
+                  onChange={field.onChange}
+                  disabled={isPending}
+                  label={t("supervisingDoctors")}
+                  emptyLabel={t("noDoctorsToAssign")}
+                />
+              )}
+            />
+          )}
           {showDepartment && (
             <FormField
               control={form.control}

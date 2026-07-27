@@ -41,6 +41,7 @@ import { resolveReturnTo, withReturnTo } from "@/lib/navigation/return-url";
 import { getTranslations } from "next-intl/server";
 import { AssistantLauncherEntry } from "@/components/assistant/assistant-launcher-entry";
 import { resolveAssistantLauncher } from "@/lib/ai/launchers";
+import { ActivityTimeline } from "@/components/activity/activity-timeline";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("protected");
@@ -146,6 +147,8 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
   if (!patient) notFound();
 
   const isDoctor = user.role === "doctor";
+  const isAssistant = user.role === "assistant";
+  const isScopedClinical = isDoctor || isAssistant;
   const isAdmin = user.role === "admin";
   const isReceptionist = user.role === "receptionist";
   const canManageMedicalNotes = isAdmin || isDoctor;
@@ -158,11 +161,11 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
 
   if (isDoctor && !doctorCanAccessPatient) notFound();
 
-  // The contextual launcher is a doctor-only clinical capability. It is
+  // The contextual launcher is a scoped clinical capability. It is
   // optional enhancement data: entitlement, admin visibility, usage, or AI
   // persistence failures must never make the patient record unavailable.
   const patientAssistantContext = { type: "patient", patientId: patient.id } as const;
-  const assistantPromise = isDoctor && !patient.is_deleted
+  const assistantPromise = isScopedClinical && !patient.is_deleted
     ? resolveAssistantLauncher({ user, context: patientAssistantContext })
     : null;
 
@@ -193,7 +196,9 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
     supabase
       .from("appointments")
       .select(
-        "id, scheduled_at, status, payment_method, paid_at, total_amount, paid_amount, insurance_amount, secondary_amount, deposit_amount, outstanding_amount, secondary_payment_method, payment_note, cancellation_reason, cancelled_at, package_id, package_session_number, profiles!doctor_id(full_name), departments(name, color), insurance_providers(name), patient_packages(name, total_sessions, used_sessions, price_per_session), appointment_services(id, name, price, quantity)",
+        isScopedClinical
+          ? "id, scheduled_at, status, cancellation_reason, cancelled_at, package_id, package_session_number, profiles!doctor_id(full_name), departments(name, color), patient_packages(name, total_sessions, used_sessions)"
+          : "id, scheduled_at, status, payment_method, paid_at, total_amount, paid_amount, insurance_amount, secondary_amount, deposit_amount, outstanding_amount, secondary_payment_method, payment_note, cancellation_reason, cancelled_at, package_id, package_session_number, profiles!doctor_id(full_name), departments(name, color), insurance_providers(name), patient_packages(name, total_sessions, used_sessions, price_per_session), appointment_services(id, name, price, quantity)",
       )
       .eq("patient_id", id)
       .eq("clinic_id", user.clinicId)
@@ -296,7 +301,7 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
     attachments: attachmentsByNote.get(note.id) ?? [],
   }));
 
-  // Financial data — only loaded for non-doctor roles
+  // Financial data is never loaded for scoped clinical roles.
   const settlementsByAppt = new Map<
     string,
     {
@@ -310,7 +315,7 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
   let billingTotals = { billed: 0, collected: 0, outstanding: 0 };
   let accountBalance = 0;
 
-  if (!isDoctor) {
+  if (!isScopedClinical) {
     const [
       { data: settlements },
       { data: deposits },
@@ -374,7 +379,9 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
     );
   }
 
-  const canEdit = !isDoctor && user.role !== "manager" && !patient.is_deleted;
+  const canEdit =
+    (user.role === "admin" || user.role === "receptionist") &&
+    !patient.is_deleted;
   let patientDocuments: PatientDocumentsData | null = null;
   let patientDocumentsLoadFailed = false;
   if (canViewDocuments) {
@@ -582,7 +589,7 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
         {/* Right column */}
         <div className="lg:col-span-2 space-y-6">
           {/* Billing summary strip — hidden for doctors */}
-          {!isDoctor && <div className="space-y-3">
+          {!isScopedClinical && <div className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                 <Receipt className="h-4 w-4" />
@@ -686,7 +693,7 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
               {appointments && appointments.length > 0 ? (
                 <div>
                   {appointments.map((a) =>
-                    isDoctor ? (
+                    isScopedClinical ? (
                       <SimpleApptRow key={a.id} a={a as Parameters<typeof SimpleApptRow>[0]["a"]} clinicLocale={clinicLocale} />
                     ) : (
                       <AppointmentPaymentRow
@@ -703,7 +710,7 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
                   {t("noAppointmentsYet")}</div>
               )}
             </div>
-            {!isDoctor && (appointments ?? []).some((a) => a.status === "completed") && (
+            {!isScopedClinical && (appointments ?? []).some((a) => a.status === "completed") && (
               <p className="text-[11px] text-muted-foreground">
                 {t("tipClickACompletedAppointmentTo")}</p>
             )}
@@ -769,6 +776,13 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
               canUploadAttachments={canManageMedicalNotes}
             />
           )}
+
+          {/* Patient activity trail (Phase 8D) */}
+          <div className="space-y-3">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+              {t("patientActivity")}</h2>
+            <ActivityTimeline patientId={id} compact />
+          </div>
         </div>
       </div>
     </div>

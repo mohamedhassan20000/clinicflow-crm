@@ -93,6 +93,12 @@ async function loadAppointmentsActions() {
   vi.doMock("@/actions/patients", () => ({
     getPatientAccountBalance: vi.fn(async () => 0),
   }));
+  vi.doMock("@/actions/settings", () => ({
+    getClinicWorkingHours: vi.fn(async () => []),
+  }));
+  vi.doMock("@/lib/messaging/appointment-notifications", () => ({
+    notifyAppointmentEvent: vi.fn(async () => undefined),
+  }));
 
   const appointments = await import("@/actions/appointments");
   return { ...appointments, mocks };
@@ -121,6 +127,8 @@ describe("appointment reference validation", () => {
     expect(mocks.state.requireRole).toHaveBeenCalledWith([
       "admin",
       "receptionist",
+      "manager",
+      "assistant",
     ]);
     expect(mocks.state.queryLog).toContainEqual(
       expect.objectContaining({
@@ -425,6 +433,133 @@ describe("appointment conflict prevention", () => {
   });
 });
 
+describe("dedicated appointment replacement action", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("allows an assigned doctor through the narrow replacement path", async () => {
+    const { replaceAppointment, mocks } = await loadAppointmentsActions();
+    mocks.state.authedUser.role = "doctor";
+    mocks.state.authedUser.id = DOCTOR_ID;
+    mocks.state.tableResults["clinics.select"] = {
+      data: { timezone: "UTC" },
+      error: null,
+    };
+    mocks.state.tableResults["appointments.select"] = [
+      {
+        data: {
+          id: APPOINTMENT_ID,
+          doctor_id: mocks.state.authedUser.id,
+          status: "confirmed",
+          scheduled_at: "2099-01-01T09:00:00.000Z",
+        },
+        error: null,
+      },
+      { data: [], error: null },
+    ];
+    const replacementId = "66666666-6666-4666-8666-666666666666";
+    mocks.state.rpcResults.replace_appointment = {
+      data: replacementId,
+      error: null,
+    };
+
+    const result = await replaceAppointment({
+      original_id: APPOINTMENT_ID,
+      doctor_id: DOCTOR_ID,
+      scheduled_at: "2099-01-02T10:00:00.000Z",
+      duration_minutes: 30,
+    });
+
+    expect(mocks.state.requireRole).toHaveBeenCalledWith([
+      "admin",
+      "receptionist",
+      "manager",
+      "doctor",
+      "assistant",
+    ]);
+    expect(mocks.state.queryLog).toContainEqual(
+      expect.objectContaining({
+        table: "appointments",
+        operation: "select",
+        args: ["neq", "id", APPOINTMENT_ID],
+      }),
+    );
+    expect(mocks.state.rpc).toHaveBeenCalledWith("replace_appointment", {
+      p_original_id: APPOINTMENT_ID,
+      p_scheduled_at: "2099-01-02T10:00:00.000Z",
+      p_doctor_id: DOCTOR_ID,
+      p_duration_minutes: 30,
+      p_department_id: undefined,
+      p_notes: undefined,
+    });
+    expect(result).toEqual({
+      success: true,
+      appointmentId: replacementId,
+    });
+  });
+
+  it("rejects a past replacement before reading or writing appointments", async () => {
+    const { replaceAppointment, mocks } = await loadAppointmentsActions();
+
+    const result = await replaceAppointment({
+      original_id: APPOINTMENT_ID,
+      doctor_id: DOCTOR_ID,
+      scheduled_at: "2020-01-01T10:00:00.000Z",
+      duration_minutes: 30,
+    });
+
+    expect(result).toEqual({
+      error: "The replacement time must be in the future.",
+    });
+    expect(mocks.state.from).not.toHaveBeenCalledWith("appointments");
+    expect(mocks.state.rpc).not.toHaveBeenCalledWith(
+      "replace_appointment",
+      expect.anything(),
+    );
+  });
+
+  it("does not let the original block its own newly selected slot", async () => {
+    const { replaceAppointment, mocks } = await loadAppointmentsActions();
+    mocks.state.tableResults["clinics.select"] = {
+      data: { timezone: "UTC" },
+      error: null,
+    };
+    mocks.state.tableResults["appointments.select"] = [
+      {
+        data: {
+          id: APPOINTMENT_ID,
+          doctor_id: DOCTOR_ID,
+          status: "confirmed",
+          scheduled_at: "2099-01-01T10:00:00.000Z",
+        },
+        error: null,
+      },
+      { data: [], error: null },
+    ];
+    mocks.state.rpcResults.replace_appointment = {
+      data: "66666666-6666-4666-8666-666666666666",
+      error: null,
+    };
+
+    const result = await replaceAppointment({
+      original_id: APPOINTMENT_ID,
+      doctor_id: DOCTOR_ID,
+      scheduled_at: "2099-01-01T10:15:00.000Z",
+      duration_minutes: 30,
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(mocks.state.queryLog).toContainEqual(
+      expect.objectContaining({
+        table: "appointments",
+        operation: "select",
+        args: ["neq", "id", APPOINTMENT_ID],
+      }),
+    );
+  });
+});
+
 describe("appointment status and role boundaries", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -448,6 +583,8 @@ describe("appointment status and role boundaries", () => {
     expect(mocks.state.requireRole).toHaveBeenCalledWith([
       "admin",
       "receptionist",
+      "manager",
+      "assistant",
     ]);
     expect(mocks.state.revalidatePath).toHaveBeenCalledWith("/appointments");
     expect(mocks.state.revalidatePath).toHaveBeenCalledWith(
@@ -539,7 +676,12 @@ describe("checkSameDayPatient", () => {
       expect.objectContaining({
         table: "appointments",
         operation: "select",
-        args: ["not", "status", "in", '("cancelled","no_show")'],
+        args: [
+          "not",
+          "status",
+          "in",
+          '("cancelled","no_show","replaced")',
+        ],
       }),
     );
   });

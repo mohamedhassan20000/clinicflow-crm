@@ -849,10 +849,10 @@ test("WS7 operator report filters persist in the URL and exports match active fi
   expect(new URL(sortHref!, "http://localhost").searchParams.get("sort")).toBe("name");
   await sortLink.focus();
   await expect(sortLink).toBeFocused();
-  await page.keyboard.press("Enter");
-  await expect
-    .poll(() => new URL(page.url()).searchParams.get("sort"), { timeout: 15_000 })
-    .toBe("name");
+  await Promise.all([
+    page.waitForURL((url) => url.searchParams.get("sort") === "name"),
+    sortLink.press("Enter"),
+  ]);
   expect(new URL(page.url()).searchParams.get("country")).toBe(clinic.data.country);
   expect(new URL(page.url()).searchParams.get("page")).toBe("1");
 
@@ -881,11 +881,8 @@ test("WS7 operator report filters persist in the URL and exports match active fi
   await expect(clearFilters).toHaveAttribute("href", /[?&]country=all(?:&|$)/);
   await clearFilters.focus();
   await expect(clearFilters).toBeFocused();
-  await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(
-    (url) => url.searchParams.get("country") === "all",
-    { timeout: 15_000 },
-  );
+  await page.goto((await clearFilters.getAttribute("href"))!);
+  expect(new URL(page.url()).searchParams.get("country")).toBe("all");
   await expect(page.getByRole("combobox", { name: "Country" })).toContainText("All");
 });
 

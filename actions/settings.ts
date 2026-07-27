@@ -1,5 +1,6 @@
 "use server";
 
+import { z } from "zod";
 import { actionError, actionWeekday } from "@/lib/i18n/action-errors";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { createClinicScopedAdminClient } from "@/lib/supabase/admin";
@@ -38,7 +39,7 @@ async function getStaffTargetForClinic(
   const supabase = await createClient();
   const { data } = await supabase
     .from("profiles")
-    .select("id, clinic_id, role")
+    .select("id, clinic_id, role, full_name, department_id, phone, is_active")
     .eq("id", staffId)
     .eq("clinic_id", clinicId)
     .single();
@@ -51,6 +52,46 @@ function managerCanManageTarget(
   targetRole: string,
 ) {
   return actorRole === "admin" || targetRole !== "admin";
+}
+
+/**
+ * Replaces an assistant's supervising-doctor set (many-to-many). This drives the
+ * assistant's DATA SCOPE only — never page/report visibility. For a non-assistant
+ * role it clears any assignments (e.g. a role change away from assistant). Only
+ * same-clinic active doctors are accepted. The database RPC validates and
+ * replaces the complete set in one transaction, so a stale or forged doctor id
+ * fails the update instead of silently leaving the assistant unassigned.
+ */
+async function syncAssistantAssignments(
+  assistantId: string,
+  role: string,
+  doctorIds: string[],
+): Promise<boolean> {
+  const supabase = await createClient();
+
+  const { error } = await supabase.rpc(
+    "replace_assistant_doctor_assignments",
+    {
+      p_assistant_id: assistantId,
+      p_doctor_ids:
+        role === "assistant" ? Array.from(new Set(doctorIds)) : [],
+    },
+  );
+  return !error;
+}
+
+/** The supervising-doctor ids currently assigned to an assistant (edit prefill). */
+export async function getAssistantSupervisingDoctorIds(
+  staffId: string,
+): Promise<string[]> {
+  const user = await requireRole(["admin", "manager"]);
+  const adminClient = createClinicScopedAdminClient(user.clinicId);
+  const { data } = await adminClient
+    .from("assistant_doctor_assignments")
+    .select("doctor_id")
+    .eq("clinic_id", user.clinicId)
+    .eq("assistant_id", staffId);
+  return (data ?? []).map((row) => row.doctor_id);
 }
 
 export async function createStaff(
@@ -66,6 +107,7 @@ export async function createStaff(
     role: fd.get("role"),
     department_id: fd.get("department_id") || null,
     phone: fd.get("phone") || null,
+    supervising_doctor_ids: fd.getAll("supervising_doctor_ids").map(String),
   });
 
   if (!parsed.success) {
@@ -117,6 +159,20 @@ export async function createStaff(
     return { error: await actionError("settings.weCouldNotCompleteThisRequestPleaseTryAgain") };
   }
 
+  const assignmentsSaved = await syncAssistantAssignments(
+    userId,
+    role,
+    parsed.data.supervising_doctor_ids ?? [],
+  );
+  if (!assignmentsSaved) {
+    await adminClient.auth.admin.deleteUser(userId);
+    return {
+      error: await actionError(
+        "settings.weCouldNotCompleteThisRequestPleaseTryAgain",
+      ),
+    };
+  }
+
   if (user.role === "admin" || user.role === "manager") {
     await ensureDefaultPagePermissions(userId, role, user.clinicId);
   }
@@ -139,6 +195,7 @@ export async function updateStaff(
     department_id: fd.get("department_id") || null,
     phone: fd.get("phone") || null,
     is_active: fd.get("is_active") === "true",
+    supervising_doctor_ids: fd.getAll("supervising_doctor_ids").map(String),
   });
 
   if (!parsed.success) {
@@ -174,6 +231,30 @@ export async function updateStaff(
 
   if (error) return { error: await actionError("settings.weCouldNotCompleteThisRequestPleaseTryAgain") };
   if (!count) return { error: await actionError("settings.couldNotUpdateThisStaffMemberYouMayLackPermission") };
+
+  const assignmentsSaved = await syncAssistantAssignments(
+    staffId,
+    parsed.data.role,
+    parsed.data.supervising_doctor_ids ?? [],
+  );
+  if (!assignmentsSaved) {
+    await supabase
+      .from("profiles")
+      .update({
+        full_name: target.full_name,
+        role: target.role,
+        department_id: target.department_id,
+        phone: target.phone,
+        is_active: target.is_active,
+      })
+      .eq("id", target.id)
+      .eq("clinic_id", target.clinic_id);
+    return {
+      error: await actionError(
+        "settings.weCouldNotCompleteThisRequestPleaseTryAgain",
+      ),
+    };
+  }
 
   if (user.role === "admin" || user.role === "manager") {
     await ensureDefaultPagePermissions(staffId, parsed.data.role, user.clinicId);
@@ -300,8 +381,12 @@ export async function deleteStaff(staffId: string): Promise<ActionResult> {
   return { success: true };
 }
 
-const temporaryPasswordSchema = createStaffSchema.pick({
-  temporary_password: true,
+const temporaryPasswordSchema = z.object({
+  temporary_password: z
+    .string()
+    .min(8)
+    .regex(/[A-Z]/)
+    .regex(/[0-9]/),
 });
 
 export async function resetStaffPassword(
@@ -977,7 +1062,13 @@ export async function toggleServiceActive(
 const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6] as const;
 
 export async function getClinicWorkingHours(): Promise<ClinicWorkingHoursValues> {
-  const user = await requireReadRole(["admin", "manager", "receptionist", "doctor"]);
+  const user = await requireReadRole([
+    "admin",
+    "manager",
+    "receptionist",
+    "doctor",
+    "assistant",
+  ]);
   const supabase = await createClient();
 
   const { data } = await supabase
@@ -1058,7 +1149,13 @@ export async function upsertClinicWorkingHours(
 export async function getDoctorSchedule(
   doctorId: string,
 ): Promise<DoctorScheduleValues> {
-  const user = await requireReadRole(["admin", "manager", "receptionist", "doctor"]);
+  const user = await requireReadRole([
+    "admin",
+    "manager",
+    "receptionist",
+    "doctor",
+    "assistant",
+  ]);
   const supabase = await createClient();
 
   const { data } = await supabase

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { requireRole } from "@/lib/rbac";
 import { listStaffPagePermissions } from "@/actions/page-permissions";
+import { listStaffReportPermissions } from "@/actions/report-permissions";
 import { PageVisibilityCustomizer } from "@/components/settings/page-visibility-customizer";
 import { getTranslations } from "next-intl/server";
 
@@ -17,7 +18,10 @@ export default async function CustomizeSettingsPage({ searchParams }: PageProps)
   const t = await getTranslations("protected");
   await requireRole("admin");
   const params = await searchParams;
-  const { data, error } = await listStaffPagePermissions();
+  const [{ data, error }, reportResult] = await Promise.all([
+    listStaffPagePermissions(),
+    listStaffReportPermissions(),
+  ]);
 
   return (
     <div className="space-y-5">
@@ -34,6 +38,7 @@ export default async function CustomizeSettingsPage({ searchParams }: PageProps)
       ) : (
         <PageVisibilityCustomizer
           staff={data ?? []}
+          reports={reportResult.data ?? []}
           initialSelectedId={params.staff}
         />
       )}

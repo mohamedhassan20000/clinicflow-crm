@@ -35,6 +35,11 @@ export default async function PatientsPage({ searchParams }: PageProps) {
   const t = await getTranslations("protected");
   const user = await requireUser();
   const isDoctor = user.role === "doctor";
+  const isAssistant = user.role === "assistant";
+  const isScopedViewer = isDoctor || isAssistant;
+  const canManagePatients =
+    user.role === "admin" || user.role === "receptionist";
+  const canViewPatientBalances = canManagePatients;
 
   const {
     q = "",
@@ -76,7 +81,7 @@ export default async function PatientsPage({ searchParams }: PageProps) {
   // Doctors are always scoped to their own department
   if (isDoctor && user.departmentId) {
     query = query.eq("department_id", user.departmentId);
-  } else {
+  } else if (!isAssistant) {
     if (dept) query = query.eq("department_id", dept);
     if (doctor) query = query.eq("assigned_doctor_id", doctor);
   }
@@ -90,7 +95,7 @@ export default async function PatientsPage({ searchParams }: PageProps) {
         .eq("clinic_id", user.clinicId)
         .eq("is_active", true)
         .order("name"),
-      isDoctor
+      isScopedViewer
         ? Promise.resolve({ data: [] })
         : supabase
             .from("profiles")
@@ -104,7 +109,9 @@ export default async function PatientsPage({ searchParams }: PageProps) {
   const activeDept = departments?.find((d) =>
     isDoctor ? d.id === user.departmentId : d.id === dept,
   ) ?? null;
-  const activeDoctor = isDoctor ? null : (doctors?.find((d) => d.id === doctor) ?? null);
+  const activeDoctor = isScopedViewer
+    ? null
+    : (doctors?.find((d) => d.id === doctor) ?? null);
   const visiblePatients = patients ?? [];
   const outstandingPatientIds = new Set<string>();
   const avatarUrls = new Map<string, string>();
@@ -128,7 +135,7 @@ export default async function PatientsPage({ searchParams }: PageProps) {
     }
   }
 
-  if (!isDoctor && visiblePatients.length > 0) {
+  if (canViewPatientBalances && visiblePatients.length > 0) {
     const { data: outstandingRows } = await supabase
       .from("appointments")
       .select("patient_id")
@@ -162,7 +169,11 @@ export default async function PatientsPage({ searchParams }: PageProps) {
     dateStyle: "long",
     timeStyle: "short",
   });
-  const patientScope = isDoctor ? t("inYourDepartment") : t("inYourClinic");
+  const patientScope = isDoctor
+    ? t("inYourDepartment")
+    : isAssistant
+      ? t("inYourAssignedScope")
+      : t("inYourClinic");
 
   return (
     <div className="space-y-6">
@@ -186,7 +197,7 @@ export default async function PatientsPage({ searchParams }: PageProps) {
             })}
           </p>
         </div>
-        {!isDoctor && user.role !== "doctor" && (
+        {canManagePatients && (
           <div className="flex items-center gap-2 print:hidden">
             <Button asChild variant="outline" size="sm" className="gap-1.5">
               <Link href="/patients/trash">
@@ -206,7 +217,7 @@ export default async function PatientsPage({ searchParams }: PageProps) {
         <PatientsFilterBar
           doctors={doctors ?? []}
           departments={departments ?? []}
-          showScopeFilters={!isDoctor}
+          showScopeFilters={!isScopedViewer}
         />
       </div>
 
@@ -234,7 +245,7 @@ export default async function PatientsPage({ searchParams }: PageProps) {
         total={count ?? 0}
         page={page}
         pageSize={PAGE_SIZE}
-        canCreate={!isDoctor && user.role !== "manager"}
+        canCreate={canManagePatients}
       />
     </div>
   );

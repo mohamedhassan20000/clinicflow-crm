@@ -2,62 +2,40 @@ import Link from "next/link";
 import {
   Ban,
   CalendarX2,
+  GaugeCircle,
   PhoneCall,
   Stethoscope,
   UserRoundCog,
   Wallet,
+  WalletCards,
+  type LucideIcon,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useTranslations } from "next-intl";
+import type { ClinicReportId } from "@/lib/ai/clinic-reports";
+import { REPORT_CATALOG_LIST } from "@/lib/reports/catalog";
 
-const REPORT_CARDS = [
-  {
-    titleKey: "cancellationReport",
-    descriptionKey: "cancelledAppointmentsByDoctorAndReason",
-    href: "/reports/cancellations",
-    icon: Ban,
-    performance: false,
-  },
-  {
-    titleKey: "noShowReport",
-    descriptionKey: "noShowAppointmentRatesByDoctor",
-    href: "/reports/no-shows",
-    icon: CalendarX2,
-    performance: false,
-  },
-  {
-    titleKey: "revenueSalesReport",
-    descriptionKey: "collectedPaymentsSettlementsAndBalances",
-    href: "/reports/revenue",
-    icon: Wallet,
-    performance: false,
-  },
-  {
-    titleKey: "followUpsReport",
-    descriptionKey: "completedFollowUpOutcomes",
-    href: "/reports/follow-ups",
-    icon: PhoneCall,
-    performance: false,
-  },
-  {
-    titleKey: "doctorPerformanceReport",
-    descriptionKey: "doctorSessionsOutcomesRevenueAndShare",
-    href: "/reports/doctors",
-    icon: Stethoscope,
-    performance: true,
-  },
-  {
-    titleKey: "receptionistPerformanceReport",
-    descriptionKey: "bookingsAndFollowUpsHandledByReceptionist",
-    href: "/reports/receptionists",
-    icon: UserRoundCog,
-    performance: true,
-  },
-];
+/** Icons live here (client) so the catalog stays a plain, import-safe module. */
+const REPORT_ICONS: Record<ClinicReportId, LucideIcon> = {
+  cancellations: Ban,
+  no_shows: CalendarX2,
+  revenue: Wallet,
+  my_revenue: WalletCards,
+  my_performance: GaugeCircle,
+  followups: PhoneCall,
+  doctor_performance: Stethoscope,
+  receptionist_performance: UserRoundCog,
+};
 
-export function ReportsIndex({ canSeePerformanceReports }: { canSeePerformanceReports: boolean }) {
+/**
+ * Fully catalog-driven: cards come from REPORT_CATALOG filtered to the report
+ * ids the server resolved this user may open AND see. A new report added to the
+ * catalog appears here automatically with no change to this component.
+ */
+export function ReportsIndex({ visibleReportIds }: { visibleReportIds: ClinicReportId[] }) {
   const t = useTranslations("reports");
-  const cards = REPORT_CARDS.filter((card) => canSeePerformanceReports || !card.performance);
+  const visible = new Set(visibleReportIds);
+  const cards = REPORT_CATALOG_LIST.filter((entry) => visible.has(entry.id));
 
   return (
     <div className="space-y-6 print:hidden">
@@ -67,28 +45,34 @@ export function ReportsIndex({ canSeePerformanceReports }: { canSeePerformanceRe
           {t("chooseAReportToOpenIts")}</p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {cards.map((card) => {
-          const Icon = card.icon;
-          return (
-            <Link key={card.href} href={card.href} className="group block">
-              <Card className="h-full rounded-xl border-border/50 transition-colors hover:border-primary/40 hover:bg-accent/5">
-                <CardHeader className="flex-row items-start gap-3 space-y-0">
-                  <span className="rounded-lg border border-border/50 bg-background p-2 text-muted-foreground transition-colors group-hover:text-primary">
-                    <Icon className="h-5 w-5" aria-hidden />
-                  </span>
-                  <div className="min-w-0">
-                    <CardTitle className="text-base">{t(card.titleKey)}</CardTitle>
-                    <CardDescription className="mt-1">{t(card.descriptionKey)}</CardDescription>
-                  </div>
-                </CardHeader>
-                <CardContent className="text-sm font-medium text-primary">
-                  {t("openReport")}</CardContent>
-              </Card>
-            </Link>
-          );
-        })}
-      </div>
+      {cards.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-border py-12 text-center text-sm text-muted-foreground">
+          {t("noReportsAvailable")}
+        </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {cards.map((card) => {
+            const Icon = REPORT_ICONS[card.id];
+            return (
+              <Link key={card.href} href={card.href} className="group block">
+                <Card className="h-full rounded-xl border-border/50 transition-colors hover:border-primary/40 hover:bg-accent/5">
+                  <CardHeader className="flex-row items-start gap-3 space-y-0">
+                    <span className="rounded-lg border border-border/50 bg-background p-2 text-muted-foreground transition-colors group-hover:text-primary">
+                      <Icon className="h-5 w-5" aria-hidden />
+                    </span>
+                    <div className="min-w-0">
+                      <CardTitle className="text-base">{t(card.titleKey as never)}</CardTitle>
+                      <CardDescription className="mt-1">{t(card.descriptionKey as never)}</CardDescription>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="text-sm font-medium text-primary">
+                    {t("openReport")}</CardContent>
+                </Card>
+              </Link>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

@@ -82,10 +82,21 @@ export type HelpArticle = {
   ar: HelpArticleContent;
 };
 
-const ALL_STAFF: readonly UserRole[] = ["admin", "manager", "receptionist", "doctor"];
+const ALL_STAFF: readonly UserRole[] = [
+  "admin",
+  "manager",
+  "receptionist",
+  "doctor",
+  "assistant",
+];
 const ADMIN_RECEPTION: readonly UserRole[] = ["admin", "receptionist"];
 const ADMIN_MANAGER: readonly UserRole[] = ["admin", "manager"];
-const ADMIN_MANAGER_RECEPTION: readonly UserRole[] = ["admin", "manager", "receptionist"];
+const OPERATIONAL_STAFF: readonly UserRole[] = [
+  "admin",
+  "manager",
+  "receptionist",
+  "assistant",
+];
 
 export const HELP_ARTICLES: readonly HelpArticle[] = [
   {
@@ -104,7 +115,7 @@ export const HELP_ARTICLES: readonly HelpArticle[] = [
         "Save the form. The new patient's file opens, and the patient can now be selected when booking an appointment.",
       ],
       notes: [
-        "Doctors can view patient files but do not create them. Managers cannot access the Patients page. Ask an administrator or a receptionist to register a patient.",
+        "Doctors and assistants can view patient files in their authorized scope but do not create them. Managers cannot access the Patients page. Ask an administrator or a receptionist to register a patient.",
       ],
       keywords: [
         "add patient",
@@ -126,7 +137,7 @@ export const HELP_ARTICLES: readonly HelpArticle[] = [
         "احفظ النموذج. سيُفتح ملف المريض الجديد، ويصبح متاحًا للاختيار عند حجز موعد.",
       ],
       notes: [
-        "يمكن للأطباء عرض ملفات المرضى لكن لا يمكنهم إنشاؤها. لا يمكن للمديرين الوصول إلى صفحة «المرضى». اطلب من مسؤول العيادة أو موظف الاستقبال تسجيل المريض.",
+        "يمكن للأطباء والمساعدين عرض ملفات المرضى ضمن نطاقهم المصرح به لكن لا يمكنهم إنشاؤها. لا يمكن للمديرين الوصول إلى صفحة «المرضى». اطلب من مسؤول العيادة أو موظف الاستقبال تسجيل المريض.",
       ],
       keywords: [
         "إضافة مريض",
@@ -141,7 +152,7 @@ export const HELP_ARTICLES: readonly HelpArticle[] = [
     id: "find-patient-file",
     navigationTarget: "patients_list",
     // Managers have no patients page; mirrors the navigation target's roles.
-    roles: ["admin", "receptionist", "doctor"],
+    roles: ["admin", "receptionist", "doctor", "assistant"],
     en: {
       title: "Find a patient's file",
       summary: "Look up an existing patient by name, phone number, or file number.",
@@ -187,7 +198,7 @@ export const HELP_ARTICLES: readonly HelpArticle[] = [
   {
     id: "book-appointment",
     navigationTarget: "appointment_new",
-    roles: ADMIN_RECEPTION,
+    roles: OPERATIONAL_STAFF,
     en: {
       title: "Book an appointment",
       summary: "Schedule a patient with a doctor at an available time.",
@@ -245,7 +256,7 @@ export const HELP_ARTICLES: readonly HelpArticle[] = [
   {
     id: "update-appointment-status",
     navigationTarget: "appointments_calendar",
-    roles: ADMIN_RECEPTION,
+    roles: OPERATIONAL_STAFF,
     en: {
       title: "Update an appointment's status",
       summary:
@@ -357,7 +368,7 @@ export const HELP_ARTICLES: readonly HelpArticle[] = [
   {
     id: "record-followup",
     navigationTarget: "followups",
-    roles: ADMIN_RECEPTION,
+    roles: OPERATIONAL_STAFF,
     en: {
       title: "Record a follow-up call",
       summary:
@@ -833,7 +844,7 @@ export const HELP_ARTICLES: readonly HelpArticle[] = [
   {
     id: "run-clinic-report",
     navigationTarget: "reports_index",
-    roles: ADMIN_MANAGER_RECEPTION,
+    roles: ALL_STAFF,
     en: {
       title: "Run a clinic report",
       summary:
@@ -847,7 +858,7 @@ export const HELP_ARTICLES: readonly HelpArticle[] = [
       ],
       notes: [
         "Which reports you see depends on your role — doctor and receptionist performance reports are for administrators and managers.",
-        "You can also ask this assistant to run one of these reports and give you the link to the full report page.",
+        "Administrative roles with the report tool can also ask the assistant to run an authorized report; clinical roles open their scoped reports from this page.",
       ],
       keywords: [
         "run report",
@@ -872,7 +883,7 @@ export const HELP_ARTICLES: readonly HelpArticle[] = [
       ],
       notes: [
         "تعتمد التقارير المتاحة لك على دورك — فتقارير أداء الأطباء وموظفي الاستقبال مخصّصة للمسؤولين والمديرين.",
-        "يمكنك أيضًا أن تطلب من هذا المساعد تشغيل أحد هذه التقارير وإعطاءك رابط صفحة التقرير الكاملة.",
+        "يمكن للأدوار الإدارية التي تملك أداة التقارير أن تطلب من المساعد تشغيل تقرير مصرح به؛ أما الأدوار السريرية فتفتح تقاريرها المحددة النطاق من هذه الصفحة.",
       ],
       keywords: [
         "تشغيل تقرير",

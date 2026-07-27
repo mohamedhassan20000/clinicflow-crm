@@ -14,6 +14,11 @@ import type { AuthedUser, UserRole } from "@/lib/rbac";
 import type { PromptLocale } from "@/lib/ai/prompts/doctor";
 import { LEGACY_AI_ASSISTANT_FEATURE } from "@/lib/ai/commercial-policy";
 import { isPrimaryClinicAdmin } from "@/lib/primary-admin";
+import {
+  getReportVisibilityState,
+  type ReportVisibilityState,
+} from "@/lib/server-report-permissions";
+import type { ClinicReportId } from "@/lib/ai/clinic-reports";
 
 /**
  * The navigation registry (P4.7A).
@@ -82,6 +87,8 @@ export type NavigationTargetId =
   | "reports_cancellations"
   | "reports_no_shows"
   | "reports_revenue"
+  | "reports_my_revenue"
+  | "reports_my_performance"
   | "reports_doctors"
   | "reports_receptionists"
   | "reports_followups"
@@ -110,14 +117,23 @@ export type NavigationTarget = {
   requiredFeatures?: readonly string[];
   /** Whether the route/action is reserved for the clinic's primary admin. */
   requiresPrimaryClinicAdmin?: boolean;
+  /** Per-user report visibility gate for report detail destinations. */
+  reportId?: ClinicReportId;
   labels: { en: string; ar: string };
   /** Human path, e.g. "Settings → Messaging". */
   breadcrumb: { en: string; ar: string };
   keywords: { en: readonly string[]; ar: readonly string[] };
 };
 
-const ALL_STAFF: readonly UserRole[] = ["admin", "manager", "receptionist", "doctor"];
+const ALL_STAFF: readonly UserRole[] = [
+  "admin",
+  "manager",
+  "receptionist",
+  "doctor",
+  "assistant",
+];
 const ADMIN_MANAGER: readonly UserRole[] = ["admin", "manager"];
+const DOCTOR_ASSISTANT: readonly UserRole[] = ["doctor", "assistant"];
 const ADMIN_MANAGER_RECEPTIONIST: readonly UserRole[] = [
   "admin",
   "manager",
@@ -145,7 +161,7 @@ export const NAVIGATION_TARGETS: readonly NavigationTarget[] = [
     href: "/patients",
     pageSlug: "patients",
     // Managers do not have the patients page in ROLE_PAGE_SLUGS.
-    roles: ["admin", "receptionist", "doctor"],
+    roles: ["admin", "receptionist", "doctor", "assistant"],
     labels: { en: "Patients", ar: "المرضى" },
     breadcrumb: { en: "Patients", ar: "المرضى" },
     keywords: {
@@ -195,8 +211,7 @@ export const NAVIGATION_TARGETS: readonly NavigationTarget[] = [
     id: "appointments_calendar",
     href: "/appointments",
     pageSlug: "appointments",
-    // Managers do not have the appointments page in ROLE_PAGE_SLUGS.
-    roles: ["admin", "receptionist", "doctor"],
+    roles: ["admin", "manager", "receptionist", "doctor", "assistant"],
     labels: { en: "Appointments", ar: "المواعيد" },
     breadcrumb: { en: "Appointments", ar: "المواعيد" },
     keywords: {
@@ -208,8 +223,7 @@ export const NAVIGATION_TARGETS: readonly NavigationTarget[] = [
     id: "appointment_new",
     href: "/appointments/new",
     pageSlug: "appointments",
-    // `canEditAppointments = !isDoctor && user.role !== "manager"`.
-    roles: ["admin", "receptionist"],
+    roles: ["admin", "manager", "receptionist", "assistant"],
     labels: { en: "Book appointment", ar: "حجز موعد" },
     breadcrumb: { en: "Appointments → New appointment", ar: "المواعيد ← موعد جديد" },
     keywords: {
@@ -246,8 +260,7 @@ export const NAVIGATION_TARGETS: readonly NavigationTarget[] = [
     id: "followups",
     href: "/followups",
     pageSlug: "followups",
-    // The page redirects managers to the dashboard.
-    roles: ["admin", "receptionist", "doctor"],
+    roles: ["admin", "manager", "receptionist", "doctor", "assistant"],
     labels: { en: "Follow-ups", ar: "المتابعات" },
     breadcrumb: { en: "Follow-ups", ar: "المتابعات" },
     keywords: {
@@ -272,7 +285,7 @@ export const NAVIGATION_TARGETS: readonly NavigationTarget[] = [
     id: "reports_index",
     href: "/reports",
     pageSlug: "reports",
-    roles: ADMIN_MANAGER_RECEPTIONIST,
+    roles: ALL_STAFF,
     labels: { en: "Reports", ar: "التقارير" },
     breadcrumb: { en: "Reports", ar: "التقارير" },
     keywords: {
@@ -284,7 +297,8 @@ export const NAVIGATION_TARGETS: readonly NavigationTarget[] = [
     id: "reports_cancellations",
     href: "/reports/cancellations",
     pageSlug: "reports",
-    roles: ADMIN_MANAGER_RECEPTIONIST,
+    roles: ALL_STAFF,
+    reportId: "cancellations",
     labels: { en: "Cancellation report", ar: "تقرير الإلغاءات" },
     breadcrumb: { en: "Reports → Cancellations", ar: "التقارير ← الإلغاءات" },
     keywords: {
@@ -296,7 +310,8 @@ export const NAVIGATION_TARGETS: readonly NavigationTarget[] = [
     id: "reports_no_shows",
     href: "/reports/no-shows",
     pageSlug: "reports",
-    roles: ADMIN_MANAGER_RECEPTIONIST,
+    roles: ALL_STAFF,
+    reportId: "no_shows",
     labels: { en: "No-show report", ar: "تقرير عدم الحضور" },
     breadcrumb: { en: "Reports → No-shows", ar: "التقارير ← عدم الحضور" },
     keywords: {
@@ -309,6 +324,7 @@ export const NAVIGATION_TARGETS: readonly NavigationTarget[] = [
     href: "/reports/revenue",
     pageSlug: "reports",
     roles: ADMIN_MANAGER_RECEPTIONIST,
+    reportId: "revenue",
     labels: { en: "Revenue report", ar: "تقرير الإيرادات" },
     breadcrumb: { en: "Reports → Revenue", ar: "التقارير ← الإيرادات" },
     keywords: {
@@ -317,10 +333,38 @@ export const NAVIGATION_TARGETS: readonly NavigationTarget[] = [
     },
   },
   {
+    id: "reports_my_revenue",
+    href: "/reports/my-revenue",
+    pageSlug: "reports",
+    roles: DOCTOR_ASSISTANT,
+    reportId: "my_revenue",
+    labels: { en: "My revenue report", ar: "تقرير إيراداتي" },
+    breadcrumb: { en: "Reports → My revenue", ar: "التقارير ← إيراداتي" },
+    keywords: {
+      en: ["my revenue", "my income", "my earnings", "personal revenue"],
+      ar: ["إيراداتي", "دخلي", "أرباحي", "الإيرادات الشخصية"],
+    },
+  },
+  {
+    id: "reports_my_performance",
+    href: "/reports/my-performance",
+    pageSlug: "reports",
+    // Doctor-only self-scoped operational performance.
+    roles: ["doctor"],
+    reportId: "my_performance",
+    labels: { en: "My performance report", ar: "تقرير أدائي" },
+    breadcrumb: { en: "Reports → My performance", ar: "التقارير ← أدائي" },
+    keywords: {
+      en: ["my performance", "my stats", "my appointments", "my no-shows", "personal performance"],
+      ar: ["أدائي", "إحصائياتي", "مواعيدي", "أدائي الشخصي", "عدم الحضور لدي"],
+    },
+  },
+  {
     id: "reports_doctors",
     href: "/reports/doctors",
     pageSlug: "reports",
     roles: ADMIN_MANAGER,
+    reportId: "doctor_performance",
     labels: { en: "Doctor performance", ar: "أداء الأطباء" },
     breadcrumb: { en: "Reports → Doctors", ar: "التقارير ← الأطباء" },
     keywords: {
@@ -333,6 +377,7 @@ export const NAVIGATION_TARGETS: readonly NavigationTarget[] = [
     href: "/reports/receptionists",
     pageSlug: "reports",
     roles: ADMIN_MANAGER,
+    reportId: "receptionist_performance",
     labels: { en: "Receptionist performance", ar: "أداء موظفي الاستقبال" },
     breadcrumb: { en: "Reports → Receptionists", ar: "التقارير ← موظفو الاستقبال" },
     keywords: {
@@ -344,7 +389,8 @@ export const NAVIGATION_TARGETS: readonly NavigationTarget[] = [
     id: "reports_followups",
     href: "/reports/follow-ups",
     pageSlug: "reports",
-    roles: ADMIN_MANAGER_RECEPTIONIST,
+    roles: ALL_STAFF,
+    reportId: "followups",
     labels: { en: "Follow-ups report", ar: "تقرير المتابعات" },
     breadcrumb: { en: "Reports → Follow-ups", ar: "التقارير ← المتابعات" },
     keywords: {
@@ -610,6 +656,7 @@ export async function resolveNavigationTarget(
     id,
     locale,
     (slug) => getPageVisibilityState(user, slug),
+    (reportId) => getReportVisibilityState(user, reportId),
     () => isPrimaryClinicAdmin(user.id, user.clinicId),
   );
 }
@@ -638,6 +685,18 @@ export async function resolveNavigationTargets(
     }
     return pending;
   };
+  const reportVisibilityCache = new Map<
+    ClinicReportId,
+    Promise<ReportVisibilityState>
+  >();
+  const readReportVisibility = (reportId: ClinicReportId) => {
+    let pending = reportVisibilityCache.get(reportId);
+    if (!pending) {
+      pending = getReportVisibilityState(user, reportId);
+      reportVisibilityCache.set(reportId, pending);
+    }
+    return pending;
+  };
   let primaryAdminCheck: Promise<boolean> | undefined;
   const readPrimaryAdmin = () => {
     primaryAdminCheck ??= isPrimaryClinicAdmin(user.id, user.clinicId);
@@ -646,7 +705,14 @@ export async function resolveNavigationTargets(
 
   const resolutions = await Promise.all(
     [...new Set(ids)].map((id) =>
-      resolveOne(user, id, locale, readVisibility, readPrimaryAdmin),
+      resolveOne(
+        user,
+        id,
+        locale,
+        readVisibility,
+        readReportVisibility,
+        readPrimaryAdmin,
+      ),
     ),
   );
   return new Map(resolutions.map((resolution) => [resolution.id, resolution]));
@@ -666,6 +732,9 @@ async function resolveOne(
   id: NavigationTargetId,
   locale: PromptLocale,
   readVisibility: (slug: PageSlug) => Promise<PageVisibilityState>,
+  readReportVisibility: (
+    reportId: ClinicReportId,
+  ) => Promise<ReportVisibilityState>,
   readPrimaryAdmin: () => Promise<boolean>,
 ): Promise<NavigationResolution> {
   const target = NAVIGATION_TARGETS_BY_ID.get(id);
@@ -719,6 +788,16 @@ async function resolveOne(
   // "guidance contradicts server-side authorization" failure this phase exists
   // to prevent.
   if (visibility === "lookup_failed") return { ...base, status: "lookup_failed" };
+
+  if (target.reportId) {
+    const reportVisibility = await readReportVisibility(target.reportId);
+    if (reportVisibility === "hidden") {
+      return { ...base, status: "hidden_by_admin" };
+    }
+    if (reportVisibility === "lookup_failed") {
+      return { ...base, status: "lookup_failed" };
+    }
+  }
 
   return { ...base, status: "available", href: target.href };
 }

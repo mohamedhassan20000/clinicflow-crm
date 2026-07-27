@@ -23,6 +23,7 @@ export async function fetchInsuranceBreakdown(
     .from("appointments")
     .select("insurance_provider_id, insurance_providers(name)")
     .eq("clinic_id", clinicId)
+    .neq("status", "replaced")
     .gte("scheduled_at", start)
     .lte("scheduled_at", end);
 
@@ -57,6 +58,7 @@ export async function fetchDoctorStats(
       .from("appointments")
       .select("doctor_id, status, paid_amount, insurance_amount, secondary_amount")
       .eq("clinic_id", clinicId)
+      .neq("status", "replaced")
       .gte("scheduled_at", start)
       .lte("scheduled_at", end),
   ]);
@@ -115,6 +117,7 @@ export async function fetchDepartmentStats(
       .from("appointments")
       .select("department_id, patient_id, status, paid_amount, insurance_amount, secondary_amount")
       .eq("clinic_id", clinicId)
+      .neq("status", "replaced")
       .gte("scheduled_at", start)
       .lte("scheduled_at", end),
   ]);
@@ -176,6 +179,7 @@ export async function fetchReceptionistStats(
       .from("appointments")
       .select("created_by, status")
       .eq("clinic_id", clinicId)
+      .neq("status", "replaced")
       .gte("scheduled_at", start)
       .lte("scheduled_at", end),
   ]);
@@ -262,7 +266,8 @@ export async function fetchAppointmentsSeries(
     .eq("clinic_id", clinicId)
     .gte("scheduled_at", start)
     .lte("scheduled_at", end)
-    .not("status", "eq", "cancelled");
+    .not("status", "eq", "cancelled")
+    .not("status", "eq", "replaced");
 
   const map = new Map<string, number>();
   const current = new Date(start);

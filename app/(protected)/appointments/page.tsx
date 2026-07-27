@@ -48,6 +48,7 @@ const APPOINTMENT_STATUSES: AppointmentStatus[] = [
   "completed",
   "cancelled",
   "no_show",
+  "replaced",
 ];
 
 interface PageProps {
@@ -104,6 +105,11 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
     requireUser(),
   ]);
   const isDoctor = user.role === "doctor";
+  const isAssistant = user.role === "assistant";
+  // Doctors and assistants get a data-scoped, read-only calendar (RLS filters to
+  // their own / their assigned doctors' appointments). Managers now operate the
+  // calendar like admins/receptionists.
+  const isScopedViewer = isDoctor || isAssistant;
   const supabase = await createClient();
   const { data: clinic } = await supabase
     .from("clinics")
@@ -183,10 +189,21 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
     rangeEnd.setDate(rangeEnd.getDate() + 7);
   }
 
-  const canEditAppointments = !isDoctor && user.role !== "manager";
+  // Assistants can operate (create/edit/status) their assigned doctors' scoped
+  // appointments; doctors remain read-only on this page. RLS + scoped action
+  // guards restrict every assistant write to their assigned doctors.
+  const canEditAppointments =
+    user.role === "admin" ||
+    user.role === "receptionist" ||
+    user.role === "manager" ||
+    user.role === "assistant";
+  const canManageAppointmentTrash =
+    user.role === "admin" ||
+    user.role === "receptionist" ||
+    user.role === "manager";
   const cutoff = new Date(new Date().getTime() - THIRTY_DAYS_MS).toISOString();
 
-  if (canEditAppointments) {
+  if (canManageAppointmentTrash) {
     // Exclude displaced appointments from the 30-day auto-purge — they belong
     // in the rebook queue until explicitly dismissed.
     await supabase
@@ -197,7 +214,7 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
       .is("displaced_at", null);
   }
 
-  const [cachedStaff, cachedDepartments, clinicHours] = isDoctor
+  const [cachedStaff, cachedDepartments, clinicHours] = isScopedViewer
     ? [[] as Awaited<ReturnType<typeof getCachedStaff>>, await getCachedDepartments(user.clinicId), await getClinicWorkingHours()]
     : await Promise.all([getCachedStaff(user.clinicId), getCachedDepartments(user.clinicId), getClinicWorkingHours()]);
 
@@ -253,7 +270,7 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
   let query = supabase
     .from("appointments")
     .select(
-      "id, patient_id, doctor_id, scheduled_at, status, insurance_provider_id, notes, duration_minutes, package_id, package_session_number, patients(full_name, phone, file_number), profiles!doctor_id(full_name), departments(name, color), patient_packages(name, total_sessions, used_sessions, price_per_session)",
+      "id, patient_id, doctor_id, scheduled_at, status, insurance_provider_id, notes, duration_minutes, package_id, package_session_number, replaces_appointment_id, replaced_by_appointment_id, patients(full_name, phone, file_number), profiles!doctor_id(full_name), departments(name, color), patient_packages(name, total_sessions, used_sessions, price_per_session)",
     )
     .eq("clinic_id", user.clinicId)
     .is("deleted_at", null)
@@ -270,7 +287,7 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
 
   const { data: appointments } = await query;
   // Recycle bin: soft-deleted but NOT displaced (displaced have their own section)
-  const { data: deletedAppointments } = canEditAppointments
+  const { data: deletedAppointments } = canManageAppointmentTrash
     ? await supabase
         .from("appointments")
         .select(
@@ -378,8 +395,8 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
       <AppointmentsFilterBar
         doctors={doctors}
         departments={departments}
-        hideDoctorFilter={isDoctor}
-        hideDeptFilter={isDoctor}
+        hideDoctorFilter={isScopedViewer}
+        hideDeptFilter={isScopedViewer}
       />
 
       {view === "day" ? (
@@ -412,7 +429,7 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
         />
       )}
 
-      {canEditAppointments && (
+      {canManageAppointmentTrash && (
         <AppointmentsRecycleBin
           items={trashItems}
           onRestore={restoreAppointment}
@@ -422,7 +439,11 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
       )}
 
       {canEditAppointments && displacedItems.length > 0 && (
-        <DisplacedAppointments items={displacedItems} returnHref={currentAppointmentsUrl} />
+        <DisplacedAppointments
+          items={displacedItems}
+          returnHref={currentAppointmentsUrl}
+          canDismiss={canManageAppointmentTrash}
+        />
       )}
       </div>
     </AssistantLauncherScope>

@@ -166,6 +166,77 @@ describe("P4.5A managed Gateway provider", () => {
 });
 
 describe("P4.5A cost and atomic execution accounting", () => {
+  it("accounts P5A patient turns on the shared ledger without requiring the staff entitlement", async () => {
+    mocks.hasFeature.mockImplementation(
+      (_entitlements: unknown, feature: string) =>
+        feature !== "ai.staff_assistant",
+    );
+    const patientActor = {
+      id: "00000000-0000-4000-8000-000000000030",
+      clinicId: USER.clinicId,
+    };
+    await prepareAiExecution({
+      user: patientActor,
+      requestId: REQUEST_ID,
+      task: "patient_booking",
+      persona: "patient",
+      surface: "patient_messaging",
+    });
+    expect(mocks.reserve).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clinicId: USER.clinicId,
+        actorId: patientActor.id,
+        surface: "patient_messaging",
+        persona: "patient",
+        task: "patient_booking",
+      }),
+    );
+  });
+
+  it("denies patient booking before spend when patient suggest or scheduling is disabled", async () => {
+    for (const disabled of ["ai.patient_suggest", "ai.scheduling"]) {
+      vi.clearAllMocks();
+      mocks.hasFeature.mockImplementation(
+        (_entitlements: unknown, feature: string) => feature !== disabled,
+      );
+      await expect(
+        prepareAiExecution({
+          user: {
+            id: "00000000-0000-4000-8000-000000000030",
+            clinicId: USER.clinicId,
+          },
+          requestId: REQUEST_ID,
+          task: "patient_booking",
+          persona: "patient",
+          surface: "patient_messaging",
+        }),
+      ).rejects.toMatchObject({ reason: "feature_not_entitled" });
+      expect(mocks.reserve).not.toHaveBeenCalled();
+    }
+  });
+
+  it("rejects a patient task on the staff surface and a staff task on the patient surface", async () => {
+    await expect(
+      prepareAiExecution({
+        user: USER,
+        requestId: REQUEST_ID,
+        task: "patient_faq",
+        persona: "patient",
+        surface: "staff_assistant",
+      }),
+    ).rejects.toMatchObject({ reason: "feature_not_entitled" });
+    await expect(
+      prepareAiExecution({
+        user: USER,
+        requestId: REQUEST_ID,
+        task: "staff_administrative",
+        persona: "administrative_staff",
+        surface: "patient_messaging",
+      }),
+    ).rejects.toMatchObject({ reason: "feature_not_entitled" });
+    expect(mocks.reserve).not.toHaveBeenCalled();
+  });
+
   it("fails before reservation when a workflow task loses ai.workflows", async () => {
     mocks.hasFeature.mockImplementation(
       (_entitlements: unknown, feature: string) => feature !== "ai.workflows",

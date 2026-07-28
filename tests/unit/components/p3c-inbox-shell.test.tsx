@@ -20,6 +20,9 @@ vi.mock("@/actions/messaging", () => ({
   sendInboxReply: vi.fn(),
   updateConversationAssignment: vi.fn(),
   updateConversationStatus: vi.fn(),
+  approveAiSuggestion: vi.fn(),
+  dismissAiSuggestion: vi.fn(),
+  clearConversationEscalation: vi.fn(),
 }));
 vi.mock("@/lib/supabase/client", () => ({
   createClient: () => ({
@@ -48,6 +51,8 @@ const baseData: InboxData = {
     lastInboundAt: "2026-07-17T09:00:00.000Z",
     windowExpiresAt: "2026-07-17T09:30:00.000Z",
     identityVerifiedAt: "2026-07-17T08:00:00.000Z",
+    escalatedAt: null,
+    escalationReason: null,
     preview: "Can I confirm my appointment?",
     unreadCount: 1,
   }],
@@ -68,6 +73,7 @@ const baseData: InboxData = {
     body: "Hello {{1}}",
     variableNames: ["name"],
   }],
+  suggestion: null,
   selectedConversationId: "conversation-1",
   loadedAt: "2026-07-17T10:00:00.000Z",
   error: false,

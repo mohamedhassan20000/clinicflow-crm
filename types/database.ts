@@ -512,6 +512,82 @@ export type Database = {
           },
         ]
       }
+      ai_suggested_replies: {
+        Row: {
+          ai_request_id: string | null
+          body: string
+          clinic_id: string
+          conversation_id: string
+          created_at: string
+          decided_at: string | null
+          decided_by: string | null
+          escalate: boolean
+          escalation_reason: string | null
+          id: string
+          inbound_message_id: string | null
+          mode: string
+          outbound_message_id: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          ai_request_id?: string | null
+          body: string
+          clinic_id: string
+          conversation_id: string
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          escalate?: boolean
+          escalation_reason?: string | null
+          id?: string
+          inbound_message_id?: string | null
+          mode: string
+          outbound_message_id?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          ai_request_id?: string | null
+          body?: string
+          clinic_id?: string
+          conversation_id?: string
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          escalate?: boolean
+          escalation_reason?: string | null
+          id?: string
+          inbound_message_id?: string | null
+          mode?: string
+          outbound_message_id?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_suggested_replies_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_suggested_replies_conversation_clinic_fkey"
+            columns: ["conversation_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id", "clinic_id"]
+          },
+          {
+            foreignKeyName: "ai_suggested_replies_decided_by_fkey"
+            columns: ["decided_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_usage_events: {
         Row: {
           actor_id: string
@@ -898,6 +974,7 @@ export type Database = {
       }
       appointments: {
         Row: {
+          ai_patient_conversation_id: string | null
           ai_workflow_run_id: string | null
           ai_workflow_step_id: string | null
           cancellation_reason: string | null
@@ -905,7 +982,7 @@ export type Database = {
           cancelled_by: string | null
           clinic_id: string
           created_at: string
-          created_by: string
+          created_by: string | null
           deleted_at: string | null
           department_id: string | null
           deposit_amount: number
@@ -913,6 +990,7 @@ export type Database = {
           displaced_by: string | null
           doctor_id: string
           duration_minutes: number
+          expires_at: string | null
           id: string
           insurance_amount: number | null
           insurance_provider_id: string | null
@@ -945,6 +1023,7 @@ export type Database = {
           updated_by: string | null
         }
         Insert: {
+          ai_patient_conversation_id?: string | null
           ai_workflow_run_id?: string | null
           ai_workflow_step_id?: string | null
           cancellation_reason?: string | null
@@ -952,7 +1031,7 @@ export type Database = {
           cancelled_by?: string | null
           clinic_id: string
           created_at?: string
-          created_by: string
+          created_by?: string | null
           deleted_at?: string | null
           department_id?: string | null
           deposit_amount?: number
@@ -960,6 +1039,7 @@ export type Database = {
           displaced_by?: string | null
           doctor_id: string
           duration_minutes?: number
+          expires_at?: string | null
           id?: string
           insurance_amount?: number | null
           insurance_provider_id?: string | null
@@ -992,6 +1072,7 @@ export type Database = {
           updated_by?: string | null
         }
         Update: {
+          ai_patient_conversation_id?: string | null
           ai_workflow_run_id?: string | null
           ai_workflow_step_id?: string | null
           cancellation_reason?: string | null
@@ -999,7 +1080,7 @@ export type Database = {
           cancelled_by?: string | null
           clinic_id?: string
           created_at?: string
-          created_by?: string
+          created_by?: string | null
           deleted_at?: string | null
           department_id?: string | null
           deposit_amount?: number
@@ -1007,6 +1088,7 @@ export type Database = {
           displaced_by?: string | null
           doctor_id?: string
           duration_minutes?: number
+          expires_at?: string | null
           id?: string
           insurance_amount?: number | null
           insurance_provider_id?: string | null
@@ -1039,6 +1121,13 @@ export type Database = {
           updated_by?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "appointments_ai_patient_conversation_clinic_fkey"
+            columns: ["ai_patient_conversation_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id", "clinic_id"]
+          },
           {
             foreignKeyName: "appointments_ai_workflow_run_clinic_fkey"
             columns: ["ai_workflow_run_id", "clinic_id"]
@@ -1439,6 +1528,9 @@ export type Database = {
       clinics: {
         Row: {
           address: string | null
+          ai_pending_booking_ttl_minutes: number
+          ai_pending_slot_cap: number
+          ai_reply_mode: string
           country: string
           created_at: string
           currency: string
@@ -1468,6 +1560,9 @@ export type Database = {
         }
         Insert: {
           address?: string | null
+          ai_pending_booking_ttl_minutes?: number
+          ai_pending_slot_cap?: number
+          ai_reply_mode?: string
           country?: string
           created_at?: string
           currency?: string
@@ -1497,6 +1592,9 @@ export type Database = {
         }
         Update: {
           address?: string | null
+          ai_pending_booking_ttl_minutes?: number
+          ai_pending_slot_cap?: number
+          ai_reply_mode?: string
           country?: string
           created_at?: string
           currency?: string
@@ -1528,11 +1626,17 @@ export type Database = {
       }
       conversations: {
         Row: {
+          ai_escalated_at: string | null
+          ai_escalation_reason: string | null
+          ai_last_replied_at: string | null
           assigned_to: string | null
           channel: Database["public"]["Enums"]["message_channel"]
           clinic_id: string
           created_at: string
           id: string
+          identity_verification_failures: number
+          identity_verification_locked_until: string | null
+          identity_verified_at: string | null
           last_message_at: string | null
           patient_id: string | null
           participant_address: string | null
@@ -1543,11 +1647,17 @@ export type Database = {
           window_expires_at: string | null
         }
         Insert: {
+          ai_escalated_at?: string | null
+          ai_escalation_reason?: string | null
+          ai_last_replied_at?: string | null
           assigned_to?: string | null
           channel: Database["public"]["Enums"]["message_channel"]
           clinic_id: string
           created_at?: string
           id?: string
+          identity_verification_failures?: number
+          identity_verification_locked_until?: string | null
+          identity_verified_at?: string | null
           last_message_at?: string | null
           patient_id?: string | null
           participant_address?: string | null
@@ -1558,11 +1668,17 @@ export type Database = {
           window_expires_at?: string | null
         }
         Update: {
+          ai_escalated_at?: string | null
+          ai_escalation_reason?: string | null
+          ai_last_replied_at?: string | null
           assigned_to?: string | null
           channel?: Database["public"]["Enums"]["message_channel"]
           clinic_id?: string
           created_at?: string
           id?: string
+          identity_verification_failures?: number
+          identity_verification_locked_until?: string | null
+          identity_verified_at?: string | null
           last_message_at?: string | null
           patient_id?: string | null
           participant_address?: string | null
@@ -3590,6 +3706,91 @@ export type Database = {
       ai_get_revenue_summary: {
         Args: { p_end: string; p_start: string }
         Returns: Json
+      }
+      cancel_patient_ai_appointment: {
+        Args: {
+          p_appointment_id: string
+          p_clinic_id: string
+          p_conversation_id: string
+        }
+        Returns: {
+          cancelled: boolean
+          reason: string
+        }[]
+      }
+      create_patient_preliminary_booking: {
+        Args: {
+          p_clinic_id: string
+          p_conversation_id: string
+          p_doctor_id: string
+          p_duration_minutes: number
+          p_scheduled_at: string
+          p_service_id?: string
+        }
+        Returns: {
+          appointment_id: string
+          expires_at: string
+        }[]
+      }
+      expire_ai_pending_bookings: {
+        Args: { p_limit?: number; p_now?: string }
+        Returns: {
+          expired_count: number
+        }[]
+      }
+      list_patient_ai_appointments: {
+        Args: { p_clinic_id: string; p_conversation_id: string }
+        Returns: {
+          appointment_id: string
+          department_name: string | null
+          doctor_name: string
+          duration_minutes: number
+          scheduled_at: string
+          service_name: string | null
+          status: Database["public"]["Enums"]["appointment_status"]
+        }[]
+      }
+      resolve_patient_ai_context: {
+        Args: { p_clinic_id: string; p_conversation_id: string }
+        Returns: {
+          clinic_id: string
+          clinic_locale: string
+          clinic_name: string
+          clinic_timezone: string
+          conversation_id: string
+          identity_locked_until: string | null
+          identity_verified_at: string | null
+          linked: boolean
+          patient_id: string | null
+        }[]
+      }
+      search_patient_clinic_faq: {
+        Args: {
+          p_clinic_id: string
+          p_conversation_id: string
+          p_language: string
+          p_question: string
+        }
+        Returns: {
+          answer: string
+          faq_id: string
+          language: string
+          question: string
+          score: number
+        }[]
+      }
+      verify_patient_conversation_dob: {
+        Args: {
+          p_clinic_id: string
+          p_conversation_id: string
+          p_date_of_birth: string
+        }
+        Returns: {
+          attempts_remaining: number
+          identity_verified_at: string | null
+          locked_until: string | null
+          verified: boolean
+        }[]
       }
       search_departments_ranked: {
         Args: { p_limit?: number; p_query: string; p_query_alt?: string }

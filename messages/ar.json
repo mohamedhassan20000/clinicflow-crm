@@ -821,6 +821,29 @@
       "delivered": "تم التسليم",
       "read": "تمت القراءة",
       "failed": "فشلت"
+    },
+    "ai": {
+      "suggestionTitle": "رد مقترح من الذكاء الاصطناعي",
+      "suggestionEscalationTitle": "رد تحويل مقترح من الذكاء الاصطناعي",
+      "approveSend": "الموافقة والإرسال",
+      "sendEdited": "إرسال المعدّل",
+      "edit": "تعديل",
+      "cancelEdit": "إلغاء التعديل",
+      "dismiss": "تجاهل",
+      "editSuggestion": "تعديل الرد المقترح",
+      "suggestionSent": "تم إرسال الرد.",
+      "suggestionDismissed": "تم تجاهل الاقتراح.",
+      "escalatedBanner": "تم التحويل إلى موظف — {reason}.",
+      "returnToAi": "إعادة إلى الذكاء",
+      "escalationCleared": "تمت الإعادة إلى المساعد الذكي.",
+      "reason": {
+        "emergency": "حالة طارئة محتملة",
+        "human_requested": "طلب المريض موظفًا",
+        "medical": "سؤال طبي",
+        "complaint": "شكوى",
+        "low_confidence": "ثقة منخفضة",
+        "agent_error": "خطأ في المساعد"
+      }
     }
   },
   "settings": {
@@ -1281,7 +1304,40 @@
     "aiFinancialPermissionsNotEntitled": "الرؤى المالية ليست ضمن باقة هذه العيادة، لذلك لا يوجد ما يمكن تفعيله بعد.",
     "aiFinancialPermissionImplicit": "مفعّل دائمًا للمديرين العامين",
     "aiFinancialPermissionSaved": "تم تحديث الوصول إلى الرؤى المالية.",
-    "aiFinancialPermissionsEmpty": "لا يوجد مديرون في هذه العيادة لضبطهم."
+    "aiFinancialPermissionsEmpty": "لا يوجد مديرون في هذه العيادة لضبطهم.",
+    "navPatientAi": "ذكاء المرضى",
+    "patientAiTitle": "ذكاء المرضى",
+    "patientAiDescription": "تحكّم في طريقة رد المساعد الذكي على المرضى عبر واتساب وأدر الإجابات التي يعتمد عليها.",
+    "patientAiUpgradeTitle": "ذكاء المرضى ضمن باقة Pro + AI",
+    "patientAiUpgradeDescription": "قم بالترقية إلى Pro + AI للسماح للمساعد بالرد على رسائل المرضى وصياغة ردود يوافق عليها فريقك.",
+    "patientAiLoadError": "تعذّر تحميل إعدادات ذكاء المرضى. يرجى المحاولة مرة أخرى.",
+    "patientAiModeTitle": "وضع الرد",
+    "patientAiModeDescription": "حدّد ما إذا كان المساعد يصيغ ردودًا ليوافق عليها الموظفون، أو يرسلها تلقائيًا، أو يبقى متوقفًا.",
+    "patientAiModeOff": "متوقف",
+    "patientAiModeSuggest": "اقتراح (يوافق الموظف)",
+    "patientAiModeAuto": "تلقائي (إرسال مباشر)",
+    "patientAiModeAutoLocked": "غير متاح في باقتك",
+    "patientAiModeOffHint": "لا يقوم المساعد بصياغة أو إرسال أي ردود للمرضى.",
+    "patientAiModeSuggestHint": "يصيغ المساعد ردًا لكل رسالة مريض؛ يوافق الموظفون عليه أو يعدّلونه قبل إرساله.",
+    "patientAiModeAutoHint": "يرد المساعد على المرضى مباشرةً ويحوّل إلى موظف في حالات الطوارئ أو الشكاوى أو انخفاض الثقة.",
+    "patientAiModeSaved": "تم تحديث وضع الرد.",
+    "patientAiFaqTitle": "الأسئلة الشائعة للعيادة",
+    "patientAiFaqDescription": "يجيب المساعد على أسئلة المرضى من هذه المدخلات التي كتبتها العيادة فقط — وليس نصيحة طبية.",
+    "patientAiFaqAdd": "إضافة سؤال",
+    "patientAiFaqEmpty": "لا توجد أسئلة بعد. أضِف الأسئلة الأكثر تكرارًا لدى المرضى.",
+    "patientAiFaqInactive": "غير مفعّل",
+    "patientAiFaqEdit": "تعديل السؤال",
+    "patientAiFaqDelete": "حذف السؤال",
+    "patientAiFaqSaved": "تم حفظ السؤال.",
+    "patientAiFaqDeleted": "تم حذف السؤال.",
+    "patientAiFaqDialogDescription": "يرى المرضى هذه الإجابة كما هي، لذا اجعلها واضحة وغير طبية.",
+    "patientAiFaqQuestion": "السؤال",
+    "patientAiFaqAnswer": "الإجابة",
+    "patientAiFaqLanguage": "اللغة",
+    "patientAiFaqLanguageAr": "العربية",
+    "patientAiFaqLanguageEn": "الإنجليزية",
+    "patientAiFaqCancel": "إلغاء",
+    "patientAiFaqSave": "حفظ"
   },
   "profile": {
     "myProfile": "ملفي الشخصي",
@@ -2622,7 +2678,8 @@
     "metadataMessageTemplates": "قوالب الرسائل",
     "metadataNotifications": "الإشعارات",
     "metadataAiProviderSettings": "إعدادات مزود الذكاء الاصطناعي",
-    "metadataAssistantCustomization": "مواضع المساعد"
+    "metadataAssistantCustomization": "مواضع المساعد",
+    "metadataPatientAi": "ذكاء المرضى"
   },
   "public": {
     "checkYourEmail": "تحقق من بريدك الإلكتروني",
@@ -2686,7 +2743,7 @@
     "settlementPayments": "مدفوعات التسوية",
     "paymentMethod": "طريقة الدفع",
     "receptionistPerformance": "أداء موظف الاستقبال",
-    "appointmentsBooked": "تم حجز المواعيد",
+    "appointmentsBooked": "المواعيد المحجوزة",
     "amount": "كمية",
     "revenueSalesSummary": "ملخص الإيرادات / المبيعات",
     "noPaymentMethodBreakdownAvailable": "لا يوجد تفصيل لطريقة الدفع المتاحة.",
@@ -2740,7 +2797,6 @@
     "operationalActivityOfYourAssistants": "النشاط التشغيلي للمساعدين المعيّنين لك.",
     "noAssistantsAssignedToYou": "لا يوجد مساعدون معيّنون لك.",
     "totalActionsCount": "{count, plural, zero {# إجراء} one {# إجراء} two {# إجراءان} few {# إجراءات} many {# إجراءً} other {# إجراء}}",
-    "appointmentsBooked": "المواعيد المحجوزة",
     "confirmations": "التأكيدات",
     "checkIns": "تسجيلات الوصول",
     "completions": "الإكمالات",
@@ -2899,7 +2955,11 @@
     "type_followup_failed_title": "فشلت متابعة الفاتورة",
     "type_followup_failed_body": "تعذر تسليم متابعة فاتورة للمريض {patientName} عبر أي قناة.",
     "type_generic_title": "إشعار",
-    "type_generic_body": "لديك إشعار جديد."
+    "type_generic_body": "لديك إشعار جديد.",
+    "type_ai_suggestion_title": "رد الذكاء جاهز للمراجعة",
+    "type_ai_suggestion_body": "صاغ المساعد ردًا لـ {patientName}.",
+    "type_ai_escalation_title": "محادثة تحتاج إلى موظف",
+    "type_ai_escalation_body": "حوّل المساعد محادثة مع {patientName} إلى فريقك."
   },
   "activity": {
     "title": "النشاط",

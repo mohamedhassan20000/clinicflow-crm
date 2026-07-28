@@ -174,7 +174,8 @@
     "couldNotSaveTemplate": "The template could not be saved. Please try again.",
     "templateNameAlreadyExists": "A template with this name and language already exists.",
     "templateCannotBeDeletedWhileSubmitted": "A template cannot be deleted while it is under review.",
-    "couldNotDeleteTemplate": "The template could not be deleted. Please try again."
+    "couldNotDeleteTemplate": "The template could not be deleted. Please try again.",
+    "suggestionUnavailable": "This suggested reply is no longer available."
   },
   "notifications": {
     "couldNotUpdateNotifications": "Notifications could not be updated. Please try again."
@@ -338,7 +339,15 @@
     "weCouldNotCompleteThisRequestPleaseTryAgain": "We could not complete this request. Please try again.",
     "youCannotDeactivateYourOwnAccount": "You cannot deactivate your own account.",
     "youCannotDeleteYourOwnAccount": "You cannot delete your own account.",
-    "youCannotPermanentlyDeleteYourOwnAccount": "You cannot permanently delete your own account."
+    "youCannotPermanentlyDeleteYourOwnAccount": "You cannot permanently delete your own account.",
+    "patientAiInvalidMode": "Please choose a valid reply mode.",
+    "patientAiNotEntitled": "Patient AI is not included in your plan.",
+    "patientAiAutoNotEntitled": "Automatic replies are not available on your plan.",
+    "patientAiCouldNotSaveMode": "We couldn't save the reply mode. Please try again.",
+    "patientAiInvalidFaq": "Please provide a valid question and answer.",
+    "patientAiFaqDuplicate": "An FAQ with this question already exists.",
+    "patientAiCouldNotSaveFaq": "We couldn't save this FAQ. Please try again.",
+    "patientAiFaqNotFound": "This FAQ could not be found."
   },
   "staff-files": {
     "certificateMustBePdfWordJpegOrPng": "Certificate must be PDF, Word, JPEG, or PNG.",

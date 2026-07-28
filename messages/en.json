@@ -825,6 +825,29 @@
       "delivered": "Delivered",
       "read": "Read",
       "failed": "Failed"
+    },
+    "ai": {
+      "suggestionTitle": "AI suggested reply",
+      "suggestionEscalationTitle": "AI suggested handoff reply",
+      "approveSend": "Approve & send",
+      "sendEdited": "Send edited",
+      "edit": "Edit",
+      "cancelEdit": "Cancel edit",
+      "dismiss": "Dismiss",
+      "editSuggestion": "Edit suggested reply",
+      "suggestionSent": "Reply sent.",
+      "suggestionDismissed": "Suggestion dismissed.",
+      "escalatedBanner": "Handed to a human — {reason}.",
+      "returnToAi": "Return to AI",
+      "escalationCleared": "Returned to the AI assistant.",
+      "reason": {
+        "emergency": "possible emergency",
+        "human_requested": "patient asked for a person",
+        "medical": "medical question",
+        "complaint": "complaint",
+        "low_confidence": "low confidence",
+        "agent_error": "assistant error"
+      }
     }
   },
   "settings": {
@@ -1285,7 +1308,40 @@
     "aiFinancialPermissionsNotEntitled": "Financial insights are not part of this clinic's plan, so there is nothing to enable yet.",
     "aiFinancialPermissionImplicit": "Always on for admins",
     "aiFinancialPermissionSaved": "Financial insights access updated.",
-    "aiFinancialPermissionsEmpty": "This clinic has no managers to configure."
+    "aiFinancialPermissionsEmpty": "This clinic has no managers to configure.",
+    "navPatientAi": "Patient AI",
+    "patientAiTitle": "Patient AI",
+    "patientAiDescription": "Control how the AI assistant answers patients on WhatsApp and manage the answers it draws from.",
+    "patientAiUpgradeTitle": "Patient AI is part of Pro + AI",
+    "patientAiUpgradeDescription": "Upgrade to Pro + AI to let the assistant answer patient messages and draft replies for your team to approve.",
+    "patientAiLoadError": "We couldn't load your Patient AI settings. Please try again.",
+    "patientAiModeTitle": "Reply mode",
+    "patientAiModeDescription": "Decide whether the assistant drafts replies for staff to approve, sends them automatically, or stays off.",
+    "patientAiModeOff": "Off",
+    "patientAiModeSuggest": "Suggest (staff approves)",
+    "patientAiModeAuto": "Auto (send directly)",
+    "patientAiModeAutoLocked": "not available on your plan",
+    "patientAiModeOffHint": "The assistant does not draft or send any patient replies.",
+    "patientAiModeSuggestHint": "The assistant drafts a reply for each patient message; staff approve or edit it before it is sent.",
+    "patientAiModeAutoHint": "The assistant answers patients directly and escalates to a human on emergencies, complaints, or low confidence.",
+    "patientAiModeSaved": "Reply mode updated.",
+    "patientAiFaqTitle": "Clinic FAQ",
+    "patientAiFaqDescription": "The assistant only answers patient questions from these clinic-authored entries — never medical advice.",
+    "patientAiFaqAdd": "Add FAQ",
+    "patientAiFaqEmpty": "No FAQ entries yet. Add the questions patients ask most.",
+    "patientAiFaqInactive": "Inactive",
+    "patientAiFaqEdit": "Edit FAQ",
+    "patientAiFaqDelete": "Delete FAQ",
+    "patientAiFaqSaved": "FAQ saved.",
+    "patientAiFaqDeleted": "FAQ deleted.",
+    "patientAiFaqDialogDescription": "Patients see this answer verbatim, so keep it clear and non-clinical.",
+    "patientAiFaqQuestion": "Question",
+    "patientAiFaqAnswer": "Answer",
+    "patientAiFaqLanguage": "Language",
+    "patientAiFaqLanguageAr": "Arabic",
+    "patientAiFaqLanguageEn": "English",
+    "patientAiFaqCancel": "Cancel",
+    "patientAiFaqSave": "Save"
   },
   "profile": {
     "myProfile": "My profile",
@@ -2626,7 +2682,8 @@
     "metadataMessageTemplates": "Message Templates",
     "metadataNotifications": "Notifications",
     "metadataAiProviderSettings": "AI Provider Settings",
-    "metadataAssistantCustomization": "Assistant Placement"
+    "metadataAssistantCustomization": "Assistant Placement",
+    "metadataPatientAi": "Patient AI"
   },
   "public": {
     "welcomeToClinicflow": "Welcome to ClinicFlow",
@@ -2744,7 +2801,6 @@
     "operationalActivityOfYourAssistants": "Operational activity of the assistants assigned to you.",
     "noAssistantsAssignedToYou": "No assistants are assigned to you.",
     "totalActionsCount": "{count, plural, one {# action} other {# actions}}",
-    "appointmentsBooked": "Appointments booked",
     "confirmations": "Confirmations",
     "checkIns": "Check-ins",
     "completions": "Completions",
@@ -2903,7 +2959,11 @@
     "type_followup_failed_title": "Invoice follow-up failed",
     "type_followup_failed_body": "An invoice follow-up for {patientName} could not be delivered on any channel.",
     "type_generic_title": "Notification",
-    "type_generic_body": "You have a new notification."
+    "type_generic_body": "You have a new notification.",
+    "type_ai_suggestion_title": "AI reply ready to review",
+    "type_ai_suggestion_body": "The assistant drafted a reply for {patientName}.",
+    "type_ai_escalation_title": "Conversation needs a human",
+    "type_ai_escalation_body": "The assistant handed a conversation with {patientName} to your team."
   },
   "activity": {
     "title": "Activity",

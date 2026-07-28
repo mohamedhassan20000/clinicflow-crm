@@ -13,7 +13,7 @@ import {
 const PRO_AI_FEATURES = {
   ai_assistant: true,
   "ai.staff_assistant": true,
-  "ai.patient_suggest": false,
+  "ai.patient_suggest": true,
   "ai.patient_auto": false,
   "ai.managed": true,
   "ai.byok": true,
@@ -21,6 +21,7 @@ const PRO_AI_FEATURES = {
   "ai.staff_analytics": true,
   "ai.financial_insights": true,
   "ai.assistant_customization": true,
+  "ai.scheduling": true,
 } as const;
 const PRO_AI_LIMITS = {
   ai_credits_month: 1_620_000_000,

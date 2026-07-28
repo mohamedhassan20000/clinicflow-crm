@@ -72,11 +72,16 @@ export function createPendingBookingWorkflowTool(ctx: DoctorToolContext) {
         workflowStepId: invocation.stepId,
       });
       if (!created.ok) {
+        const guidance =
+          created.reason === "patient_pending_cap"
+            ? "This patient already has an active AI-created pending booking. Ask staff to confirm, cancel, or let that request expire before previewing another."
+            : created.reason === "slot_pending_cap"
+              ? "This time has reached the clinic's AI pending-booking cap. Ask the user to preview another available time."
+              : "The selected time is no longer available. Ask the user to preview a new pending booking.";
         return {
           needs_clarification: true as const,
           field: "scheduled_at",
-          guidance:
-            "The selected time is no longer available. Ask the user to preview a new pending booking.",
+          guidance,
           candidates: [],
         };
       }

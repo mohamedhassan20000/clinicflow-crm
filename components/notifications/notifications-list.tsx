@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { AlertTriangle, Bell, CheckCheck, Check, MessageCircle } from "lucide-react";
+import { AlertTriangle, Bell, CheckCheck, Check, MessageCircle, Sparkles } from "lucide-react";
 import { useFormatter, useTranslations } from "next-intl";
 import { toast } from "sonner";
 import {
@@ -34,6 +34,14 @@ const TYPE_MESSAGE_KEYS: Record<string, { title: string; body: string }> = {
     title: "type_followup_failed_title",
     body: "type_followup_failed_body",
   },
+  ai_suggestion: {
+    title: "type_ai_suggestion_title",
+    body: "type_ai_suggestion_body",
+  },
+  ai_escalation: {
+    title: "type_ai_escalation_title",
+    body: "type_ai_escalation_body",
+  },
 };
 
 const GENERIC_MESSAGE_KEYS = {
@@ -43,7 +51,10 @@ const GENERIC_MESSAGE_KEYS = {
 
 function typeIcon(type: string) {
   if (type === "inbox_message") return MessageCircle;
-  if (type === "reminder_failed" || type === "followup_failed") return AlertTriangle;
+  if (type === "ai_suggestion") return Sparkles;
+  if (type === "reminder_failed" || type === "followup_failed" || type === "ai_escalation") {
+    return AlertTriangle;
+  }
   return Bell;
 }
 

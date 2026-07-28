@@ -18,8 +18,19 @@ export type InboxConversation = {
   lastInboundAt: string | null;
   windowExpiresAt: string | null;
   identityVerifiedAt: string | null;
+  escalatedAt: string | null;
+  escalationReason: string | null;
   preview: string;
   unreadCount: number;
+};
+
+export type InboxSuggestion = {
+  id: string;
+  conversationId: string;
+  body: string;
+  escalate: boolean;
+  escalationReason: string | null;
+  createdAt: string;
 };
 
 export type InboxThreadMessage = {
@@ -55,6 +66,7 @@ export type InboxData = {
   assignees: InboxPersonOption[];
   patients: InboxPatientOption[];
   templates: InboxTemplate[];
+  suggestion: InboxSuggestion | null;
   selectedConversationId: string | null;
   loadedAt: string;
   error: boolean;
@@ -76,6 +88,7 @@ function emptyInbox(error: boolean): InboxData {
     assignees: [],
     patients: [],
     templates: [],
+    suggestion: null,
     selectedConversationId: null,
     loadedAt: new Date().toISOString(),
     error,
@@ -139,6 +152,23 @@ export async function loadInboxData(
     (requestedConversationId && summaryRows.some((item) => item.id === requestedConversationId)
       ? requestedConversationId
       : summaryRows[0]?.id) ?? null;
+
+  // P5B (§5.4, §6.2): the summary RPC returns no identity/escalation state, so
+  // read those conversation columns directly for the visible threads. RLS keeps
+  // this to the caller's clinic and the inbox roles.
+  const conversationIds = summaryRows.map((row) => row.id);
+  const metaResult = conversationIds.length
+    ? await supabase
+        .from("conversations")
+        .select("id, identity_verified_at, ai_escalated_at, ai_escalation_reason")
+        .eq("clinic_id", user.clinicId)
+        .in("id", conversationIds)
+    : { data: [], error: null };
+  if (metaResult.error) return emptyInbox(true);
+  const metaById = new Map(
+    (metaResult.data ?? []).map((row) => [row.id, row]),
+  );
+
   const [inboundResult, outboundResult] = selectedConversationId
     ? await Promise.all([
         supabase
@@ -189,6 +219,7 @@ export async function loadInboxData(
 
   const conversations = summaryRows.map((row) => {
     const patient = row.patient_id ? patientsById.get(row.patient_id) : null;
+    const meta = metaById.get(row.id);
     return {
       id: row.id,
       channel: row.channel,
@@ -203,11 +234,36 @@ export async function loadInboxData(
       lastMessageAt: row.last_message_at,
       lastInboundAt: row.last_inbound_at,
       windowExpiresAt: row.window_expires_at,
-      identityVerifiedAt: null,
+      identityVerifiedAt: meta?.identity_verified_at ?? null,
+      escalatedAt: meta?.ai_escalated_at ?? null,
+      escalationReason: meta?.ai_escalation_reason ?? null,
       preview: row.preview,
       unreadCount: Number(row.unread_count),
     } satisfies InboxConversation;
   });
+
+  const suggestionResult = selectedConversationId
+    ? await supabase
+        .from("ai_suggested_replies")
+        .select("id, conversation_id, body, escalate, escalation_reason, created_at")
+        .eq("clinic_id", user.clinicId)
+        .eq("conversation_id", selectedConversationId)
+        .eq("status", "pending")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+    : { data: null, error: null };
+  const suggestion: InboxSuggestion | null =
+    suggestionResult.data && !suggestionResult.error
+      ? {
+          id: suggestionResult.data.id,
+          conversationId: suggestionResult.data.conversation_id,
+          body: suggestionResult.data.body,
+          escalate: suggestionResult.data.escalate,
+          escalationReason: suggestionResult.data.escalation_reason,
+          createdAt: suggestionResult.data.created_at,
+        }
+      : null;
 
   const messages: InboxThreadMessage[] = [
     ...(inboundResult.data ?? [])
@@ -252,6 +308,7 @@ export async function loadInboxData(
       body: template.body,
       variableNames: variableNames(template.variables),
     })),
+    suggestion,
     selectedConversationId,
     loadedAt: new Date().toISOString(),
     error: false,

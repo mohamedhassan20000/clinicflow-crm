@@ -6,6 +6,7 @@ import { computeAvailableSlots } from "@/lib/booking/availability";
 import { resolveClinicTimeZone } from "@/lib/ai/tools/context";
 import { formatScheduledAt } from "@/lib/messaging/format";
 import type { AuthedUser } from "@/lib/rbac";
+import { createClinicScopedAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/types/database";
 
 export type PendingBookingInput = {
@@ -137,7 +138,14 @@ export async function createPendingWorkflowBooking(input: {
   workflowStepId: string;
 }): Promise<
   | { ok: true; appointmentId: string; preview: PendingBookingPreview }
-  | { ok: false; reason: "no_longer_available" | "create_failed" }
+  | {
+      ok: false;
+      reason:
+        | "no_longer_available"
+        | "patient_pending_cap"
+        | "slot_pending_cap"
+        | "create_failed";
+    }
 > {
   const preview = await validatePendingBooking(
     input.supabase,
@@ -146,18 +154,72 @@ export async function createPendingWorkflowBooking(input: {
   );
   if (!preview) return { ok: false, reason: "no_longer_available" };
 
-  const existing = await input.supabase
+  // The caller is an authenticated P4.11 confirmation request. Keep the
+  // privileged persistence boundary tied to that exact session rather than
+  // trusting an AuthedUser-shaped object supplied by another server caller.
+  const session = await input.supabase.auth.getUser();
+  if (session.error || session.data.user?.id !== input.user.id) {
+    return { ok: false, reason: "create_failed" };
+  }
+
+  // P5A makes every AI provenance/TTL column server-owned. The authenticated
+  // request client still performs all availability reads under normal RLS, but
+  // the confirmed insert must use the clinic-scoped service client so browsers
+  // cannot forge workflow provenance. Re-check the content-free P4.11 ledger
+  // before elevating: same tenant, same actor, confirmed execute run, and exact
+  // registered booking step.
+  const writer = createClinicScopedAdminClient(input.user.clinicId);
+  const existing = await writer
     .from("appointments")
     .select("id")
-    .eq("clinic_id", input.user.clinicId)
     .eq("ai_workflow_run_id", input.workflowRunId)
     .eq("ai_workflow_step_id", input.workflowStepId)
     .maybeSingle();
+
+  const workflow = await writer
+    .from("ai_workflow_runs")
+    .select("id, user_id, mode, state, plan, confirmed_by, confirmed_at")
+    .eq("id", input.workflowRunId)
+    .eq("user_id", input.user.id)
+    .eq("confirmed_by", input.user.id)
+    .eq("mode", "execute")
+    .not("confirmed_at", "is", null)
+    .maybeSingle();
+  const plan = workflow.data?.plan;
+  const steps =
+    plan && typeof plan === "object" && !Array.isArray(plan)
+      ? (plan as { steps?: unknown }).steps
+      : null;
+  const isRegisteredBookingStep =
+    Array.isArray(steps) &&
+    steps.some(
+      (step) =>
+        step !== null &&
+        typeof step === "object" &&
+        (step as { id?: unknown }).id === input.workflowStepId &&
+        (step as { tool?: unknown }).tool === "create_pending_booking",
+    );
+  if (
+    existing.error ||
+    workflow.error ||
+    !workflow.data ||
+    !workflow.data.confirmed_at ||
+    ![
+      "running",
+      "partially_failed",
+      "failed",
+      "needs_clarification",
+      ...(existing.data ? ["succeeded"] : []),
+    ].includes(workflow.data.state) ||
+    !isRegisteredBookingStep
+  ) {
+    return { ok: false, reason: "create_failed" };
+  }
   if (existing.data) {
     return { ok: true, appointmentId: existing.data.id, preview };
   }
 
-  const inserted = await input.supabase
+  const inserted = await writer
     .from("appointments")
     .insert({
       clinic_id: input.user.clinicId,
@@ -174,15 +236,20 @@ export async function createPendingWorkflowBooking(input: {
     .select("id")
     .single();
   if (inserted.error || !inserted.data) {
-    const raced = await input.supabase
+    const raced = await writer
       .from("appointments")
       .select("id")
-      .eq("clinic_id", input.user.clinicId)
       .eq("ai_workflow_run_id", input.workflowRunId)
       .eq("ai_workflow_step_id", input.workflowStepId)
       .maybeSingle();
     if (raced.data) {
       return { ok: true, appointmentId: raced.data.id, preview };
+    }
+    if (inserted.error?.message.includes("AI_PENDING_PATIENT_CAP")) {
+      return { ok: false, reason: "patient_pending_cap" };
+    }
+    if (inserted.error?.message.includes("AI_PENDING_SLOT_CAP")) {
+      return { ok: false, reason: "slot_pending_cap" };
     }
     return { ok: false, reason: "create_failed" };
   }

@@ -181,7 +181,7 @@ const TASK_POLICIES = {
   },
   patient_booking: {
     task: "patient_booking",
-    version: "p45b-patient-policy-reserved-v1",
+    version: "p5a-patient-booking-policy-v1",
     primaryModelAlias: "patient-haiku-bootstrap-v1",
     fallbackModelAliases: [],
     allowedPersonas: ["patient"],
@@ -194,7 +194,7 @@ const TASK_POLICIES = {
   },
   patient_faq: {
     task: "patient_faq",
-    version: "p45b-patient-policy-reserved-v1",
+    version: "p5a-patient-faq-policy-v1",
     primaryModelAlias: "patient-haiku-bootstrap-v1",
     fallbackModelAliases: [],
     allowedPersonas: ["patient"],

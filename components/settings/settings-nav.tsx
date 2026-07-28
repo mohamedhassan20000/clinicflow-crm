@@ -15,6 +15,7 @@ const NAV = [
   { href: "/settings/messaging", labelKey: "navMessaging" },
   { href: "/settings/templates", labelKey: "navTemplates" },
   { href: "/settings/ai", labelKey: "navAiProvider", aiOnly: true },
+  { href: "/settings/patient-ai", labelKey: "navPatientAi", aiOnly: true },
   {
     href: "/settings/assistant",
     labelKey: "navAssistantCustomization",

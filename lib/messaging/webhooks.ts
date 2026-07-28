@@ -1,4 +1,5 @@
 import "server-only";
+import * as Sentry from "@sentry/nextjs";
 import {
   advanceOutboundMessageStatus,
   findMessageTemplateForWebhook,
@@ -8,6 +9,7 @@ import {
 import { normalizePhone } from "@/lib/phone/registry";
 import { sanitizeProviderError } from "@/lib/messaging/scrub";
 import { emitClinicNotification } from "@/lib/notifications/emit";
+import { runPatientInboundAiReply } from "@/lib/ai/patient-reply";
 import type {
   MessagingProviderId,
   TemplateApprovalStatus,
@@ -71,6 +73,24 @@ async function persistInboundMessage(
         : { roles: ["admin", "receptionist"] }),
       dedupeUnread: true,
     });
+
+    // P5B (§6.2): hand the fresh inbound turn to the patient AI. This is the
+    // only wiring point between the webhook and the agent. It is strictly
+    // best-effort — a disabled mode, a missing entitlement, or any failure
+    // leaves the staff inbox notification above as the guaranteed fallback and
+    // never fails the webhook (a failed reply degrades to a human, §6.7).
+    try {
+      await runPatientInboundAiReply({
+        clinicId,
+        conversationId,
+        providerMessageId: event.providerMessageId,
+        messageText: event.body ?? "",
+      });
+    } catch (error) {
+      Sentry.captureException(error, {
+        tags: { scope: "webhook-patient-ai", provider: "dialog360" },
+      });
+    }
   }
   return "inserted";
 }

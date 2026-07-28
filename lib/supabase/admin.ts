@@ -315,6 +315,122 @@ export async function logAgentToolCall(input: {
   });
 }
 
+/**
+ * P5B (§6.2): the clinic fields the patient-reply orchestrator needs to resolve
+ * mode, locale, and canned escalation copy. `clinics` has no clinic_id column,
+ * so it is read by primary key here rather than through the auto-scoping client.
+ */
+export async function getClinicAiReplyContext(clinicId: string) {
+  return createAdminClient()
+    .from("clinics")
+    .select("name, locale, country, phone, ai_reply_mode")
+    .eq("id", clinicId)
+    .maybeSingle();
+}
+
+/** P5B (§6.2): update the per-clinic patient AI reply mode. `clinics` is keyed
+ * by `id`, so it is written by primary key rather than the auto-scoping client. */
+export async function setClinicAiReplyMode(
+  clinicId: string,
+  mode: "off" | "suggest" | "auto",
+) {
+  return createAdminClient()
+    .from("clinics")
+    .update({ ai_reply_mode: mode })
+    .eq("id", clinicId)
+    .select("id")
+    .maybeSingle();
+}
+
+/** P5A conversation-bound patient identity resolution. The RPC rechecks the
+ * clinic/conversation pair and patient entitlement; callers never provide or
+ * receive a model-visible patient id. */
+export async function resolvePatientAiContext(input: {
+  clinicId: string;
+  conversationId: string;
+}) {
+  return createAdminClient().rpc("resolve_patient_ai_context", {
+    p_clinic_id: input.clinicId,
+    p_conversation_id: input.conversationId,
+  });
+}
+
+/** Rate-limited-in-database DOB verification for one conversation. */
+export async function verifyPatientConversationDob(input: {
+  clinicId: string;
+  conversationId: string;
+  dateOfBirth: string;
+}) {
+  return createAdminClient().rpc("verify_patient_conversation_dob", {
+    p_clinic_id: input.clinicId,
+    p_conversation_id: input.conversationId,
+    p_date_of_birth: input.dateOfBirth,
+  });
+}
+
+/** Atomic P5A preliminary-booking boundary (identity, caps, TTL, and audit). */
+export async function createPatientPreliminaryBooking(input: {
+  clinicId: string;
+  conversationId: string;
+  doctorId: string;
+  scheduledAt: string;
+  durationMinutes: number;
+  serviceId?: string | null;
+}) {
+  return createAdminClient().rpc("create_patient_preliminary_booking", {
+    p_clinic_id: input.clinicId,
+    p_conversation_id: input.conversationId,
+    p_doctor_id: input.doctorId,
+    p_scheduled_at: input.scheduledAt,
+    p_duration_minutes: input.durationMinutes,
+    p_service_id: input.serviceId ?? undefined,
+  });
+}
+
+export async function listPatientAiAppointments(input: {
+  clinicId: string;
+  conversationId: string;
+}) {
+  return createAdminClient().rpc("list_patient_ai_appointments", {
+    p_clinic_id: input.clinicId,
+    p_conversation_id: input.conversationId,
+  });
+}
+
+export async function cancelPatientAiAppointment(input: {
+  clinicId: string;
+  conversationId: string;
+  appointmentId: string;
+}) {
+  return createAdminClient().rpc("cancel_patient_ai_appointment", {
+    p_clinic_id: input.clinicId,
+    p_conversation_id: input.conversationId,
+    p_appointment_id: input.appointmentId,
+  });
+}
+
+export async function searchPatientClinicFaq(input: {
+  clinicId: string;
+  conversationId: string;
+  question: string;
+  language: "ar" | "en";
+}) {
+  return createAdminClient().rpc("search_patient_clinic_faq", {
+    p_clinic_id: input.clinicId,
+    p_conversation_id: input.conversationId,
+    p_question: input.question,
+    p_language: input.language,
+  });
+}
+
+/** Daily P3D cron sub-job. Expiry is terminal, transition-checked, and audited. */
+export async function expireAiPendingBookings(now = new Date(), limit = 500) {
+  return createAdminClient().rpc("expire_ai_pending_bookings", {
+    p_now: now.toISOString(),
+    p_limit: limit,
+  });
+}
+
 /** Atomic webhook boundary: one inbound event creates/repairs one sender thread. */
 export async function persistWhatsAppInbound(input: {
   clinicId: string;
@@ -1237,6 +1353,7 @@ export async function listOrphanedSignupUsers(): Promise<
 }
 
 const CLINIC_SCOPED_TABLES = new Set([
+  "ai_suggested_replies",
   "ai_usage_events",
   "ai_workflow_runs",
   "ai_budget_periods",
@@ -1247,6 +1364,7 @@ const CLINIC_SCOPED_TABLES = new Set([
   "appointments",
   "audit_logs",
   "clinic_channels",
+  "clinic_faq",
   "clinic_working_hours",
   "clinic_feature_overrides",
   "conversations",

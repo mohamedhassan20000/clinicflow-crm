@@ -236,6 +236,51 @@ export function followupCopy(input: FollowupCopyInput): {
   };
 }
 
+type EscalationCopyInput = {
+  locale: PatientCopyLocale;
+  clinicName: string;
+  /** The clinic's own phone, already trimmed; omitted from copy when absent. */
+  clinicPhone?: string | null;
+  /** Local emergency number resolved from the clinic country (§6.5). */
+  emergencyNumber: string;
+};
+
+/**
+ * Canned human-escalation copy for the patient WhatsApp agent (§6.2, §6.5).
+ *
+ * `emergency` is the life-safety response: it never involves the model and
+ * always surfaces the local emergency number plus the clinic phone. The
+ * `handoff` copy is the generic "a staff member will follow up" message used
+ * for explicit human requests, medical questions, complaints, and
+ * low-confidence turns. Bodies carry no PHI — clinic name and phone only.
+ */
+export function patientEscalationCopy(
+  kind: "emergency" | "handoff",
+  input: EscalationCopyInput,
+): string {
+  const phone = input.clinicPhone?.trim() ? input.clinicPhone.trim() : null;
+  if (input.locale === "ar") {
+    if (kind === "emergency") {
+      const callClinic = phone ? ` أو تواصلوا مع ${input.clinicName} على ${phone}.` : ".";
+      return (
+        `هذا مساعد آلي ولا يمكنه التعامل مع الحالات الطارئة. ` +
+        `إذا كانت هذه حالة طارئة يرجى الاتصال بالطوارئ على ${input.emergencyNumber} فورًا${callClinic}`
+      );
+    }
+    const callClinic = phone ? ` يمكنكم أيضًا الاتصال بنا على ${phone}.` : "";
+    return `سأطلب من أحد موظفي ${input.clinicName} متابعة رسالتكم قريبًا.${callClinic}`;
+  }
+  if (kind === "emergency") {
+    const callClinic = phone ? ` or contact ${input.clinicName} at ${phone}.` : ".";
+    return (
+      `This is an automated assistant and can't help with emergencies. ` +
+      `If this is an emergency, please call ${input.emergencyNumber} right away${callClinic}`
+    );
+  }
+  const callClinic = phone ? ` You can also reach us at ${phone}.` : "";
+  return `I've asked a member of the ${input.clinicName} team to follow up with you shortly.${callClinic}`;
+}
+
 /**
  * Orders values by the template's declared variable list. Returns null when a
  * declared variable is outside the allowed vocabulary, which makes the

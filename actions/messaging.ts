@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import { actionError } from "@/lib/i18n/action-errors";
 import { getEntitlements, hasFeature } from "@/lib/entitlements";
 import { requireMutationRole, requireRole } from "@/lib/rbac";
@@ -394,6 +395,145 @@ export async function sendInboxReply(input: {
   }
   revalidatePath("/inbox");
   return { success: true, outboundMessageId: sent.outboundMessageId };
+}
+
+const aiSuggestionSchema = z.object({
+  suggestionId: z.string().uuid(),
+  body: z.string().trim().min(1).max(4000).optional(),
+});
+
+/**
+ * P5B (§6.2): approve an AI-drafted patient reply from the inbox. Staff may
+ * edit the body before sending. The suggestion is authorization only for the
+ * *send*; the message itself still goes through the single `sendMessage`
+ * boundary (window rules, usage caps, outbound record), exactly like a manual
+ * reply. Never sends more than once (the pending guard is the claim).
+ */
+export async function approveAiSuggestion(input: {
+  suggestionId: string;
+  body?: string;
+}): Promise<MessagingActionResult> {
+  const user = await requireMutationRole(["admin", "receptionist"]);
+  const parsed = aiSuggestionSchema.safeParse(input);
+  if (!parsed.success) return messagingError("messaging.invalidInboxReply");
+
+  const client = createClinicScopedAdminClient(user.clinicId);
+  // Claim the pending suggestion first so two staff cannot both send it.
+  const claimed = await client
+    .from("ai_suggested_replies")
+    .update({ status: "sent", decided_by: user.id, decided_at: new Date().toISOString() })
+    .eq("id", parsed.data.suggestionId)
+    .eq("status", "pending")
+    .select("id, conversation_id, body")
+    .maybeSingle();
+  if (claimed.error || !claimed.data) {
+    return messagingError("messaging.suggestionUnavailable");
+  }
+
+  const conversation = await client
+    .from("conversations")
+    .select("id, channel, status, assigned_to, participant_address")
+    .eq("id", claimed.data.conversation_id)
+    .maybeSingle();
+  if (
+    conversation.error ||
+    !conversation.data ||
+    conversation.data.channel !== "whatsapp" ||
+    !conversation.data.participant_address
+  ) {
+    // Release the claim so the draft can be retried once the thread is usable.
+    await client
+      .from("ai_suggested_replies")
+      .update({ status: "pending", decided_by: null, decided_at: null })
+      .eq("id", claimed.data.id)
+      .eq("status", "sent");
+    return messagingError("messaging.conversationNotFound");
+  }
+
+  const body = parsed.data.body?.trim() || claimed.data.body;
+  const sent = await sendMessage({
+    clinicId: user.clinicId,
+    recipient: conversation.data.participant_address,
+    body,
+    relatedType: "manual",
+    conversationId: conversation.data.id,
+    channelPreference: ["whatsapp"],
+  });
+  if (!sent.ok) {
+    await client
+      .from("ai_suggested_replies")
+      .update({ status: "pending", decided_by: null, decided_at: null })
+      .eq("id", claimed.data.id)
+      .eq("status", "sent");
+    const key =
+      sent.code === "SERVICE_WINDOW_CLOSED"
+        ? "messaging.serviceWindowClosed"
+        : sent.code === "USAGE_LIMIT_REACHED"
+          ? "messaging.messagingLimitReached"
+          : "messaging.couldNotSendReply";
+    return messagingError(key);
+  }
+
+  await client
+    .from("ai_suggested_replies")
+    .update({ body, outbound_message_id: sent.outboundMessageId })
+    .eq("id", claimed.data.id);
+  if (!conversation.data.assigned_to) {
+    await client
+      .from("conversations")
+      .update({ assigned_to: user.id })
+      .eq("id", conversation.data.id)
+      .is("assigned_to", null);
+  }
+  revalidatePath("/inbox");
+  return { success: true, outboundMessageId: sent.outboundMessageId };
+}
+
+/** P5B: discard an AI-drafted reply without sending. */
+export async function dismissAiSuggestion(input: {
+  suggestionId: string;
+}): Promise<MessagingActionResult> {
+  const user = await requireMutationRole(["admin", "receptionist"]);
+  const parsed = aiSuggestionSchema.safeParse({ suggestionId: input.suggestionId });
+  if (!parsed.success) return messagingError("messaging.invalidInboxReply");
+  const client = createClinicScopedAdminClient(user.clinicId);
+  const dismissed = await client
+    .from("ai_suggested_replies")
+    .update({ status: "dismissed", decided_by: user.id, decided_at: new Date().toISOString() })
+    .eq("id", parsed.data.suggestionId)
+    .eq("status", "pending")
+    .select("id")
+    .maybeSingle();
+  if (dismissed.error || !dismissed.data) {
+    return messagingError("messaging.suggestionUnavailable");
+  }
+  revalidatePath("/inbox");
+  return { success: true };
+}
+
+/**
+ * P5B (§6.2): return an escalated conversation to the AI. Staff decide when a
+ * handoff is resolved; clearing the escalation lets the agent draft again on
+ * the next inbound turn.
+ */
+export async function clearConversationEscalation(input: {
+  conversationId: string;
+}): Promise<MessagingActionResult> {
+  const user = await requireMutationRole(["admin", "receptionist"]);
+  const parsed = z.object({ conversationId: z.string().uuid() }).safeParse(input);
+  if (!parsed.success) return messagingError("messaging.invalidConversationUpdate");
+  const client = createClinicScopedAdminClient(user.clinicId);
+  const updated = await client
+    .from("conversations")
+    .update({ ai_escalated_at: null, ai_escalation_reason: null })
+    .eq("id", parsed.data.conversationId)
+    .select("id")
+    .maybeSingle();
+  if (updated.error || !updated.data) {
+    return messagingError("messaging.conversationNotFound");
+  }
+  revalidatePath("/inbox");
+  return { success: true };
 }
 
 export async function updateConversationAssignment(input: {

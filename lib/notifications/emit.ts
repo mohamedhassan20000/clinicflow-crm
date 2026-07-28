@@ -22,7 +22,11 @@ import {
 export type NotificationType =
   | "inbox_message"
   | "reminder_failed"
-  | "followup_failed";
+  | "followup_failed"
+  // P5B — patient AI (§6.2): a drafted reply awaits staff approval, or the
+  // agent handed a conversation to a human.
+  | "ai_suggestion"
+  | "ai_escalation";
 
 export type NotificationRole = "admin" | "receptionist" | "manager" | "doctor";
 

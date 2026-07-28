@@ -292,7 +292,7 @@ function stepStatus(finishReason: string): AiUsageAttempt["status"] {
 }
 
 export async function prepareAiExecution(input: {
-  user: AuthedUser;
+  user: Pick<AuthedUser, "id" | "clinicId">;
   requestId: string;
   task: AiTaskClass;
   persona: AiPersona;
@@ -304,9 +304,21 @@ export async function prepareAiExecution(input: {
   const route = getCertifiedModelRoute(taskPolicy);
   const credential = await resolveAiProviderCredential(input.user.clinicId);
   const entitlements = await getEntitlements(input.user.clinicId);
+  const isPatientSurface = input.surface === "patient_messaging";
+  const surfaceAndTaskMatch = isPatientSurface
+    ? input.persona === "patient" &&
+      (input.task === "patient_booking" || input.task === "patient_faq")
+    : input.persona !== "patient" &&
+      !input.task.startsWith("patient_");
   if (
+    !surfaceAndTaskMatch ||
     !hasFeature(entitlements, AI_ASSISTANT_FEATURE) ||
-    !hasFeature(entitlements, "ai.staff_assistant") ||
+    !hasFeature(
+      entitlements,
+      isPatientSurface ? "ai.patient_suggest" : "ai.staff_assistant",
+    ) ||
+    (input.task === "patient_booking" &&
+      !hasFeature(entitlements, "ai.scheduling")) ||
     (input.task === "staff_workflow" &&
       !hasFeature(entitlements, AI_WORKFLOWS_FEATURE)) ||
     !hasAiProviderMode(entitlements, credential.mode)

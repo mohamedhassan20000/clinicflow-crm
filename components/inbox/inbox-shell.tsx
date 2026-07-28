@@ -13,12 +13,17 @@ import {
   Plus,
   Search,
   Send,
+  Sparkles,
+  TriangleAlert,
   UserRoundCheck,
   X,
 } from "lucide-react";
 import { useFormatter, useTranslations } from "next-intl";
 import { toast } from "sonner";
 import {
+  approveAiSuggestion,
+  clearConversationEscalation,
+  dismissAiSuggestion,
   linkConversationPatient,
   sendInboxReply,
   updateConversationAssignment,
@@ -50,6 +55,20 @@ import type {
   InboxTemplate,
 } from "@/lib/messaging/inbox";
 import { cn } from "@/lib/utils";
+
+const ESCALATION_REASONS = new Set([
+  "emergency",
+  "human_requested",
+  "medical",
+  "complaint",
+  "low_confidence",
+  "agent_error",
+]);
+
+/** Maps a stored escalation reason to its `inbox.ai.reason.*` message key. */
+function escalationReasonKey(reason: string | null): string {
+  return `ai.reason.${reason && ESCALATION_REASONS.has(reason) ? reason : "low_confidence"}`;
+}
 
 function initials(name: string) {
   return name
@@ -89,6 +108,9 @@ export function InboxShell({
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [query, setQuery] = useState("");
   const [reply, setReply] = useState("");
+  const [suggestionDraft, setSuggestionDraft] = useState("");
+  const [suggestionEditing, setSuggestionEditing] = useState(false);
+  const [suggestionDraftFor, setSuggestionDraftFor] = useState<string | null>(null);
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [templateParameters, setTemplateParameters] = useState<string[]>([]);
   const [patientQuery, setPatientQuery] = useState("");
@@ -101,6 +123,21 @@ export function InboxShell({
     (conversation) => conversation.id === data.selectedConversationId,
   ) ?? null;
   const selectedTemplate = data.templates.find((template) => template.id === templateId) ?? null;
+  const suggestion =
+    data.suggestion && selected && data.suggestion.conversationId === selected.id
+      ? data.suggestion
+      : null;
+  const escalationReasonLabel = t(escalationReasonKey(selected?.escalationReason ?? null));
+
+  // Reset the editable draft when a different suggestion loads. Adjusting state
+  // during render (guarded) is the React-recommended alternative to a
+  // setState-in-effect for deriving state from props.
+  const suggestionKey = suggestion ? `${suggestion.id}:${suggestion.body}` : null;
+  if (suggestionKey !== suggestionDraftFor) {
+    setSuggestionDraftFor(suggestionKey);
+    setSuggestionDraft(suggestion?.body ?? "");
+    setSuggestionEditing(false);
+  }
 
   const subscribeSeen = useCallback((callback: () => void) => {
     window.addEventListener("storage", callback);
@@ -165,7 +202,13 @@ export function InboxShell({
       if (session?.access_token) await supabase.realtime.setAuth(session.access_token);
       if (disposed) return;
       const subscribedTables = new Set<string>();
-      for (const table of ["conversations", "inbound_messages", "outbound_messages"] as const) {
+      const realtimeTables = [
+        "conversations",
+        "inbound_messages",
+        "outbound_messages",
+        "ai_suggested_replies",
+      ] as const;
+      for (const table of realtimeTables) {
         const channel = supabase
           .channel(`clinic-inbox:${clinicId}:${table}`)
           // Role-aware RLS is the subscription filter. A redundant UUID
@@ -174,7 +217,7 @@ export function InboxShell({
           .subscribe((status) => {
             if (status === "SUBSCRIBED") {
               subscribedTables.add(table);
-              if (subscribedTables.size === 3) setRealtimeStatus("subscribed");
+              if (subscribedTables.size === realtimeTables.length) setRealtimeStatus("subscribed");
             } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
               setRealtimeStatus("error");
             }
@@ -252,6 +295,34 @@ export function InboxShell({
   function chooseTemplate(template: InboxTemplate) {
     setTemplateId(template.id);
     setTemplateParameters(template.variableNames.map(() => ""));
+  }
+
+  function handleApproveSuggestion() {
+    if (!suggestion) return;
+    const edited = suggestionEditing ? suggestionDraft.trim() : undefined;
+    if (suggestionEditing && !edited) return;
+    startTransition(async () => {
+      const result = await approveAiSuggestion({ suggestionId: suggestion.id, body: edited });
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success(t("ai.suggestionSent"));
+      router.refresh();
+    });
+  }
+
+  function handleDismissSuggestion() {
+    if (!suggestion) return;
+    runAction(() => dismissAiSuggestion({ suggestionId: suggestion.id }), t("ai.suggestionDismissed"));
+  }
+
+  function handleClearEscalation() {
+    if (!selected) return;
+    runAction(
+      () => clearConversationEscalation({ conversationId: selected.id }),
+      t("ai.escalationCleared"),
+    );
   }
 
   function handleSend() {
@@ -485,7 +556,67 @@ export function InboxShell({
                 )}
               </div>
 
-              <div className="border-t p-3">
+              <div className="space-y-3 border-t p-3">
+                {selected.escalatedAt ? (
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-amber-800 dark:text-amber-300">
+                    <span className="flex items-center gap-2">
+                      <TriangleAlert className="size-4 shrink-0" aria-hidden />
+                      {t("ai.escalatedBanner", { reason: escalationReasonLabel })}
+                    </span>
+                    <Button variant="outline" size="sm" disabled={pending} onClick={handleClearEscalation}>
+                      {t("ai.returnToAi")}
+                    </Button>
+                  </div>
+                ) : null}
+
+                {suggestion ? (
+                  <div
+                    className="space-y-2 rounded-lg border border-primary/30 bg-primary/5 p-3"
+                    data-testid="ai-suggestion"
+                  >
+                    <div className="flex items-center gap-2 text-xs font-medium text-primary">
+                      <Sparkles className="size-3.5" aria-hidden />
+                      {suggestion.escalate ? t("ai.suggestionEscalationTitle") : t("ai.suggestionTitle")}
+                    </div>
+                    {suggestionEditing ? (
+                      <Textarea
+                        value={suggestionDraft}
+                        onChange={(event) => setSuggestionDraft(event.target.value)}
+                        maxLength={4000}
+                        aria-label={t("ai.editSuggestion")}
+                        className="max-h-48 min-h-16 resize-none bg-background"
+                      />
+                    ) : (
+                      <p className="whitespace-pre-wrap break-words text-sm">{suggestion.body}</p>
+                    )}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        size="sm"
+                        disabled={pending || (suggestionEditing && !suggestionDraft.trim())}
+                        onClick={handleApproveSuggestion}
+                      >
+                        {pending ? (
+                          <Loader2 className="size-4 animate-spin" aria-hidden />
+                        ) : (
+                          <Send className="size-4 rtl:-scale-x-100" aria-hidden />
+                        )}
+                        {suggestionEditing ? t("ai.sendEdited") : t("ai.approveSend")}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={pending}
+                        onClick={() => setSuggestionEditing((value) => !value)}
+                      >
+                        {suggestionEditing ? t("ai.cancelEdit") : t("ai.edit")}
+                      </Button>
+                      <Button variant="ghost" size="sm" disabled={pending} onClick={handleDismissSuggestion}>
+                        {t("ai.dismiss")}
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
+
                 {selected.status === "closed" ? (
                   <div className="flex items-center justify-between gap-3 rounded-lg border bg-muted/40 p-3 text-sm">
                     <span>{t("closedReplyHint")}</span>

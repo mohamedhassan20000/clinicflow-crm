@@ -174,7 +174,8 @@
     "couldNotSaveTemplate": "تعذر حفظ القالب. يرجى المحاولة مرة أخرى.",
     "templateNameAlreadyExists": "يوجد قالب بهذا الاسم واللغة بالفعل.",
     "templateCannotBeDeletedWhileSubmitted": "لا يمكن حذف القالب أثناء مراجعته.",
-    "couldNotDeleteTemplate": "تعذر حذف القالب. يرجى المحاولة مرة أخرى."
+    "couldNotDeleteTemplate": "تعذر حذف القالب. يرجى المحاولة مرة أخرى.",
+    "suggestionUnavailable": "لم يعد هذا الرد المقترح متاحًا."
   },
   "notifications": {
     "couldNotUpdateNotifications": "تعذر تحديث الإشعارات. يرجى المحاولة مرة أخرى."
@@ -338,7 +339,15 @@
     "weCouldNotCompleteThisRequestPleaseTryAgain": "تعذر إكمال الطلب. يُرجى المحاولة مرة أخرى.",
     "youCannotDeactivateYourOwnAccount": "لا يمكنك تعطيل حسابك.",
     "youCannotDeleteYourOwnAccount": "لا يمكنك حذف حسابك.",
-    "youCannotPermanentlyDeleteYourOwnAccount": "لا يمكنك حذف حسابك نهائيًا."
+    "youCannotPermanentlyDeleteYourOwnAccount": "لا يمكنك حذف حسابك نهائيًا.",
+    "patientAiInvalidMode": "يرجى اختيار وضع رد صالح.",
+    "patientAiNotEntitled": "ذكاء المرضى غير مضمّن في باقتك.",
+    "patientAiAutoNotEntitled": "الردود التلقائية غير متاحة في باقتك.",
+    "patientAiCouldNotSaveMode": "تعذّر حفظ وضع الرد. يرجى المحاولة مرة أخرى.",
+    "patientAiInvalidFaq": "يرجى إدخال سؤال وإجابة صالحين.",
+    "patientAiFaqDuplicate": "يوجد سؤال بهذا النص مسبقًا.",
+    "patientAiCouldNotSaveFaq": "تعذّر حفظ هذا السؤال. يرجى المحاولة مرة أخرى.",
+    "patientAiFaqNotFound": "تعذّر العثور على هذا السؤال."
   },
   "staff-files": {
     "certificateMustBePdfWordJpegOrPng": "تعذر إكمال الطلب. يُرجى المحاولة مرة أخرى.",

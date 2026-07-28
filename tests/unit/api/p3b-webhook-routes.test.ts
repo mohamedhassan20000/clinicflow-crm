@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
   verifyResend: vi.fn(),
   parseResend: vi.fn(),
   process: vi.fn(),
+  recordVerified: vi.fn(),
+  recordRejection: vi.fn(),
 }));
 
 vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
@@ -25,6 +27,12 @@ vi.mock("@/lib/messaging/webhook-http", () => ({
 }));
 vi.mock("@/lib/messaging/crypto", () => ({ decryptChannelCredentials: mocks.decrypt }));
 vi.mock("@/lib/messaging/webhooks", () => ({ processMessagingWebhookEvents: mocks.process }));
+vi.mock("@/lib/messaging/health", () => ({
+  recordVerifiedWhatsAppWebhook: mocks.recordVerified,
+}));
+vi.mock("@/lib/messaging/webhook-telemetry", () => ({
+  recordWebhookRouteRejection: mocks.recordRejection,
+}));
 vi.mock("@/lib/supabase/admin", () => ({
   findClinicChannelForWebhook: mocks.findChannel,
   findMessageTemplateForWebhook: mocks.findTemplate,
@@ -62,6 +70,8 @@ beforeEach(() => {
   mocks.verifyWhatsApp.mockResolvedValue(false);
   mocks.verifyResend.mockResolvedValue(false);
   mocks.process.mockResolvedValue({ inbound: 1, statuses: 0, templates: 0, replays: 0, ignored: 0 });
+  mocks.recordVerified.mockResolvedValue(undefined);
+  mocks.recordRejection.mockResolvedValue(undefined);
 });
 
 describe("P3B webhook route boundaries", () => {

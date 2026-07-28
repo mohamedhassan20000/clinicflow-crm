@@ -1,39 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  findTemplate: vi.fn(),
   persistInbound: vi.fn(),
   advanceStatus: vi.fn(),
-  updateResult: { data: null as unknown, error: null as unknown },
-  updates: [] as Array<{ payload: unknown; filters: unknown[] }>,
+  applyTemplateStatus: vi.fn(),
 }));
 
 vi.mock("@/lib/supabase/admin", () => ({
-  findMessageTemplateForWebhook: mocks.findTemplate,
   persistWhatsAppInbound: mocks.persistInbound,
   advanceOutboundMessageStatus: mocks.advanceStatus,
+  applyMessageTemplateProviderStatus: mocks.applyTemplateStatus,
   createClinicScopedAdminClient: () => ({
-    from: () => {
-      const filters: unknown[] = [];
-      const chain: Record<string, unknown> = {
-        update: (payload: unknown) => {
-          mocks.updates.push({ payload, filters });
-          return chain;
-        },
-        eq: (...args: unknown[]) => {
-          filters.push(["eq", ...args]);
-          return chain;
-        },
-        in: (...args: unknown[]) => {
-          filters.push(["in", ...args]);
-          return chain;
-        },
-        select: () => chain,
-        maybeSingle: () => Promise.resolve(mocks.updateResult),
-      };
-      return chain;
-    },
+    from: () => ({ select: () => ({ eq: () => ({ maybeSingle: vi.fn() }) }) }),
   }),
+}));
+vi.mock("@/lib/messaging/meta-reconcile", () => ({
+  applyChannelStateSignals: vi.fn().mockResolvedValue({ transitioned: false }),
+  refreshConnectionStateAfterTemplateChange: vi.fn().mockResolvedValue({ transitioned: false }),
 }));
 vi.mock("@/lib/phone/registry", () => ({ normalizePhone: (v: string) => v }));
 vi.mock("@/lib/messaging/scrub", () => ({ sanitizeProviderError: (v: unknown) => String(v) }));
@@ -57,10 +40,8 @@ function templateEvent(status: "approved" | "rejected" | "submitted") {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.updates = [];
-  mocks.updateResult = { data: { id: templateDbId }, error: null };
-  mocks.findTemplate.mockResolvedValue({
-    data: { id: templateDbId, clinic_id: clinicId },
+  mocks.applyTemplateStatus.mockResolvedValue({
+    data: [{ template_id: templateDbId, clinic_id: clinicId, changed: true }],
     error: null,
   });
 });
@@ -73,19 +54,18 @@ describe("persistTemplateStatus transition guard (P3-M3)", () => {
       events: [templateEvent("approved")],
     });
     expect(summary.templates).toBe(1);
-    const update = mocks.updates[0];
-    expect(update.payload).toMatchObject({ approval_status: "approved" });
-    // Guarded on provider_template_id and legal source states (submitted/rejected).
-    const filters = JSON.stringify(update.filters);
-    expect(filters).toContain(providerTemplateId);
-    expect(filters).toContain("submitted");
-    expect(filters).toContain("rejected");
+    expect(mocks.applyTemplateStatus).toHaveBeenCalledWith({
+      provider: "dialog360",
+      providerTemplateId,
+      status: "approved",
+      allowedFrom: ["submitted", "rejected"],
+    });
   });
 
   it("safely ignores a stale event that matches no legal source row", async () => {
     // The conditional UPDATE affects nothing (e.g. template edited back to
     // draft and provider id detached): a no-op, not an error.
-    mocks.updateResult = { data: null, error: null };
+    mocks.applyTemplateStatus.mockResolvedValue({ data: [], error: null });
     const summary = await processMessagingWebhookEvents({
       provider: "dialog360",
       clinicId,
@@ -96,8 +76,12 @@ describe("persistTemplateStatus transition guard (P3-M3)", () => {
   });
 
   it("rejects an event for a template owned by another clinic", async () => {
-    mocks.findTemplate.mockResolvedValue({
-      data: { id: templateDbId, clinic_id: "99999999-9999-4999-8999-999999999999" },
+    mocks.applyTemplateStatus.mockResolvedValue({
+      data: [{
+        template_id: templateDbId,
+        clinic_id: "99999999-9999-4999-8999-999999999999",
+        changed: true,
+      }],
       error: null,
     });
     const summary = await processMessagingWebhookEvents({
@@ -106,6 +90,20 @@ describe("persistTemplateStatus transition guard (P3-M3)", () => {
       events: [templateEvent("approved")],
     });
     expect(summary.templates).toBe(0);
-    expect(mocks.updates).toHaveLength(0);
+    expect(mocks.applyTemplateStatus).toHaveBeenCalledOnce();
+  });
+
+  it("fails the callback when the atomic status+audit RPC fails", async () => {
+    mocks.applyTemplateStatus.mockResolvedValue({
+      data: null,
+      error: { message: "audit insert failed" },
+    });
+    await expect(
+      processMessagingWebhookEvents({
+        provider: "dialog360",
+        clinicId,
+        events: [templateEvent("approved")],
+      }),
+    ).rejects.toThrow("TEMPLATE_STATUS_UPDATE_FAILED");
   });
 });

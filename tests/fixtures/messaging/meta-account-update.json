@@ -1,0 +1,15 @@
+{
+  "object": "whatsapp_business_account",
+  "entry": [{
+    "id": "waba-meta-1",
+    "changes": [{
+      "field": "account_update",
+      "value": {
+        "phone_number": { "id": "551234567890", "status": "CONNECTED" },
+        "business_verification_status": "verified",
+        "event": "VERIFIED_ACCOUNT",
+        "metadata": { "phone_number_id": "551234567890" }
+      }
+    }]
+  }]
+}

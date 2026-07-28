@@ -1298,40 +1298,88 @@ export type Database = {
       }
       clinic_channels: {
         Row: {
+          account_review_status: string | null
+          business_verification_status: string | null
           channel: Database["public"]["Enums"]["message_channel"]
           clinic_id: string
           connected_at: string | null
+          connection_state: string | null
           created_at: string
           credentials_encrypted: string | null
           id: string
+          last_signal_at: string | null
+          last_state_reason: string | null
+          last_sync_attempt_at: string | null
+          last_synced_at: string | null
+          last_verified_webhook_at: string | null
+          last_webhook_check_at: string | null
+          messaging_limit_tier: string | null
+          phone_status: string | null
           provider: Database["public"]["Enums"]["messaging_provider"]
+          provider_account_id: string | null
+          quality_rating: string | null
           sender_identity: string
           status: Database["public"]["Enums"]["clinic_channel_status"]
           updated_at: string
+          webhook_health_reason: string | null
+          webhook_health_status: string
+          webhook_subscribed: boolean
         }
         Insert: {
+          account_review_status?: string | null
+          business_verification_status?: string | null
           channel: Database["public"]["Enums"]["message_channel"]
           clinic_id: string
           connected_at?: string | null
+          connection_state?: string | null
           created_at?: string
           credentials_encrypted?: string | null
           id?: string
+          last_signal_at?: string | null
+          last_state_reason?: string | null
+          last_sync_attempt_at?: string | null
+          last_synced_at?: string | null
+          last_verified_webhook_at?: string | null
+          last_webhook_check_at?: string | null
+          messaging_limit_tier?: string | null
+          phone_status?: string | null
           provider: Database["public"]["Enums"]["messaging_provider"]
+          provider_account_id?: string | null
+          quality_rating?: string | null
           sender_identity: string
           status?: Database["public"]["Enums"]["clinic_channel_status"]
           updated_at?: string
+          webhook_health_reason?: string | null
+          webhook_health_status?: string
+          webhook_subscribed?: boolean
         }
         Update: {
+          account_review_status?: string | null
+          business_verification_status?: string | null
           channel?: Database["public"]["Enums"]["message_channel"]
           clinic_id?: string
           connected_at?: string | null
+          connection_state?: string | null
           created_at?: string
           credentials_encrypted?: string | null
           id?: string
+          last_signal_at?: string | null
+          last_state_reason?: string | null
+          last_sync_attempt_at?: string | null
+          last_synced_at?: string | null
+          last_verified_webhook_at?: string | null
+          last_webhook_check_at?: string | null
+          messaging_limit_tier?: string | null
+          phone_status?: string | null
           provider?: Database["public"]["Enums"]["messaging_provider"]
+          provider_account_id?: string | null
+          quality_rating?: string | null
           sender_identity?: string
           status?: Database["public"]["Enums"]["clinic_channel_status"]
           updated_at?: string
+          webhook_health_reason?: string | null
+          webhook_health_status?: string
+          webhook_subscribed?: boolean
         }
         Relationships: [
           {
@@ -2448,6 +2496,57 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clinics"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      message_template_provider_bindings: {
+        Row: {
+          approval_status: Database["public"]["Enums"]["template_approval_status"]
+          clinic_id: string
+          created_at: string
+          id: string
+          provider: Database["public"]["Enums"]["messaging_provider"]
+          provider_account_id: string | null
+          provider_template_id: string | null
+          template_id: string
+          updated_at: string
+        }
+        Insert: {
+          approval_status?: Database["public"]["Enums"]["template_approval_status"]
+          clinic_id: string
+          created_at?: string
+          id?: string
+          provider: Database["public"]["Enums"]["messaging_provider"]
+          provider_account_id?: string | null
+          provider_template_id?: string | null
+          template_id: string
+          updated_at?: string
+        }
+        Update: {
+          approval_status?: Database["public"]["Enums"]["template_approval_status"]
+          clinic_id?: string
+          created_at?: string
+          id?: string
+          provider?: Database["public"]["Enums"]["messaging_provider"]
+          provider_account_id?: string | null
+          provider_template_id?: string | null
+          template_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_template_provider_bindings_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_template_provider_bindings_template_clinic_fkey"
+            columns: ["template_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "message_templates"
+            referencedColumns: ["id", "clinic_id"]
           },
         ]
       }
@@ -3682,6 +3781,65 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      activate_whatsapp_provider: {
+        Args: {
+          p_clinic_id: string
+          p_provider: Database["public"]["Enums"]["messaging_provider"]
+        }
+        Returns: boolean
+      }
+      apply_message_template_provider_status: {
+        Args: {
+          p_allowed_from: Database["public"]["Enums"]["template_approval_status"][]
+          p_provider: Database["public"]["Enums"]["messaging_provider"]
+          p_provider_template_id: string
+          p_status: Database["public"]["Enums"]["template_approval_status"]
+        }
+        Returns: {
+          changed: boolean
+          clinic_id: string
+          template_id: string
+        }[]
+      }
+      apply_meta_channel_state: {
+        Args: {
+          p_account_review_status: string | null
+          p_business_verification_status: string | null
+          p_channel_id: string
+          p_clinic_id: string
+          p_connection_state: string
+          p_expected_updated_at: string
+          p_last_signal_at?: string | null
+          p_last_state_reason: string | null
+          p_last_synced_at?: string | null
+          p_messaging_limit_tier: string | null
+          p_phone_status: string | null
+          p_quality_rating: string | null
+          p_status: Database["public"]["Enums"]["clinic_channel_status"]
+          p_webhook_subscribed: boolean
+        }
+        Returns: {
+          applied: boolean
+          connection_state: string
+          state_reason: string
+          transitioned: boolean
+        }[]
+      }
+      apply_whatsapp_webhook_health: {
+        Args: {
+          p_channel_id: string
+          p_checked_at?: string | null
+          p_clinic_id: string
+          p_reason?: string | null
+          p_status: string
+          p_verified_at?: string | null
+        }
+        Returns: {
+          applied: boolean
+          health_status: string
+          transitioned: boolean
+        }[]
+      }
       ai_compare_revenue_periods: {
         Args: {
           p_a_end: string
@@ -4293,6 +4451,30 @@ export type Database = {
         }
         Returns: string
       }
+      log_messaging_event: {
+        Args: {
+          p_clinic_id: string
+          p_event: string
+          p_record_id?: string
+          p_summary?: Json
+        }
+        Returns: string
+      }
+      claim_meta_channels_for_reconciliation: {
+        Args: { p_limit?: number }
+        Returns: {
+          clinic_id: string
+          id: string
+        }[]
+      }
+      claim_whatsapp_channels_for_health_check: {
+        Args: { p_limit?: number }
+        Returns: {
+          clinic_id: string
+          id: string
+          provider: Database["public"]["Enums"]["messaging_provider"]
+        }[]
+      }
       log_platform_audit_event: {
         Args: {
           p_action: string
@@ -4306,6 +4488,30 @@ export type Database = {
       normalize_legacy_phone_e164: {
         Args: { default_country: string; value: string }
         Returns: string
+      }
+      operator_whatsapp_health_report: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          account_review_status: string | null
+          approved_templates: number
+          business_verification_status: string | null
+          channel_id: string
+          channel_status: Database["public"]["Enums"]["clinic_channel_status"]
+          clinic_id: string
+          clinic_name: string
+          connection_state: string | null
+          last_inbound_at: string | null
+          last_outbound_at: string | null
+          last_outbound_status: Database["public"]["Enums"]["outbound_message_status"] | null
+          last_synced_at: string | null
+          last_verified_webhook_at: string | null
+          last_webhook_check_at: string | null
+          messaging_limit_tier: string | null
+          phone_status: string | null
+          provider: Database["public"]["Enums"]["messaging_provider"]
+          quality_rating: string | null
+          webhook_health_status: string
+        }[]
       }
       platform_week_start: { Args: { p_at?: string }; Returns: string }
       search_patients_ranked: {

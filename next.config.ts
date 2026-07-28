@@ -39,12 +39,13 @@ const securityHeaders = [
     key: "Content-Security-Policy",
     value: [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://connect.facebook.net",
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https:",
       "font-src 'self' data:",
       // Supabase REST + Storage + Realtime; Sentry error reporting (optional, no-op without DSN)
-      `connect-src 'self' ${supabaseConnectSources()} https://*.supabase.co wss://*.supabase.co https://*.sentry.io`,
+      `connect-src 'self' ${supabaseConnectSources()} https://*.supabase.co wss://*.supabase.co https://*.sentry.io https://graph.facebook.com https://www.facebook.com https://web.facebook.com`,
+      "frame-src 'self' https://www.facebook.com https://web.facebook.com",
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",

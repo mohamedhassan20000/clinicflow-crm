@@ -59,6 +59,18 @@ export const templateSubmissionSchema = z.object({
   category: z.enum(["UTILITY", "MARKETING", "AUTHENTICATION"]),
 });
 
+/**
+ * P6C: the Embedded Signup completion payload. `code` is the Meta authorization
+ * code exchanged server-side for a token; the phone-number / WABA ids Meta returns
+ * to the popup message. The raw code is never stored, only the exchanged token
+ * (encrypted). Bounded lengths keep an oversized/hostile popup payload out.
+ */
+export const metaOnboardingCompletionSchema = z.object({
+  code: z.string().trim().min(8, "validation.tooSmall").max(2000, "validation.tooBig"),
+  phoneNumberId: z.string().trim().regex(/^\d{5,32}$/, "validation.invalidFormat"),
+  wabaId: z.string().trim().regex(/^\d{5,32}$/, "validation.invalidFormat"),
+});
+
 export const inboxReplySchema = z
   .object({
     conversationId: z.string().uuid("validation.invalidFormat"),

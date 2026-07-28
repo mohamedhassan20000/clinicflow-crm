@@ -55,6 +55,14 @@ jobs:
       - name: Unit tests
         run: pnpm vitest run tests/unit/actions tests/unit/components tests/unit/db tests/unit/lib tests/unit/pages tests/unit/security tests/unit/sanity.test.ts
 
+      # P6A: adversarial prompt-injection corpus (ar/en + dialects) and the
+      # bilingual evaluation set, graded against the real tool-authorization
+      # oracle. Required job: asserts no injection can reach an unauthorized tool
+      # and every eval rubric is consistent with the product's auth model.
+      # Deterministic, no model or database — runs with the other unit tests.
+      - name: AI adversarial & evaluation suites (P6A)
+        run: pnpm test:ai-adversarial
+
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v1
         with:

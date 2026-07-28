@@ -1,5 +1,6 @@
 import "server-only";
 import { NextResponse } from "next/server";
+import { recordWebhookRouteRejection } from "@/lib/messaging/webhook-telemetry";
 import { checkRateLimit } from "@/lib/rate-limit";
 
 const WEBHOOK_RATE_LIMIT = {
@@ -47,6 +48,10 @@ export async function enforceWebhookRateLimit(
     WEBHOOK_RATE_LIMIT,
   );
   if (result.allowed) return null;
+  await recordWebhookRouteRejection(
+    provider === "meta" ? "meta" : "dialog360",
+    "rate_limit",
+  );
   return NextResponse.json(
     { error: "Webhook temporarily unavailable" },
     {

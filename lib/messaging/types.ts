@@ -108,6 +108,28 @@ export type WebhookEvent =
       language: string | null;
       status: TemplateApprovalStatus;
     }
+  | {
+      /**
+       * P6C: a Meta-direct account/phone/review state change. Carries only
+       * provider status strings (no message content); the connection-state
+       * machine derives the channel state and a sanitized failure reason from
+       * these. `failureReason` is raw provider text and is never persisted or
+       * shown without sanitization.
+       */
+      kind: "channel_state";
+      phoneNumberId: string | null;
+      wabaId: string | null;
+      observedAt?: string | null;
+      signals: {
+        businessVerificationStatus?: string | null;
+        phoneStatus?: string | null;
+        accountReviewStatus?: string | null;
+        qualityRating?: string | null;
+        messagingLimitTier?: string | null;
+        webhookSubscribed?: boolean | null;
+        failureReason?: string | null;
+      };
+    }
   | { kind: "ignored"; reason: string };
 
 export type SendErrorCode =

@@ -1,0 +1,10 @@
+{
+  "object": "whatsapp_business_account",
+  "entry": [{
+    "id": "waba-meta-1",
+    "changes": [{
+      "field": "account_review_update",
+      "value": { "decision": "REJECTED", "internal_reason_do_not_show_client": "policy 4.2 violation dossier #A1" }
+    }]
+  }]
+}

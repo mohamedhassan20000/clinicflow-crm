@@ -22,6 +22,9 @@
     "db:types": "supabase gen types typescript --project-id tslylwruuntrqjdzreot --schema public > types/database.ts",
     "format": "prettier --write .",
     "test:integration": "vitest run tests/unit/integration --no-file-parallelism",
+    "test:ai-adversarial": "vitest run tests/unit/ai/p6a-injection-suite.test.ts tests/unit/ai/p6a-eval-set.test.ts",
+    "test:ops": "vitest run tests/unit/lib/p6b-messaging-cost.test.ts tests/unit/lib/p6b-ops-alerts.test.ts tests/unit/lib/p6b-alert-scan.test.ts",
+    "load:test": "node scripts/load-test.mjs",
     "test:all": "vitest run"
   },
   "dependencies": {

@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   findOwner: vi.fn(),
   upsert: vi.fn(),
   captureMessage: vi.fn(),
+  activate: vi.fn(),
 }));
 
 vi.mock("@sentry/nextjs", () => ({ captureMessage: mocks.captureMessage }));
@@ -18,6 +19,7 @@ vi.mock("@/lib/messaging/whatsapp-dialog360", () => ({
 }));
 vi.mock("@/lib/supabase/admin", () => ({
   findClinicChannelIdentityOwner: mocks.findOwner,
+  activateWhatsAppProvider: mocks.activate,
   createClinicScopedAdminClient: () => ({
     from: () => ({ upsert: mocks.upsert }),
   }),
@@ -48,6 +50,7 @@ beforeEach(() => {
   mocks.configure.mockResolvedValue({ ok: true });
   mocks.setWebhook.mockResolvedValue({ ok: true });
   mocks.upsert.mockResolvedValue({ error: null });
+  mocks.activate.mockResolvedValue({ data: true, error: null });
 });
 
 afterEach(() => {
@@ -66,7 +69,8 @@ describe("360dialog channel connection", () => {
       password: expect.any(String),
     }));
     const row = mocks.upsert.mock.calls[0][0];
-    expect(row).toMatchObject({ clinic_id: clinicId, sender_identity: input.phoneNumberId, status: "active" });
+    expect(row).toMatchObject({ clinic_id: clinicId, sender_identity: input.phoneNumberId, status: "pending" });
+    expect(mocks.activate).toHaveBeenCalledWith(clinicId, "dialog360");
     expect(row.credentials_encrypted).not.toContain(input.apiKey);
     expect(decryptChannelCredentials(row.credentials_encrypted)).toMatchObject({
       apiKey: input.apiKey,

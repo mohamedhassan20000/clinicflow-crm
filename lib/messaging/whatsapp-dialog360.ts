@@ -246,6 +246,64 @@ export async function submitDialog360Template(
   }
 }
 
+export type Dialog360TemplateSnapshot = {
+  providerTemplateId: string;
+  name: string;
+  language: string;
+  status: TemplateApprovalStatus;
+};
+
+/** Read-only template reconciliation source for the P6D manual sync action. */
+export async function fetchDialog360Templates(
+  credentials: ChannelCredentials,
+): Promise<
+  | { ok: true; templates: Dialog360TemplateSnapshot[] }
+  | { ok: false; error: string }
+> {
+  const apiKey = credentials.apiKey;
+  if (!apiKey) {
+    return { ok: false, error: "WhatsApp channel credentials are unavailable." };
+  }
+  try {
+    const response = await fetch(`${apiBase()}/v1/configs/templates`, {
+      method: "GET",
+      headers: { "D360-API-KEY": apiKey },
+      cache: "no-store",
+      signal: AbortSignal.timeout(10_000),
+    });
+    const payload: unknown = await response.json().catch(() => null);
+    const object = asObject(payload);
+    const rows = Array.isArray(payload)
+      ? payload
+      : Array.isArray(object?.data)
+        ? object.data
+        : Array.isArray(object?.waba_templates)
+          ? object.waba_templates
+          : [];
+    if (!response.ok) {
+      return {
+        ok: false,
+        error: `360dialog template synchronization failed with HTTP ${response.status}.`,
+      };
+    }
+    return {
+      ok: true,
+      templates: rows.flatMap((raw) => {
+        const row = asObject(raw);
+        const providerTemplateId = text(row?.id);
+        const name = text(row?.name);
+        const language = text(row?.language);
+        const status = normalizeTemplateStatus(row?.status);
+        return providerTemplateId && name && language && status
+          ? [{ providerTemplateId, name, language, status }]
+          : [];
+      }),
+    };
+  } catch (error) {
+    return { ok: false, error: sanitizeProviderError(error) };
+  }
+}
+
 /**
  * Deletes a provider-registered template so a local delete cannot strand an
  * orphaned template at 360dialog. A 404 counts as success (already gone).

@@ -57,7 +57,9 @@ describe("P4.6B copy parity", () => {
   });
 
   it.each(["en", "ar"] as const)("defines every new settings key in %s", (locale) => {
-    const messages = CATALOGS[locale].settings as Record<string, string>;
+    // `settings` contains nested groups (e.g. P6C connectionState/connectionReason),
+    // so the value type is not uniformly string.
+    const messages = CATALOGS[locale].settings as Record<string, unknown>;
     for (const key of NEW_SETTINGS_KEYS) {
       expect(messages[key], `settings.${key} missing from ${locale}`).toBeTruthy();
     }

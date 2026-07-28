@@ -15,9 +15,11 @@ import {
   deleteDialog360Template,
   submitDialog360Template,
 } from "@/lib/messaging/whatsapp-dialog360";
+import { submitMetaTemplate } from "@/lib/messaging/whatsapp-meta";
 import { sendMessage } from "@/lib/messaging/send";
 import {
   createClinicScopedAdminClient,
+  logMessagingEvent,
   setInboxConversationPatient,
 } from "@/lib/supabase/admin";
 import {
@@ -100,6 +102,122 @@ export async function submitWhatsAppTemplate(
   }
 
   const client = createClinicScopedAdminClient(user.clinicId);
+  const metaChannel = await client
+    .from("clinic_channels")
+    .select("credentials_encrypted, provider_account_id")
+    .eq("channel", "whatsapp")
+    .eq("provider", "meta")
+    .in("status", ["pending", "active", "error"])
+    .maybeSingle();
+  if (metaChannel.error) {
+    return { error: await actionError("messaging.whatsAppTemplateOrChannelNotFound") };
+  }
+  if (
+    metaChannel.data?.credentials_encrypted &&
+    metaChannel.data.provider_account_id
+  ) {
+    let credentials;
+    try {
+      credentials = decryptChannelCredentials(metaChannel.data.credentials_encrypted);
+    } catch {
+      return { error: await actionError("messaging.whatsAppChannelCredentialsUnavailable") };
+    }
+    const template = await client
+      .from("message_templates")
+      .select("id, name, language, body")
+      .eq("id", parsed.data.templateId)
+      .eq("channel", "whatsapp")
+      .maybeSingle();
+    if (template.error || !template.data) {
+      return { error: await actionError("messaging.whatsAppTemplateOrChannelNotFound") };
+    }
+    const existing = await client
+      .from("message_template_provider_bindings")
+      .select("approval_status")
+      .eq("template_id", template.data.id)
+      .eq("provider", "meta")
+      .maybeSingle();
+    if (
+      existing.error ||
+      existing.data?.approval_status === "submitted" ||
+      existing.data?.approval_status === "approved"
+    ) {
+      return { error: await actionError("messaging.whatsAppTemplateOrChannelNotFound") };
+    }
+    const claimPayload = {
+      clinic_id: user.clinicId,
+      template_id: template.data.id,
+      provider: "meta" as const,
+      provider_account_id: metaChannel.data.provider_account_id,
+      provider_template_id: null,
+      approval_status: "submitted" as const,
+    };
+    const claimed = existing.data
+      ? await client
+          .from("message_template_provider_bindings")
+          .update(claimPayload)
+          .eq("template_id", template.data.id)
+          .eq("provider", "meta")
+          .in("approval_status", ["draft", "rejected"])
+          .select("id")
+          .maybeSingle()
+      : await client
+          .from("message_template_provider_bindings")
+          .insert(claimPayload)
+          .select("id")
+          .maybeSingle();
+    if (claimed.error || !claimed.data) {
+      return { error: await actionError("messaging.whatsAppTemplateOrChannelNotFound") };
+    }
+    const submitted = await submitMetaTemplate(
+      {
+        name: template.data.name,
+        language: template.data.language,
+        body: template.data.body,
+        category: parsed.data.category,
+      },
+      credentials,
+    );
+    if (!submitted.ok) {
+      await client
+        .from("message_template_provider_bindings")
+        .update({ approval_status: "draft", provider_template_id: null })
+        .eq("template_id", template.data.id)
+        .eq("provider", "meta")
+        .eq("approval_status", "submitted");
+      return { error: await actionError("messaging.couldNotSubmitWhatsAppTemplate") };
+    }
+    const saved = await client
+      .from("message_template_provider_bindings")
+      .update({
+        provider_template_id: submitted.providerTemplateId,
+        approval_status: submitted.status,
+      })
+      .eq("template_id", template.data.id)
+      .eq("provider", "meta")
+      .eq("approval_status", "submitted");
+    if (saved.error) {
+      return { error: await actionError("messaging.couldNotSaveTemplateSubmission") };
+    }
+    const audited = await logMessagingEvent({
+      clinicId: user.clinicId,
+      event: "template_status",
+      recordId: template.data.id,
+      summary: {
+        provider: "meta",
+        status: submitted.status,
+      },
+    });
+    if (audited.error) {
+      return { error: await actionError("messaging.couldNotSaveTemplateSubmission") };
+    }
+    revalidatePath("/settings/templates");
+    return {
+      success: true,
+      providerTemplateId: submitted.providerTemplateId,
+    };
+  }
+
   const channel = await client
     .from("clinic_channels")
     .select("credentials_encrypted")
@@ -167,6 +285,34 @@ export async function submitWhatsAppTemplate(
       .eq("approval_status", "submitted");
   }
   if (update.error) {
+    return { error: await actionError("messaging.couldNotSaveTemplateSubmission") };
+  }
+  const binding = await client
+    .from("message_template_provider_bindings")
+    .upsert(
+      {
+        clinic_id: user.clinicId,
+        template_id: claimed.data.id,
+        provider: "dialog360",
+        provider_account_id: null,
+        provider_template_id: submitted.providerTemplateId,
+        approval_status: submitted.status,
+      },
+      { onConflict: "template_id,provider" },
+    );
+  if (binding.error) {
+    return { error: await actionError("messaging.couldNotSaveTemplateSubmission") };
+  }
+  const audited = await logMessagingEvent({
+    clinicId: user.clinicId,
+    event: "template_status",
+    recordId: claimed.data.id,
+    summary: {
+      provider: "dialog360",
+      status: submitted.status,
+    },
+  });
+  if (audited.error) {
     return { error: await actionError("messaging.couldNotSaveTemplateSubmission") };
   }
   revalidatePath("/settings/templates");

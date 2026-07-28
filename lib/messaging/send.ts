@@ -18,6 +18,7 @@ import { resendEmailProvider } from "@/lib/messaging/email-resend";
 import type { MessagingProvider } from "@/lib/messaging/provider";
 import { sanitizeProviderError } from "@/lib/messaging/scrub";
 import { dialog360WhatsAppProvider } from "@/lib/messaging/whatsapp-dialog360";
+import { metaWhatsAppProvider } from "@/lib/messaging/whatsapp-meta";
 import type {
   ChannelCredentials,
   MessageChannel,
@@ -35,7 +36,21 @@ import type { Database } from "@/types/database";
  * dispatches through the channel adapter. One send = one row = one usage tick.
  */
 
-type ClinicChannelRow = Database["public"]["Tables"]["clinic_channels"]["Row"];
+// The send path only reads the transport columns; the P6C operational-state
+// columns are not selected here, so pick exactly the columns the queries return.
+type ClinicChannelRow = Pick<
+  Database["public"]["Tables"]["clinic_channels"]["Row"],
+  | "id"
+  | "clinic_id"
+  | "channel"
+  | "provider"
+  | "credentials_encrypted"
+  | "sender_identity"
+  | "status"
+  | "connected_at"
+  | "created_at"
+  | "updated_at"
+>;
 type MessageTemplateRow = Database["public"]["Tables"]["message_templates"]["Row"];
 
 const DEFAULT_CHANNEL_ORDER: readonly MessageChannel[] = [
@@ -59,6 +74,7 @@ const CHANNEL_FEATURE: Partial<Record<MessageChannel, string>> = {
 /** Meta-direct registers here in P6C; domain callers remain provider-neutral. */
 const ADAPTERS: Partial<Record<MessagingProviderId, MessagingProvider>> = {
   dialog360: dialog360WhatsAppProvider,
+  meta: metaWhatsAppProvider,
   resend: resendEmailProvider,
 };
 
@@ -112,7 +128,7 @@ async function provisionEmailChannel(
         status: "active",
         connected_at: new Date().toISOString(),
       },
-      { onConflict: "clinic_id,channel" },
+      { onConflict: "clinic_id,channel,provider" },
     )
     .select(
       "id, clinic_id, channel, provider, credentials_encrypted, sender_identity, status, connected_at, created_at, updated_at",
@@ -180,7 +196,10 @@ export async function sendMessage(
 
   const activeChannels = new Map<MessageChannel, ClinicChannelRow>();
   for (const row of channelsResult.data ?? []) {
-    activeChannels.set(row.channel, row);
+    const existing = activeChannels.get(row.channel);
+    // The database keeps one active WhatsApp provider. If legacy data briefly
+    // contains two, prefer Meta deterministically after its completed cutover.
+    if (!existing || row.provider === "meta") activeChannels.set(row.channel, row);
   }
   const preference = normalizePreference(input.channelPreference);
   if (preference.includes("email") && !activeChannels.has("email")) {
@@ -264,6 +283,16 @@ export async function sendMessage(
       return failure("TEMPLATE_NOT_APPROVED");
     }
     template = templateResult.data;
+    if (selected.channel === "whatsapp" && selected.provider === "meta") {
+      const binding = await client
+        .from("message_template_provider_bindings")
+        .select("id")
+        .eq("template_id", template.id)
+        .eq("provider", "meta")
+        .eq("approval_status", "approved")
+        .maybeSingle();
+      if (binding.error || !binding.data) return failure("TEMPLATE_NOT_APPROVED");
+    }
     const rendered = renderTemplateBody(template, input.templateParameters ?? []);
     if (!rendered) return failure("TEMPLATE_PARAMETERS_INVALID");
     body = rendered;

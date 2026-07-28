@@ -111,6 +111,16 @@ vi.mock("@/lib/messaging/whatsapp-dialog360", () => ({
   },
 }));
 
+vi.mock("@/lib/messaging/whatsapp-meta", () => ({
+  metaWhatsAppProvider: {
+    id: "meta",
+    channel: "whatsapp",
+    send: mocks.whatsappSend,
+    verifySignature: vi.fn(),
+    parseWebhook: vi.fn(),
+  },
+}));
+
 import { encryptChannelCredentials } from "@/lib/messaging/crypto";
 import { buildBodyPreview, sendMessage } from "@/lib/messaging/send";
 
@@ -234,6 +244,39 @@ describe("sendMessage", () => {
     expect(mocks.whatsappSend).not.toHaveBeenCalled();
   });
 
+  it("selects the registered Meta adapter through the production send boundary", async () => {
+    const encrypted = encryptChannelCredentials({
+      accessToken: "meta-token",
+      phoneNumberId: "meta-phone-id",
+      wabaId: "meta-waba-id",
+    });
+    mocks.state.channels = {
+      data: [
+        channelRow("whatsapp", {
+          provider: "meta",
+          credentials_encrypted: encrypted,
+          sender_identity: "meta-phone-id",
+        }),
+      ],
+      error: null,
+    };
+    mocks.getEntitlements.mockResolvedValue(entitled({ whatsapp: true }));
+    const result = await sendMessage({
+      ...baseInput,
+      recipient: "+15551234567",
+      relatedType: "appointment",
+      channelPreference: ["whatsapp"],
+    });
+    expect(result).toMatchObject({ ok: true, channel: "whatsapp", provider: "meta" });
+    expect(mocks.whatsappSend).toHaveBeenCalledWith(
+      expect.objectContaining({ senderIdentity: "meta-phone-id" }),
+      expect.objectContaining({
+        accessToken: "meta-token",
+        phoneNumberId: "meta-phone-id",
+      }),
+    );
+  });
+
   it("skips WhatsApp over its usage cap and degrades to email", async () => {
     mocks.state.channels = {
       data: [channelRow("whatsapp"), channelRow("email")],
@@ -259,7 +302,7 @@ describe("sendMessage", () => {
           sender_identity: "messaging@clinicflow.fit",
           status: "active",
         }),
-        options: { onConflict: "clinic_id,channel" },
+        options: { onConflict: "clinic_id,channel,provider" },
       },
     ]);
   });

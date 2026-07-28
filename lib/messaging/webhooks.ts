@@ -1,8 +1,8 @@
 import "server-only";
 import * as Sentry from "@sentry/nextjs";
 import {
+  applyMessageTemplateProviderStatus,
   advanceOutboundMessageStatus,
-  findMessageTemplateForWebhook,
   createClinicScopedAdminClient,
   persistWhatsAppInbound,
 } from "@/lib/supabase/admin";
@@ -10,6 +10,10 @@ import { normalizePhone } from "@/lib/phone/registry";
 import { sanitizeProviderError } from "@/lib/messaging/scrub";
 import { emitClinicNotification } from "@/lib/notifications/emit";
 import { runPatientInboundAiReply } from "@/lib/ai/patient-reply";
+import {
+  applyChannelStateSignals,
+  refreshConnectionStateAfterTemplateChange,
+} from "@/lib/messaging/meta-reconcile";
 import type {
   MessagingProviderId,
   TemplateApprovalStatus,
@@ -20,6 +24,7 @@ type ProcessingSummary = {
   inbound: number;
   statuses: number;
   templates: number;
+  states: number;
   replays: number;
   ignored: number;
 };
@@ -137,27 +142,27 @@ const TEMPLATE_WEBHOOK_TRANSITIONS: Partial<
 async function persistTemplateStatus(
   clinicId: string,
   event: Extract<WebhookEvent, { kind: "template_status" }>,
+  provider: MessagingProviderId,
 ): Promise<boolean> {
-  const owner = await findMessageTemplateForWebhook(event.providerTemplateId);
-  if (owner.error || !owner.data || owner.data.clinic_id !== clinicId) return false;
   const allowedFrom = TEMPLATE_WEBHOOK_TRANSITIONS[event.status];
   if (!allowedFrom) return false;
-  const client = createClinicScopedAdminClient(clinicId);
-  // Conditional UPDATE gated on both the provider id (so an edit that detached
-  // it wins) and the legal source states, in one statement — no read-then-write
-  // race with a concurrent edit/submit/delete.
-  const update = await client
-    .from("message_templates")
-    .update({ approval_status: event.status })
-    .eq("id", owner.data.id)
-    .eq("provider_template_id", event.providerTemplateId)
-    .in("approval_status", [...allowedFrom])
-    .select("id")
-    .maybeSingle();
+  const update = await applyMessageTemplateProviderStatus({
+    provider,
+    providerTemplateId: event.providerTemplateId,
+    status: event.status,
+    allowedFrom: [...allowedFrom],
+  });
   if (update.error) throw new Error("TEMPLATE_STATUS_UPDATE_FAILED");
-  // A no-op (stale event, superseded template) is not an error: the event was
-  // handled by being safely ignored.
-  return update.data !== null;
+  const applied = update.data?.[0];
+  if (!applied?.changed || applied.clinic_id !== clinicId) return false;
+  if (provider === "meta") {
+    await refreshConnectionStateAfterTemplateChange(clinicId).catch((error) => {
+      Sentry.captureException(error, {
+        tags: { scope: "webhook-template-state", provider: "meta" },
+      });
+    });
+  }
+  return true;
 }
 
 export async function processMessagingWebhookEvents(input: {
@@ -170,6 +175,7 @@ export async function processMessagingWebhookEvents(input: {
     inbound: 0,
     statuses: 0,
     templates: 0,
+    states: 0,
     replays: 0,
     ignored: 0,
   };
@@ -208,7 +214,29 @@ export async function processMessagingWebhookEvents(input: {
       summary.ignored += 1;
       continue;
     }
-    if (await persistTemplateStatus(input.clinicId, event)) summary.templates += 1;
+    if (event.kind === "channel_state") {
+      // P6C: only Meta-direct channels carry a derived connection state. Route by
+      // phone id when the event provides one; a WABA-only event (no phone id) is
+      // left to the reconciliation poll — the hybrid design's safety net.
+      if (
+        input.provider !== "meta" ||
+        (event.phoneNumberId !== null &&
+          input.senderIdentity !== undefined &&
+          event.phoneNumberId !== input.senderIdentity)
+      ) {
+        summary.ignored += 1;
+        continue;
+      }
+      const applied = await applyChannelStateSignals({
+        clinicId: input.clinicId,
+        signals: event.signals,
+        observedAt: event.observedAt,
+      });
+      if (applied.transitioned) summary.states += 1;
+      else summary.ignored += 1;
+      continue;
+    }
+    if (await persistTemplateStatus(input.clinicId, event, input.provider)) summary.templates += 1;
     else summary.ignored += 1;
   }
   return summary;

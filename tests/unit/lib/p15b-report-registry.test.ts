@@ -10,7 +10,8 @@ describe("P1.5B operator report registry", () => {
   it("registers every launch report with the shared contract", () => {
     expect(operatorReports.map((report) => report.id)).toEqual([
       "clinics", "users", "invitations", "revenue", "subscriptions", "activity", "growth",
-      "ai-usage", "ai-provider-health",
+      "ai-usage", "ai-provider-health", "messaging-cost",
+      "whatsapp-health",
     ]);
     for (const report of operatorReports) {
       expect(operatorReportRegistry.get(report.id)).toBe(report);

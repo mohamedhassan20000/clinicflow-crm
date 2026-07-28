@@ -519,20 +519,35 @@ export async function findClinicChannelForWebhook(
     )
     .eq("provider", provider)
     .eq("sender_identity", senderIdentity)
-    .eq("status", "active")
+    .in("status", ["pending", "active", "error"])
     .maybeSingle();
 }
 
 /** Preflight for provider configuration so a tenant cannot claim another channel's identity. */
 export async function findClinicChannelIdentityOwner(
-  provider: Database["public"]["Enums"]["messaging_provider"],
+  _provider: Database["public"]["Enums"]["messaging_provider"],
   senderIdentity: string,
 ) {
   return createAdminClient()
     .from("clinic_channels")
     .select("id, clinic_id")
-    .eq("provider", provider)
+    .eq("channel", "whatsapp")
     .eq("sender_identity", senderIdentity)
+    .maybeSingle();
+}
+
+/** Routes WABA-scoped Meta callbacks that do not contain a phone-number id. */
+export async function findClinicChannelByProviderAccount(
+  provider: Database["public"]["Enums"]["messaging_provider"],
+  providerAccountId: string,
+) {
+  return createAdminClient()
+    .from("clinic_channels")
+    .select("id, clinic_id, sender_identity, status")
+    .eq("channel", "whatsapp")
+    .eq("provider", provider)
+    .eq("provider_account_id", providerAccountId)
+    .in("status", ["pending", "active", "error"])
     .maybeSingle();
 }
 
@@ -744,6 +759,179 @@ export async function findMessageTemplateForWebhook(providerTemplateId: string) 
     .select("id, clinic_id")
     .eq("provider_template_id", providerTemplateId)
     .maybeSingle();
+}
+
+/** Provider-scoped template callback routing for parallel 360dialog/Meta bindings. */
+export async function findMessageTemplateBindingForWebhook(
+  provider: Database["public"]["Enums"]["messaging_provider"],
+  providerTemplateId: string,
+) {
+  return createAdminClient()
+    .from("message_template_provider_bindings")
+    .select("id, template_id, clinic_id, approval_status")
+    .eq("provider", provider)
+    .eq("provider_template_id", providerTemplateId)
+    .maybeSingle();
+}
+
+/**
+ * P6C (§6.6, plan line 1310): service-role audit boundary for a connection-state
+ * transition or template approval-status change. Writes exactly one clinic-scoped
+ * `messaging:<event>` audit_logs row (callers invoke this only when a stored signal
+ * actually changed — never one row per callback). The summary is PHI-free metadata
+ * (states, sanitized reason codes) only. Read by the P6D activity timeline through
+ * the existing audit_logs_select_admin_manager policy.
+ */
+export async function logMessagingEvent(input: {
+  clinicId: string;
+  event: string;
+  recordId?: string | null;
+  summary?: Record<string, unknown>;
+}) {
+  return createAdminClient().rpc("log_messaging_event", {
+    p_clinic_id: input.clinicId,
+    p_event: input.event,
+    p_record_id: input.recordId ?? undefined,
+    p_summary: (input.summary ?? {}) as Database["public"]["Tables"]["audit_logs"]["Row"]["new_data"],
+  });
+}
+
+/**
+ * P6C safe-metadata boundary: the WhatsApp channel's operational state columns plus
+ * its encrypted credentials, for the connection-state machine and reconciliation
+ * poll. The non-secret status columns live outside the encrypted envelope; the
+ * caller decrypts credentials only to call the provider. Scoped to one clinic.
+ */
+export async function getWhatsAppChannelStateRow(
+  clinicId: string,
+  provider: Database["public"]["Enums"]["messaging_provider"] = "meta",
+) {
+  return createClinicScopedAdminClient(clinicId)
+    .from("clinic_channels")
+    .select(
+      "id, provider, provider_account_id, status, credentials_encrypted, connection_state, business_verification_status, account_review_status, phone_status, quality_rating, messaging_limit_tier, webhook_subscribed, last_synced_at, last_signal_at, last_state_reason, connected_at, updated_at",
+    )
+    .eq("channel", "whatsapp")
+    .eq("provider", provider)
+    .maybeSingle();
+}
+
+/** Approved-template count for the `templates_pending → connected` transition (P3B sync). */
+export async function countApprovedTemplates(
+  clinicId: string,
+  provider: Database["public"]["Enums"]["messaging_provider"] = "meta",
+  providerAccountId?: string | null,
+): Promise<number> {
+  let query = createClinicScopedAdminClient(clinicId)
+    .from("message_template_provider_bindings")
+    .select("id", { count: "exact", head: true })
+    .eq("provider", provider)
+    .eq("approval_status", "approved");
+  if (providerAccountId) query = query.eq("provider_account_id", providerAccountId);
+  const result = await query;
+  return result.error ? 0 : result.count ?? 0;
+}
+
+/** Atomic P6C operational-state compare-and-set plus transition audit. */
+export async function applyMetaChannelState(input: {
+  clinicId: string;
+  channelId: string;
+  expectedUpdatedAt: string;
+  status: Database["public"]["Enums"]["clinic_channel_status"];
+  connectionState: string;
+  businessVerificationStatus: string | null;
+  accountReviewStatus: string | null;
+  phoneStatus: string | null;
+  qualityRating: string | null;
+  messagingLimitTier: string | null;
+  webhookSubscribed: boolean;
+  lastStateReason: string | null;
+  lastSyncedAt?: string | null;
+  lastSignalAt?: string | null;
+}) {
+  return createAdminClient().rpc("apply_meta_channel_state", {
+    p_clinic_id: input.clinicId,
+    p_channel_id: input.channelId,
+    p_expected_updated_at: input.expectedUpdatedAt,
+    p_status: input.status,
+    p_connection_state: input.connectionState,
+    p_business_verification_status: input.businessVerificationStatus,
+    p_account_review_status: input.accountReviewStatus,
+    p_phone_status: input.phoneStatus,
+    p_quality_rating: input.qualityRating,
+    p_messaging_limit_tier: input.messagingLimitTier,
+    p_webhook_subscribed: input.webhookSubscribed,
+    p_last_state_reason: input.lastStateReason,
+    p_last_synced_at: input.lastSyncedAt ?? undefined,
+    p_last_signal_at: input.lastSignalAt ?? undefined,
+  });
+}
+
+export async function applyMessageTemplateProviderStatus(input: {
+  provider: Database["public"]["Enums"]["messaging_provider"];
+  providerTemplateId: string;
+  status: Database["public"]["Enums"]["template_approval_status"];
+  allowedFrom: Database["public"]["Enums"]["template_approval_status"][];
+}) {
+  return createAdminClient().rpc("apply_message_template_provider_status", {
+    p_provider: input.provider,
+    p_provider_template_id: input.providerTemplateId,
+    p_status: input.status,
+    p_allowed_from: input.allowedFrom,
+  });
+}
+
+export async function activateWhatsAppProvider(
+  clinicId: string,
+  provider: "dialog360" | "meta",
+) {
+  return createAdminClient().rpc("activate_whatsapp_provider", {
+    p_clinic_id: clinicId,
+    p_provider: provider,
+  });
+}
+
+/**
+ * Cross-tenant list of active Meta-direct WhatsApp channels for the low-frequency
+ * reconciliation cron (P3D precedent). Reviewed platform read: non-secret state
+ * columns + the encrypted credential envelope only; bounded. The cron decrypts and
+ * polls each per its clinic through the scoped boundary.
+ */
+export async function listActiveMetaChannels(limit = 64) {
+  return createAdminClient().rpc("claim_meta_channels_for_reconciliation", {
+    p_limit: limit,
+  });
+}
+
+/** Atomic P6D webhook-health write plus transition-only clinic audit. */
+export async function applyWhatsAppWebhookHealth(input: {
+  clinicId: string;
+  channelId: string;
+  status: "unknown" | "healthy" | "degraded";
+  reason?: string | null;
+  checkedAt?: string | null;
+  verifiedAt?: string | null;
+}) {
+  return createAdminClient().rpc("apply_whatsapp_webhook_health", {
+    p_clinic_id: input.clinicId,
+    p_channel_id: input.channelId,
+    p_status: input.status,
+    p_reason: input.reason ?? undefined,
+    p_checked_at: input.checkedAt ?? undefined,
+    p_verified_at: input.verifiedAt ?? undefined,
+  });
+}
+
+/** Fair bounded daily P6D self-check claim across both WhatsApp providers. */
+export async function claimWhatsAppChannelsForHealthCheck(limit = 120) {
+  return createAdminClient().rpc("claim_whatsapp_channels_for_health_check", {
+    p_limit: limit,
+  });
+}
+
+/** P6D platform-safe report source; contains no credentials, PII, or message bodies. */
+export async function loadOperatorWhatsAppHealthReport() {
+  return createAdminClient().rpc("operator_whatsapp_health_report");
 }
 
 /**
@@ -973,6 +1161,87 @@ export async function loadOperatorAiProviderHealthSource() {
           policy_updated_at: policy?.updated_at ?? null,
         };
       }),
+    error: null,
+  };
+}
+
+/**
+ * P6B content-free messaging cost source. Reads only aggregate-safe columns
+ * from `usage_counters` (billed WA/email counts) and `outbound_messages`
+ * (cost_micro, status, channel — never `body_preview`, recipient, or provider
+ * ids) for an already-authorized operator path. Bounded per source; aggregation
+ * happens in the report registry via `aggregateMessagingCost`.
+ */
+export async function loadOperatorMessagingCostSource(input: {
+  periodFromMonth: string; // YYYY-MM (inclusive)
+  periodToMonth: string; // YYYY-MM (inclusive)
+  clinicId?: string;
+  limit: number;
+}) {
+  const db = createAdminClient();
+  const periodFromDate = `${input.periodFromMonth}-01`;
+  const [year, month] = input.periodToMonth.split("-").map(Number);
+  const periodToExclusiveDate = new Date(Date.UTC(year!, month!, 1))
+    .toISOString()
+    .slice(0, 10);
+  const outboundToExclusiveIso = new Date(Date.UTC(year!, month!, 1)).toISOString();
+
+  const clinics = await collectOperatorRows<{ id: string; name: string }>(
+    input.limit,
+    (from, to) => {
+      let query = db
+        .from("clinics")
+        .select("id, name", { count: "exact" })
+        .order("name", { ascending: true });
+      if (input.clinicId) query = query.eq("id", input.clinicId);
+      return query.range(from, to);
+    },
+  );
+  if (clinics.error) return { data: null, error: clinics.error };
+
+  const counters = await collectOperatorRows<{
+    clinic_id: string;
+    period_start: string;
+    metric: string;
+    used: number;
+  }>(input.limit, (from, to) => {
+    let query = db
+      .from("usage_counters")
+      .select("clinic_id, period_start, metric, used", { count: "exact" })
+      .in("metric", ["wa_messages", "emails"])
+      .gte("period_start", periodFromDate)
+      .lt("period_start", periodToExclusiveDate)
+      .order("period_start", { ascending: false });
+    if (input.clinicId) query = query.eq("clinic_id", input.clinicId);
+    return query.range(from, to);
+  });
+  if (counters.error) return { data: null, error: counters.error };
+
+  const outbound = await collectOperatorRows<{
+    clinic_id: string;
+    channel: string;
+    status: string;
+    cost_micro: number | null;
+    created_at: string;
+  }>(input.limit, (from, to) => {
+    let query = db
+      .from("outbound_messages")
+      .select("clinic_id, channel, status, cost_micro, created_at", { count: "exact" })
+      .gte("created_at", periodFromDate)
+      .lt("created_at", outboundToExclusiveIso)
+      .order("created_at", { ascending: false });
+    if (input.clinicId) query = query.eq("clinic_id", input.clinicId);
+    return query.range(from, to);
+  });
+  if (outbound.error) return { data: null, error: outbound.error };
+
+  return {
+    data: {
+      clinics: clinics.data,
+      counters: counters.data,
+      outbound: outbound.data,
+      truncated: clinics.truncated || counters.truncated || outbound.truncated,
+    },
     error: null,
   };
 }
@@ -1376,6 +1645,7 @@ const CLINIC_SCOPED_TABLES = new Set([
   "inbound_messages",
   "insurance_providers",
   "medical_note_attachments",
+  "message_template_provider_bindings",
   "message_templates",
   "notifications",
   "outbound_messages",

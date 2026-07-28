@@ -7,9 +7,12 @@ import {
   loadOperatorGrowthSource,
   loadOperatorAiProviderHealthSource,
   loadOperatorAiUsageReport,
+  loadOperatorMessagingCostSource,
   loadOperatorUserAggregateSource,
+  loadOperatorWhatsAppHealthReport,
   queryOperatorClinicReport,
 } from "@/lib/supabase/admin";
+import { aggregateMessagingCost } from "@/lib/ops/messaging-cost";
 import { createClient } from "@/lib/supabase/server";
 import {
   REPORT_AGGREGATE_SOURCE_LIMIT,
@@ -56,6 +59,13 @@ const aiProviderHealthSchema = z.enum([
   "insufficient_scope",
   "quota",
   "provider_unavailable",
+]);
+const whatsappProviderSchema = z.enum(["all", "dialog360", "meta"]);
+const whatsappHealthSchema = z.enum([
+  "all",
+  "unknown",
+  "healthy",
+  "degraded",
 ]);
 const idSchema = z.union([z.literal("all"), z.string().uuid()]);
 const slugSchema = z.union([
@@ -681,6 +691,103 @@ async function aiProviderHealthQuery(
   return paginateDerived(rows, params, mode, source.data.length > 0);
 }
 
+async function messagingCostQuery(
+  params: ParsedReportParams,
+  mode: ReportQueryMode = "page",
+) {
+  await requirePlatformAdmin();
+  const source = await loadOperatorMessagingCostSource({
+    periodFromMonth: params.filters.monthFrom!,
+    periodToMonth: params.filters.monthTo!,
+    clinicId: params.filters.clinic === "all" ? undefined : params.filters.clinic,
+    limit: REPORT_AGGREGATE_SOURCE_LIMIT,
+  });
+  if (source.error || !source.data) throw new Error("Unable to load messaging cost report.");
+  const rows: ReportRow[] = aggregateMessagingCost({
+    clinics: source.data.clinics,
+    counters: source.data.counters,
+    outbound: source.data.outbound,
+  }).map((row) => ({
+    clinic_id: row.clinic_id,
+    clinic_name: row.clinic_name,
+    period_start: row.period_start,
+    wa_messages: row.wa_messages,
+    emails: row.emails,
+    delivered: row.delivered,
+    failed: row.failed,
+    delivery_failure_pct: row.delivery_failure_pct,
+    wa_cost_usd: row.wa_cost_usd,
+    total_cost_usd: row.total_cost_usd,
+  }));
+  const factor = params.direction === "asc" ? 1 : -1;
+  rows.sort((a, b) => {
+    const left = a[params.sort];
+    const right = b[params.sort];
+    if (typeof left === "number" && typeof right === "number") return (left - right) * factor;
+    return String(left ?? "").localeCompare(String(right ?? "")) * factor;
+  });
+  return paginateDerived(rows, params, mode, rows.length > 0, source.data.truncated);
+}
+
+async function whatsappHealthQuery(
+  params: ParsedReportParams,
+  mode: ReportQueryMode = "page",
+) {
+  await requirePlatformAdmin();
+  const source = await loadOperatorWhatsAppHealthReport();
+  if (source.error || !source.data) {
+    throw new Error("Unable to load WhatsApp health report.");
+  }
+  const rows: ReportRow[] = source.data
+    .filter(
+      (row) =>
+        params.filters.clinic === "all" ||
+        row.clinic_id === params.filters.clinic,
+    )
+    .filter(
+      (row) =>
+        params.filters.provider === "all" ||
+        row.provider === params.filters.provider,
+    )
+    .filter(
+      (row) =>
+        params.filters.health === "all" ||
+        row.webhook_health_status === params.filters.health,
+    )
+    .map((row) => ({
+      clinic_id: row.clinic_id,
+      clinic_name: row.clinic_name,
+      provider: row.provider,
+      connection:
+        row.connection_state ??
+        row.channel_status,
+      webhook_health: row.webhook_health_status,
+      last_verified_webhook_at: row.last_verified_webhook_at,
+      approved_templates: Number(row.approved_templates),
+      last_inbound_at: row.last_inbound_at,
+      last_outbound: row.last_outbound_at
+        ? `${row.last_outbound_at} · ${row.last_outbound_status ?? "unknown"}`
+        : null,
+      last_synced_at: row.last_synced_at,
+      quality_rating:
+        row.provider === "meta" ? row.quality_rating : "not_available",
+      messaging_limit:
+        row.provider === "meta"
+          ? row.messaging_limit_tier
+          : "not_available",
+    }));
+  const factor = params.direction === "asc" ? 1 : -1;
+  rows.sort((left, right) => {
+    const a = left[params.sort];
+    const b = right[params.sort];
+    if (typeof a === "number" && typeof b === "number") {
+      return (a - b) * factor;
+    }
+    return String(a ?? "").localeCompare(String(b ?? "")) * factor;
+  });
+  return paginateDerived(rows, params, mode, rows.length > 0);
+}
+
 const reports: OperatorReportDefinition[] = [
   definition({
     id: "clinics",
@@ -901,6 +1008,129 @@ const reports: OperatorReportDefinition[] = [
     ],
     defaultSort: "clinic_name",
     query: aiProviderHealthQuery,
+  }),
+  definition({
+    id: "messaging-cost",
+    title: "Messaging cost and delivery",
+    description:
+      "Content-free WhatsApp/email send counts (usage_counters), delivery outcomes, and cost (outbound_messages.cost_micro) by clinic and month. No message bodies or PHI.",
+    columns: [
+      { key: "clinic_name", label: "Clinic", sortable: true },
+      { key: "period_start", label: "Period", sortable: true },
+      { key: "wa_messages", label: "WA sent", numeric: true, sortable: true },
+      { key: "emails", label: "Emails sent", numeric: true, sortable: true },
+      { key: "delivered", label: "Delivered", numeric: true, sortable: true },
+      { key: "failed", label: "Failed", numeric: true, sortable: true },
+      { key: "delivery_failure_pct", label: "Failure %", numeric: true, sortable: true },
+      { key: "wa_cost_usd", label: "WA cost USD", numeric: true, sortable: true },
+      { key: "total_cost_usd", label: "Total cost USD", numeric: true, sortable: true },
+    ],
+    filters: [
+      { key: "clinic", label: "Clinic", kind: "combobox", defaultValue: "all", clearValue: "all", schema: idSchema, optionSource: "clinics", placeholder: "All clinics" },
+      { key: "monthFrom", label: "Month from", kind: "month", defaultValue: (now) => monthsAgo(now, 11), clearValue: "", schema: monthSchema },
+      { key: "monthTo", label: "Month to", kind: "month", defaultValue: monthOnly, clearValue: "", schema: monthSchema },
+    ],
+    sorts: [
+      { key: "period_start", label: "Period", defaultDirection: "desc" },
+      { key: "clinic_name", label: "Clinic", defaultDirection: "asc" },
+      { key: "failed", label: "Failed", defaultDirection: "desc" },
+      { key: "delivery_failure_pct", label: "Failure %", defaultDirection: "desc" },
+      { key: "wa_cost_usd", label: "WA cost", defaultDirection: "desc" },
+      { key: "total_cost_usd", label: "Total cost", defaultDirection: "desc" },
+    ],
+    defaultSort: "period_start",
+    normalize: normalizeRange("monthFrom", "monthTo", (now) => [monthsAgo(now, 11), monthOnly(now)]),
+    query: messagingCostQuery,
+  }),
+  definition({
+    id: "whatsapp-health",
+    title: "WhatsApp health",
+    description:
+      "Per-clinic connection, webhook, template, message lifecycle, and provider health metadata. No credentials, message bodies, senders, or recipients.",
+    columns: [
+      { key: "clinic_name", label: "Clinic", sortable: true },
+      { key: "provider", label: "Provider", sortable: true },
+      { key: "connection", label: "Connection", sortable: true },
+      { key: "webhook_health", label: "Webhook", sortable: true },
+      {
+        key: "last_verified_webhook_at",
+        label: "Last verified webhook",
+        sortable: true,
+      },
+      {
+        key: "approved_templates",
+        label: "Approved templates",
+        numeric: true,
+        sortable: true,
+      },
+      { key: "last_inbound_at", label: "Last incoming" },
+      { key: "last_outbound", label: "Last outgoing" },
+      { key: "last_synced_at", label: "Last sync", sortable: true },
+      { key: "quality_rating", label: "Quality" },
+      { key: "messaging_limit", label: "Messaging limit" },
+    ],
+    filters: [
+      {
+        key: "clinic",
+        label: "Clinic",
+        kind: "combobox",
+        defaultValue: "all",
+        clearValue: "all",
+        schema: idSchema,
+        optionSource: "clinics",
+        placeholder: "All clinics",
+      },
+      {
+        key: "provider",
+        label: "Provider",
+        kind: "select",
+        defaultValue: "all",
+        clearValue: "all",
+        schema: whatsappProviderSchema,
+        options: [
+          ALL,
+          { value: "meta", label: "Meta direct" },
+          { value: "dialog360", label: "360dialog" },
+        ],
+      },
+      {
+        key: "health",
+        label: "Webhook health",
+        kind: "select",
+        defaultValue: "all",
+        clearValue: "all",
+        schema: whatsappHealthSchema,
+        options: [
+          ALL,
+          { value: "healthy", label: "Healthy" },
+          { value: "degraded", label: "Degraded" },
+          { value: "unknown", label: "Unknown" },
+        ],
+      },
+    ],
+    sorts: [
+      { key: "clinic_name", label: "Clinic", defaultDirection: "asc" },
+      { key: "provider", label: "Provider", defaultDirection: "asc" },
+      { key: "connection", label: "Connection", defaultDirection: "asc" },
+      {
+        key: "webhook_health",
+        label: "Webhook health",
+        defaultDirection: "asc",
+      },
+      {
+        key: "last_verified_webhook_at",
+        label: "Last verified webhook",
+        defaultDirection: "desc",
+      },
+      {
+        key: "approved_templates",
+        label: "Approved templates",
+        defaultDirection: "desc",
+      },
+      { key: "last_synced_at", label: "Last sync", defaultDirection: "desc" },
+    ],
+    defaultSort: "clinic_name",
+    query: whatsappHealthQuery,
   }),
 ];
 

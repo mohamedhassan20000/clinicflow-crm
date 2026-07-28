@@ -8,12 +8,15 @@ const mocks = vi.hoisted(() => ({
   hasFeature: vi.fn(),
   decryptChannelCredentials: vi.fn(),
   submitDialog360Template: vi.fn(),
+  submitMetaTemplate: vi.fn(),
   deleteDialog360Template: vi.fn(),
+  logMessagingEvent: vi.fn(),
   state: {
     // Per-table, per-operation results. Key form: "<table>" (read),
     // "<table>.update", "<table>.delete", "<table>.insert".
     results: {} as Record<string, { data: unknown; error: unknown }>,
     inserts: [] as Array<{ table: string; payload: unknown }>,
+    upserts: [] as Array<{ table: string; payload: unknown; options: unknown }>,
     updates: [] as Array<{ table: string; payload: unknown; filters: unknown[] }>,
     deletes: [] as Array<{ table: string; filters: unknown[] }>,
   },
@@ -42,10 +45,14 @@ vi.mock("@/lib/messaging/whatsapp-dialog360", () => ({
   submitDialog360Template: mocks.submitDialog360Template,
   deleteDialog360Template: mocks.deleteDialog360Template,
 }));
+vi.mock("@/lib/messaging/whatsapp-meta", () => ({
+  submitMetaTemplate: mocks.submitMetaTemplate,
+}));
 vi.mock("@/lib/messaging/send", () => ({ sendMessage: vi.fn() }));
 
 vi.mock("@/lib/supabase/admin", () => ({
   setInboxConversationPatient: vi.fn(),
+  logMessagingEvent: mocks.logMessagingEvent,
   createClinicScopedAdminClient: () => ({
     from: (table: string) => {
       const filters: unknown[] = [];
@@ -76,7 +83,13 @@ vi.mock("@/lib/supabase/admin", () => ({
         insert: (payload: unknown) => {
           operation = "insert";
           mocks.state.inserts.push({ table, payload });
-          return Promise.resolve(resultFor());
+          return chain;
+        },
+        upsert: (payload: unknown, options: unknown) => {
+          mocks.state.upserts.push({ table, payload, options });
+          return Promise.resolve(
+            mocks.state.results[`${table}.upsert`] ?? { data: null, error: null },
+          );
         },
         update: (payload: unknown) => {
           operation = "update";
@@ -126,6 +139,7 @@ beforeEach(() => {
   mocks.state.results = {};
   mocks.state.inserts = [];
   mocks.state.updates = [];
+  mocks.state.upserts = [];
   mocks.state.deletes = [];
   mocks.requireMutationRole.mockResolvedValue({
     id: "user-1",
@@ -134,6 +148,7 @@ beforeEach(() => {
   });
   mocks.hasFeature.mockReturnValue(true);
   mocks.getEntitlements.mockResolvedValue({ features: { whatsapp: true } });
+  mocks.logMessagingEvent.mockResolvedValue({ data: "audit-id", error: null });
 });
 
 describe("saveMessageTemplate", () => {
@@ -276,6 +291,60 @@ describe("submitWhatsAppTemplate", () => {
     // Second update is the revert back to draft.
     const revert = mocks.state.updates[1];
     expect(revert.payload).toMatchObject({ approval_status: "draft", provider_template_id: null });
+  });
+
+  it("submits an existing local template to the configured Meta WABA with separate provenance", async () => {
+    mocks.state.results.clinic_channels = {
+      data: {
+        credentials_encrypted: "enc",
+        provider_account_id: "waba-1",
+      },
+      error: null,
+    };
+    mocks.state.results.message_templates = {
+      data: {
+        id: templateId,
+        name: "appointment_reminder",
+        language: "ar",
+        body: "hi",
+      },
+      error: null,
+    };
+    mocks.state.results.message_template_provider_bindings = {
+      data: null,
+      error: null,
+    };
+    mocks.state.results["message_template_provider_bindings.insert"] = {
+      data: { id: "binding-1" },
+      error: null,
+    };
+    mocks.state.results["message_template_provider_bindings.update"] = {
+      data: null,
+      error: null,
+    };
+    mocks.submitMetaTemplate.mockResolvedValue({
+      ok: true,
+      providerTemplateId: "meta-template-1",
+      status: "submitted",
+    });
+    const result = await submitWhatsAppTemplate(templateId, "UTILITY");
+    expect(result).toEqual({
+      success: true,
+      providerTemplateId: "meta-template-1",
+    });
+    expect(mocks.submitMetaTemplate).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "appointment_reminder" }),
+      { apiKey: "k" },
+    );
+    expect(mocks.state.inserts).toContainEqual({
+      table: "message_template_provider_bindings",
+      payload: expect.objectContaining({
+        template_id: templateId,
+        provider: "meta",
+        provider_account_id: "waba-1",
+        approval_status: "submitted",
+      }),
+    });
   });
 });
 

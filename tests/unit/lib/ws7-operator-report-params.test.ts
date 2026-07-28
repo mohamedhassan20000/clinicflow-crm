@@ -27,6 +27,8 @@ describe("Pre-P2 WS7 report filter contracts", () => {
       growth: ["monthFrom", "monthTo"],
       "ai-usage": ["clinic", "monthFrom", "monthTo"],
       "ai-provider-health": ["clinic", "mode", "health"],
+      "messaging-cost": ["clinic", "monthFrom", "monthTo"],
+      "whatsapp-health": ["clinic", "provider", "health"],
     });
     for (const item of operatorReports) {
       expect(item.filters.map((filter) => filter.key)).not.toContain("usageMetric");

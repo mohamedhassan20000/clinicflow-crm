@@ -237,9 +237,12 @@ export function MonthCalendar({ appointments, monthStart, canEdit, clinicHours =
                   href={`/appointments?view=day&date=${day}`}
                   aria-current={isToday ? "date" : undefined}
                   data-calendar-non-working={closed ? "closed" : undefined}
-                  className={`${cellBase} ${
-                    closed ? "calendar-non-working-band" : "hover:bg-muted/30"
-                  } focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary`}
+                  className={
+                    // i18n-allow: Tailwind and calendar CSS class names; not user-facing copy.
+                    `${cellBase} ${
+                      closed ? "calendar-non-working-band" : "hover:bg-muted/30"
+                    } focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary`
+                  }
                 >
                   {cellContent}
                 </Link>

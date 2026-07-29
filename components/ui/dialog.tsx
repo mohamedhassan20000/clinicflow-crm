@@ -117,6 +117,7 @@ function DialogFooter({
       data-slot="dialog-footer"
       className={cn(
         "flex flex-col-reverse gap-2 rounded-b-xl border-t bg-muted/50 p-4 sm:flex-row sm:justify-end",
+        /* i18n-allow: Tailwind utility class names; not user-facing copy. */
         !flush && "-mx-4 -mb-4",
         className
       )}

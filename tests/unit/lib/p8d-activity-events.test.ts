@@ -4,6 +4,7 @@ import {
   ACTIVITY_ENTITY_TYPES,
   activityActionMessageKey,
   activityActionTone,
+  activityOriginalAction,
 } from "@/lib/activity/events";
 import en from "@/messages/en.json";
 import ar from "@/messages/ar.json";
@@ -13,6 +14,9 @@ describe("Phase 8D — activity event catalog", () => {
     expect(activityActionMessageKey("appointment.confirmed")).toBe("appointmentConfirmed");
     expect(activityActionMessageKey("follow_up.recorded")).toBe("followUpRecorded");
     expect(activityActionMessageKey("appointment.no_show")).toBe("appointmentNoShow");
+    expect(activityActionMessageKey("appointment.billing_completion_undone")).toBe(
+      "appointmentBillingCompletionUndone",
+    );
   });
 
   it("assigns a known tone to every catalogued action", () => {
@@ -25,6 +29,16 @@ describe("Phase 8D — activity event catalog", () => {
 
   it("falls back to a neutral tone for unknown actions", () => {
     expect(activityActionTone("something.unexpected")).toBe("neutral");
+  });
+
+  it("reads original action references from reversal metadata", () => {
+    expect(
+      activityOriginalAction({
+        operation: "undo",
+        original_action: "appointment.completed",
+      }),
+    ).toBe("appointment.completed");
+    expect(activityOriginalAction({ original_action: 42 })).toBeNull();
   });
 
   it("covers exactly the appointment and follow-up entity types", () => {

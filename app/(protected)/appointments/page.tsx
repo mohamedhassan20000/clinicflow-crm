@@ -25,31 +25,28 @@ import {
 } from "@/actions/appointments";
 import { getClinicWorkingHours } from "@/actions/settings";
 import { THIRTY_DAYS_MS } from "@/lib/constants";
-import { clinicLocaleFromRow, type ClinicLocale } from "@/lib/datetime";
-import type { Database } from "@/types/database";
+import { clinicLocaleFromRow } from "@/lib/datetime";
 import { pathWithSearch, withReturnTo } from "@/lib/navigation/return-url";
 import { getTranslations } from "next-intl/server";
 import { AssistantLauncherEntry } from "@/components/assistant/assistant-launcher-entry";
 import { AssistantLauncherScope } from "@/components/assistant/assistant-launcher-scope";
 import { resolveAssistantLauncher } from "@/lib/ai/launchers";
+import {
+  addCalendarDays,
+  CALENDAR_APPOINTMENT_FINANCIAL_SELECT,
+  CALENDAR_APPOINTMENT_SELECT,
+  CALENDAR_APPOINTMENT_STATUSES,
+  getAppointmentCalendarRange,
+  mergeCalendarFinancialRows,
+  resolveCalendarScopeFilters,
+  type CalendarAppointmentStatus,
+  type CalendarFinancialRow,
+} from "@/lib/appointments/calendar";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("protected");
   return { title: t("metadataAppointments") };
 }
-
-type AppointmentStatus = Database["public"]["Enums"]["appointment_status"];
-
-const APPOINTMENT_STATUSES: AppointmentStatus[] = [
-  "pending",
-  "confirmed",
-  "arrived",
-  "in_session",
-  "completed",
-  "cancelled",
-  "no_show",
-  "replaced",
-];
 
 interface PageProps {
   searchParams: Promise<{
@@ -65,38 +62,6 @@ interface PageProps {
     phone?: string;
     name?: string;
   }>;
-}
-
-function getWeekStart(
-  date: Date,
-  weekStartsOn: ClinicLocale["weekStart"],
-): Date {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = (day - weekStartsOn + 7) % 7;
-  d.setDate(d.getDate() - diff);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-function parseLocalDate(iso: string): Date {
-  const [y, m, d] = iso.split("-").map(Number);
-  if (!y || !m || !d) return new Date();
-  return new Date(y, m - 1, d);
-}
-
-function parseLocalMonth(iso: string): Date {
-  const [y, m] = iso.split("-").map(Number);
-  if (!y || !m) return new Date();
-  return new Date(y, m - 1, 1);
-}
-
-function formatLocalDate(date: Date): string {
-  return [
-    date.getFullYear(),
-    String(date.getMonth() + 1).padStart(2, "0"),
-    String(date.getDate()).padStart(2, "0"),
-  ].join("-");
 }
 
 export default async function AppointmentsPage({ searchParams }: PageProps) {
@@ -142,52 +107,28 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
 
   const view: CalendarView =
     viewParam === "day" || viewParam === "month" ? viewParam : "week";
-  const statusFilter = APPOINTMENT_STATUSES.includes(
-    status as AppointmentStatus,
+  const statusFilter = CALENDAR_APPOINTMENT_STATUSES.includes(
+    status as CalendarAppointmentStatus,
   )
-    ? (status as AppointmentStatus)
+    ? (status as CalendarAppointmentStatus)
     : null;
-
-  // Compute range [rangeStart, rangeEnd) based on view
-  let rangeStart: Date;
-  let rangeEnd: Date;
-  let dayAnchor: Date = new Date();
-  let weekStart: Date = new Date();
-  let monthStart: Date = new Date();
-
-  if (view === "day") {
-    dayAnchor = date ? parseLocalDate(date) : new Date();
-    dayAnchor.setHours(0, 0, 0, 0);
-    rangeStart = new Date(dayAnchor);
-    rangeEnd = new Date(dayAnchor);
-    rangeEnd.setDate(rangeEnd.getDate() + 1);
-  } else if (view === "month") {
-    monthStart = month ? parseLocalMonth(month) : new Date();
-    monthStart = new Date(
-      monthStart.getFullYear(),
-      monthStart.getMonth(),
-      1,
-      0,
-      0,
-      0,
-      0,
-    );
-    // Include the 6-week grid so trailing/leading cells render their events too
-    const firstDay = monthStart.getDay();
-    const weekOffset = (firstDay - clinicLocale.weekStart + 7) % 7;
-    rangeStart = new Date(monthStart);
-    rangeStart.setDate(rangeStart.getDate() - weekOffset);
-    rangeEnd = new Date(rangeStart);
-    rangeEnd.setDate(rangeEnd.getDate() + 42);
-  } else {
-    weekStart = getWeekStart(
-      week ? parseLocalDate(week) : new Date(),
-      clinicLocale.weekStart,
-    );
-    rangeStart = weekStart;
-    rangeEnd = new Date(weekStart);
-    rangeEnd.setDate(rangeEnd.getDate() + 7);
-  }
+  const calendarRange = getAppointmentCalendarRange({
+    view,
+    day: date,
+    week,
+    month,
+    timeZone: clinicLocale.timeZone,
+    weekStartsOn: clinicLocale.weekStart,
+  });
+  const {
+    dayAnchor,
+    weekStart,
+    monthStart,
+    rangeStartDate,
+    rangeEndDate,
+    rangeStartIso,
+    rangeEndIso,
+  } = calendarRange;
 
   // Assistants can operate (create/edit/status) their assigned doctors' scoped
   // appointments; doctors remain read-only on this page. RLS + scoped action
@@ -225,20 +166,24 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
     .filter((d) => !d.deleted_at && d.is_active)
     .map((d) => ({ id: d.id, name: d.name, color: d.color }));
 
-  const contextRangeEnd = new Date(rangeEnd);
-  contextRangeEnd.setDate(contextRangeEnd.getDate() - 1);
-  const selectedDoctorId = isDoctor
-    ? user.id
-    : doctors.some((candidate) => candidate.id === doctor)
-      ? doctor
-      : undefined;
+  const {
+    doctorId: selectedDoctorId,
+    departmentId: selectedDepartmentId,
+  } = resolveCalendarScopeFilters({
+    role: user.role,
+    userId: user.id,
+    doctorParam: doctor,
+    departmentParam: dept,
+    doctors,
+    departments,
+  });
   const assistantPromise = resolveAssistantLauncher({
     user,
     context: {
       type: "appointments",
       dateRange: {
-        from: formatLocalDate(rangeStart),
-        to: formatLocalDate(contextRangeEnd),
+        from: rangeStartDate,
+        to: addCalendarDays(rangeEndDate, -1),
       },
       ...(statusFilter ? { status: statusFilter } : {}),
       ...(selectedDoctorId ? { doctorId: selectedDoctorId } : {}),
@@ -269,23 +214,68 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
 
   let query = supabase
     .from("appointments")
-    .select(
-      "id, patient_id, doctor_id, scheduled_at, status, insurance_provider_id, notes, duration_minutes, package_id, package_session_number, replaces_appointment_id, replaced_by_appointment_id, patients(full_name, phone, file_number), profiles!doctor_id(full_name), departments(name, color), patient_packages(name, total_sessions, used_sessions, price_per_session)",
-    )
+    .select(CALENDAR_APPOINTMENT_SELECT)
     .eq("clinic_id", user.clinicId)
     .is("deleted_at", null)
-    .gte("scheduled_at", rangeStart.toISOString())
-    .lt("scheduled_at", rangeEnd.toISOString())
+    .gte("scheduled_at", rangeStartIso)
+    .lt("scheduled_at", rangeEndIso)
     .order("scheduled_at");
 
   // Doctors always see only their own appointments
   if (isDoctor) query = query.eq("doctor_id", user.id);
-  else if (doctor) query = query.eq("doctor_id", doctor);
-  if (dept) query = query.eq("department_id", dept);
+  else if (selectedDoctorId) query = query.eq("doctor_id", selectedDoctorId);
+  if (selectedDepartmentId) {
+    query = query.eq("department_id", selectedDepartmentId);
+  }
   if (statusFilter) query = query.eq("status", statusFilter);
   if (patientIds) query = query.in("patient_id", patientIds);
 
-  const { data: appointments } = await query;
+  const { data: appointments, error: appointmentsError } = await query;
+  if (appointmentsError) {
+    console.error("appointments_calendar_query_failed", {
+      clinicId: user.clinicId,
+      userId: user.id,
+      role: user.role,
+      rangeStartIso,
+      rangeEndIso,
+      code: appointmentsError.code,
+      message: appointmentsError.message,
+      details: appointmentsError.details,
+      hint: appointmentsError.hint,
+    });
+    throw new Error("Failed to load the appointments calendar", {
+      cause: appointmentsError,
+    });
+  }
+
+  let financialRows: CalendarFinancialRow[] = [];
+  if (appointments?.length) {
+    const financialResult = await supabase
+      .from("appointments")
+      .select(CALENDAR_APPOINTMENT_FINANCIAL_SELECT)
+      .eq("clinic_id", user.clinicId)
+      .in(
+        "id",
+        appointments.map((appointment) => appointment.id),
+      );
+
+    if (financialResult.error) {
+      // Financial enrichment must never turn a valid calendar query into an
+      // empty calendar. RLS still scopes this second read to the same caller.
+      console.error("appointments_calendar_financial_enrichment_failed", {
+        clinicId: user.clinicId,
+        userId: user.id,
+        role: user.role,
+        appointmentCount: appointments.length,
+        code: financialResult.error.code,
+        message: financialResult.error.message,
+        details: financialResult.error.details,
+        hint: financialResult.error.hint,
+      });
+    } else {
+      financialRows = financialResult.data as CalendarFinancialRow[];
+    }
+  }
   // Recycle bin: soft-deleted but NOT displaced (displaced have their own section)
   const { data: deletedAppointments } = canManageAppointmentTrash
     ? await supabase
@@ -313,7 +303,10 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
         .not("deleted_at", "is", null)
         .order("displaced_at", { ascending: false })
     : { data: [] };
-  const appts = (appointments ?? []) as Parameters<
+  const appts = mergeCalendarFinancialRows(
+    appointments ?? [],
+    financialRows,
+  ) as Parameters<
     typeof WeekCalendar
   >[0]["appointments"];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -345,8 +338,8 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
 
   const total = appts.length;
   const activeFilterCount =
-    Number(!isDoctor && !!doctor) +
-    Number(!!dept) +
+    Number(!!selectedDoctorId && !isDoctor) +
+    Number(!!selectedDepartmentId) +
     Number(!!file) +
     Number(!!nat) +
     Number(!!phone) +

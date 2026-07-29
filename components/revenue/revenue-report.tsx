@@ -79,6 +79,7 @@ export interface RevenueSummary {
   depositTotal: number;
   outstandingTotal: number;
   settlementsTotal: number;
+  patientCollectedTotal?: number;
   grossTotal: number;
   transactionCount: number;
   settlementCount: number;
@@ -197,6 +198,9 @@ export function RevenueReport({
   const settlementsTotal = summary.settlementsTotal;
   const outstandingTotal = summary.outstandingTotal;
   const grossTotal = summary.grossTotal;
+  const patientCollectedTotal =
+    summary.patientCollectedTotal ??
+    primaryTotal + secondaryTotal + depositTotal + settlementsTotal;
   const methodBreakdown = summary.methodBreakdown
     .filter((item): item is { method: PaymentMethod; amount: number } =>
       item.method in METHOD_META,
@@ -360,13 +364,26 @@ export function RevenueReport({
         </div>
 
         {/* Totals strip */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-px bg-border/40 border-b border-border/50">
+        <div className="grid grid-cols-2 gap-px border-b border-border/50 bg-border/40 sm:grid-cols-4 xl:grid-cols-8">
           <SummaryCell
             icon={TrendingUp}
-            label={t("totalRevenue")}
-            sublabel={t("sessionsDepositAndSettlements")}
+            label={t("grossAllocated")}
+            sublabel={t("allPayerAllocations")}
             amount={grossTotal}
             accent="text-primary"
+          />
+          <SummaryCell
+            icon={Receipt}
+            label={t("totalBilled")}
+            amount={summary.totalAmount}
+            accent="text-foreground"
+          />
+          <SummaryCell
+            icon={Wallet}
+            label={t("patientCollected")}
+            sublabel={t("excludesInsurance")}
+            amount={patientCollectedTotal}
+            accent="text-emerald-600 dark:text-emerald-400"
           />
           <SummaryCell
             icon={Banknote}

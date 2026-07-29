@@ -1,7 +1,18 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppointmentForm } from "@/components/appointments/appointment-form";
+
+vi.mock("@/actions/time-slots", () => ({
+  getAvailableTimeSlots: vi.fn(async (_doctorId: string, dateIso: string) => ({
+    slots: [{ time: "09:00", disabled: false }],
+    reason: "available",
+    dateIso,
+    dayOfWeek: 4,
+    doctorName: "Doctor Two",
+    workingHours: [{ start: "09:00", end: "17:00" }],
+  })),
+}));
 
 const PATIENT_ID = "22222222-2222-4222-8222-222222222222";
 const SECOND_PATIENT_ID = "99999999-9999-4999-8999-999999999999";
@@ -226,7 +237,13 @@ describe("appointment form patient context autofill", () => {
     const user = userEvent.setup();
     renderAppointmentForm();
 
-    await user.click(screen.getByRole("combobox", { name: /time/i }));
+    await selectDoctor(user, "Doctor Two");
+    fireEvent.change(screen.getByLabelText(/date/i), {
+      target: { value: "2099-01-01" },
+    });
+    const timeSelect = screen.getByRole("combobox", { name: /time/i });
+    await waitFor(() => expect(timeSelect).toBeEnabled());
+    await user.click(timeSelect);
 
     const listbox = await screen.findByRole("listbox");
     expect(

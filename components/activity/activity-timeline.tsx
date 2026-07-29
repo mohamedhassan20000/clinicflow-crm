@@ -10,6 +10,7 @@ import {
 import {
   activityActionMessageKey,
   activityActionTone,
+  activityOriginalAction,
   type ActivityEntityType,
   type ActivityTone,
 } from "@/lib/activity/events";
@@ -110,33 +111,45 @@ export function ActivityTimeline({ entityType, entityId, patientId, compact }: P
         ) : (
           <>
             <ol className="flex flex-col gap-3">
-              {events.map((event) => (
-                <li key={event.id} className="flex gap-2.5">
-                  <span
-                    aria-hidden
-                    className={cn(
-                      "mt-1 size-2 shrink-0 rounded-full",
-                      TONE_DOT[activityActionTone(event.action)],
-                    )}
-                  />
-                  <div className="min-w-0 space-y-0.5">
-                    <p className="text-sm leading-snug">
-                      {t(`actions.${activityActionMessageKey(event.action)}`)}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {actorLabel(event)}
-                      {" · "}
-                      {formatDate(event.occurredAt, {
-                        day: "numeric",
-                        month: "short",
-                        year: "numeric",
-                      })}
-                      {" · "}
-                      {formatTime(event.occurredAt)}
-                    </p>
-                  </div>
-                </li>
-              ))}
+              {events.map((event) => {
+                const reversedAction = activityOriginalAction(event.metadata);
+                return (
+                  <li key={event.id} className="flex gap-2.5">
+                    <span
+                      aria-hidden
+                      className={cn(
+                        "mt-1 size-2 shrink-0 rounded-full",
+                        TONE_DOT[activityActionTone(event.action)],
+                      )}
+                    />
+                    <div className="min-w-0 space-y-0.5">
+                      <p className="text-sm leading-snug">
+                        {t(`actions.${activityActionMessageKey(event.action)}`)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {actorLabel(event)}
+                        {" · "}
+                        {formatDate(event.occurredAt, {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                        })}
+                        {" · "}
+                        {formatTime(event.occurredAt)}
+                      </p>
+                      {reversedAction && (
+                        <p className="text-xs text-muted-foreground">
+                          {t("reverses", {
+                            action: t(
+                              `actions.${activityActionMessageKey(reversedAction)}`,
+                            ),
+                          })}
+                        </p>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
             </ol>
             {cursor && (
               <button

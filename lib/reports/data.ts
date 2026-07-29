@@ -71,6 +71,7 @@ export const EMPTY_REVENUE: RevenueSummaryReportResponse = {
   depositTotal: 0,
   outstandingTotal: 0,
   settlementsTotal: 0,
+  patientCollectedTotal: 0,
   grossTotal: 0,
   transactionCount: 0,
   settlementCount: 0,
@@ -84,6 +85,7 @@ export const EMPTY_MY_REVENUE: MyRevenueSummaryReportResponse = {
   insuranceTotal: 0,
   depositTotal: 0,
   outstandingTotal: 0,
+  patientCollectedTotal: 0,
   grossTotal: 0,
   transactionCount: 0,
   methodBreakdown: [],
@@ -225,39 +227,60 @@ export function normalizeNoShowReport(value: unknown): NoShowReportResponse {
 
 export function normalizeRevenueSummary(value: unknown): RevenueSummaryReportResponse {
   const raw = toRecord(value);
+  const primaryTotal = toNumber(raw.primaryTotal);
+  const secondaryTotal = toNumber(raw.secondaryTotal);
+  const depositTotal = toNumber(raw.depositTotal);
+  const settlementsTotal = toNumber(raw.settlementsTotal);
   return {
     totalAmount: toNumber(raw.totalAmount),
-    primaryTotal: toNumber(raw.primaryTotal),
-    secondaryTotal: toNumber(raw.secondaryTotal),
+    primaryTotal,
+    secondaryTotal,
     insuranceTotal: toNumber(raw.insuranceTotal),
-    depositTotal: toNumber(raw.depositTotal),
+    depositTotal,
     outstandingTotal: toNumber(raw.outstandingTotal),
-    settlementsTotal: toNumber(raw.settlementsTotal),
+    settlementsTotal,
+    patientCollectedTotal:
+      raw.patientCollectedTotal == null
+        ? primaryTotal + secondaryTotal + depositTotal + settlementsTotal
+        : toNumber(raw.patientCollectedTotal),
     grossTotal: toNumber(raw.grossTotal),
     transactionCount: toNumber(raw.transactionCount),
     settlementCount: toNumber(raw.settlementCount),
-    methodBreakdown: normalizeArray<RevenueMethodBreakdown>(raw.methodBreakdown, (row) => ({
-      method: toString(row.method),
-      amount: toNumber(row.amount),
-    })).filter((row) => row.method.length > 0),
+    methodBreakdown: normalizeArray<RevenueMethodBreakdown>(
+      raw.methodBreakdown,
+      (row) => ({
+        method: toString(row.method),
+        amount: toNumber(row.amount),
+      }),
+    ).filter((row) => row.method.length > 0 && row.method !== "insurance"),
   };
 }
 
 export function normalizeMyRevenueSummary(value: unknown): MyRevenueSummaryReportResponse {
   const raw = toRecord(value);
+  const primaryTotal = toNumber(raw.primaryTotal);
+  const secondaryTotal = toNumber(raw.secondaryTotal);
+  const depositTotal = toNumber(raw.depositTotal);
   return {
     totalAmount: toNumber(raw.totalAmount),
-    primaryTotal: toNumber(raw.primaryTotal),
-    secondaryTotal: toNumber(raw.secondaryTotal),
+    primaryTotal,
+    secondaryTotal,
     insuranceTotal: toNumber(raw.insuranceTotal),
-    depositTotal: toNumber(raw.depositTotal),
+    depositTotal,
     outstandingTotal: toNumber(raw.outstandingTotal),
+    patientCollectedTotal:
+      raw.patientCollectedTotal == null
+        ? primaryTotal + secondaryTotal + depositTotal
+        : toNumber(raw.patientCollectedTotal),
     grossTotal: toNumber(raw.grossTotal),
     transactionCount: toNumber(raw.transactionCount),
-    methodBreakdown: normalizeArray<RevenueMethodBreakdown>(raw.methodBreakdown, (row) => ({
-      method: toString(row.method),
-      amount: toNumber(row.amount),
-    })).filter((row) => row.method.length > 0),
+    methodBreakdown: normalizeArray<RevenueMethodBreakdown>(
+      raw.methodBreakdown,
+      (row) => ({
+        method: toString(row.method),
+        amount: toNumber(row.amount),
+      }),
+    ).filter((row) => row.method.length > 0 && row.method !== "insurance"),
   };
 }
 

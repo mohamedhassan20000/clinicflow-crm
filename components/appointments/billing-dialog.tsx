@@ -39,6 +39,13 @@ import { cn } from "@/lib/utils";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
 import { useTranslations } from "next-intl";
 import { ScopedAssistantLauncher } from "@/components/assistant/assistant-launcher-scope";
+import {
+  calculateInsuranceAmount,
+  calculatePatientResponsibility,
+  calculateRemainingPatientPayment,
+  roundBillingCurrency,
+  type InsuranceCalculationMode,
+} from "@/lib/billing/appointment-allocation";
 
 export type PaymentMethod =
   | "cash"
@@ -46,6 +53,7 @@ export type PaymentMethod =
   | "paypal"
   | "bank_transfer"
   | "insurance";
+export type PatientPaymentMethod = Exclude<PaymentMethod, "insurance">;
 
 export interface InvoiceLine {
   service_id: string | null;
@@ -57,14 +65,17 @@ export interface InvoiceLine {
 export interface BillingPayload {
   line_items: InvoiceLine[];
   paid_amount: number;
-  payment_method: PaymentMethod;
+  payment_method: PatientPaymentMethod;
   insurance_amount: number;
-  secondary_payment_method: PaymentMethod | null;
+  insurance_calculation_mode: InsuranceCalculationMode;
+  insurance_percentage: number | null;
+  patient_responsibility: number;
+  secondary_payment_method: PatientPaymentMethod | null;
   secondary_amount: number;
   deposit_amount: number;
   payment_note: string | null;
   previous_settlement_amount?: number;
-  previous_payment_method?: PaymentMethod | null;
+  previous_payment_method?: PatientPaymentMethod | null;
   previous_note?: string | null;
 }
 
@@ -85,7 +96,7 @@ export interface BillingPackageInfo {
 }
 
 const METHODS: {
-  value: PaymentMethod;
+  value: PatientPaymentMethod;
   labelKey: string;
   icon: React.ComponentType<{ className?: string }>;
 }[] = [
@@ -93,7 +104,6 @@ const METHODS: {
   { value: "credit_card", labelKey: "paymentCreditCard", icon: CreditCard },
   { value: "paypal", labelKey: "paymentPaypal", icon: Wallet },
   { value: "bank_transfer", labelKey: "paymentBankTransfer", icon: Landmark },
-  { value: "insurance", labelKey: "paymentInsurance", icon: ShieldCheck },
 ];
 
 interface BillingDialogProps {
@@ -154,16 +164,20 @@ export function BillingDialog({
   const [pickerValue, setPickerValue] = useState<string>("");
   const [paid, setPaid] = useState<string>("");
   const [insurance, setInsurance] = useState<string>("");
+  const [insuranceMode, setInsuranceMode] =
+    useState<InsuranceCalculationMode>("amount");
+  const [insurancePercentage, setInsurancePercentage] = useState<string>("");
   const [deposit, setDeposit] = useState<string>("");
-  const [method, setMethod] = useState<PaymentMethod>("cash");
+  const [method, setMethod] = useState<PatientPaymentMethod>("cash");
   const [showSplit, setShowSplit] = useState(false);
   const [secondaryMethod, setSecondaryMethod] =
-    useState<PaymentMethod>("credit_card");
+    useState<PatientPaymentMethod>("credit_card");
   const [secondaryAmount, setSecondaryAmount] = useState<string>("");
   const [note, setNote] = useState("");
   const [deferAll, setDeferAll] = useState(false);
   const [previousSettlement, setPreviousSettlement] = useState("");
-  const [previousMethod, setPreviousMethod] = useState<PaymentMethod | null>(null);
+  const [previousMethod, setPreviousMethod] =
+    useState<PatientPaymentMethod | null>(null);
   const [previousNote, setPreviousNote] = useState("");
   const didPrefillRef = useRef(false);
 
@@ -175,24 +189,66 @@ export function BillingDialog({
     [lines],
   );
 
-  const paidN = Math.max(0, Number(paid) || 0);
-  const insuranceN = Math.max(0, Number(insurance) || 0);
+  const paidN = roundBillingCurrency(Math.max(0, Number(paid) || 0));
+  const insuranceAmountRaw =
+    insurance.trim() === "" ? 0 : Number(insurance);
+  const insurancePercentageRaw =
+    insurancePercentage.trim() === "" ? 0 : Number(insurancePercentage);
+  const insuranceAmountInputInvalid =
+    insuranceMode === "amount" &&
+    insurance.trim() !== "" &&
+    (!Number.isFinite(insuranceAmountRaw) || insuranceAmountRaw < 0);
+  const insurancePercentageInputInvalid =
+    insuranceMode === "percentage" &&
+    (insurancePercentage.trim() === "" ||
+      !Number.isFinite(insurancePercentageRaw) ||
+      insurancePercentageRaw < 0 ||
+      insurancePercentageRaw > 100);
+  const insurancePercentageMissing =
+    insuranceMode === "percentage" && insurancePercentage.trim() === "";
+  const insuranceN =
+    insuranceAmountInputInvalid || insurancePercentageInputInvalid
+      ? 0
+      : calculateInsuranceAmount({
+          invoiceTotal: totalN,
+          mode: insuranceMode,
+          amount: insuranceAmountRaw,
+          percentage:
+            insuranceMode === "percentage" ? insurancePercentageRaw : null,
+        });
+  const insuranceAboveTotal = insuranceN > totalN + 0.001;
+  const patientResponsibility = insuranceAboveTotal
+    ? 0
+    : calculatePatientResponsibility(totalN, insuranceN);
 
-  // Cap deposit at min(balance, total - other payments) to keep math sane
   const depositRaw = Math.max(0, Number(deposit) || 0);
-  const depositN = Math.min(
-    depositRaw,
-    accountBalance,
-    Math.max(0, totalN),
-  );
+  const depositN = roundBillingCurrency(depositRaw);
+  const depositAboveBalance = depositN > accountBalance + 0.001;
 
   const secondaryRaw = showSplit ? Number(secondaryAmount) || 0 : 0;
   const secondaryN = Number.isFinite(secondaryRaw)
     ? Math.max(0, secondaryRaw)
     : 0;
 
-  const collected = paidN + insuranceN + secondaryN + depositN;
-  const remaining = Math.max(0, Number((totalN - collected).toFixed(2)));
+  const patientPaid = roundBillingCurrency(paidN + secondaryN);
+  const patientAllocated = roundBillingCurrency(patientPaid + depositN);
+  const patientPaymentsAboveResponsibility =
+    patientAllocated > patientResponsibility + 0.001;
+  const totalAllocated = roundBillingCurrency(insuranceN + patientAllocated);
+  const remaining = Math.max(
+    0,
+    roundBillingCurrency(patientResponsibility - patientAllocated),
+  );
+  const primaryRemainingAmount = calculateRemainingPatientPayment(
+    patientResponsibility,
+    secondaryN,
+    depositN,
+  );
+  const secondaryRemainingAmount = calculateRemainingPatientPayment(
+    patientResponsibility,
+    paidN,
+    depositN,
+  );
   const previousBalanceN = Math.max(0, Number(previousOutstandingBalance) || 0);
   const previousRaw =
     previousSettlement.trim() === "" ? 0 : Number(previousSettlement);
@@ -209,13 +265,21 @@ export function BillingDialog({
     Number((previousBalanceN - Math.min(previousSettlementN, previousBalanceN)).toFixed(2)),
   );
   const totalCollectedToday = Number(
-    (collected + (previousAboveBalance ? 0 : previousSettlementN)).toFixed(2),
+    (
+      patientPaid +
+      (previousAboveBalance ? 0 : previousSettlementN)
+    ).toFixed(2),
   );
 
   const canSubmit =
     lines.length > 0 &&
     totalN > 0 &&
-    collected <= totalN + 0.001 &&
+    !insuranceAmountInputInvalid &&
+    !insurancePercentageInputInvalid &&
+    !insuranceAboveTotal &&
+    !depositAboveBalance &&
+    !patientPaymentsAboveResponsibility &&
+    totalAllocated <= totalN + 0.001 &&
     (!showSplit || secondaryMethod !== method) &&
     !previousInputInvalid &&
     !previousAboveBalance &&
@@ -227,6 +291,8 @@ export function BillingDialog({
     setPickerValue("");
     setPaid("");
     setInsurance("");
+    setInsuranceMode("amount");
+    setInsurancePercentage("");
     setDeposit("");
     setMethod("cash");
     setShowSplit(false);
@@ -250,6 +316,13 @@ export function BillingDialog({
     setPaid(payload.paid_amount ? String(payload.paid_amount) : "");
     setInsurance(
       payload.insurance_amount ? String(payload.insurance_amount) : "",
+    );
+    setInsuranceMode(payload.insurance_calculation_mode ?? "amount");
+    setInsurancePercentage(
+      payload.insurance_calculation_mode === "percentage" &&
+        payload.insurance_percentage != null
+        ? String(payload.insurance_percentage)
+        : "",
     );
     setDeposit(payload.deposit_amount ? String(payload.deposit_amount) : "");
     setMethod(payload.payment_method);
@@ -364,6 +437,12 @@ export function BillingDialog({
       paid_amount: Number(paidN.toFixed(2)),
       payment_method: method,
       insurance_amount: Number(insuranceN.toFixed(2)),
+      insurance_calculation_mode: insuranceMode,
+      insurance_percentage:
+        insuranceMode === "percentage"
+          ? Number(insurancePercentageRaw.toFixed(2))
+          : null,
+      patient_responsibility: patientResponsibility,
       secondary_payment_method:
         showSplit && secondaryN > 0 ? secondaryMethod : null,
       secondary_amount: showSplit ? Number(secondaryN.toFixed(2)) : 0,
@@ -396,8 +475,11 @@ export function BillingDialog({
         onOpenChange(next);
       }}
     >
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent
+        layout="flex"
+        className="max-h-[calc(100dvh-1rem)] flex-col gap-0 overflow-hidden p-0 sm:max-h-[calc(100dvh-2rem)] sm:max-w-2xl"
+      >
+        <DialogHeader className="shrink-0 border-b border-border/60 p-4">
           <div className="flex flex-wrap items-start justify-between gap-2 pe-6">
             <DialogTitle>{t("invoiceCompleteAppointment")}</DialogTitle>
             <ScopedAssistantLauncher />
@@ -430,13 +512,18 @@ export function BillingDialog({
           )}
         </DialogHeader>
 
-        {loadingContext && (
-          <div className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            {t("loadingPriceListAndPatientBilling")}</div>
-        )}
+        <div
+          className="billing-dialog-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4"
+          data-testid="billing-dialog-scroll-area"
+        >
+          {loadingContext && (
+            <div className="mb-4 flex items-center gap-2 rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              {t("loadingPriceListAndPatientBilling")}
+            </div>
+          )}
 
-        <div className="space-y-5 py-1">
+          <div className="space-y-5">
           {packageInfo && (
             <div className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-800 dark:text-emerald-300">
               <Package className="h-3.5 w-3.5" />
@@ -449,36 +536,58 @@ export function BillingDialog({
             </div>
           )}
 
-          {/* Summary strip */}
-          <div className="grid grid-cols-3 gap-2 rounded-lg border border-border/60 bg-muted/30 p-3 text-center">
-            <div>
-              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                {t("invoiceTotal")}</p>
-              <p className="text-sm font-semibold tabular-nums">
-                {fmtMoney(totalN)}
-              </p>
-            </div>
-            <div>
-              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                {t("collected")}</p>
-              <p className="text-sm font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
-                {fmtMoney(collected)}
-              </p>
-            </div>
-            <div>
-              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                {t("outstanding")}</p>
-              <p
-                className={cn(
-                  "text-sm font-semibold tabular-nums",
-                  remaining > 0
-                    ? "text-amber-600 dark:text-amber-400"
-                    : "text-muted-foreground",
-                )}
-              >
-                {fmtMoney(remaining)}
-              </p>
-            </div>
+          {/* Financial allocation summary */}
+          <div
+            className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border/60 bg-border/40 sm:grid-cols-4"
+            aria-label={t("billingSummary")}
+          >
+            <SummaryCell
+              label={t("invoiceTotal")}
+              amount={totalN}
+              formatAmount={fmtMoney}
+            />
+            <SummaryCell
+              label={t("insuranceContribution")}
+              amount={insuranceN}
+              formatAmount={fmtMoney}
+              accent="text-sky-700 dark:text-sky-400"
+            />
+            <SummaryCell
+              label={t("patientResponsibility")}
+              amount={patientResponsibility}
+              formatAmount={fmtMoney}
+            />
+            <SummaryCell
+              label={t("primaryPaymentAmount")}
+              amount={paidN}
+              formatAmount={fmtMoney}
+            />
+            <SummaryCell
+              label={t("secondaryPaymentAmount")}
+              amount={secondaryN}
+              formatAmount={fmtMoney}
+            />
+            <SummaryCell
+              label={t("totalPatientPaid")}
+              amount={patientPaid}
+              formatAmount={fmtMoney}
+              accent="text-emerald-600 dark:text-emerald-400"
+            />
+            <SummaryCell
+              label={t("depositApplied")}
+              amount={depositN}
+              formatAmount={fmtMoney}
+            />
+            <SummaryCell
+              label={t("remainingPatientBalance")}
+              amount={remaining}
+              formatAmount={fmtMoney}
+              accent={
+                remaining > 0
+                  ? "text-amber-600 dark:text-amber-400"
+                  : "text-muted-foreground"
+              }
+            />
           </div>
 
           {/* Line items */}
@@ -695,7 +804,11 @@ export function BillingDialog({
                   disabled={isPending}
                   onClick={() =>
                     setDeposit(
-                      String(Math.min(accountBalance, totalN).toFixed(2)),
+                      String(
+                        Math.min(accountBalance, patientResponsibility).toFixed(
+                          2,
+                        ),
+                      ),
                     )
                   }
                 >
@@ -709,30 +822,48 @@ export function BillingDialog({
                   </span>
                 </p>
               )}
+              {depositAboveBalance && (
+                <p className="text-[11px] text-destructive" role="alert">
+                  {t("depositCannotExceedAccountBalance")}
+                </p>
+              )}
             </section>
           )}
 
           {/* Patient paid now */}
           <div className={cn("space-y-1.5")}>
             <Label htmlFor="bill-paid" className="text-xs">
-              {t("patientPaidNow")}</Label>
-            <Input
-              id="bill-paid"
-              type="number"
-              inputMode="decimal"
-              min={0}
-              step="0.01"
-              placeholder="0.00"
-              value={paid}
-              disabled={isPending}
-              onChange={(e) => setPaid(e.target.value)}
-            />
+              {t("primaryPaymentAmount")}</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                id="bill-paid"
+                type="number"
+                inputMode="decimal"
+                min={0}
+                step="0.01"
+                placeholder="0.00"
+                value={paid}
+                disabled={isPending}
+                onChange={(e) => setPaid(e.target.value)}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9 shrink-0 px-2.5 text-xs"
+                disabled={isPending || primaryRemainingAmount === 0}
+                onClick={() => setPaid(primaryRemainingAmount.toFixed(2))}
+                data-testid="fill-primary-remaining"
+              >
+                {t("fillRemaining")}
+              </Button>
+            </div>
           </div>
 
           {/* Primary method */}
           <div className={cn("space-y-1.5")}>
             <Label className="text-xs">{t("primaryPaymentMethod")}</Label>
-            <div className="grid grid-cols-5 gap-1.5">
+            <div className="grid grid-cols-4 gap-1.5" role="group" aria-label={t("primaryPaymentMethod")}>
               {METHODS.map(({ value, labelKey, icon: Icon }) => {
                 const active = method === value;
                 return (
@@ -741,6 +872,8 @@ export function BillingDialog({
                     type="button"
                     disabled={isPending}
                     onClick={() => setMethod(value)}
+                    aria-pressed={active}
+                    aria-label={t(labelKey)}
                     className={cn(
                       "flex flex-col items-center gap-1 rounded-lg border px-1 py-2 text-[10px] font-medium transition-all",
                       active
@@ -756,27 +889,147 @@ export function BillingDialog({
             </div>
           </div>
 
-          {/* Insurance */}
-          {hasInsurance && (
-            <div className="space-y-1.5 rounded-lg border border-sky-500/30 bg-sky-500/5 p-3">
-              <Label htmlFor="bill-insurance" className="text-xs">
+          {/* Insurance is an allocation, separate from patient payment methods. */}
+          <section
+            className="space-y-3 rounded-lg border border-sky-500/30 bg-sky-500/5 p-3"
+            aria-labelledby="billing-insurance-heading"
+          >
+            <div className="space-y-1">
+              <h3
+                id="billing-insurance-heading"
+                className="flex items-center gap-1.5 text-xs font-semibold"
+              >
+                <ShieldCheck
+                  className="h-3.5 w-3.5 text-sky-700 dark:text-sky-400"
+                  aria-hidden
+                />
+                {t("insurance")}
+              </h3>
+              <p className="text-[11px] text-muted-foreground">
                 {insuranceProviderName
-                  ? t("coveredbyprovider", { provider: insuranceProviderName })
-                  : t("coveredbyinsurance")}
-              </Label>
-              <Input
-                id="bill-insurance"
-                type="number"
-                inputMode="decimal"
-                min={0}
-                step="0.01"
-                placeholder="0.00"
-                value={insurance}
-                disabled={isPending}
-                onChange={(e) => setInsurance(e.target.value)}
-              />
+                  ? t("insuranceContributionDescriptionProvider", {
+                      provider: insuranceProviderName,
+                    })
+                  : hasInsurance
+                    ? t("insuranceContributionDescription")
+                    : t("insuranceContributionNoProviderDescription")}
+              </p>
             </div>
-          )}
+
+            <div className="grid gap-3 sm:grid-cols-[minmax(140px,0.45fr)_1fr]">
+              <div className="space-y-1.5">
+                <Label htmlFor="bill-insurance-mode" className="text-xs">
+                  {t("insuranceCalculationMode")}
+                </Label>
+                <Select
+                  value={insuranceMode}
+                  onValueChange={(value) =>
+                    setInsuranceMode(value as InsuranceCalculationMode)
+                  }
+                  disabled={isPending}
+                >
+                  <SelectTrigger id="bill-insurance-mode">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="amount">
+                      {t("insuranceModeAmount")}
+                    </SelectItem>
+                    <SelectItem value="percentage">
+                      {t("insuranceModePercentage")}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {insuranceMode === "amount" ? (
+                <div className="space-y-1.5">
+                  <Label htmlFor="bill-insurance" className="text-xs">
+                    {t("insuranceAmount")}
+                  </Label>
+                  <Input
+                    id="bill-insurance"
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    max={totalN}
+                    step="0.01"
+                    placeholder="0.00"
+                    value={insurance}
+                    disabled={isPending}
+                    onChange={(event) => setInsurance(event.target.value)}
+                    aria-invalid={
+                      insuranceAmountInputInvalid || insuranceAboveTotal
+                    }
+                    aria-describedby="bill-insurance-help"
+                  />
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <Label htmlFor="bill-insurance-percentage" className="text-xs">
+                    {t("insurancePercentage")}
+                  </Label>
+                  <div className="relative">
+                    <Input
+                      id="bill-insurance-percentage"
+                      type="number"
+                      inputMode="decimal"
+                      min={0}
+                      max={100}
+                      step="0.01"
+                      placeholder="0"
+                      value={insurancePercentage}
+                      disabled={isPending}
+                      onChange={(event) =>
+                        setInsurancePercentage(event.target.value)
+                      }
+                      aria-invalid={insurancePercentageInputInvalid}
+                      aria-describedby="bill-insurance-help"
+                      className="pe-8"
+                    />
+                    <span
+                      className="pointer-events-none absolute inset-y-0 end-3 flex items-center text-xs text-muted-foreground"
+                      aria-hidden
+                    >
+                      %
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div
+              id="bill-insurance-help"
+              className="flex items-center justify-between gap-3 rounded-md border border-sky-500/20 bg-card/70 px-3 py-2 text-xs"
+              aria-live="polite"
+            >
+              <span className="text-muted-foreground">
+                {insuranceMode === "percentage"
+                  ? t("calculatedInsuranceAmount")
+                  : t("insuranceContribution")}
+              </span>
+              <span
+                className="font-semibold tabular-nums text-sky-700 dark:text-sky-400"
+                data-testid="calculated-insurance-amount"
+              >
+                {fmtMoney(insuranceN)}
+              </span>
+            </div>
+
+            {(insuranceAmountInputInvalid ||
+              insurancePercentageInputInvalid ||
+              insuranceAboveTotal) && (
+              <p className="text-[11px] text-destructive" role="alert">
+                {insuranceAboveTotal
+                  ? t("insuranceAmountCannotExceedInvoiceTotal")
+                  : insuranceMode === "percentage"
+                    ? insurancePercentageMissing
+                      ? t("insurancePercentageRequired")
+                      : t("insurancePercentageMustBeBetween")
+                    : t("insuranceAmountCannotBeNegative")}
+              </p>
+            )}
+          </section>
 
           {/* Split toggle */}
           <div className={cn(deferAll && "hidden")}>
@@ -812,17 +1065,34 @@ export function BillingDialog({
                 <div className="space-y-1.5">
                   <Label htmlFor="bill-secondary" className="text-xs">
                     {t("paidViaAnotherMethod")}</Label>
-                  <Input
-                    id="bill-secondary"
-                    type="number"
-                    inputMode="decimal"
-                    min={0}
-                    step="0.01"
-                    placeholder="0.00"
-                    value={secondaryAmount}
-                    disabled={isPending}
-                    onChange={(e) => setSecondaryAmount(e.target.value)}
-                  />
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="bill-secondary"
+                      type="number"
+                      inputMode="decimal"
+                      min={0}
+                      step="0.01"
+                      placeholder="0.00"
+                      value={secondaryAmount}
+                      disabled={isPending}
+                      onChange={(e) => setSecondaryAmount(e.target.value)}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-9 shrink-0 px-2.5 text-xs"
+                      disabled={isPending || secondaryRemainingAmount === 0}
+                      onClick={() =>
+                        setSecondaryAmount(
+                          secondaryRemainingAmount.toFixed(2),
+                        )
+                      }
+                      data-testid="fill-secondary-remaining"
+                    >
+                      {t("fillRemaining")}
+                    </Button>
+                  </div>
                 </div>
                 <div className="flex items-end">
                   <p className="text-[11px] text-muted-foreground pb-2">
@@ -843,7 +1113,7 @@ export function BillingDialog({
 
               <div className="space-y-1.5">
                 <Label className="text-xs">{t("secondaryPaymentMethod")}</Label>
-                <div className="grid grid-cols-5 gap-1.5">
+                <div className="grid grid-cols-4 gap-1.5" role="group" aria-label={t("secondaryPaymentMethod")}>
                   {METHODS.map(({ value, labelKey, icon: Icon }) => {
                     const active = secondaryMethod === value;
                     const disabled = value === method;
@@ -853,6 +1123,8 @@ export function BillingDialog({
                         type="button"
                         disabled={isPending || disabled}
                         onClick={() => setSecondaryMethod(value)}
+                        aria-pressed={active}
+                        aria-label={t(labelKey)}
                         className={cn(
                           "flex flex-col items-center gap-1 rounded-lg border px-1 py-2 text-[10px] font-medium transition-all",
                           active
@@ -876,6 +1148,12 @@ export function BillingDialog({
           {remaining > 0 && totalN > 0 && (
             <p className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-400">
               {t("remainingSavedAsOutstanding", { amount: fmtMoney(remaining) })}
+            </p>
+          )}
+
+          {patientPaymentsAboveResponsibility && (
+            <p className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-[11px] text-destructive" role="alert">
+              {t("patientPaymentsCannotExceedResponsibility")}
             </p>
           )}
 
@@ -947,7 +1225,7 @@ export function BillingDialog({
 
               <div className="space-y-1.5">
                 <Label className="text-xs">{t("previousBalancePaymentMethod")}</Label>
-                <div className="grid grid-cols-5 gap-1.5">
+                <div className="grid grid-cols-4 gap-1.5" role="group" aria-label={t("previousBalancePaymentMethod")}>
                   {METHODS.map(({ value, labelKey, icon: Icon }) => {
                     const active = previousMethod === value;
                     return (
@@ -956,6 +1234,8 @@ export function BillingDialog({
                         type="button"
                         disabled={isPending}
                         onClick={() => setPreviousMethod(value)}
+                        aria-pressed={active}
+                        aria-label={t(labelKey)}
                         className={cn(
                           "flex flex-col items-center gap-1 rounded-lg border px-1 py-2 text-[10px] font-medium transition-all",
                           active
@@ -1045,9 +1325,13 @@ export function BillingDialog({
               className="resize-none text-sm"
             />
           </div>
+          </div>
         </div>
 
-        <DialogFooter className="gap-2 sm:gap-2">
+        <DialogFooter
+          flush
+          className="shrink-0 gap-2 rounded-none rounded-b-xl sm:gap-2"
+        >
           <Button
             type="button"
             variant="outline"

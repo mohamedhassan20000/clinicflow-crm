@@ -38,11 +38,12 @@ export function MyRevenueSummaryReport({
       <MetricGrid
         mobileColumns={2}
         items={[
-          { label: t("grossTotal"), value: formatCurrency(data.grossTotal) },
-          { label: t("serviceTotal"), value: formatCurrency(data.totalAmount) },
+          { label: t("grossAllocated"), value: formatCurrency(data.grossTotal) },
+          { label: t("totalBilled"), value: formatCurrency(data.totalAmount) },
+          { label: t("patientCollected"), value: formatCurrency(data.patientCollectedTotal) },
           { label: t("primaryPayments"), value: formatCurrency(data.primaryTotal) },
           { label: t("secondaryPayments"), value: formatCurrency(data.secondaryTotal) },
-          { label: t("insurance"), value: formatCurrency(data.insuranceTotal) },
+          { label: t("insuranceCovered"), value: formatCurrency(data.insuranceTotal) },
           { label: t("deposits"), value: formatCurrency(data.depositTotal) },
           { label: t("outstanding"), value: formatCurrency(data.outstandingTotal) },
         ]}
@@ -62,7 +63,9 @@ export function MyRevenueSummaryReport({
               </TableHeader>
               <TableBody>
                 <RevenueRow label={t("transactions")} value={formatNumber(data.transactionCount, locale)} />
-                <RevenueRow label={t("collectedRevenue")} value={formatCurrency(data.grossTotal)} />
+                <RevenueRow label={t("totalBilled")} value={formatCurrency(data.totalAmount)} />
+                <RevenueRow label={t("insuranceCovered")} value={formatCurrency(data.insuranceTotal)} />
+                <RevenueRow label={t("patientCollected")} value={formatCurrency(data.patientCollectedTotal)} />
                 <RevenueRow label={t("outstandingBalance")} value={formatCurrency(data.outstandingTotal)} />
               </TableBody>
             </Table>

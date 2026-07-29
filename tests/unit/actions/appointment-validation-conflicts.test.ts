@@ -44,6 +44,10 @@ function allowValidReferences(
       : {
         id: DOCTOR_ID,
         department_id: DEPARTMENT_ID,
+        full_name: "Dr Test",
+        is_active: true,
+        is_deleted: false,
+        deleted_at: null,
         },
     error: null,
   };
@@ -65,6 +69,80 @@ function allowValidReferences(
   };
   mocks.state.tableResults["appointments.insert"] = {
     data: null,
+    error: null,
+  };
+  mocks.state.tableResults["doctor_schedules.select"] = {
+    data: [
+      {
+        day_of_week: 4,
+        start_time: "00:00",
+        end_time: "23:59",
+        is_enabled: true,
+        valid_from: null,
+        valid_until: null,
+      },
+      {
+        day_of_week: 5,
+        start_time: "00:00",
+        end_time: "23:59",
+        is_enabled: true,
+        valid_from: null,
+        valid_until: null,
+      },
+    ],
+    error: null,
+  };
+  mocks.state.tableResults["clinic_working_hours.select"] = {
+    data: [],
+    error: null,
+  };
+  mocks.state.tableResults["doctor_unavailability.select"] = {
+    data: [],
+    error: null,
+  };
+}
+
+function allowReplacementAvailability(
+  mocks: ReturnType<typeof createServerActionMocks>,
+) {
+  mocks.state.tableResults["profiles.select"] = {
+    data: {
+      id: DOCTOR_ID,
+      department_id: DEPARTMENT_ID,
+      full_name: "Dr Test",
+      is_active: true,
+      is_deleted: false,
+      deleted_at: null,
+    },
+    error: null,
+  };
+  mocks.state.tableResults["doctor_schedules.select"] = {
+    data: [
+      {
+        day_of_week: 4,
+        start_time: "00:00",
+        end_time: "23:59",
+        is_enabled: true,
+        valid_from: null,
+        valid_until: null,
+      },
+      {
+        day_of_week: 5,
+        start_time: "00:00",
+        end_time: "23:59",
+        is_enabled: true,
+        valid_from: null,
+        valid_until: null,
+      },
+    ],
+    error: null,
+  };
+  mocks.state.tableResults["clinic_working_hours.select"] = {
+    data: [],
+    error: null,
+  };
+  mocks.state.tableResults["doctor_unavailability.select"] = {
+    data: [],
     error: null,
   };
 }
@@ -165,7 +243,9 @@ describe("appointment reference validation", () => {
         args: ["eq", "clinic_id", "clinic-1"],
       }),
     );
-    expect(mocks.state.redirect).toHaveBeenCalledWith("/appointments");
+    expect(mocks.state.redirect).toHaveBeenCalledWith(
+      "/appointments?view=day&date=2099-01-01",
+    );
   });
 
   it("rejects invalid patient references before DB write", async () => {
@@ -272,7 +352,9 @@ describe("appointment conflict prevention", () => {
         args: ["eq", "doctor_id", DOCTOR_ID],
       }),
     );
-    expect(mocks.state.redirect).toHaveBeenCalledWith("/appointments");
+    expect(mocks.state.redirect).toHaveBeenCalledWith(
+      "/appointments?view=day&date=2099-01-01",
+    );
   });
 
   it("allows appointments exactly at the 15-minute buffer boundary", async () => {
@@ -291,7 +373,9 @@ describe("appointment conflict prevention", () => {
       appointmentForm({ scheduled_at: "2099-01-01T10:45:00.000Z" }),
     );
 
-    expect(mocks.state.redirect).toHaveBeenCalledWith("/appointments");
+    expect(mocks.state.redirect).toHaveBeenCalledWith(
+      "/appointments?view=day&date=2099-01-01",
+    );
   });
 
   it("allows appointments ending exactly at the 15-minute buffer boundary before another session", async () => {
@@ -310,7 +394,9 @@ describe("appointment conflict prevention", () => {
       appointmentForm({ scheduled_at: "2099-01-01T10:00:00.000Z" }),
     );
 
-    expect(mocks.state.redirect).toHaveBeenCalledWith("/appointments");
+    expect(mocks.state.redirect).toHaveBeenCalledWith(
+      "/appointments?view=day&date=2099-01-01",
+    );
   });
 
   it("rejects appointments one minute inside the buffer boundary", async () => {
@@ -353,7 +439,9 @@ describe("appointment conflict prevention", () => {
         args: ["in", "status", ["confirmed", "arrived", "in_session"]],
       }),
     );
-    expect(mocks.state.redirect).toHaveBeenCalledWith("/appointments");
+    expect(mocks.state.redirect).toHaveBeenCalledWith(
+      "/appointments?view=day&date=2099-01-01",
+    );
   });
 
   it("conflict query only blocks active occupied appointments — no_show slots can be rebooked", async () => {
@@ -374,7 +462,9 @@ describe("appointment conflict prevention", () => {
         args: ["in", "status", ["confirmed", "arrived", "in_session"]],
       }),
     );
-    expect(mocks.state.redirect).toHaveBeenCalledWith("/appointments");
+    expect(mocks.state.redirect).toHaveBeenCalledWith(
+      "/appointments?view=day&date=2099-01-01",
+    );
   });
 
   it("conflict query excludes soft-deleted appointments via deleted_at IS NULL filter", async () => {
@@ -406,7 +496,9 @@ describe("appointment conflict prevention", () => {
       appointmentForm({ scheduled_at: "2099-01-01T10:00:00.000Z" }),
     );
 
-    expect(mocks.state.redirect).toHaveBeenCalledWith("/appointments");
+    expect(mocks.state.redirect).toHaveBeenCalledWith(
+      "/appointments?view=day&date=2099-01-01",
+    );
     expect(wroteAppointments(mocks)).toBe(true);
   });
 
@@ -440,6 +532,7 @@ describe("dedicated appointment replacement action", () => {
 
   it("allows an assigned doctor through the narrow replacement path", async () => {
     const { replaceAppointment, mocks } = await loadAppointmentsActions();
+    allowReplacementAvailability(mocks);
     mocks.state.authedUser.role = "doctor";
     mocks.state.authedUser.id = DOCTOR_ID;
     mocks.state.tableResults["clinics.select"] = {
@@ -521,6 +614,7 @@ describe("dedicated appointment replacement action", () => {
 
   it("does not let the original block its own newly selected slot", async () => {
     const { replaceAppointment, mocks } = await loadAppointmentsActions();
+    allowReplacementAvailability(mocks);
     mocks.state.tableResults["clinics.select"] = {
       data: { timezone: "UTC" },
       error: null,

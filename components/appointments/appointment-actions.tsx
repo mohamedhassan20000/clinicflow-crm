@@ -3,20 +3,20 @@
 import { memo, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Repeat } from "lucide-react";
+import { Loader2, Repeat, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ReplaceAppointmentDialog } from "@/components/appointments/replace-appointment-dialog";
 import { cn } from "@/lib/utils";
 import {
   arriveAppointment,
   getBillingContext,
+  getInvoiceUndoEligibility,
   startAppointmentSession,
   updateAppointmentStatus,
   undoAppointmentStatus,
   undoInvoiceCompletion,
   getConflictingPendingAppointments,
   type BillingContext,
-  type InvoiceUndoStatus,
   type ConflictingAppointment,
 } from "@/actions/appointments";
 import { ConflictResolutionModal } from "@/components/appointments/conflict-resolution-modal";
@@ -29,6 +29,10 @@ import { CancelAppointmentDialog } from "@/components/appointments/cancel-dialog
 import { NoShowDialog } from "@/components/appointments/noshow-dialog";
 import { SettleOutstandingDialog } from "@/components/patients/settle-outstanding-dialog";
 import { useTranslations } from "next-intl";
+import type {
+  BillingUndoEligibility,
+  BillingUndoEligibilityReason,
+} from "@/lib/appointments/billing-undo";
 
 type Status = Database["public"]["Enums"]["appointment_status"];
 type UserRole = "admin" | "receptionist" | "manager" | "doctor" | "assistant";
@@ -54,6 +58,8 @@ function AppointmentActionsInner({
   currentUserId,
   currentUserRole = "receptionist",
   onActionComplete,
+  onBillingChanged,
+  showBillingUndo = false,
 }: {
   appointmentId: string;
   currentStatus: Status;
@@ -67,6 +73,10 @@ function AppointmentActionsInner({
   hasInsurance?: boolean;
   /** Called after a terminal action (cancel, no-show) succeeds. */
   onActionComplete?: () => void;
+  /** Refreshes dialog-local invoice and activity state after billing changes. */
+  onBillingChanged?: () => void;
+  /** Persistent billing Undo belongs in the appointment detail dialog only. */
+  showBillingUndo?: boolean;
 }) {
   const t = useTranslations("appointments");
   const router = useRouter();
@@ -87,6 +97,9 @@ function AppointmentActionsInner({
   const [invoiceDraft, setInvoiceDraft] = useState<BillingPayload | null>(null);
   const [invoiceDraftKey, setInvoiceDraftKey] = useState(0);
   const [isUndoing, setIsUndoing] = useState(false);
+  const [undoEligibility, setUndoEligibility] =
+    useState<BillingUndoEligibility | null>(null);
+  const [loadingUndoEligibility, setLoadingUndoEligibility] = useState(false);
 
   const effectiveStatus = optimisticStatus ?? currentStatus;
   const isTerminal = TERMINAL.includes(effectiveStatus);
@@ -144,7 +157,55 @@ function AppointmentActionsInner({
     };
   }, [billingOpen, appointmentId, ctx, t]);
 
-  if (isTerminal || isUndoing) return null;
+  useEffect(() => {
+    if (!showBillingUndo || effectiveStatus !== "completed") return;
+
+    let active = true;
+    queueMicrotask(() => {
+      if (!active) return;
+      setLoadingUndoEligibility(true);
+      getInvoiceUndoEligibility(appointmentId)
+        .then((eligibility) => {
+          if (active) setUndoEligibility(eligibility);
+        })
+        .catch(() => {
+          if (!active) return;
+          setUndoEligibility({
+            canUndo: false,
+            reason: "activity_unavailable",
+            targetStatus: null,
+            completionEventId: null,
+            completionOccurredAt: null,
+            expiresAt: null,
+          });
+        })
+        .finally(() => {
+          if (active) setLoadingUndoEligibility(false);
+        });
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [appointmentId, effectiveStatus, showBillingUndo]);
+
+  useEffect(() => {
+    if (!undoEligibility?.canUndo || !undoEligibility.expiresAt) return;
+    const remaining =
+      new Date(undoEligibility.expiresAt).getTime() - Date.now();
+    const timer = window.setTimeout(() => {
+      setUndoEligibility((current) =>
+        current?.completionEventId === undoEligibility.completionEventId
+          ? { ...current, canUndo: false, reason: "expired" }
+          : current,
+      );
+    }, Math.max(0, remaining) + 25);
+    return () => window.clearTimeout(timer);
+  }, [undoEligibility]);
+
+  const showBillingUndoAction =
+    showBillingUndo && effectiveStatus === "completed";
+  if (isTerminal && !showBillingUndoAction) return null;
 
   function setActionPending(action: PendingAction | null) {
     pendingActionRef.current = action;
@@ -174,7 +235,56 @@ function AppointmentActionsInner({
     setInvoiceDraft(payload);
     setInvoiceDraftKey((key) => key + 1);
     setOptimisticStatus(targetStatus);
+    setCtx(null);
     setBillingOpen(true);
+  }
+
+  function billingUndoReason(reason: BillingUndoEligibilityReason): string {
+    const key = {
+      eligible: "billingUndoUnavailableReason",
+      unauthorized: "billingUndoUnauthorizedReason",
+      appointment_not_found: "billingUndoAppointmentMissingReason",
+      not_completed: "billingUndoNotCompletedReason",
+      completion_event_missing: "billingUndoMissingEventReason",
+      completion_already_undone: "billingUndoAlreadyUndoneReason",
+      invalid_previous_status: "billingUndoInvalidPreviousStatusReason",
+      expired: "billingUndoExpiredReason",
+      activity_unavailable: "billingUndoUnavailableReason",
+    } as const;
+    return t(key[reason]);
+  }
+
+  async function runBillingUndo(payload?: BillingPayload) {
+    if (pendingActionRef.current) return;
+    setActionPending("undo");
+    setIsUndoing(true);
+
+    try {
+      const result = await undoInvoiceCompletion(appointmentId);
+      if (result.error || !result.targetStatus) {
+        if (result.eligibility) setUndoEligibility(result.eligibility);
+        toast.error(result.error ?? t("billingUndoUnavailableReason"));
+        return;
+      }
+
+      setOptimisticStatus(result.targetStatus);
+      setUndoEligibility(null);
+      if (payload) {
+        reopenInvoiceDraft(payload, result.targetStatus);
+      }
+      toast.success(t("billingCompletionUndone"));
+      onBillingChanged?.();
+      router.refresh();
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t("billingUndoUnavailableReason"),
+      );
+    } finally {
+      setIsUndoing(false);
+      setActionPending(null);
+    }
   }
 
   function doUndo(targetStatus: Status, fallbackStatus: Status) {
@@ -392,14 +502,6 @@ function AppointmentActionsInner({
 
   function runComplete(payload: BillingPayload) {
     if (pendingActionRef.current) return;
-    const prevStatus = effectiveStatus;
-    const undoTarget: InvoiceUndoStatus =
-      prevStatus === "pending" ||
-      prevStatus === "confirmed" ||
-      prevStatus === "arrived" ||
-      prevStatus === "in_session"
-        ? prevStatus
-        : "confirmed";
     setInvoiceDraft(payload);
     setActionPending("complete");
     setIsCompleting(true);
@@ -415,21 +517,11 @@ function AppointmentActionsInner({
           duration: 10000,
           action: {
             label: t("undo"),
-            onClick: async () => {
-              if (pendingActionRef.current) return;
-              setActionPending("undo");
-              reopenInvoiceDraft(payload, undoTarget);
-              const undo = await undoInvoiceCompletion(appointmentId, undoTarget);
-              if (undo.error) {
-                toast.error(undo.error);
-                setOptimisticStatus("completed");
-                setActionPending(null);
-                return;
-              }
-              setActionPending(null);
-            },
+            onClick: () => void runBillingUndo(payload),
           },
         });
+        onBillingChanged?.();
+        router.refresh();
         resetBillingState();
       }
     });
@@ -456,6 +548,20 @@ function AppointmentActionsInner({
     !!doctorId &&
     !!scheduledAt &&
     new Date(scheduledAt) > new Date();
+  const checkingBillingUndo =
+    showBillingUndoAction &&
+    (loadingUndoEligibility || undoEligibility === null);
+  const billingUndoDisabled =
+    checkingBillingUndo ||
+    !undoEligibility?.canUndo ||
+    hasPendingAction ||
+    isUndoing;
+  const billingUndoStatus =
+    checkingBillingUndo
+      ? t("checkingUndoEligibility")
+      : undoEligibility && !undoEligibility.canUndo
+        ? billingUndoReason(undoEligibility.reason)
+        : null;
 
   if (
     !showConfirm &&
@@ -464,7 +570,8 @@ function AppointmentActionsInner({
     !showCancel &&
     !showNoShow &&
     !showStartSession &&
-    !showReplace
+    !showReplace &&
+    !showBillingUndoAction
   ) {
     return null;
   }
@@ -472,6 +579,44 @@ function AppointmentActionsInner({
   return (
     <>
       <div className="flex flex-wrap items-center gap-1">
+        {showBillingUndoAction && (
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 gap-1.5 px-2 text-[11px] font-semibold"
+              disabled={billingUndoDisabled}
+              onClick={() => void runBillingUndo()}
+              title={billingUndoStatus ?? t("undoBillingCompletion")}
+              aria-describedby={
+                billingUndoStatus
+                  ? `billing-undo-reason-${appointmentId}`
+                  : undefined
+              }
+            >
+              {isUndoing ? (
+                <Loader2 className="size-3 animate-spin" aria-hidden="true" />
+              ) : (
+                <Undo2
+                  className="size-3 rtl:-scale-x-100"
+                  aria-hidden="true"
+                />
+              )}
+              {isUndoing
+                ? t("undoingBillingCompletion")
+                : t("undoBillingCompletion")}
+            </Button>
+            {billingUndoStatus && (
+              <span
+                id={`billing-undo-reason-${appointmentId}`}
+                className="text-[11px] text-muted-foreground"
+                role="status"
+              >
+                {billingUndoStatus}
+              </span>
+            )}
+          </div>
+        )}
         {showConfirm && (
           <Button
             size="sm"

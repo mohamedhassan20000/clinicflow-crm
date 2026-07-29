@@ -6,6 +6,7 @@ import { formatTime, formatSlotTime } from "@/lib/format-time";
 import {
   DEFAULT_CLINIC_LOCALE,
   formatClinicCurrency,
+  formatClinicCalendarDate,
   formatClinicDate,
   formatClinicDateTime,
   formatClinicNumber,
@@ -29,6 +30,7 @@ interface ClinicSettingsContextValue {
     options?: Intl.NumberFormatOptions,
   ) => string;
   formatDate: (value: Date | string | number, options?: Intl.DateTimeFormatOptions) => string;
+  formatCalendarDate: (dateIso: string, options?: Intl.DateTimeFormatOptions) => string;
   formatDateTime: (value: Date | string | number, options?: Intl.DateTimeFormatOptions) => string;
 }
 
@@ -44,6 +46,8 @@ const ClinicSettingsContext = createContext<ClinicSettingsContextValue>({
   formatCurrency: (n, options) =>
     formatClinicCurrency(n, DEFAULT_CLINIC_LOCALE, options),
   formatDate: (value, options) => formatClinicDate(value, DEFAULT_CLINIC_LOCALE, options),
+  formatCalendarDate: (dateIso, options) =>
+    formatClinicCalendarDate(dateIso, DEFAULT_CLINIC_LOCALE, options),
   formatDateTime: (value, options) => formatClinicDateTime(value, DEFAULT_CLINIC_LOCALE, options),
 });
 
@@ -78,6 +82,8 @@ export function ClinicSettingsProvider({
         formatCurrency: (n, options) =>
           composeDisplayMoney(n, resolvedLocale, preferredCurrency, fxRates, options),
         formatDate: (value, options) => formatClinicDate(value, resolvedLocale, options),
+        formatCalendarDate: (dateIso, options) =>
+          formatClinicCalendarDate(dateIso, resolvedLocale, options),
         formatDateTime: (value, options) => formatClinicDateTime(value, resolvedLocale, options),
       }}
     >

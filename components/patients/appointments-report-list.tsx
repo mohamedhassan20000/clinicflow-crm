@@ -104,18 +104,23 @@ export function AppointmentsReportList({ appointments, settlementsByAppt }: Prop
               <TableHead>{t("department")}</TableHead>
               <TableHead>{t("status")}</TableHead>
               <TableHead className="text-end">{t("total")}</TableHead>
-              <TableHead className="text-end">{t("paid")}</TableHead>
-              <TableHead className="text-end">{t("outstanding")}</TableHead>
+              <TableHead className="text-end">{t("insuranceContribution")}</TableHead>
+              <TableHead className="text-end">{t("patientResponsibility")}</TableHead>
+              <TableHead className="text-end">{t("totalPatientPaid")}</TableHead>
+              <TableHead className="text-end">{t("remainingPatientBalance")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {appointments.map((a) => {
               const packageLine = formatPackagePrintLine(a);
-              const paid =
+              const patientPaid =
                 (a.paid_amount ?? 0) +
-                (a.insurance_amount ?? 0) +
                 (a.secondary_amount ?? 0) +
                 (a.deposit_amount ?? 0);
+              const insurance = a.insurance_amount ?? 0;
+              const patientResponsibility =
+                a.patient_responsibility ??
+                Math.max(0, (a.total_amount ?? 0) - insurance);
 
               return (
                 <TableRow key={a.id}>
@@ -145,7 +150,11 @@ export function AppointmentsReportList({ appointments, settlementsByAppt }: Prop
                     {a.status.replace("_", " ")}
                   </TableCell>
                   <TableCell style={moneyCellStyle}>{fmtMoney(a.total_amount ?? 0)}</TableCell>
-                  <TableCell style={moneyCellStyle}>{fmtMoney(paid)}</TableCell>
+                  <TableCell style={moneyCellStyle}>{fmtMoney(insurance)}</TableCell>
+                  <TableCell style={moneyCellStyle}>
+                    {fmtMoney(patientResponsibility)}
+                  </TableCell>
+                  <TableCell style={moneyCellStyle}>{fmtMoney(patientPaid)}</TableCell>
                   <TableCell style={moneyCellStyle}>
                     {fmtMoney(a.outstanding_amount ?? 0)}
                   </TableCell>

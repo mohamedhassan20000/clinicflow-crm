@@ -13,7 +13,6 @@ import {
   type AppointmentForDetail,
 } from "@/components/appointments/appointment-detail-dialog";
 import type { ClinicWorkingHoursValues } from "@/lib/validations/settings";
-import { isDayClosed } from "@/lib/calendar-utils";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
 import { HourAppointmentsDialog } from "@/components/appointments/hour-appointments-dialog";
 import { DeleteConfirmDialog } from "@/components/appointments/delete-confirm-dialog";
@@ -28,6 +27,12 @@ import {
   useCalendarNow,
 } from "@/components/appointments/calendar-visuals";
 import { useTranslations } from "next-intl";
+import {
+  addCalendarDays,
+  calendarDateKey,
+  calendarDayOfWeek,
+  toCalendarEventPlacement,
+} from "@/lib/appointments/calendar";
 
 type Appointment = AppointmentForDetail;
 
@@ -35,16 +40,19 @@ type Appointment = AppointmentForDetail;
 const BUCKET_H_PX = 420; // fixed height per hour row — fits 3 full compact cards
 const CARD_H_PX   = 110; // compact card: name + badge + time + doctor + dept
 
-// Returns the appointment's start time in minutes since midnight (Istanbul).
-function apptStartMin(appt: Appointment): number {
-  return minutesInClinicTimeZone(new Date(appt.scheduled_at));
+// Returns the appointment's start time in clinic-local minutes since midnight.
+function apptStartMin(appt: Appointment, timeZone: string): number {
+  return toCalendarEventPlacement(appt, timeZone).startMinutes;
 }
 
 // Groups appointments by hour bucket (floor to nearest hour).
-function groupByHourBucket(appts: Appointment[]): Map<number, Appointment[]> {
+function groupByHourBucket(
+  appts: Appointment[],
+  timeZone: string,
+): Map<number, Appointment[]> {
   const groups = new Map<number, Appointment[]>();
   for (const appt of appts) {
-    const startMin = apptStartMin(appt);
+    const startMin = apptStartMin(appt, timeZone);
     const bucket = Math.floor(startMin / 60) * 60;
     const existing = groups.get(bucket) ?? [];
     existing.push(appt);
@@ -63,38 +71,12 @@ function groupByHourBucket(appts: Appointment[]): Map<number, Appointment[]> {
 
 interface WeekCalendarProps {
   appointments: Appointment[];
-  weekStart: Date;
+  weekStart: string;
   canEdit: boolean;
   currentUserId?: string;
   currentUserRole?: "admin" | "receptionist" | "manager" | "doctor" | "assistant";
   clinicHours?: ClinicWorkingHoursValues;
   newAppointmentHref?: string;
-}
-
-function addDays(date: Date, days: number) {
-  const d = new Date(date);
-  d.setDate(d.getDate() + days);
-  return d;
-}
-
-function isSameDay(a: Date, b: Date) {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  );
-}
-
-function localDateKey(date: Date) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
-const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-function dayIndexToDow(i: number, weekStart: number): number {
-  return (weekStart + i) % 7;
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -109,21 +91,22 @@ export function WeekCalendar({
   newAppointmentHref = "/appointments/new",
 }: WeekCalendarProps) {
   const t = useTranslations("appointments");
-  const { formatSlotTime, formatDate, weekStart: configuredWeekStart } = useClinicSettings();
+  const {
+    formatSlotTime,
+    formatCalendarDate,
+    locale,
+  } = useClinicSettings();
   const allDays = Array.from({ length: 7 }, (_, i) => ({
-    day: addDays(weekStart, i),
+    day: addCalendarDays(weekStart, i),
     originalIndex: i,
   }));
-  // Hide closed days from the week view (month view is unaffected)
-  const visibleDays = allDays.filter(({ originalIndex }) => {
-    const dow = dayIndexToDow(originalIndex, configuredWeekStart);
-    return !isDayClosed(clinicHours, dow);
-  });
-  // Fall back to showing all 7 if no clinic hours are configured
-  const displayDays = visibleDays.length > 0 ? visibleDays : allDays;
+  // Closed-day bands remain visible, but persisted appointments must never be
+  // hidden merely because working-hours configuration later changed.
+  const displayDays = allDays;
   const colCount = displayDays.length;
   const today = useCalendarNow();
-  const nowMin = minutesInClinicTimeZone(today);
+  const todayKey = calendarDateKey(today, locale.timeZone);
+  const nowMin = minutesInClinicTimeZone(today, locale.timeZone);
 
   const appointmentsByDate = useMemo(() => {
     const grouped = new Map<string, Appointment[]>();
@@ -133,13 +116,16 @@ export function WeekCalendar({
         new Date(b.scheduled_at).getTime(),
     );
     for (const appointment of sorted) {
-      const key = localDateKey(new Date(appointment.scheduled_at));
+      const key = toCalendarEventPlacement(
+        appointment,
+        locale.timeZone,
+      ).date;
       const dayAppointments = grouped.get(key) ?? [];
       dayAppointments.push(appointment);
       grouped.set(key, dayAppointments);
     }
     return grouped;
-  }, [appointments]);
+  }, [appointments, locale.timeZone]);
 
   const bounds = getCalendarGridBounds(clinicHours);
   const { startMin, endMin } = bounds;
@@ -148,14 +134,8 @@ export function WeekCalendar({
   const hourRows: number[] = [];
   for (let m = startMin; m < endMin; m += 60) hourRows.push(m);
 
-  const prevWeek = addDays(weekStart, -7);
-  const nextWeek = addDays(weekStart, 7);
-  const fmt = (d: Date) => {
-    const y = d.getFullYear();
-    const mo = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return `${y}-${mo}-${day}`;
-  };
+  const prevWeek = addCalendarDays(weekStart, -7);
+  const nextWeek = addCalendarDays(weekStart, 7);
 
   return (
     <div className="space-y-4" data-calendar-view="week">
@@ -163,19 +143,19 @@ export function WeekCalendar({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <Button asChild variant="outline" size="sm" className="h-8 w-8 p-0">
-            <Link href={`/appointments?week=${fmt(prevWeek)}`} aria-label={t("previousWeek")}>
+            <Link href={`/appointments?week=${prevWeek}`} aria-label={t("previousWeek")}>
               <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
             </Link>
           </Button>
           <span className="min-w-0 text-sm font-medium">
-            {formatDate(weekStart, { day: "numeric", month: "short" })}{" "}
+            {formatCalendarDate(weekStart, { day: "numeric", month: "short" })}{" "}
             —{" "}
-            {formatDate(addDays(weekStart, 6), {
+            {formatCalendarDate(addCalendarDays(weekStart, 6), {
               day: "numeric", month: "short", year: "numeric",
             })}
           </span>
           <Button asChild variant="outline" size="sm" className="h-8 w-8 p-0">
-            <Link href={`/appointments?week=${fmt(nextWeek)}`} aria-label={t("nextWeek")}>
+            <Link href={`/appointments?week=${nextWeek}`} aria-label={t("nextWeek")}>
               <ChevronRight className="h-4 w-4 rtl:rotate-180" />
             </Link>
           </Button>
@@ -218,15 +198,18 @@ export function WeekCalendar({
           >
             {displayDays.map(({ day, originalIndex }) => {
               const i = originalIndex;
-              const isToday = isSameDay(day, today);
-              const dayAppts = appointmentsByDate.get(localDateKey(day)) ?? [];
-              const dow = dayIndexToDow(i, configuredWeekStart);
+              const isToday = day === todayKey;
+              const dayAppts = appointmentsByDate.get(day) ?? [];
+              const dow = calendarDayOfWeek(day);
               const nonWorkingBands = getCalendarNonWorkingBands(
                 clinicHours,
                 dow,
                 bounds,
               );
-              const hourBuckets = groupByHourBucket(dayAppts);
+              const hourBuckets = groupByHourBucket(
+                dayAppts,
+                locale.timeZone,
+              );
               // Current-time indicator: only on today's column, only if now is
               // within the visible grid range.
               const showNowLine = isToday && nowMin >= startMin && nowMin <= endMin;
@@ -252,8 +235,10 @@ export function WeekCalendar({
                         : CALENDAR_STYLES.dayHeader
                     } gap-1`}
                   >
-                    <span className={isToday ? "" : CALENDAR_STYLES.secondaryLabel}>{DAY_NAMES[dow]}</span>
-                    <span>{day.getDate()}</span>
+                    <span className={isToday ? "" : CALENDAR_STYLES.secondaryLabel}>
+                      {formatCalendarDate(day, { weekday: "short" })}
+                    </span>
+                    <span>{Number(day.slice(8, 10))}</span>
                   </div>
 
                   <CalendarNonWorkingBands
@@ -429,6 +414,7 @@ export function AppointmentCard({
         tabIndex={0}
         aria-pressed={detailOpen}
         data-calendar-event
+        data-appointment-id={appt.id}
         onClick={() => setDetailOpen(true)}
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setDetailOpen(true); }}
         className="group relative h-full w-full cursor-pointer overflow-hidden rounded-md border text-xs transition-[filter,box-shadow] hover:brightness-[1.04] hover:ring-1 hover:ring-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary aria-pressed:ring-2 aria-pressed:ring-primary"

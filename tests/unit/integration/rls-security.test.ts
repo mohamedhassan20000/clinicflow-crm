@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Database } from "@/types/database";
+import { CALENDAR_APPOINTMENT_SELECT } from "@/lib/appointments/calendar";
 
 const LOCAL_SUPABASE_URL =
   process.env.LOCAL_SUPABASE_URL ?? "http://127.0.0.1:54321";
@@ -621,6 +622,47 @@ describe("RLS security integration", () => {
 
     expect(error).toBeNull();
     expect(data).toEqual([{ id: ids.allowedAppointment }]);
+  });
+
+  it("returns the exact calendar rows for admin, manager, receptionist, and doctor scopes", async () => {
+    const queryCalendar = (db: DbClient, doctorId?: string) => {
+      let query = db
+        .from("appointments")
+        .select(CALENDAR_APPOINTMENT_SELECT)
+        .eq("clinic_id", ids.clinic)
+        .is("deleted_at", null)
+        .gte("scheduled_at", "2099-05-01T00:00:00.000Z")
+        .lt("scheduled_at", "2099-05-02T00:00:00.000Z")
+        .order("scheduled_at");
+      if (doctorId) query = query.eq("doctor_id", doctorId);
+      return query;
+    };
+
+    const [admin, manager, receptionist, doctor] = await Promise.all([
+      queryCalendar(clients.admin),
+      queryCalendar(clients.manager),
+      queryCalendar(clients.receptionist),
+      queryCalendar(clients.doctor, userIds.doctor),
+    ]);
+
+    for (const result of [admin, manager, receptionist, doctor]) {
+      expect(result.error).toBeNull();
+    }
+    expect(admin.data?.map((row) => row.id)).toEqual([
+      ids.allowedAppointment,
+      ids.unrelatedAppointment,
+    ]);
+    expect(manager.data?.map((row) => row.id)).toEqual([
+      ids.allowedAppointment,
+      ids.unrelatedAppointment,
+    ]);
+    expect(receptionist.data?.map((row) => row.id)).toEqual([
+      ids.allowedAppointment,
+      ids.unrelatedAppointment,
+    ]);
+    expect(doctor.data?.map((row) => row.id)).toEqual([
+      ids.allowedAppointment,
+    ]);
   });
 
   it("blocks direct doctor reads of finance rows", async () => {

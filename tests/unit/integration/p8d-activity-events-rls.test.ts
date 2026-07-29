@@ -94,7 +94,7 @@ async function eventsFor(client: Client, entityId: string) {
   for (let attempt = 0; attempt < 5; attempt++) {
     const { data } = await client
       .from("activity_events")
-      .select("action, actor_id, actor_role, is_system, entity_type, doctor_id, patient_id, occurred_at")
+      .select("id, action, actor_id, actor_role, is_system, entity_type, doctor_id, patient_id, occurred_at, previous_state, new_state, metadata")
       .eq("entity_id", entityId)
       .order("occurred_at", { ascending: true });
     if (data && data.length > 0) return data;
@@ -193,6 +193,65 @@ describe("write boundary — semantic events, real human actor", () => {
       expect(e.doctor_id).toBe(docA1Id);
       expect(e.patient_id).toBe(patientA1);
     }
+
+    await service.from("appointments").delete().eq("id", apptId);
+  });
+
+  it("records status undo as a reversal linked to the original action", async () => {
+    const apptId = randomUUID();
+    const insert = await admin.from("appointments").insert({
+      id: apptId,
+      clinic_id: clinicA,
+      patient_id: patientA1,
+      doctor_id: docA1Id,
+      scheduled_at: future(4.5),
+      duration_minutes: 30,
+      created_by: adminId,
+      status: "pending",
+    });
+    expect(insert.error).toBeNull();
+
+    const confirm = await admin
+      .from("appointments")
+      .update({ status: "confirmed" })
+      .eq("id", apptId);
+    expect(confirm.error).toBeNull();
+
+    const undo = await admin.rpc("undo_appointment_status", {
+      p_appointment_id: apptId,
+      p_target_status: "pending",
+    });
+    expect(undo.error).toBeNull();
+
+    const events = await eventsFor(service as unknown as Client, apptId);
+    expect(events.map((event) => event.action)).toEqual([
+      "appointment.created",
+      "appointment.confirmed",
+      "appointment.confirmation_undone",
+    ]);
+
+    const confirmed = events.find(
+      (event) => event.action === "appointment.confirmed",
+    );
+    const reversed = events.find(
+      (event) => event.action === "appointment.confirmation_undone",
+    );
+    expect(reversed).toMatchObject({
+      actor_id: adminId,
+      actor_role: "admin",
+      is_system: false,
+      previous_state: expect.objectContaining({ status: "confirmed" }),
+      new_state: expect.objectContaining({ status: "pending" }),
+      metadata: expect.objectContaining({
+        operation: "undo",
+        original_action: "appointment.confirmed",
+        original_event_id: confirmed?.id,
+        target_status: "pending",
+      }),
+    });
+    expect(events.some((event) => event.action === "appointment.deleted")).toBe(
+      false,
+    );
 
     await service.from("appointments").delete().eq("id", apptId);
   });

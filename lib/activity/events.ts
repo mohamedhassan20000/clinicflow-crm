@@ -27,6 +27,14 @@ export const ACTIVITY_ACTIONS = [
   "appointment.restored",
   "appointment.updated",
   "appointment.deleted",
+  "appointment.confirmation_undone",
+  "appointment.check_in_undone",
+  "appointment.session_start_undone",
+  "appointment.billing_completion_undone",
+  "appointment.cancellation_undone",
+  "appointment.no_show_undone",
+  "appointment.replacement_undone",
+  "appointment.status_undone",
   // follow-ups
   "follow_up.recorded",
   "follow_up.outcome_changed",
@@ -53,6 +61,14 @@ const ACTION_TONE: Record<ActivityAction, ActivityTone> = {
   "appointment.restored": "neutral",
   "appointment.updated": "neutral",
   "appointment.deleted": "negative",
+  "appointment.confirmation_undone": "warning",
+  "appointment.check_in_undone": "warning",
+  "appointment.session_start_undone": "warning",
+  "appointment.billing_completion_undone": "warning",
+  "appointment.cancellation_undone": "warning",
+  "appointment.no_show_undone": "warning",
+  "appointment.replacement_undone": "warning",
+  "appointment.status_undone": "warning",
   "follow_up.recorded": "neutral",
   "follow_up.outcome_changed": "warning",
   "follow_up.updated": "neutral",
@@ -70,4 +86,19 @@ export function activityActionTone(action: string): ActivityTone {
  */
 export function activityActionMessageKey(action: string): string {
   return action.replace(/[._]([a-z])/g, (_match, char: string) => char.toUpperCase());
+}
+
+/** Returns the performed action referenced by an undo event's metadata. */
+export function activityOriginalAction(
+  metadata: unknown,
+): string | null {
+  if (
+    typeof metadata !== "object" ||
+    metadata === null ||
+    Array.isArray(metadata)
+  ) {
+    return null;
+  }
+  const action = (metadata as Record<string, unknown>).original_action;
+  return typeof action === "string" ? action : null;
 }

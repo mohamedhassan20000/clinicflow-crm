@@ -76,6 +76,17 @@ describe("WS5 appointment calendar readability", () => {
     }
   });
 
+  it("keeps persisted events renderable on dates now marked closed", () => {
+    const day = source("components/appointments/day-calendar.tsx");
+    const week = source("components/appointments/week-calendar.tsx");
+    const month = source("components/appointments/month-calendar.tsx");
+
+    expect(day).not.toContain("{closed ? (");
+    expect(week).not.toContain("allDays.filter");
+    expect(month).not.toContain("{!closed && (");
+    expect(month).toContain('data-calendar-non-working={closed ? "closed"');
+  });
+
   it("exposes a clear selected time-slot state in the create flow", () => {
     const form = source("components/appointments/appointment-form.tsx");
     expect(form).toContain("data-calendar-slot-selected");

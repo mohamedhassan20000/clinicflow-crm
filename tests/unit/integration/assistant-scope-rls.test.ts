@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Database } from "@/types/database";
+import { CALENDAR_APPOINTMENT_SELECT } from "@/lib/appointments/calendar";
 
 // Assistant data-scope isolation, run against live Postgres because the property
 // under test is a database property: an assistant may read exactly the UNION of
@@ -210,6 +211,30 @@ describe("assistant scope — single assigned doctor", () => {
     const { data, error } = await assistant.from("appointments").select("id, doctor_id");
     expect(error).toBeNull();
     expect((data ?? []).map((a) => a.id)).toEqual([apptA1]);
+  });
+
+  it("returns the assigned doctor's row through the exact calendar query", async () => {
+    const { data, error } = await assistant
+      .from("appointments")
+      .select(CALENDAR_APPOINTMENT_SELECT)
+      .eq("clinic_id", clinicA)
+      .is("deleted_at", null)
+      .gte("scheduled_at", RANGE.p_start)
+      .lt("scheduled_at", RANGE.p_end)
+      .order("scheduled_at");
+
+    expect(error).toBeNull();
+    expect((data ?? []).map((appointment) => ({
+      id: appointment.id,
+      doctor_id: appointment.doctor_id,
+      status: appointment.status,
+    }))).toEqual([
+      {
+        id: apptA1,
+        doctor_id: docA1Id,
+        status: "cancelled",
+      },
+    ]);
   });
 
   it("scopes the cancellation report to the assigned doctor only", async () => {

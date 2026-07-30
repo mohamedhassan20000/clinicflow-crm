@@ -73,6 +73,8 @@ export type RevenueSummaryReportResponse = {
   depositTotal: number;
   outstandingTotal: number;
   settlementsTotal: number;
+  /** Direct patient funds only; explicitly excludes insurance coverage. */
+  patientCollectedTotal: number;
   grossTotal: number;
   transactionCount: number;
   settlementCount: number;
@@ -92,6 +94,8 @@ export type MyRevenueSummaryReportResponse = {
   insuranceTotal: number;
   depositTotal: number;
   outstandingTotal: number;
+  /** Direct patient funds only; explicitly excludes insurance coverage. */
+  patientCollectedTotal: number;
   grossTotal: number;
   transactionCount: number;
   methodBreakdown: RevenueMethodBreakdown[];

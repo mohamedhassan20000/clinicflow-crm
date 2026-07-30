@@ -68,6 +68,7 @@ export async function getActivityTimeline(
       "id, action, entity_type, entity_id, actor_id, actor_role, is_system, occurred_at, previous_state, new_state, metadata, actor:profiles!activity_events_actor_id_fkey(full_name, role)",
     )
     .order("occurred_at", { ascending: false })
+    .order("id", { ascending: false })
     .limit(limit + 1);
 
   if (params.entityType) query = query.eq("entity_type", params.entityType);

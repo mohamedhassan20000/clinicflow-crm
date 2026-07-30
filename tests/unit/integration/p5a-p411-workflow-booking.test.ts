@@ -1,10 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AuthedUser } from "@/lib/rbac";
 import type { Database, Json } from "@/types/database";
 
 const url = process.env.LOCAL_SUPABASE_URL ?? "http://127.0.0.1:54321";
+const clinicTimeZone = "Asia/Kuwait";
+const DAY_MS = 86_400_000;
+const testStartedAt = Date.now();
+
 function required(name: string) {
   const value = process.env[name];
   if (!value) throw new Error(`${name} is required for integration tests`);
@@ -32,6 +37,27 @@ const userIds = [adminId, doctorId];
 let admin: Client;
 let adminUser: AuthedUser;
 let createPendingWorkflowBooking: CreatePendingWorkflowBooking;
+
+function futureClinicSlot(dayOffset: number, time = "12:00") {
+  const futureDate = new Date(testStartedAt + dayOffset * DAY_MS);
+  const clinicDate = formatInTimeZone(
+    futureDate,
+    clinicTimeZone,
+    "yyyy-MM-dd",
+  );
+  return fromZonedTime(
+    `${clinicDate}T${time}:00`,
+    clinicTimeZone,
+  ).toISOString();
+}
+
+const bookingSlots = {
+  confirmed: futureClinicSlot(30),
+  directForgery: futureClinicSlot(31),
+  unconfirmed: futureClinicSlot(32),
+  patientCap: futureClinicSlot(33),
+  sharedSlotCap: futureClinicSlot(34),
+};
 
 function bookingPlan(stepId: string) {
   return {
@@ -179,7 +205,7 @@ beforeAll(async () => {
   const clinic = await service.from("clinics").insert({
     id: clinicId,
     name: `P5A P4.11 Clinic ${suffix}`,
-    timezone: "Asia/Kuwait",
+    timezone: clinicTimeZone,
     ai_pending_slot_cap: 2,
     ai_pending_booking_ttl_minutes: 1440,
   });
@@ -191,7 +217,7 @@ beforeAll(async () => {
     clinic_id: clinicId,
     plan_id: plan.data.id,
     status: "trialing",
-    trial_ends_at: "2040-01-01T00:00:00Z",
+    trial_ends_at: new Date(testStartedAt + 365 * DAY_MS).toISOString(),
   });
   if (subscription.error) throw subscription.error;
 
@@ -210,6 +236,29 @@ beforeAll(async () => {
     },
   ]);
   if (profiles.error) throw profiles.error;
+
+  const [clinicHours, doctorSchedules] = await Promise.all([
+    service.from("clinic_working_hours").insert(
+      Array.from({ length: 7 }, (_, dayOfWeek) => ({
+        clinic_id: clinicId,
+        day_of_week: dayOfWeek,
+        shift_start: "08:00",
+        shift_end: "18:00",
+      })),
+    ),
+    service.from("doctor_schedules").insert(
+      Array.from({ length: 7 }, (_, dayOfWeek) => ({
+        clinic_id: clinicId,
+        doctor_id: doctorId,
+        day_of_week: dayOfWeek,
+        start_time: "08:00",
+        end_time: "18:00",
+        is_enabled: true,
+      })),
+    ),
+  ]);
+  if (clinicHours.error) throw clinicHours.error;
+  if (doctorSchedules.error) throw doctorSchedules.error;
 
   const patients = await service.from("patients").insert(
     patientIds.map((id, index) => ({
@@ -257,7 +306,7 @@ describe("P5A regression: authenticated P4.11 confirmed workflow booking", () =>
     const runId = await createConfirmedBookingRun(stepId);
     const created = await workflowBooking(
       patientIds[0]!,
-      "2035-08-01T09:00:00.000Z",
+      bookingSlots.confirmed,
       runId,
       stepId,
     );
@@ -286,7 +335,7 @@ describe("P5A regression: authenticated P4.11 confirmed workflow booking", () =>
 
     const replay = await workflowBooking(
       patientIds[0]!,
-      "2035-08-01T09:00:00.000Z",
+      bookingSlots.confirmed,
       runId,
       stepId,
     );
@@ -312,7 +361,7 @@ describe("P5A regression: authenticated P4.11 confirmed workflow booking", () =>
       clinic_id: clinicId,
       patient_id: patientIds[3]!,
       doctor_id: doctorId,
-      scheduled_at: "2035-08-03T09:00:00.000Z",
+      scheduled_at: bookingSlots.directForgery,
       duration_minutes: 30,
       status: "pending",
       created_by: adminId,
@@ -329,7 +378,7 @@ describe("P5A regression: authenticated P4.11 confirmed workflow booking", () =>
     const runId = await createUnconfirmedBookingRun(stepId);
     const result = await workflowBooking(
       patientIds[3]!,
-      "2035-08-04T10:00:00.000Z",
+      bookingSlots.unconfirmed,
       runId,
       stepId,
     );
@@ -348,7 +397,7 @@ describe("P5A regression: authenticated P4.11 confirmed workflow booking", () =>
     const secondRun = await createConfirmedBookingRun(secondStep);
     const workflowAttempt = await workflowBooking(
       patientIds[0]!,
-      "2035-08-04T09:00:00.000Z",
+      bookingSlots.patientCap,
       secondRun,
       secondStep,
     );
@@ -361,7 +410,7 @@ describe("P5A regression: authenticated P4.11 confirmed workflow booking", () =>
       p_clinic_id: clinicId,
       p_conversation_id: conversationIds[0]!,
       p_doctor_id: doctorId,
-      p_scheduled_at: "2035-08-04T09:00:00.000Z",
+      p_scheduled_at: bookingSlots.patientCap,
       p_duration_minutes: 30,
     });
 
@@ -369,7 +418,7 @@ describe("P5A regression: authenticated P4.11 confirmed workflow booking", () =>
   });
 
   it("shares the configured per-slot cap across workflow and patient origins", async () => {
-    const scheduledAt = "2035-08-05T09:00:00.000Z";
+    const scheduledAt = bookingSlots.sharedSlotCap;
     const firstStep = "slot_workflow_first";
     const firstRun = await createConfirmedBookingRun(firstStep);
     const first = await workflowBooking(

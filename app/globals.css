@@ -421,6 +421,35 @@ html[lang="ar"] .marketing-pricing-card {
   .no-scrollbar::-webkit-scrollbar {
     display: none;
   }
+
+  /*
+    Keep the billing form's scroll affordance visible even on platforms whose
+    native overlay scrollbars otherwise disappear until scrolling begins.
+  */
+  .billing-dialog-scrollbar {
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+    scrollbar-gutter: stable;
+    scrollbar-width: auto;
+  }
+
+  .billing-dialog-scrollbar::-webkit-scrollbar {
+    width: 12px;
+  }
+
+  .billing-dialog-scrollbar::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+  }
+
+  .billing-dialog-scrollbar::-webkit-scrollbar-thumb {
+    min-height: 32px;
+    border: 3px solid var(--scrollbar-track);
+    border-radius: 999px;
+    background: var(--scrollbar-thumb);
+  }
+
+  .billing-dialog-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
+  }
 }
 
 .calendar-non-working-band {

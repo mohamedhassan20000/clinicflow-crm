@@ -3,6 +3,11 @@ import { createClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import type { Database } from "@/types/database";
+import {
+  CALENDAR_APPOINTMENT_SELECT,
+  getAppointmentCalendarRange,
+  toCalendarEventPlacement,
+} from "@/lib/appointments/calendar";
 
 const LOCAL_SUPABASE_URL =
   process.env.LOCAL_SUPABASE_URL ?? "http://127.0.0.1:54321";
@@ -13,6 +18,9 @@ function requireTestEnv(name: string): string {
 }
 
 const LOCAL_SUPABASE_SECRET_KEY = requireTestEnv("LOCAL_SUPABASE_SECRET_KEY");
+const LOCAL_SUPABASE_PUBLISHABLE_KEY = requireTestEnv(
+  "LOCAL_SUPABASE_PUBLISHABLE_KEY",
+);
 
 const suffix = `e2e-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 const password = "SmokeTest12345";
@@ -38,9 +46,12 @@ const ids = {
   emptyReceptionist: "",
   billingPatient: randomUUID(),
   settlementPatient: randomUUID(),
+  billingOriginalAppointment: randomUUID(),
   billingAppointment: randomUUID(),
   settlementAppointment: randomUUID(),
   calendarAppointment: randomUUID(),
+  calendarTodayRegression: randomUUID(),
+  calendarOtherDateRegression: randomUUID(),
   service: randomUUID(),
 };
 
@@ -60,6 +71,17 @@ const service = createClient<Database>(
   LOCAL_SUPABASE_SECRET_KEY,
   { auth: { autoRefreshToken: false, persistSession: false } },
 );
+
+async function authenticatedClient(email: string) {
+  const client = createClient<Database>(
+    LOCAL_SUPABASE_URL,
+    LOCAL_SUPABASE_PUBLISHABLE_KEY,
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  );
+  const { error } = await client.auth.signInWithPassword({ email, password });
+  if (error) throw error;
+  return client;
+}
 
 async function must<T>(
   result: PromiseLike<{ data: T | null; error: { message: string } | null }>,
@@ -96,9 +118,12 @@ async function cleanup() {
     ids.settlementPatient,
   ]);
   await service.from("appointments").delete().in("id", [
+    ids.billingOriginalAppointment,
     ids.billingAppointment,
     ids.settlementAppointment,
     ids.calendarAppointment,
+    ids.calendarTodayRegression,
+    ids.calendarOtherDateRegression,
   ]);
   await service.from("patients").delete().in("id", [
     ids.billingPatient,
@@ -243,6 +268,18 @@ async function seedSmokeData() {
   ]));
   await must(service.from("appointments").insert([
     {
+      id: ids.billingOriginalAppointment,
+      clinic_id: ids.clinic,
+      patient_id: ids.billingPatient,
+      doctor_id: ids.doctor,
+      department_id: ids.dept,
+      scheduled_at: `${day}T08:00:00.000+03:00`,
+      duration_minutes: 30,
+      status: "replaced",
+      created_by: ids.receptionist,
+      replaced_by_appointment_id: ids.billingAppointment,
+    },
+    {
       id: ids.billingAppointment,
       clinic_id: ids.clinic,
       patient_id: ids.billingPatient,
@@ -252,6 +289,8 @@ async function seedSmokeData() {
       duration_minutes: 30,
       status: "confirmed",
       created_by: ids.receptionist,
+      replaces_appointment_id: ids.billingOriginalAppointment,
+      original_appointment_id: ids.billingOriginalAppointment,
     },
     {
       id: ids.settlementAppointment,
@@ -1066,6 +1105,136 @@ test("forced password users are redirected to change-password", async ({ page })
   ).toBeVisible();
 });
 
+test("newly saved appointments remain in the exact authenticated calendar data path", async ({ page }) => {
+  const receptionist = await authenticatedClient(emails.receptionist);
+  const created = await receptionist
+    .from("appointments")
+    .insert([
+      {
+        id: ids.calendarTodayRegression,
+        clinic_id: ids.clinic,
+        patient_id: ids.billingPatient,
+        doctor_id: ids.doctor,
+        department_id: ids.dept,
+        scheduled_at: `${calendarDay}T15:30:00.000+03:00`,
+        duration_minutes: 30,
+        status: "pending",
+        created_by: ids.receptionist,
+      },
+      {
+        id: ids.calendarOtherDateRegression,
+        clinic_id: ids.clinic,
+        patient_id: ids.settlementPatient,
+        doctor_id: ids.doctor,
+        department_id: ids.dept,
+        scheduled_at: `${day}T16:00:00.000+03:00`,
+        duration_minutes: 30,
+        status: "confirmed",
+        created_by: ids.receptionist,
+      },
+    ])
+    .select(
+      "id, clinic_id, patient_id, doctor_id, scheduled_at, duration_minutes, status, deleted_at",
+    )
+    .order("scheduled_at");
+  expect(created.error).toBeNull();
+  expect(created.data?.map((appointment) => appointment.id)).toEqual([
+    ids.calendarTodayRegression,
+    ids.calendarOtherDateRegression,
+  ]);
+
+  const directRows = await service
+    .from("appointments")
+    .select(
+      "id, clinic_id, patient_id, doctor_id, scheduled_at, duration_minutes, status, deleted_at",
+    )
+    .in("id", [
+      ids.calendarTodayRegression,
+      ids.calendarOtherDateRegression,
+    ])
+    .order("scheduled_at");
+  expect(directRows.error).toBeNull();
+  expect(directRows.data).toHaveLength(2);
+
+  const todayRange = getAppointmentCalendarRange({
+    view: "day",
+    day: calendarDay,
+    timeZone: "Europe/Istanbul",
+    weekStartsOn: 1,
+  });
+  const otherDateRange = getAppointmentCalendarRange({
+    view: "day",
+    day,
+    timeZone: "Europe/Istanbul",
+    weekStartsOn: 1,
+  });
+  const calendarRows = await receptionist
+    .from("appointments")
+    .select(CALENDAR_APPOINTMENT_SELECT)
+    .eq("clinic_id", ids.clinic)
+    .is("deleted_at", null)
+    .gte("scheduled_at", todayRange.rangeStartIso)
+    .lt("scheduled_at", otherDateRange.rangeEndIso)
+    .in("id", [
+      ids.calendarTodayRegression,
+      ids.calendarOtherDateRegression,
+    ])
+    .order("scheduled_at");
+  expect(calendarRows.error).toBeNull();
+  expect(calendarRows.data?.map((appointment) => appointment.id)).toEqual([
+    ids.calendarTodayRegression,
+    ids.calendarOtherDateRegression,
+  ]);
+
+  const frontendEvents = (calendarRows.data ?? []).map((appointment) => ({
+    id: appointment.id,
+    ...toCalendarEventPlacement(appointment, "Europe/Istanbul"),
+    status: appointment.status,
+  }));
+  expect(frontendEvents).toEqual([
+    {
+      id: ids.calendarTodayRegression,
+      date: calendarDay,
+      startMinutes: 15 * 60 + 30,
+      endMinutes: 16 * 60,
+      status: "pending",
+    },
+    {
+      id: ids.calendarOtherDateRegression,
+      date: day,
+      startMinutes: 16 * 60,
+      endMinutes: 16 * 60 + 30,
+      status: "confirmed",
+    },
+  ]);
+
+  console.info(
+    "appointment_calendar_regression",
+    JSON.stringify({
+      directRows: directRows.data,
+      calendarQueryRows: calendarRows.data,
+      frontendEvents,
+    }),
+  );
+
+  await login(page, emails.receptionist);
+  await page.goto(`/appointments?view=day&date=${calendarDay}`);
+  const todayEvent = page.locator(
+    `[data-calendar-event][data-appointment-id="${ids.calendarTodayRegression}"]`,
+  );
+  await expect(todayEvent).toBeVisible();
+  await page.reload();
+  await expect(todayEvent).toBeVisible();
+
+  await page.goto("/dashboard");
+  await page.goto(`/appointments?view=day&date=${day}`);
+  await expect(
+    page.locator(
+      `[data-calendar-event][data-appointment-id="${ids.calendarOtherDateRegression}"]`,
+    ),
+  ).toBeVisible();
+});
+
 test("WS5 calendar readability is consistent across views, themes, and mobile", async ({ page }) => {
   await mkdir(WS5_SCREENSHOT_DIR, { recursive: true });
   await login(page, emails.receptionist);
@@ -1143,10 +1312,11 @@ test("WS5 calendar readability is consistent across views, themes, and mobile", 
   });
 });
 
-test("appointment billing dialog submits once and shows pending feedback", async ({ page }) => {
+test("appointment complete → undo → reopen keeps the detail dialog scrollable", async ({ page }) => {
   await login(page, emails.receptionist);
+  await page.setViewportSize({ width: 900, height: 560 });
   await page.goto(`/appointments?view=day&date=${day}`);
-  const appointment = page.getByText("Billing Smoke Patient");
+  const appointment = page.getByText("Billing Smoke Patient").last();
   await expect(appointment).toBeVisible();
   await appointment.click();
 
@@ -1166,6 +1336,122 @@ test("appointment billing dialog submits once and shows pending feedback", async
   await submit.click();
   await expect(submit).toBeDisabled();
   await expect(page.getByText(/appointment completed & charged/i)).toBeVisible();
+
+  const [completed, predecessor, lines] = await Promise.all([
+    service
+      .from("appointments")
+      .select(
+        "status, total_amount, paid_amount, outstanding_amount, replaces_appointment_id, original_appointment_id",
+      )
+      .eq("id", ids.billingAppointment)
+      .single(),
+    service
+      .from("appointments")
+      .select("status, replaced_by_appointment_id")
+      .eq("id", ids.billingOriginalAppointment)
+      .single(),
+    service
+      .from("appointment_services")
+      .select("name, price, quantity")
+      .eq("appointment_id", ids.billingAppointment),
+  ]);
+  expect(completed.error).toBeNull();
+  expect(completed.data).toMatchObject({
+    status: "completed",
+    total_amount: 50,
+    paid_amount: 50,
+    outstanding_amount: 0,
+    replaces_appointment_id: ids.billingOriginalAppointment,
+    original_appointment_id: ids.billingOriginalAppointment,
+  });
+  expect(predecessor.data).toEqual({
+    status: "replaced",
+    replaced_by_appointment_id: ids.billingAppointment,
+  });
+  expect(lines.data).toEqual([
+    { name: "Smoke E2E line", price: 50, quantity: 1 },
+  ]);
+
+  await expect(dialog).toBeHidden();
+  const detail = page.getByTestId("appointment-detail-dialog");
+  await expect(detail).toBeVisible();
+  await detail.getByRole("button", { name: /^close$/i }).click();
+  await expect(detail).toBeHidden();
+
+  await page.getByRole("button", { name: /^undo$/i }).click();
+  await expect
+    .poll(async () => {
+      const result = await service
+        .from("appointments")
+        .select("status")
+        .eq("id", ids.billingAppointment)
+        .single();
+      return result.data?.status;
+    })
+    .toBe("confirmed");
+
+  await page.setViewportSize({ width: 900, height: 420 });
+  await page.getByText("Billing Smoke Patient").last().click();
+  await expect(detail).toBeVisible();
+
+  const layout = await detail.evaluate((element) => {
+    const scroller = element.querySelector<HTMLElement>(
+      '[data-testid="appointment-detail-scroll-area"]',
+    );
+    const header = element.querySelector<HTMLElement>(
+      '[data-slot="dialog-header"]',
+    );
+    const footer = element.querySelector<HTMLElement>(
+      '[data-slot="dialog-footer"]',
+    );
+    if (!scroller || !header || !footer) {
+      throw new Error("Appointment dialog layout regions are missing");
+    }
+
+    const dialogRect = element.getBoundingClientRect();
+    const headerRect = header.getBoundingClientRect();
+    const footerRect = footer.getBoundingClientRect();
+    const dialogStyle = getComputedStyle(element);
+    const scrollStyle = getComputedStyle(scroller);
+
+    scroller.scrollTop = scroller.scrollHeight;
+
+    return {
+      viewportHeight: window.innerHeight,
+      dialogTop: dialogRect.top,
+      dialogBottom: dialogRect.bottom,
+      dialogHeight: dialogRect.height,
+      dialogDisplay: dialogStyle.display,
+      dialogFlexDirection: dialogStyle.flexDirection,
+      dialogOverflow: dialogStyle.overflow,
+      scrollOverflowY: scrollStyle.overflowY,
+      scrollMinHeight: scrollStyle.minHeight,
+      scrollFlexGrow: scrollStyle.flexGrow,
+      scrollTop: scroller.scrollTop,
+      scrollHeight: scroller.scrollHeight,
+      scrollClientHeight: scroller.clientHeight,
+      headerTop: headerRect.top,
+      footerBottom: footerRect.bottom,
+      bodyScrollLocked: document.body.hasAttribute("data-scroll-locked"),
+      bodyOverflow: getComputedStyle(document.body).overflow,
+    };
+  });
+
+  expect(layout.dialogTop).toBeGreaterThanOrEqual(0);
+  expect(layout.dialogBottom).toBeLessThanOrEqual(layout.viewportHeight);
+  expect(layout.dialogHeight).toBeLessThanOrEqual(layout.viewportHeight - 32);
+  expect(layout.dialogDisplay).toBe("flex");
+  expect(layout.dialogFlexDirection).toBe("column");
+  expect(layout.dialogOverflow).toBe("hidden");
+  expect(layout.scrollOverflowY).toBe("auto");
+  expect(layout.scrollMinHeight).toBe("0px");
+  expect(layout.scrollFlexGrow).toBe("1");
+  expect(layout.scrollHeight).toBeGreaterThan(layout.scrollClientHeight);
+  expect(layout.scrollTop).toBeGreaterThan(0);
+  expect(layout.headerTop).toBeGreaterThanOrEqual(layout.dialogTop);
+  expect(layout.footerBottom - layout.dialogBottom).toBeLessThanOrEqual(1);
+  expect(layout.bodyScrollLocked).toBe(true);
+  expect(layout.bodyOverflow).toBe("hidden");
 });
 
 test("settlement dialog validates totals and disables while submitting", async ({ page }) => {

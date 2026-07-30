@@ -38,12 +38,15 @@ export function timeStringToMinutes(value: string): number {
   return (hours ?? 0) * 60 + (minutes ?? 0);
 }
 
-export function minutesInClinicTimeZone(date = new Date()): number {
+export function minutesInClinicTimeZone(
+  date = new Date(),
+  timeZone = DEFAULT_TIME_ZONE,
+): number {
   return timeStringToMinutes(
     date.toLocaleTimeString("en-GB", {
       hour: "2-digit",
       minute: "2-digit",
-      timeZone: DEFAULT_TIME_ZONE,
+      timeZone,
     }),
   );
 }

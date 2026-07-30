@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { assertStaffToolAccess } from "@/lib/ai/authorization";
 import { logAgentTool } from "@/lib/ai/audit";
 import { AiToolAuthorizationError } from "@/lib/ai/errors";
-import { computeAvailableSlots } from "@/lib/booking/availability";
+import { computeAvailability } from "@/lib/booking/availability";
 import {
   ISO_DATE_RE,
   omitElapsedClinicSlots,
@@ -87,7 +87,7 @@ export function checkAvailabilityTool(ctx: DoctorToolContext) {
         }
       }
 
-      const slots = await computeAvailableSlots({
+      const availability = await computeAvailability({
         supabase,
         clinicId: ctx.user.clinicId,
         doctorId,
@@ -96,7 +96,7 @@ export function checkAvailabilityTool(ctx: DoctorToolContext) {
       });
       const available = omitElapsedClinicSlots(
         date,
-        slots.filter((s) => !s.disabled).map((s) => s.time),
+        availability.slots.filter((s) => !s.disabled).map((s) => s.time),
         timeZone,
       );
 
@@ -109,7 +109,13 @@ export function checkAvailabilityTool(ctx: DoctorToolContext) {
         params: { date, doctor_id: doctorId, service: service ?? null, count: available.length },
       });
 
-      return { date, doctor_id: doctorId, available_slots: available };
+      return {
+        date,
+        doctor_id: doctorId,
+        available_slots: available,
+        availability_reason: availability.reason,
+        working_hours: availability.workingHours,
+      };
     },
   });
 }

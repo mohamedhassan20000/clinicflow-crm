@@ -4,10 +4,10 @@ import { actionAppointmentStatus, actionError, actionWeekday } from "@/lib/i18n/
 import { localizeZodFieldErrors } from "@/lib/validations/server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { fromZonedTime, toZonedTime } from "date-fns-tz";
+import { formatInTimeZone, fromZonedTime, toZonedTime } from "date-fns-tz";
 import { createClinicScopedAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { requireMutationRole, requireRole } from "@/lib/rbac";
+import { requireMutationRole, requireRole, requireUser } from "@/lib/rbac";
 import {
   appointmentSchema,
   billingSchema,
@@ -24,6 +24,12 @@ import { notifyAppointmentEvent } from "@/lib/messaging/appointment-notification
 import { deliverIssuedInvoice } from "@/lib/messaging/invoice-delivery";
 import { getClinicWorkingHours } from "@/actions/settings";
 import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
+import { computeAvailability } from "@/lib/booking/availability";
+import {
+  computeBillingUndoEligibility,
+  type BillingUndoActivityEvent,
+  type BillingUndoEligibility,
+} from "@/lib/appointments/billing-undo";
 
 export type ActionResult = {
   error?: string;
@@ -41,6 +47,68 @@ type ValidatedAppointmentPackage = {
   packageId: string | null;
   packageSessionNumber: number | null;
 };
+
+type BillingRpcError = {
+  code?: string | null;
+  message: string;
+  details?: string | null;
+  hint?: string | null;
+};
+
+function logBillingRpcError({
+  appointmentId,
+  clinicId,
+  rpc,
+  error,
+  financialContext,
+}: {
+  appointmentId: string;
+  clinicId: string;
+  rpc: string;
+  error: BillingRpcError;
+  financialContext: Record<string, unknown>;
+}) {
+  const failure = new Error(
+    `Appointment billing transaction failed: ${error.message}`,
+    { cause: error },
+  );
+  console.error("appointment_billing_transaction_failed", {
+    appointmentId,
+    clinicId,
+    rpc,
+    code: error.code ?? null,
+    message: error.message,
+    details: error.details ?? null,
+    hint: error.hint ?? null,
+    financialContext,
+    stack: failure.stack,
+  });
+}
+
+function logBillingUndoRpcError({
+  appointmentId,
+  clinicId,
+  rpc,
+  error,
+  eligibility,
+}: {
+  appointmentId: string;
+  clinicId: string;
+  rpc: string;
+  error: BillingRpcError;
+  eligibility: BillingUndoEligibility;
+}) {
+  console.error("appointment_billing_undo_failed", {
+    appointmentId,
+    clinicId,
+    rpc,
+    code: error.code ?? null,
+    message: error.message,
+    details: error.details ?? null,
+    hint: error.hint ?? null,
+    eligibility,
+  });
+}
 
 function isPastScheduledAt(scheduledAt: string): boolean {
   const scheduledTime = new Date(scheduledAt).getTime();
@@ -186,6 +254,21 @@ async function validateAppointmentSlot(
   const supabase = await createClient();
   const startTime = new Date(values.scheduled_at);
   const endTime = new Date(startTime.getTime() + values.duration_minutes * 60_000);
+  const clinicDate = formatInTimeZone(startTime, timeZone, "yyyy-MM-dd");
+  const clinicTime = formatInTimeZone(startTime, timeZone, "HH:mm");
+  const availability = await computeAvailability({
+    supabase,
+    clinicId,
+    doctorId: values.doctor_id,
+    dateIso: clinicDate,
+    timeZone,
+    durationMinutes: values.duration_minutes,
+    excludeAppointmentId,
+  });
+  const selectedSlot = availability.slots.find(
+    (candidate) => candidate.time === clinicTime,
+  );
+
   const zonedStart = toZonedTime(startTime, timeZone);
   const dayStart = fromZonedTime(
     new Date(
@@ -253,6 +336,27 @@ async function validateAppointmentSlot(
           await actionError("appointments.thisDoctorNeedsA15MinuteRecoveryBufferWindowBetween"),
       };
     }
+  }
+
+  if (!selectedSlot || selectedSlot.disabled) {
+    const messageKey = {
+      no_schedule_configured: "appointments.doctorHasNoWorkingSchedule",
+      doctor_off_weekday: "appointments.doctorDoesNotWorkOnSelectedWeekday",
+      schedule_disabled: "appointments.doctorScheduleDisabled",
+      outside_schedule_range: "appointments.dateOutsideDoctorSchedule",
+      clinic_closed: "appointments.clinicClosedOnSelectedDate",
+      on_leave: "appointments.doctorOnLeave",
+      working_hours_passed: "appointments.doctorWorkingHoursPassed",
+      all_slots_booked: "appointments.allDoctorSlotsBooked",
+      all_slots_blocked: "appointments.allDoctorSlotsBlocked",
+      duration_unavailable: "appointments.durationDoesNotFitWorkingHours",
+      doctor_not_found: "appointments.failedToValidateDoctor",
+      doctor_required: "appointments.failedToValidateDoctor",
+      unable_to_calculate:
+        "appointments.couldNotVerifyTheDoctorSAvailabilityPleaseTryAgain",
+      available: "appointments.selectedTimeIsNotAvailable",
+    } as const;
+    return { error: await actionError(messageKey[availability.reason]) };
   }
 
   return {};
@@ -357,7 +461,12 @@ export async function createAppointment(
   }
 
   revalidatePath("/appointments");
-  redirect("/appointments");
+  const appointmentDate = formatInTimeZone(
+    parsed.data.scheduled_at,
+    clinicTimeZone,
+    "yyyy-MM-dd",
+  );
+  redirect(`/appointments?view=day&date=${appointmentDate}`);
 }
 
 /**
@@ -763,29 +872,88 @@ export async function updateAppointmentStatus(
       p_paid_amount: Number(billing.paid_amount.toFixed(2)),
       p_payment_method: billing.payment_method,
       p_insurance_amount: Number(billing.insurance_amount.toFixed(2)),
+      p_insurance_calculation_mode: billing.insurance_calculation_mode,
+      p_insurance_percentage: billing.insurance_percentage,
+      p_patient_responsibility: Number(
+        billing.patient_responsibility.toFixed(2),
+      ),
       p_secondary_amount: Number(billing.secondary_amount.toFixed(2)),
       p_secondary_payment_method:
-        billing.secondary_payment_method ?? undefined,
+        billing.secondary_payment_method ?? null,
       p_deposit_amount: Number(billing.deposit_amount.toFixed(2)),
-      p_payment_note: billing.payment_note ?? undefined,
+      p_payment_note: billing.payment_note ?? null,
     };
 
     const previousSettlementAmount = billing.previous_settlement_amount;
-    const { error } =
+    const billingRpc =
       previousSettlementAmount > 0
-        ? await supabase.rpc(
-            "complete_appointment_billing_with_previous_settlement",
-            {
-              ...baseBillingArgs,
-              p_previous_settlement_amount: previousSettlementAmount,
-              p_previous_payment_method:
-                billing.previous_payment_method ?? undefined,
-              p_previous_note: billing.previous_note ?? undefined,
-            },
-          )
-        : await supabase.rpc("complete_appointment_billing", baseBillingArgs);
+        ? "complete_appointment_billing_with_previous_settlement"
+        : "complete_appointment_billing";
+    const { error } =
+      billingRpc === "complete_appointment_billing_with_previous_settlement"
+        ? await supabase.rpc(billingRpc, {
+            ...baseBillingArgs,
+            p_previous_settlement_amount: previousSettlementAmount,
+            p_previous_payment_method:
+              billing.previous_payment_method ?? null,
+            p_previous_note: billing.previous_note ?? null,
+          })
+        : await supabase.rpc(billingRpc, baseBillingArgs);
 
-    if (error) return { error: await actionError("appointments.weCouldNotCompleteThisRequestPleaseTryAgain") };
+    if (error) {
+      logBillingRpcError({
+        appointmentId: id,
+        clinicId: user.clinicId,
+        rpc: billingRpc,
+        error,
+        financialContext: {
+          submitted: {
+            paidAmount: billingPayload.paid_amount,
+            insuranceAmount: billingPayload.insurance_amount,
+            insuranceCalculationMode:
+              billingPayload.insurance_calculation_mode,
+            insurancePercentage: billingPayload.insurance_percentage ?? null,
+            patientResponsibility: billingPayload.patient_responsibility,
+            secondaryAmount: billingPayload.secondary_amount,
+            depositAmount: billingPayload.deposit_amount,
+          },
+          normalized: {
+            invoiceTotal: total,
+            paidAmount: billing.paid_amount,
+            insuranceAmount: billing.insurance_amount,
+            insuranceCalculationMode: billing.insurance_calculation_mode,
+            insurancePercentage: billing.insurance_percentage,
+            patientResponsibility: billing.patient_responsibility,
+            secondaryAmount: billing.secondary_amount,
+            depositAmount: billing.deposit_amount,
+            grossAllocated: Number(collected.toFixed(2)),
+            outstandingAmount: Number(
+              Math.max(0, total - collected).toFixed(2),
+            ),
+          },
+          rpcArguments: {
+            p_paid_amount: baseBillingArgs.p_paid_amount,
+            p_payment_method: baseBillingArgs.p_payment_method,
+            p_insurance_amount: baseBillingArgs.p_insurance_amount,
+            p_insurance_calculation_mode:
+              baseBillingArgs.p_insurance_calculation_mode,
+            p_insurance_percentage:
+              baseBillingArgs.p_insurance_percentage,
+            p_patient_responsibility:
+              baseBillingArgs.p_patient_responsibility,
+            p_secondary_amount: baseBillingArgs.p_secondary_amount,
+            p_secondary_payment_method:
+              baseBillingArgs.p_secondary_payment_method,
+            p_deposit_amount: baseBillingArgs.p_deposit_amount,
+          },
+        },
+      });
+      return {
+        error: await actionError(
+          "appointments.weCouldNotCompleteThisRequestPleaseTryAgain",
+        ),
+      };
+    }
 
     // §7.3b: an invoice that completes with an outstanding balance enters the
     // dunning follow-up sequence (per-clinic configurable timing), advanced by
@@ -859,6 +1027,9 @@ export async function softDeleteAppointment(id: string): Promise<ActionResult> {
       total_amount: null,
       paid_amount: null,
       insurance_amount: null,
+      insurance_calculation_mode: "amount",
+      insurance_percentage: null,
+      patient_responsibility: null,
       secondary_amount: 0,
       deposit_amount: 0,
       outstanding_amount: null,
@@ -1030,21 +1201,169 @@ export async function startAppointmentSession(
   return { success: true, patientId: startedSession.patient_id, redirectTo };
 }
 
+const BILLING_UNDO_ACTIVITY_ACTIONS = [
+  "appointment.completed",
+  "appointment.billing_completion_undone",
+] as const;
+
+type AppointmentsSupabaseClient = Awaited<ReturnType<typeof createClient>>;
+
+async function loadInvoiceUndoEligibility({
+  id,
+  user,
+  supabase,
+  now,
+}: {
+  id: string;
+  user: Awaited<ReturnType<typeof requireUser>>;
+  supabase: AppointmentsSupabaseClient;
+  now?: Date;
+}): Promise<
+  BillingUndoEligibility & {
+    patientId: string | null;
+  }
+> {
+  if (
+    user.role !== "admin" &&
+    user.role !== "receptionist" &&
+    user.role !== "manager"
+  ) {
+    return {
+      ...computeBillingUndoEligibility({
+        currentStatus: "completed",
+        role: user.role,
+        latestBillingEvent: null,
+        now,
+      }),
+      patientId: null,
+    };
+  }
+
+  const [appointmentResult, activityResult] = await Promise.all([
+    supabase
+      .from("appointments")
+      .select("patient_id, status")
+      .eq("id", id)
+      .eq("clinic_id", user.clinicId)
+      .maybeSingle(),
+    supabase
+      .from("activity_events")
+      .select("id, action, occurred_at, previous_state")
+      .eq("clinic_id", user.clinicId)
+      .eq("entity_type", "appointment")
+      .eq("entity_id", id)
+      .in("action", [...BILLING_UNDO_ACTIVITY_ACTIONS])
+      .order("occurred_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+
+  if (appointmentResult.error) {
+    console.error("appointment_billing_undo_appointment_read_failed", {
+      appointmentId: id,
+      clinicId: user.clinicId,
+      code: appointmentResult.error.code,
+      message: appointmentResult.error.message,
+      details: appointmentResult.error.details,
+      hint: appointmentResult.error.hint,
+    });
+  }
+  if (activityResult.error) {
+    console.error("appointment_billing_undo_activity_read_failed", {
+      appointmentId: id,
+      clinicId: user.clinicId,
+      code: activityResult.error.code,
+      message: activityResult.error.message,
+      details: activityResult.error.details,
+      hint: activityResult.error.hint,
+    });
+    return {
+      canUndo: false,
+      reason: "activity_unavailable",
+      targetStatus: null,
+      completionEventId: null,
+      completionOccurredAt: null,
+      expiresAt: null,
+      patientId: appointmentResult.data?.patient_id ?? null,
+    };
+  }
+
+  const latestBillingEvent =
+    (activityResult.data as BillingUndoActivityEvent | null) ?? null;
+  return {
+    ...computeBillingUndoEligibility({
+      currentStatus: appointmentResult.data?.status ?? null,
+      role: user.role,
+      latestBillingEvent,
+      now,
+    }),
+    patientId: appointmentResult.data?.patient_id ?? null,
+  };
+}
+
+export async function getInvoiceUndoEligibility(
+  id: string,
+): Promise<BillingUndoEligibility> {
+  const user = await requireUser();
+  const supabase = await createClient();
+  const eligibility = await loadInvoiceUndoEligibility({
+    id,
+    user,
+    supabase,
+  });
+  return {
+    canUndo: eligibility.canUndo,
+    reason: eligibility.reason,
+    targetStatus: eligibility.targetStatus,
+    completionEventId: eligibility.completionEventId,
+    completionOccurredAt: eligibility.completionOccurredAt,
+    expiresAt: eligibility.expiresAt,
+  };
+}
+
+async function invoiceUndoEligibilityError(
+  reason: BillingUndoEligibility["reason"],
+): Promise<string> {
+  const key = {
+    eligible: "appointments.weCouldNotCompleteThisRequestPleaseTryAgain",
+    unauthorized: "appointments.notAuthorizedToUndoAppointmentBilling",
+    appointment_not_found: "appointments.appointmentNotFound",
+    not_completed: "appointments.billingUndoRequiresCompletedAppointment",
+    completion_event_missing:
+      "appointments.billingUndoCompletionEventMissing",
+    completion_already_undone:
+      "appointments.billingCompletionAlreadyUndone",
+    invalid_previous_status:
+      "appointments.billingUndoPreviousStatusUnavailable",
+    expired: "appointments.billingUndoWindowExpired",
+    activity_unavailable: "appointments.billingUndoActivityUnavailable",
+  } as const;
+  return actionError(key[reason]);
+}
+
+export type UndoInvoiceCompletionResult = ActionResult & {
+  eligibility?: BillingUndoEligibility;
+  targetStatus?: InvoiceUndoStatus;
+  rpc?: string;
+};
+
 export async function undoInvoiceCompletion(
   id: string,
-  targetStatus: InvoiceUndoStatus,
-): Promise<ActionResult> {
+): Promise<UndoInvoiceCompletionResult> {
   const user = await requireMutationRole(["admin", "receptionist", "manager"]);
   const supabase = await createClient();
-
-  const { data: appt } = await supabase
-    .from("appointments")
-    .select("patient_id")
-    .eq("id", id)
-    .eq("clinic_id", user.clinicId)
-    .single();
-
-  if (!appt) return { error: await actionError("appointments.appointmentNotFound") };
+  const { patientId, ...eligibility } = await loadInvoiceUndoEligibility({
+    id,
+    user,
+    supabase,
+  });
+  if (!eligibility.canUndo || !eligibility.targetStatus) {
+    return {
+      error: await invoiceUndoEligibilityError(eligibility.reason),
+      eligibility,
+    };
+  }
 
   const { data: provenanceRows, error: provenanceError } = await supabase
     .from("outstanding_settlements")
@@ -1053,7 +1372,14 @@ export async function undoInvoiceCompletion(
     .eq("source_appointment_id", id)
     .limit(1);
 
-  if (provenanceError) return { error: await actionError("appointments.weCouldNotCompleteThisRequestPleaseTryAgain") };
+  if (provenanceError) {
+    return {
+      error: await actionError(
+        "appointments.weCouldNotCompleteThisRequestPleaseTryAgain",
+      ),
+      eligibility,
+    };
+  }
 
   const undoRpc =
     (provenanceRows?.length ?? 0) > 0
@@ -1062,14 +1388,36 @@ export async function undoInvoiceCompletion(
 
   const { error } = await supabase.rpc(undoRpc, {
     p_appointment_id: id,
-    p_target_status: targetStatus,
+    p_target_status: eligibility.targetStatus,
   });
 
-  if (error) return { error: await actionError("appointments.weCouldNotCompleteThisRequestPleaseTryAgain") };
+  if (error) {
+    logBillingUndoRpcError({
+      appointmentId: id,
+      clinicId: user.clinicId,
+      rpc: undoRpc,
+      error,
+      eligibility,
+    });
+    return {
+      error: await actionError(
+        "appointments.weCouldNotCompleteThisRequestPleaseTryAgain",
+      ),
+      eligibility,
+      rpc: undoRpc,
+    };
+  }
 
   revalidatePath("/appointments");
-  revalidatePath(`/patients/${appt.patient_id}`);
-  return {};
+  revalidatePath("/revenue");
+  revalidatePath("/reports/revenue");
+  if (patientId) revalidatePath(`/patients/${patientId}`);
+  return {
+    success: true,
+    eligibility,
+    targetStatus: eligibility.targetStatus,
+    rpc: undoRpc,
+  };
 }
 
 export type InvoiceChannelState = "sent" | "already_sent" | "failed" | "unavailable";

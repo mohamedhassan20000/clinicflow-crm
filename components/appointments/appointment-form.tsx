@@ -4,7 +4,8 @@ import Link from "next/link";
 import { startTransition, useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Check, ChevronsUpDown, Loader2, CalendarPlus, Package } from "lucide-react";
+import { Check, ChevronsUpDown, Loader2, CalendarPlus, Info, Package } from "lucide-react";
+import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,7 +42,6 @@ import {
   appointmentSchema,
   type AppointmentFormValues,
 } from "@/lib/validations/appointment";
-import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
 import type { ClinicWorkingHoursValues } from "@/lib/validations/settings";
 import {
   AlertDialog,
@@ -54,7 +54,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { checkSameDayPatient, type ActionResult } from "@/actions/appointments";
-import { getAvailableTimeSlots, type SlotInfo } from "@/actions/time-slots";
+import { getAvailableTimeSlots } from "@/actions/time-slots";
+import type { AvailabilityResult } from "@/lib/booking/availability";
 import type { Tables } from "@/types/database";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
 import { CALENDAR_STYLES } from "@/components/appointments/calendar-visuals";
@@ -101,18 +102,26 @@ interface AppointmentFormProps {
 }
 
 
-// All clinic times default to default clinic timezone (UTC+3).
-// Tag the local date/time with the +03:00 offset so Postgres timestamptz
-// stores the exact wall-clock moment the receptionist picked, regardless
-// of server or browser timezone.
-const DEFAULT_TIME_ZONE_OFFSET = "+03:00";
-function buildClinicIso(date: string, time: string): string {
-  return `${date}T${time}:00${DEFAULT_TIME_ZONE_OFFSET}`;
+function buildClinicIso(date: string, time: string, timeZone: string): string {
+  return fromZonedTime(`${date}T${time}:00`, timeZone).toISOString();
 }
 
-function clinicNowParts() {
+function clinicValuePart(
+  value: string,
+  timeZone: string,
+  part: "date" | "time",
+): string {
+  if (!value || Number.isNaN(new Date(value).getTime())) return "";
+  return formatInTimeZone(
+    value,
+    timeZone,
+    part === "date" ? "yyyy-MM-dd" : "HH:mm",
+  );
+}
+
+function clinicNowParts(timeZone: string) {
   const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: DEFAULT_TIME_ZONE,
+    timeZone,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -135,13 +144,8 @@ function timeToMinutes(time: string): number {
 }
 
 function isPastClinicSlot(value: string): boolean {
-  const date = value.split("T")[0] ?? "";
-  const time = value.split("T")[1]?.slice(0, 5) ?? "";
-  if (!date || !time) return false;
-  const now = clinicNowParts();
-  if (date < now.date) return true;
-  if (date > now.date) return false;
-  return timeToMinutes(time) <= now.minutes;
+  const instant = new Date(value).getTime();
+  return Number.isFinite(instant) && instant <= Date.now();
 }
 
 function getAssignedDoctor(patient: PatientWithDoctor | undefined): Doctor | null {
@@ -175,7 +179,7 @@ export function AppointmentForm({
   const t = useTranslations("appointments");
   const tProtected = useTranslations("protected");
   const closedDays = clinicWorkingHours ? getClosedDaysOfWeek(clinicWorkingHours) : new Set<number>();
-  const { formatCurrency, formatSlotTime } = useClinicSettings();
+  const { formatCurrency, formatSlotTime, locale } = useClinicSettings();
   const [state, formAction, isPending] = useActionState(action, null);
   const [patientOpen, setPatientOpen] = useState(false);
   const [sameDayWarning, setSameDayWarning] = useState(false);
@@ -243,6 +247,7 @@ export function AppointmentForm({
   const selectedPatientId = useWatch({ control: form.control, name: "patient_id" });
   const selectedPackageId = useWatch({ control: form.control, name: "package_id" });
   const selectedDoctorId = useWatch({ control: form.control, name: "doctor_id" });
+  const selectedDuration = useWatch({ control: form.control, name: "duration_minutes" });
   const activeDept = useWatch({ control: form.control, name: "department_id" }) ?? null;
   const previousPatientIdRef = useRef(defaultPatientId ?? "");
   const availablePackages = useMemo(
@@ -297,26 +302,89 @@ export function AppointmentForm({
 
   // ── Smart time slots ───────────────────────────────────────────────────────
   const scheduledAt = useWatch({ control: form.control, name: "scheduled_at" });
-  const dateVal = scheduledAt ? scheduledAt.split("T")[0] ?? "" : "";
+  const dateVal = clinicValuePart(scheduledAt, locale.timeZone, "date");
 
-  const [slots, setSlots] = useState<SlotInfo[]>([]);
+  const [availability, setAvailability] = useState<AvailabilityResult | null>(null);
   const [slotsLoading, setSlotsLoading] = useState(false);
 
   useEffect(() => {
     if (!selectedDoctorId || !dateVal) {
-      queueMicrotask(() => setSlots([]));
+      queueMicrotask(() => setAvailability(null));
       return;
     }
     let cancelled = false;
     queueMicrotask(() => {
       if (cancelled) return;
       setSlotsLoading(true);
-      getAvailableTimeSlots(selectedDoctorId, dateVal)
-        .then(({ slots: s }) => { if (!cancelled) setSlots(s); })
+      setAvailability(null);
+      getAvailableTimeSlots(selectedDoctorId, dateVal, selectedDuration)
+        .then((result) => {
+          if (!cancelled) setAvailability(result);
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setAvailability({
+              slots: [],
+              reason: "unable_to_calculate",
+              dateIso: dateVal,
+              dayOfWeek: new Date(`${dateVal}T12:00:00`).getDay(),
+              workingHours: [],
+            });
+          }
+        })
         .finally(() => { if (!cancelled) setSlotsLoading(false); });
     });
     return () => { cancelled = true; };
-  }, [selectedDoctorId, dateVal]);
+  }, [selectedDoctorId, dateVal, selectedDuration]);
+
+  const slots = availability?.slots ?? [];
+  const openSlots = slots.filter((slot) => !slot.disabled);
+  const selectedDoctorName =
+    availability?.doctorName ??
+    doctors.find((doctor) => doctor.id === selectedDoctorId)?.full_name ??
+    t("thisDoctor");
+  const selectedWeekday = dateVal
+    ? new Intl.DateTimeFormat(locale.locale, {
+        weekday: "long",
+        timeZone: locale.timeZone,
+      }).format(fromZonedTime(`${dateVal}T12:00:00`, locale.timeZone))
+    : "";
+  const selectedDateIsToday =
+    Boolean(dateVal) && dateVal === clinicNowParts(locale.timeZone).date;
+
+  const availabilityMessage = availability
+    ? {
+        available: null,
+        doctor_required: t("selectADoctorAndDateFirst"),
+        doctor_not_found: t("availabilityDoctorUnavailable"),
+        no_schedule_configured: t("availabilityNoSchedule", {
+          doctor: selectedDoctorName,
+        }),
+        doctor_off_weekday: selectedDateIsToday
+          ? t("availabilityDoctorOffToday", { doctor: selectedDoctorName })
+          : t("availabilityDoctorDoesNotWorkWeekday", {
+              doctor: selectedDoctorName,
+              weekday: selectedWeekday,
+            }),
+        schedule_disabled: t("availabilityScheduleDisabled", {
+          doctor: selectedDoctorName,
+        }),
+        outside_schedule_range: t("availabilityOutsideSchedule", {
+          doctor: selectedDoctorName,
+        }),
+        clinic_closed: t("availabilityClinicClosed"),
+        on_leave: t("availabilityDoctorOnLeave", {
+          doctor: selectedDoctorName,
+        }),
+        working_hours_passed: t("availabilityWorkingHoursPassed"),
+        all_slots_booked: t("availabilityAllBooked"),
+        all_slots_blocked: t("availabilityAllBlocked"),
+        duration_unavailable: t("availabilityDurationUnavailable", {
+          duration: selectedDuration,
+        }),
+        unable_to_calculate: t("availabilityUnableToCalculate"),
+      }[availability.reason]
+    : null;
 
   function buildFd(values: AppointmentFormValues): FormData {
     const fd = new FormData();
@@ -346,7 +414,11 @@ export function AppointmentForm({
     }
 
     if (closedDays.size > 0) {
-      const dateStr = values.scheduled_at.split("T")[0];
+      const dateStr = clinicValuePart(
+        values.scheduled_at,
+        locale.timeZone,
+        "date",
+      );
       if (dateStr) {
         const dow = new Date(`${dateStr}T12:00:00`).getDay();
         if (closedDays.has(dow)) {
@@ -653,11 +725,17 @@ export function AppointmentForm({
             control={form.control}
             name="scheduled_at"
             render={({ field }) => {
-              const dateVal = field.value ? field.value.split("T")[0] : "";
-              const timeVal = field.value
-                ? field.value.split("T")[1]?.slice(0, 5)
-                : "";
-              const today = clinicNowParts().date;
+              const dateVal = clinicValuePart(
+                field.value,
+                locale.timeZone,
+                "date",
+              );
+              const timeVal = clinicValuePart(
+                field.value,
+                locale.timeZone,
+                "time",
+              );
+              const today = clinicNowParts(locale.timeZone).date;
               const selectedDow = dateVal ? new Date(`${dateVal}T12:00:00`).getDay() : null;
               const isClosedDay = selectedDow !== null && closedDays.has(selectedDow);
               return (
@@ -672,7 +750,9 @@ export function AppointmentForm({
                       onChange={(e) => {
                         const t = timeVal || "09:00";
                         field.onChange(
-                          e.target.value ? buildClinicIso(e.target.value, t) : "",
+                          e.target.value
+                            ? buildClinicIso(e.target.value, t, locale.timeZone)
+                            : "",
                         );
                       }}
                     />
@@ -687,25 +767,58 @@ export function AppointmentForm({
             }}
           />
 
+          {selectedDoctorId && dateVal && availabilityMessage && !slotsLoading && (
+            <div
+              role="status"
+              className="flex gap-2 rounded-lg border border-sky-500/25 bg-sky-500/5 px-3 py-2.5 text-sm text-foreground"
+            >
+              <Info className="mt-0.5 size-4 shrink-0 text-sky-600 dark:text-sky-400" />
+              <span>{availabilityMessage}</span>
+            </div>
+          )}
+
+          {availability && availability.workingHours.length > 0 && (
+            <div className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-sm">
+              <span className="font-medium">{t("workingHours")}</span>{" "}
+              {availability.workingHours
+                .map(
+                  (window) =>
+                    `${formatSlotTime(window.start)} – ${formatSlotTime(window.end)}`,
+                )
+                .join(" · ")}
+            </div>
+          )}
+
           {/* Time slot */}
           <FormField
             control={form.control}
             name="scheduled_at"
             render={({ field }) => {
-              const timeVal = field.value
-                ? field.value.split("T")[1]?.slice(0, 5)
-                : "";
-              const now = clinicNowParts();
+              const timeVal = clinicValuePart(
+                field.value,
+                locale.timeZone,
+                "time",
+              );
+              const now = clinicNowParts(locale.timeZone);
               const selectedDate = dateVal || now.date;
+              const timeSelectionDisabled =
+                isPending ||
+                slotsLoading ||
+                !selectedDoctorId ||
+                !dateVal ||
+                openSlots.length === 0;
               return (
                 <FormItem>
                   <FormLabel>{t("time")}</FormLabel>
                   <Select
                     value={timeVal}
                     onValueChange={(t) => {
-                      field.onChange(buildClinicIso(selectedDate, t));
+                      if (!/^\d{2}:\d{2}$/.test(t)) return;
+                      field.onChange(
+                        buildClinicIso(selectedDate, t, locale.timeZone),
+                      );
                     }}
-                    disabled={isPending || slotsLoading}
+                    disabled={timeSelectionDisabled}
                   >
                     <FormControl>
                       <SelectTrigger
@@ -725,8 +838,9 @@ export function AppointmentForm({
                       {slots.length === 0 && !slotsLoading && (
                         <SelectItem value="__empty__" disabled>
                           {selectedDoctorId && dateVal
-                            ? t("noslotsavailable")
-                            : t("selectadoctoranddatefirst")}
+                            ? availabilityMessage ??
+                              t("availabilityUnableToCalculate")
+                            : t("selectADoctorAndDateFirst")}
                         </SelectItem>
                       )}
                       {slots.map((slot) => {

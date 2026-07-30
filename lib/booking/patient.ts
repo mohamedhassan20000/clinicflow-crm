@@ -1,7 +1,11 @@
 import "server-only";
 
 import { formatInTimeZone } from "date-fns-tz";
-import { computeAvailableSlots } from "@/lib/booking/availability";
+import { computeAvailability } from "@/lib/booking/availability";
+import type {
+  AvailabilityReason,
+  WorkingWindow,
+} from "@/lib/booking/availability";
 import type { ResolvedPatientAiContext } from "@/lib/ai/patient-authorization";
 import {
   createClinicScopedAdminClient,
@@ -15,6 +19,8 @@ export type PatientAvailabilityResult =
       doctorName: string;
       date: string;
       availableSlots: string[];
+      availabilityReason: AvailabilityReason;
+      workingHours: WorkingWindow[];
     }
   | {
       ok: false;
@@ -75,7 +81,7 @@ export async function getPatientAvailableSlots(input: {
   }
 
   const doctor = doctors.data[0]!;
-  const slots = await computeAvailableSlots({
+  const availability = await computeAvailability({
     supabase: db,
     clinicId: input.identity.clinicId,
     doctorId: doctor.id,
@@ -85,7 +91,7 @@ export async function getPatientAvailableSlots(input: {
   const now = input.now ?? new Date();
   const today = formatInTimeZone(now, input.identity.clinicTimezone, "yyyy-MM-dd");
   const currentTime = formatInTimeZone(now, input.identity.clinicTimezone, "HH:mm");
-  const availableSlots = slots
+  const availableSlots = availability.slots
     .filter(
       (slot) =>
         !slot.disabled &&
@@ -99,6 +105,8 @@ export async function getPatientAvailableSlots(input: {
     doctorName: doctor.full_name,
     date: input.date,
     availableSlots,
+    availabilityReason: availability.reason,
+    workingHours: availability.workingHours,
   };
 }
 

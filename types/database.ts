@@ -993,6 +993,8 @@ export type Database = {
           expires_at: string | null
           id: string
           insurance_amount: number | null
+          insurance_calculation_mode: string
+          insurance_percentage: number | null
           insurance_provider_id: string | null
           no_show_reason: string | null
           no_showed_at: string | null
@@ -1005,6 +1007,7 @@ export type Database = {
           paid_amount: number | null
           paid_at: string | null
           patient_id: string
+          patient_responsibility: number | null
           payment_method: Database["public"]["Enums"]["payment_method"] | null
           payment_note: string | null
           reminder_sent_at: string | null
@@ -1042,6 +1045,8 @@ export type Database = {
           expires_at?: string | null
           id?: string
           insurance_amount?: number | null
+          insurance_calculation_mode?: string
+          insurance_percentage?: number | null
           insurance_provider_id?: string | null
           no_show_reason?: string | null
           no_showed_at?: string | null
@@ -1054,6 +1059,7 @@ export type Database = {
           paid_amount?: number | null
           paid_at?: string | null
           patient_id: string
+          patient_responsibility?: number | null
           payment_method?: Database["public"]["Enums"]["payment_method"] | null
           payment_note?: string | null
           reminder_sent_at?: string | null
@@ -1091,6 +1097,8 @@ export type Database = {
           expires_at?: string | null
           id?: string
           insurance_amount?: number | null
+          insurance_calculation_mode?: string
+          insurance_percentage?: number | null
           insurance_provider_id?: string | null
           no_show_reason?: string | null
           no_showed_at?: string | null
@@ -1103,6 +1111,7 @@ export type Database = {
           paid_amount?: number | null
           paid_at?: string | null
           patient_id?: string
+          patient_responsibility?: number | null
           payment_method?: Database["public"]["Enums"]["payment_method"] | null
           payment_note?: string | null
           reminder_sent_at?: string | null
@@ -1940,7 +1949,10 @@ export type Database = {
           doctor_id: string
           end_time: string
           id: string
+          is_enabled: boolean
           start_time: string
+          valid_from: string | null
+          valid_until: string | null
         }
         Insert: {
           clinic_id: string
@@ -1949,7 +1961,10 @@ export type Database = {
           doctor_id: string
           end_time: string
           id?: string
+          is_enabled?: boolean
           start_time: string
+          valid_from?: string | null
+          valid_until?: string | null
         }
         Update: {
           clinic_id?: string
@@ -1958,7 +1973,10 @@ export type Database = {
           doctor_id?: string
           end_time?: string
           id?: string
+          is_enabled?: boolean
           start_time?: string
+          valid_from?: string | null
+          valid_until?: string | null
         }
         Relationships: [
           {
@@ -1970,6 +1988,67 @@ export type Database = {
           },
           {
             foreignKeyName: "doctor_schedules_doctor_id_fkey"
+            columns: ["doctor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      doctor_unavailability: {
+        Row: {
+          clinic_id: string
+          created_at: string
+          created_by: string | null
+          doctor_id: string
+          ends_at: string
+          id: string
+          is_active: boolean
+          kind: string
+          note: string | null
+          starts_at: string
+        }
+        Insert: {
+          clinic_id: string
+          created_at?: string
+          created_by?: string | null
+          doctor_id: string
+          ends_at: string
+          id?: string
+          is_active?: boolean
+          kind: string
+          note?: string | null
+          starts_at: string
+        }
+        Update: {
+          clinic_id?: string
+          created_at?: string
+          created_by?: string | null
+          doctor_id?: string
+          ends_at?: string
+          id?: string
+          is_active?: boolean
+          kind?: string
+          note?: string | null
+          starts_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "doctor_unavailability_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "doctor_unavailability_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "doctor_unavailability_doctor_id_fkey"
             columns: ["doctor_id"]
             isOneToOne: false
             referencedRelation: "profiles"
@@ -4057,12 +4136,15 @@ export type Database = {
           p_appointment_id: string
           p_deposit_amount?: number
           p_insurance_amount?: number
+          p_insurance_calculation_mode?: string
+          p_insurance_percentage?: number | null
           p_line_items: Json
           p_paid_amount: number
+          p_patient_responsibility?: number
           p_payment_method: string
-          p_payment_note?: string
+          p_payment_note?: string | null
           p_secondary_amount?: number
-          p_secondary_payment_method?: string
+          p_secondary_payment_method?: string | null
         }
         Returns: undefined
       }
@@ -4071,15 +4153,18 @@ export type Database = {
           p_appointment_id: string
           p_deposit_amount?: number
           p_insurance_amount?: number
+          p_insurance_calculation_mode?: string
+          p_insurance_percentage?: number | null
           p_line_items: Json
           p_paid_amount: number
+          p_patient_responsibility?: number
           p_payment_method: string
-          p_payment_note?: string
-          p_previous_note?: string
-          p_previous_payment_method?: string
+          p_payment_note?: string | null
+          p_previous_note?: string | null
+          p_previous_payment_method?: string | null
           p_previous_settlement_amount?: number
           p_secondary_amount?: number
-          p_secondary_payment_method?: string
+          p_secondary_payment_method?: string | null
         }
         Returns: {
           affected_prior_appointment_ids: string[]

@@ -46,6 +46,9 @@ export interface AppointmentPaymentRowData {
   total_amount: number | null;
   paid_amount: number | null;
   insurance_amount: number | null;
+  insurance_calculation_mode?: string | null;
+  insurance_percentage?: number | null;
+  patient_responsibility?: number | null;
   secondary_amount: number | null;
   deposit_amount: number | null;
   outstanding_amount: number | null;
@@ -122,7 +125,10 @@ export function AppointmentPaymentRow({
   const insurance = a.insurance_amount ?? 0;
   const secondaryAmt = a.secondary_amount ?? 0;
   const deposit = a.deposit_amount ?? 0;
-  const collected = paid + insurance + secondaryAmt + deposit;
+  const patientPaid = paid + secondaryAmt;
+  const patientResponsibility =
+    a.patient_responsibility ??
+    Math.max(0, (a.total_amount ?? 0) - insurance);
 
   return (
     <div className="border-b border-border/30 last:border-0">
@@ -250,20 +256,46 @@ export function AppointmentPaymentRow({
           )}
 
           {/* Summary strip */}
-          <div className="grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-border/50 bg-border/40">
+          <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border/50 bg-border/40 sm:grid-cols-4">
             <SummaryCell
-              label={t("total")}
+              label={t("invoiceTotal")}
               amount={a.total_amount ?? 0}
               formatAmount={fmtMoney}
             />
             <SummaryCell
-              label={t("collected")}
-              amount={collected}
+              label={t("insuranceContribution")}
+              amount={insurance}
+              formatAmount={fmtMoney}
+              accent="text-sky-700 dark:text-sky-400"
+            />
+            <SummaryCell
+              label={t("patientResponsibility")}
+              amount={patientResponsibility}
+              formatAmount={fmtMoney}
+            />
+            <SummaryCell
+              label={t("primaryPaymentAmount")}
+              amount={paid}
+              formatAmount={fmtMoney}
+            />
+            <SummaryCell
+              label={t("secondaryPaymentAmount")}
+              amount={secondaryAmt}
+              formatAmount={fmtMoney}
+            />
+            <SummaryCell
+              label={t("totalPatientPaid")}
+              amount={patientPaid}
               formatAmount={fmtMoney}
               accent="text-emerald-600 dark:text-emerald-400"
             />
             <SummaryCell
-              label={t("outstanding")}
+              label={t("depositApplied")}
+              amount={deposit}
+              formatAmount={fmtMoney}
+            />
+            <SummaryCell
+              label={t("remainingPatientBalance")}
               amount={outstanding}
               formatAmount={fmtMoney}
               accent={
@@ -304,6 +336,12 @@ export function AppointmentPaymentRow({
               <Pill className="border-sky-500/30 bg-sky-500/5 text-sky-700 dark:text-sky-400">
                 <ShieldCheck className="h-3 w-3" />
                 {a.insurance_providers?.name ?? t("insurance")}
+                {a.insurance_calculation_mode === "percentage" &&
+                  a.insurance_percentage != null && (
+                    <span>
+                      ({a.insurance_percentage}%)
+                    </span>
+                  )}
                 <span className="tabular-nums font-medium">
                   {fmtMoney(insurance)}
                 </span>

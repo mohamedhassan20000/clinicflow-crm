@@ -41,6 +41,14 @@ export const PAYMENT_METHODS = [
 ] as const;
 
 export const paymentMethodSchema = z.enum(PAYMENT_METHODS);
+export const PATIENT_PAYMENT_METHODS = [
+  "cash",
+  "credit_card",
+  "paypal",
+  "bank_transfer",
+] as const;
+export const patientPaymentMethodSchema = z.enum(PATIENT_PAYMENT_METHODS);
+export const insuranceCalculationModeSchema = z.enum(["amount", "percentage"]);
 
 export const lineItemSchema = z.object({
   service_id: z.string().uuid().optional().nullable(),
@@ -57,14 +65,17 @@ export const billingSchema = z
       .array(lineItemSchema)
       .min(1, "validation.tooSmall"),
     paid_amount: z.number().nonnegative(),
-    payment_method: paymentMethodSchema,
+    payment_method: patientPaymentMethodSchema,
     insurance_amount: z.number().nonnegative().default(0),
-    secondary_payment_method: paymentMethodSchema.nullable().optional(),
+    insurance_calculation_mode: insuranceCalculationModeSchema.default("amount"),
+    insurance_percentage: z.number().nullable().optional(),
+    patient_responsibility: z.number().nonnegative(),
+    secondary_payment_method: patientPaymentMethodSchema.nullable().optional(),
     secondary_amount: z.number().nonnegative().default(0),
     deposit_amount: z.number().nonnegative().default(0),
     payment_note: z.string().max(500).nullable().optional(),
     previous_settlement_amount: z.number().default(0),
-    previous_payment_method: paymentMethodSchema.nullable().optional(),
+    previous_payment_method: patientPaymentMethodSchema.nullable().optional(),
     previous_note: z
       .string()
       .max(500, "validation.previousNoteTooLong")
@@ -82,6 +93,81 @@ export const billingSchema = z
     },
   )
   .superRefine((v, ctx) => {
+    const total = Number(
+      v.line_items
+        .reduce(
+          (sum, item) => sum + Number(item.price) * Number(item.quantity),
+          0,
+        )
+        .toFixed(2),
+    );
+    const expectedInsurance =
+      v.insurance_calculation_mode === "percentage"
+        ? Number(
+            (
+              (total * Number(v.insurance_percentage ?? 0)) /
+              100
+            ).toFixed(2),
+          )
+        : Number(v.insurance_amount.toFixed(2));
+    const expectedResponsibility = Number(
+      Math.max(0, total - v.insurance_amount).toFixed(2),
+    );
+
+    if (
+      v.insurance_calculation_mode === "percentage" &&
+      v.insurance_percentage == null
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["insurance_percentage"],
+        message: "validation.insurancePercentageRequired",
+      });
+    }
+    if (
+      v.insurance_calculation_mode === "percentage" &&
+      v.insurance_percentage != null &&
+      (v.insurance_percentage < 0 || v.insurance_percentage > 100)
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["insurance_percentage"],
+        message: "validation.insurancePercentageOutOfRange",
+      });
+    }
+    if (v.insurance_amount > total + 0.001) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["insurance_amount"],
+        message: "validation.insuranceAmountExceedsInvoiceTotal",
+      });
+    }
+    if (Math.abs(expectedInsurance - v.insurance_amount) > 0.001) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["insurance_amount"],
+        message: "validation.insuranceAmountDoesNotMatchPercentage",
+      });
+    }
+    if (
+      Math.abs(expectedResponsibility - v.patient_responsibility) > 0.001
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["patient_responsibility"],
+        message: "validation.patientResponsibilityMismatch",
+      });
+    }
+    if (
+      v.paid_amount + v.secondary_amount + v.deposit_amount >
+      v.patient_responsibility + 0.001
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["paid_amount"],
+        message: "validation.patientPaymentsExceedResponsibility",
+      });
+    }
     if (v.previous_settlement_amount < 0) {
       ctx.addIssue({
         code: "custom",
@@ -99,6 +185,12 @@ export const billingSchema = z
   })
   .transform((v) => ({
     ...v,
+    insurance_amount: Number(v.insurance_amount.toFixed(2)),
+    insurance_percentage:
+      v.insurance_calculation_mode === "percentage"
+        ? Number((v.insurance_percentage ?? 0).toFixed(2))
+        : null,
+    patient_responsibility: Number(v.patient_responsibility.toFixed(2)),
     previous_settlement_amount: Number(
       v.previous_settlement_amount.toFixed(2),
     ),

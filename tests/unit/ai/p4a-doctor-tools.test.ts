@@ -369,12 +369,33 @@ describe("P4A check_availability", () => {
   it("returns only free slots from the shared booking core", async () => {
     const { tools, mocks } = await loadTools();
     mocks.state.tableResults["clinics"] = { data: { timezone: "Asia/Kuwait" }, error: null };
-    mocks.state.tableResults["doctor_schedules"] = { data: null, error: null };
+    mocks.state.tableResults["profiles"] = {
+      data: {
+        id: DOCTOR.id,
+        full_name: "Dr Test",
+        is_active: true,
+        is_deleted: false,
+        deleted_at: null,
+      },
+      error: null,
+    };
+    mocks.state.tableResults["doctor_schedules"] = {
+      data: [{
+        day_of_week: 1,
+        start_time: "09:00",
+        end_time: "10:00",
+        is_enabled: true,
+        valid_from: null,
+        valid_until: null,
+      }],
+      error: null,
+    };
     mocks.state.tableResults["clinic_working_hours"] = {
-      data: [{ shift_start: "09:00", shift_end: "10:00" }],
+      data: [{ day_of_week: 1, shift_start: "09:00", shift_end: "10:00" }],
       error: null,
     };
     mocks.state.tableResults["appointments"] = { data: [], error: null };
+    mocks.state.tableResults["doctor_unavailability"] = { data: [], error: null };
 
     const result = (await tools.check_availability.execute!(
       { date: "2026-07-20" },
@@ -382,7 +403,7 @@ describe("P4A check_availability", () => {
     )) as { available_slots: string[]; doctor_id: string | null };
 
     expect(result.doctor_id).toBe(DOCTOR.id); // defaulted to the doctor
-    expect(result.available_slots).toEqual(["09:00", "09:15", "09:30", "09:45"]);
+    expect(result.available_slots).toEqual(["09:00", "09:15", "09:30"]);
   });
 
   it("omits already-elapsed clinic-local slots when checking today", async () => {
@@ -391,19 +412,40 @@ describe("P4A check_availability", () => {
     try {
       const { tools, mocks } = await loadTools();
       mocks.state.tableResults["clinics"] = { data: { timezone: "Asia/Kuwait" }, error: null };
-      mocks.state.tableResults["doctor_schedules"] = { data: null, error: null };
+      mocks.state.tableResults["profiles"] = {
+        data: {
+          id: DOCTOR.id,
+          full_name: "Dr Test",
+          is_active: true,
+          is_deleted: false,
+          deleted_at: null,
+        },
+        error: null,
+      };
+      mocks.state.tableResults["doctor_schedules"] = {
+        data: [{
+          day_of_week: 6,
+          start_time: "09:00",
+          end_time: "10:00",
+          is_enabled: true,
+          valid_from: null,
+          valid_until: null,
+        }],
+        error: null,
+      };
       mocks.state.tableResults["clinic_working_hours"] = {
-        data: [{ shift_start: "09:00", shift_end: "10:00" }],
+        data: [{ day_of_week: 6, shift_start: "09:00", shift_end: "10:00" }],
         error: null,
       };
       mocks.state.tableResults["appointments"] = { data: [], error: null };
+      mocks.state.tableResults["doctor_unavailability"] = { data: [], error: null };
 
       const result = (await tools.check_availability.execute!(
         { date: "2026-07-18" },
         opts,
       )) as { available_slots: string[] };
 
-      expect(result.available_slots).toEqual(["09:30", "09:45"]);
+      expect(result.available_slots).toEqual(["09:30"]);
     } finally {
       vi.useRealTimers();
     }

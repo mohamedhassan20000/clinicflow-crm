@@ -23,6 +23,12 @@ import {
   useCalendarNow,
 } from "@/components/appointments/calendar-visuals";
 import { useTranslations } from "next-intl";
+import {
+  addCalendarDays,
+  calendarDateKey,
+  calendarDayOfWeek,
+  toCalendarEventPlacement,
+} from "@/lib/appointments/calendar";
 
 type Appointment = AppointmentForDetail;
 
@@ -30,8 +36,8 @@ type Appointment = AppointmentForDetail;
 const BUCKET_H_PX = 420;
 const CARD_H_PX   = 110;
 
-function apptStartMin(appt: Appointment): number {
-  return minutesInClinicTimeZone(new Date(appt.scheduled_at));
+function apptStartMin(appt: Appointment, timeZone: string): number {
+  return toCalendarEventPlacement(appt, timeZone).startMinutes;
 }
 
 function isDayClosed(clinicHours: ClinicWorkingHoursValues, dow: number): boolean {
@@ -41,10 +47,13 @@ function isDayClosed(clinicHours: ClinicWorkingHoursValues, dow: number): boolea
   return !day?.open;
 }
 
-function groupByHourBucket(appts: Appointment[]): Map<number, Appointment[]> {
+function groupByHourBucket(
+  appts: Appointment[],
+  timeZone: string,
+): Map<number, Appointment[]> {
   const groups = new Map<number, Appointment[]>();
   for (const appt of appts) {
-    const bucket = Math.floor(apptStartMin(appt) / 60) * 60;
+    const bucket = Math.floor(apptStartMin(appt, timeZone) / 60) * 60;
     const existing = groups.get(bucket) ?? [];
     existing.push(appt);
     groups.set(bucket, existing);
@@ -58,34 +67,11 @@ function groupByHourBucket(appts: Appointment[]): Map<number, Appointment[]> {
   return groups;
 }
 
-function addDays(date: Date, days: number) {
-  const d = new Date(date);
-  d.setDate(d.getDate() + days);
-  return d;
-}
-
-function fmt(d: Date) {
-  const y  = d.getFullYear();
-  const m  = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-function dateToDow(d: Date): number { return d.getDay(); }
-
-function isSameDay(a: Date, b: Date): boolean {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  );
-}
-
 // ── Main component ────────────────────────────────────────────────────────────
 
 interface Props {
   appointments: Appointment[];
-  date: Date;
+  date: string;
   canEdit: boolean;
   currentUserId?: string;
   currentUserRole?: "admin" | "receptionist" | "manager" | "doctor" | "assistant";
@@ -103,12 +89,12 @@ export function DayCalendar({
   newAppointmentHref = "/appointments/new",
 }: Props) {
   const t = useTranslations("appointments");
-  const { formatSlotTime, formatDate } = useClinicSettings();
+  const { formatSlotTime, formatCalendarDate, locale } = useClinicSettings();
   const currentDate = useCalendarNow();
 
-  const prev = addDays(date, -1);
-  const next = addDays(date, 1);
-  const dow  = dateToDow(date);
+  const prev = addCalendarDays(date, -1);
+  const next = addCalendarDays(date, 1);
+  const dow = calendarDayOfWeek(date);
 
   const sorted = useMemo(
     () =>
@@ -125,9 +111,9 @@ export function DayCalendar({
 
   const closed      = isDayClosed(clinicHours, dow);
   const nonWorkingBands = getCalendarNonWorkingBands(clinicHours, dow, bounds);
-  const hourBuckets = groupByHourBucket(sorted);
-  const isToday     = isSameDay(date, currentDate);
-  const nowMin      = minutesInClinicTimeZone(currentDate);
+  const hourBuckets = groupByHourBucket(sorted, locale.timeZone);
+  const isToday = date === calendarDateKey(currentDate, locale.timeZone);
+  const nowMin = minutesInClinicTimeZone(currentDate, locale.timeZone);
   const showNowLine = isToday && !closed && nowMin >= startMin && nowMin <= endMin;
   const nowTopPx    = CALENDAR_HEADER_HEIGHT_PX + ((nowMin - startMin) / 60) * BUCKET_H_PX;
 
@@ -137,12 +123,12 @@ export function DayCalendar({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <Button asChild variant="outline" size="sm" className="h-8 w-8 p-0">
-            <Link href={`/appointments?view=day&date=${fmt(prev)}`} aria-label={t("previousDay")}>
+            <Link href={`/appointments?view=day&date=${prev}`} aria-label={t("previousDay")}>
               <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
             </Link>
           </Button>
           <span className="min-w-0 text-sm font-medium">
-            {formatDate(date, {
+            {formatCalendarDate(date, {
               weekday: "long",
               day: "numeric",
               month: "long",
@@ -150,7 +136,7 @@ export function DayCalendar({
             })}
           </span>
           <Button asChild variant="outline" size="sm" className="h-8 w-8 p-0">
-            <Link href={`/appointments?view=day&date=${fmt(next)}`} aria-label={t("nextDay")}>
+            <Link href={`/appointments?view=day&date=${next}`} aria-label={t("nextDay")}>
               <ChevronRight className="h-4 w-4 rtl:rotate-180" />
             </Link>
           </Button>
@@ -199,50 +185,37 @@ export function DayCalendar({
                 isToday ? CALENDAR_STYLES.todayHeader : CALENDAR_STYLES.dayHeader
               }
             >
-              {formatDate(date, { weekday: "short", day: "numeric", month: "short" })}
+              {formatCalendarDate(date, { weekday: "short", day: "numeric", month: "short" })}
             </div>
 
-            {closed ? (
-              <div
-                data-calendar-non-working="closed"
-                className="calendar-non-working-band flex items-center justify-center"
-                style={{ height: hourRows.length * BUCKET_H_PX }}
-              >
-                <span className={CALENDAR_STYLES.nonWorkingLabel}>
-                  {t("closed")}</span>
-              </div>
-            ) : (
-              <>
-                <CalendarNonWorkingBands
-                  bands={nonWorkingBands}
-                  gridStartMin={startMin}
-                  hourHeightPx={BUCKET_H_PX}
+            <CalendarNonWorkingBands
+              bands={nonWorkingBands}
+              gridStartMin={startMin}
+              hourHeightPx={BUCKET_H_PX}
+            />
+
+            {hourRows.map((hMin) => {
+              const appts = hourBuckets.get(hMin) ?? [];
+              return (
+                <DayBucketCell
+                  key={hMin}
+                  appts={appts}
+                  bucketMin={hMin}
+                  canEdit={canEdit}
+                  currentUserId={currentUserId}
+                  currentUserRole={currentUserRole}
                 />
+              );
+            })}
 
-                {hourRows.map((hMin) => {
-                  const appts = hourBuckets.get(hMin) ?? [];
-                  return (
-                    <DayBucketCell
-                      key={hMin}
-                      appts={appts}
-                      bucketMin={hMin}
-                      canEdit={canEdit}
-                      currentUserId={currentUserId}
-                      currentUserRole={currentUserRole}
-                    />
-                  );
-                })}
-
-                {sorted.length === 0 && (
-                  <div
-                    className="pointer-events-none absolute inset-x-0 z-10 flex items-center justify-center"
-                    style={{ top: CALENDAR_HEADER_HEIGHT_PX, height: hourRows.length * BUCKET_H_PX }}
-                  >
-                    <span className="text-xs text-foreground/70">
-                      {t("noAppointmentsScheduledForThisDay")}</span>
-                  </div>
-                )}
-              </>
+            {sorted.length === 0 && (
+              <div
+                className="pointer-events-none absolute inset-x-0 z-10 flex items-center justify-center"
+                style={{ top: CALENDAR_HEADER_HEIGHT_PX, height: hourRows.length * BUCKET_H_PX }}
+              >
+                <span className="text-xs text-foreground/70">
+                  {t("noAppointmentsScheduledForThisDay")}</span>
+              </div>
             )}
 
             {showNowLine && (

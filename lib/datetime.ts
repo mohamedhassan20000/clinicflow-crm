@@ -125,6 +125,18 @@ export function formatClinicDate(
   }).format(new Date(value));
 }
 
+export function formatClinicCalendarDate(
+  dateIso: string,
+  locale?: Partial<ClinicLocale>,
+  options: Intl.DateTimeFormatOptions = { dateStyle: "medium" },
+): string {
+  const resolved = resolveLocale(locale);
+  return new Intl.DateTimeFormat(toNumberingLocale(resolved), {
+    timeZone: "UTC",
+    ...options,
+  }).format(new Date(`${dateIso}T12:00:00.000Z`));
+}
+
 export function formatClinicDateTime(
   value: Date | string | number,
   locale?: Partial<ClinicLocale>,

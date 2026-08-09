@@ -10,9 +10,9 @@ const WHITE_CHANNEL_MIN = 245;
 type CanvasBackground = "transparent" | "white" | "unknown";
 
 interface Bounds {
-  left: number;
+  left: number; // rtl-allow: physical image pixel bound, not UI layout
   top: number;
-  right: number;
+  right: number; // rtl-allow: physical image pixel bound, not UI layout
   bottom: number;
 }
 
@@ -89,7 +89,7 @@ function findContentBounds(
   background: CanvasBackground,
 ): Bounds | null {
   if (background === "unknown") {
-    return { left: 0, top: 0, right: width - 1, bottom: height - 1 };
+    return { left: 0, top: 0, right: width - 1, bottom: height - 1 }; // rtl-allow: physical image pixel bounds, not UI layout
   }
 
   let left = width;
@@ -156,7 +156,7 @@ export async function cleanClinicLogo(
     raw: { width, height, channels: 4 },
   })
     .extract({
-      left: bounds.left,
+      left: bounds.left, // rtl-allow: Sharp physical pixel coordinate, not UI layout
       top: bounds.top,
       width: contentWidth,
       height: contentHeight,
@@ -164,8 +164,8 @@ export async function cleanClinicLogo(
     .extend({
       top: verticalMargin,
       bottom: verticalMargin,
-      left: horizontalMargin,
-      right: horizontalMargin,
+      left: horizontalMargin, // rtl-allow: Sharp physical pixel padding, not UI layout
+      right: horizontalMargin, // rtl-allow: Sharp physical pixel padding, not UI layout
       background: { r: 0, g: 0, b: 0, alpha: 0 },
     })
     .png({ compressionLevel: 9, palette: false })

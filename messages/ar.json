@@ -3248,12 +3248,6 @@
       "accrualPaidAtDate": "الاستحقاق، مدفوع في التاريخ",
       "currency": "العملة",
       "legalNote": "هذا التقرير سجل محاسبي قانوني تم إنشاؤه بواسطة كلينيك فلو. تُعرض المعاملات من بيانات الفوترة والتسويات المسجلة لدى العيادة.",
-      "verificationTitle": "التحقق من السجل",
-      "verificationCaption": "امسح الرمز للتحقق من السجل الصادر عبر كلينيك فلو.",
-      "accountingApproval": "اعتماد المحاسبة / التوقيع المعتمد",
-      "clinicStamp": "ختم العيادة",
-      "footerAttribution": "نظام كلينيك فلو للسجلات الطبية",
-      "copyright": "© 2026 كلينيك فلو. جميع الحقوق محفوظة.",
       "page": "صفحة",
       "of": "من",
       "paymentMethods": {
@@ -3412,12 +3406,6 @@
           "empty": "لا توجد سجلات أداء لموظفي الاستقبال خلال هذه الفترة"
         }
       },
-      "verificationTitle": "التحقق",
-      "verificationCaption": "امسح الرمز للتحقق من السجل الصادر عبر كلينيك فلو.",
-      "signatureLabel": "التوقيع المعتمد",
-      "signatureRole": "مدير العيادة",
-      "footerAttribution": "نظام كلينيك فلو للسجلات الطبية",
-      "copyright": "© 2026 كلينيك فلو. جميع الحقوق محفوظة.",
       "page": "صفحة",
       "of": "من"
     },
@@ -3556,14 +3544,7 @@
         "insurance": "تأمين",
         "other": "أخرى"
       },
-      "verificationTitle": "التحقق من السجل",
-      "verificationCaption": "امسح الرمز للتحقق من هذا السجل المالي الطبي عبر سجل تدقيق كلينيك فلو.",
       "taxInvoiceNote": "الرقم الضريبي:",
-      "authorizedSignature": "توقيع المعتمد",
-      "patientSignature": "توقيع المريض",
-      "clinicStamp": "ختم العيادة",
-      "footerAttribution": "سجل مالي طبي سري.",
-      "copyright": "صادر عن كلينيك فلو.",
       "page": "صفحة",
       "of": "من"
     }
@@ -3581,8 +3562,6 @@
     "uploadSignature": "رفع التوقيع",
     "saveCredentials": "حفظ بيانات الاعتماد",
     "credentialsSaved": "تم حفظ بيانات اعتماد الطبيب.",
-    "signatureSaved": "تم حفظ التوقيع أو الختم.",
-    "signatureRemoved": "تمت إزالة التوقيع أو الختم.",
     "validationError": "يرجى مراجعة الحقول السريرية.",
     "subjectAndResponsibility": "صاحب السجل والمسؤولية السريرية",
     "responsibleDoctor": "الطبيب المسؤول",

@@ -6,6 +6,7 @@ import type {
   AnalyticalDocumentSnapshot,
   P74AnalyticalDocumentCode,
 } from "@/lib/documents/resolvers/analytical-report";
+import { getSharedDocumentSectionCopy } from "@/lib/documents/shared-section-copy";
 import en from "../../../messages/en.json";
 import ar from "../../../messages/ar.json";
 
@@ -25,6 +26,7 @@ function copyFor(
 ): AnalyticalReportCopy {
   const messages = locale === "ar" ? ar : en;
   const source = messages.documentPlatform.analytical;
+  const shared = getSharedDocumentSectionCopy(locale);
   const report = source.reports[reportKey[code]];
   return {
     ...report,
@@ -44,12 +46,12 @@ function copyFor(
       insurance: source.paymentMethods.insurance,
       other: source.paymentMethods.other,
     },
-    verificationTitle: source.verificationTitle,
-    verificationCaption: source.verificationCaption,
-    signatureLabel: source.signatureLabel,
-    signatureRole: source.signatureRole,
-    footerAttribution: source.footerAttribution,
-    copyright: source.copyright,
+    verificationTitle: shared.verification.genericTitle,
+    verificationCaption: shared.verification.genericCaption,
+    signatureLabel: shared.signatures.authorized,
+    signatureRole: shared.signatures.clinicAdministrator,
+    footerAttribution: shared.footer.medicalRecordsSystem,
+    copyright: shared.footer.allRights,
     page: source.page,
     of: source.of,
   };

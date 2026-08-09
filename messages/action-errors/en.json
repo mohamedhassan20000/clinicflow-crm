@@ -255,7 +255,7 @@
   },
   "patient-avatar": {
     "avatarMustBeJpegPngOrWebp": "Avatar must be JPEG, PNG, or WebP.",
-    "avatarMustBeUnder2Mb": "Avatar must be under 2 MB.",
+    "avatarMustBe6MbOrSmaller": "Patient photo must be 6 MB or smaller.",
     "failedToRemovePatientAvatar": "Failed to remove patient avatar.",
     "failedToUpdatePatientAvatar": "Failed to update patient avatar.",
     "failedToUploadAvatar": "Failed to upload avatar.",
@@ -346,6 +346,8 @@
     "invoiceFollowupSecondAfterFirst": "The second reminder must be scheduled after the first.",
     "doctorHoursOutsideClinicHours": "{day}: doctor hours ({start}–{end}) must be within clinic hours ({clinicOpen}–{clinicClose}).",
     "doctorScheduleOnClosedDay": "{day} is a clinic closed day. The doctor cannot work on a clinic closed day.",
+    "staffHoursOutsideClinicHours": "{day}: staff hours ({start}–{end}) must be within clinic hours ({clinicOpen}–{clinicClose}).",
+    "staffScheduleOnClosedDay": "{day} is a clinic closed day. Staff cannot work on a clinic closed day.",
     "aDepartmentWithThisNameAlreadyExists": "A department with this name already exists.",
     "aStaffMemberWithThisEmailAlreadyExists": "A staff member with this email already exists.",
     "anInsuranceProviderWithThisNameAlreadyExists": "An insurance provider with this name already exists.",
@@ -376,6 +378,19 @@
     "patientAiCouldNotSaveFaq": "We couldn't save this FAQ. Please try again.",
     "patientAiFaqNotFound": "This FAQ could not be found."
   },
+  "clinical": {
+    "validationError": "Please correct the clinical record fields and try again.",
+    "mutationFailed": "The clinical record could not be saved. Please try again.",
+    "recordNotFound": "The clinical record could not be found.",
+    "recordLocked": "This clinical record is finalized or no longer editable.",
+    "credentialUpdateDenied": "Only the clinician or a clinic administrator can update these credentials.",
+    "signatureRequired": "Choose a signature or stamp image to upload.",
+    "signatureInvalid": "The signature must be a PNG, JPEG, or WebP image no larger than 2 MB."
+    ,"invalidId": "The clinical record identifier is invalid."
+    ,"readFailed": "The clinical record could not be loaded."
+    ,"catalogReadFailed": "The clinical catalogs could not be loaded."
+    ,"signatureReadFailed": "The clinician signature could not be loaded."
+  },
   "staff-files": {
     "certificateMustBePdfWordJpegOrPng": "Certificate must be PDF, Word, JPEG, or PNG.",
     "certificateMustBeUnder10Mb": "Certificate must be under 10 MB.",
@@ -385,7 +400,7 @@
     "documentMustBeUnder10Mb": "Document must be under 10 MB.",
     "noFileProvided": "No file provided.",
     "photoMustBeJpegPngOrWebp": "Photo must be JPEG, PNG, or WebP.",
-    "photoMustBeUnder2Mb": "Photo must be under 2 MB.",
+    "photoMustBe6MbOrSmaller": "Staff photo must be 6 MB or smaller.",
     "staffMemberNotFound": "Staff member not found.",
     "unauthorized": "Unauthorized.",
     "weCouldNotCompleteThisRequestPleaseTryAgain": "We could not complete this request. Please try again."

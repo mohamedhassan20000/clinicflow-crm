@@ -869,8 +869,10 @@ test("WS7 operator report filters persist in the URL and exports match active fi
   await page.getByRole("combobox", { name: "Country" }).click();
   await page.getByPlaceholder(/search country/i).fill(clinic.data.country);
   await page.getByRole("option", { name: clinic.data.country, exact: true }).click();
-  await page.locator('input[type="date"][name="createdFrom"]').fill("");
-  await page.locator('input[type="date"][name="createdTo"]').fill("");
+  await page.getByRole("button", { name: /Created from/i }).click();
+  await page.getByRole("button", { name: "Clear date" }).click();
+  await page.getByRole("button", { name: /Created to/i }).click();
+  await page.getByRole("button", { name: "Clear date" }).click();
   await page.getByRole("button", { name: "Apply filters" }).click();
 
   await expect.poll(() => new URL(page.url()).searchParams.get("country")).toBe(clinic.data.country);
@@ -880,9 +882,7 @@ test("WS7 operator report filters persist in the URL and exports match active fi
 
   await page.reload();
   await expect(page.getByRole("combobox", { name: "Country" })).toContainText(clinic.data.country);
-  await expect(
-    page.locator('input[type="date"][name="createdFrom"]'),
-  ).toHaveValue("");
+  await expect(page.locator('input[type="hidden"][name="createdFrom"]')).toHaveValue("");
   const sortLink = page.getByRole("link", { name: "Sort by Clinic ascending" });
   const sortHref = await sortLink.getAttribute("href");
   expect(new URL(sortHref!, "http://localhost").searchParams.get("sort")).toBe("name");
@@ -937,8 +937,10 @@ test("MP0 operator clinic history and Invitations report render with recoverable
   await expect(page.getByRole("heading", { name: "Invitations report" })).toBeVisible();
   await page.locator('select[name="status"]').selectOption("all");
   await page.locator('select[name="emailSent"]').selectOption("yes");
-  await page.locator('input[type="date"][name="createdFrom"]').fill("");
-  await page.locator('input[type="date"][name="createdTo"]').fill("");
+  await page.getByRole("button", { name: /Created from/i }).click();
+  await page.getByRole("button", { name: "Clear date" }).click();
+  await page.getByRole("button", { name: /Created to/i }).click();
+  await page.getByRole("button", { name: "Clear date" }).click();
   await page.getByRole("button", { name: "Apply filters" }).click();
   await expect.poll(() => new URL(page.url()).searchParams.get("emailSent")).toBe("yes");
   await expect.poll(() => new URL(page.url()).searchParams.get("status")).toBe("all");
@@ -1057,7 +1059,8 @@ test("WS6 patient detail and report preserve the filtered patient return path", 
   const reportBack = page.getByRole("link", { name: "Back to patient" });
   expect(await reportBack.getAttribute("href")).toBe(new URL(patientUrl).pathname + new URL(patientUrl).search);
 
-  await page.locator('input[type="date"]').first().fill("2026-07-01");
+  await page.locator('[data-range-edge="from"]').click();
+  await page.getByRole("gridcell", { name: /July 1, 2026/ }).click();
   await page.getByRole("button", { name: "Apply filter" }).click();
   await expect.poll(() => new URL(page.url()).searchParams.get("returnTo")).toBe(new URL(patientUrl).pathname + new URL(patientUrl).search);
 

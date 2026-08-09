@@ -132,7 +132,10 @@ export function isDateRangePreset(value: string | undefined): value is DateRange
   return (
     value === "today" ||
     value === "this_week" ||
+    value === "last_week" ||
     value === "this_month" ||
+    value === "last_month" ||
+    value === "last_year" ||
     value === "custom"
   );
 }

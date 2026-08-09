@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireMutationRole } from "@/lib/rbac";
 
 const BUCKET = "patient-assets";
-const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
+const MAX_AVATAR_BYTES = 6 * 1024 * 1024;
 const ALLOWED_AVATAR_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 type AvatarResult = {
@@ -59,7 +59,7 @@ export async function uploadPatientAvatar(
     return { error: await actionError("patient-avatar.avatarMustBeJpegPngOrWebp") };
   }
   if (file.size > MAX_AVATAR_BYTES) {
-    return { error: await actionError("patient-avatar.avatarMustBeUnder2Mb") };
+    return { error: await actionError("patient-avatar.avatarMustBe6MbOrSmaller") };
   }
 
   const ext = extensionForMime(file.type);

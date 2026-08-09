@@ -32,6 +32,7 @@ import {
 } from "@/actions/manager-dashboard";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
 import { useTranslations } from "next-intl";
+import { DateRangePicker, MonthPicker } from "@/components/ui/clinic-date-picker";
 
 // ── Exported types (re-exported through analytics-section.tsx) ────────────────
 
@@ -327,19 +328,26 @@ function DateFilter({
           {t("customRange")}</button>
       </div>
       {filterMode === "month" ? (
-        <input
-          type="month"
+        <MonthPicker
           value={month}
           max={currentYearMonth()}
-          onChange={(e) => onMonthChange(e.target.value)}
+          onChange={onMonthChange}
+          label={t("month")}
+          compact
           className={INPUT_CLS}
         />
       ) : (
-        <div className="flex items-center gap-1.5">
-          <input type="date" value={rangeFrom} max={rangeTo || todayStr()} onChange={(e) => onRangeFromChange(e.target.value)} className={INPUT_CLS} />
-          <span className="text-xs text-muted-foreground">{t("to")}</span>
-          <input type="date" value={rangeTo} min={rangeFrom} max={todayStr()} onChange={(e) => onRangeToChange(e.target.value)} className={INPUT_CLS} />
-        </div>
+        <DateRangePicker
+          from={rangeFrom}
+          to={rangeTo}
+          max={todayStr()}
+          onFromChange={onRangeFromChange}
+          onToChange={onRangeToChange}
+          labels={{ from: t("from"), to: t("to") }}
+          className="w-full sm:w-[19rem]"
+          compact
+          enforceOrder
+        />
       )}
     </div>
   );
@@ -774,13 +782,19 @@ function FollowUpOutcomeSection({
             <button type="button" onClick={() => handleFilterModeChange("range")} className={modeBtnCls(filterMode === "range")}>{t("customRange")}</button>
           </div>
           {filterMode === "month" ? (
-            <input type="month" value={month} max={currentYearMonth()} onChange={(e) => handleMonthChange(e.target.value)} className={INPUT_CLS} />
+            <MonthPicker value={month} max={currentYearMonth()} onChange={handleMonthChange} label={t("month")} compact className={INPUT_CLS} />
           ) : (
-            <div className="flex items-center gap-1.5">
-              <input type="date" value={rangeFrom} max={rangeTo || todayStr()} onChange={(e) => handleRangeFromChange(e.target.value)} className={INPUT_CLS} />
-              <span className="text-xs text-muted-foreground">{t("to")}</span>
-              <input type="date" value={rangeTo} min={rangeFrom} max={todayStr()} onChange={(e) => handleRangeToChange(e.target.value)} className={INPUT_CLS} />
-            </div>
+            <DateRangePicker
+              from={rangeFrom}
+              to={rangeTo}
+              max={todayStr()}
+              onFromChange={handleRangeFromChange}
+              onToChange={handleRangeToChange}
+              labels={{ from: t("from"), to: t("to") }}
+              className="w-full sm:w-[19rem]"
+              compact
+              enforceOrder
+            />
           )}
         </div>
       </div>

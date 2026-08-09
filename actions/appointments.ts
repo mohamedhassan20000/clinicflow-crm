@@ -24,7 +24,7 @@ import { notifyAppointmentEvent } from "@/lib/messaging/appointment-notification
 import { deliverIssuedInvoice } from "@/lib/messaging/invoice-delivery";
 import { getClinicWorkingHours } from "@/actions/settings";
 import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
-import { computeAvailability } from "@/lib/booking/availability";
+import { computeAvailability, type AvailabilityResult } from "@/lib/booking/availability";
 import {
   computeBillingUndoEligibility,
   type BillingUndoActivityEvent,
@@ -693,6 +693,60 @@ export async function getReplacementDoctorOptions(
       fullName: doctor.full_name,
     })),
   };
+}
+
+/**
+ * Presentation data for the Replace dialog's slot grid. The result comes from
+ * the same calculator and uses the same original-appointment exclusion as the
+ * final replace validation; the mutation remains the source of truth.
+ */
+export async function getReplacementAvailability(
+  appointmentId: string,
+  doctorId: string,
+  dateIso: string,
+  durationMinutes: number,
+): Promise<ActionResult & { data?: AvailabilityResult }> {
+  const user = await requireRole([
+    "admin",
+    "receptionist",
+    "manager",
+    "doctor",
+    "assistant",
+  ]);
+  const parsedAppointmentId = replaceAppointmentSchema.shape.original_id.safeParse(appointmentId);
+  const parsedDoctorId = replaceAppointmentSchema.shape.doctor_id.safeParse(doctorId);
+  if (
+    !parsedAppointmentId.success ||
+    !parsedDoctorId.success ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(dateIso) ||
+    !Number.isInteger(durationMinutes) ||
+    durationMinutes <= 0
+  ) {
+    return { error: await actionError("appointments.validationError") };
+  }
+
+  const doctorResult = await getReplacementDoctorOptions(parsedAppointmentId.data);
+  if (
+    doctorResult.error ||
+    !doctorResult.data?.some((doctor) => doctor.id === parsedDoctorId.data)
+  ) {
+    return {
+      error: doctorResult.error ?? await actionError("appointments.failedToValidateDoctor"),
+    };
+  }
+
+  const supabase = await createClient();
+  const timeZone = await getClinicTimeZone(user.clinicId);
+  const data = await computeAvailability({
+    supabase,
+    clinicId: user.clinicId,
+    doctorId: parsedDoctorId.data,
+    dateIso,
+    timeZone,
+    durationMinutes,
+    excludeAppointmentId: parsedAppointmentId.data,
+  });
+  return { data };
 }
 
 /** Ordered original -> ... -> active replacement history, still RLS-scoped. */
@@ -1453,6 +1507,7 @@ export async function sendInvoiceToPatient(
   const result = await deliverIssuedInvoice({
     clinicId: user.clinicId,
     appointmentId,
+    actorId: user.id,
   });
   if (!result) {
     return { error: await actionError("appointments.failedToSendInvoice") };

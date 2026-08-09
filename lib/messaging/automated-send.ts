@@ -11,6 +11,7 @@ import {
   type TemplateVariable,
 } from "@/lib/messaging/patient-copy";
 import type {
+  MessageAttachment,
   MessageChannel,
   OutboundRelatedType,
   SendErrorCode,
@@ -71,6 +72,8 @@ export type DispatchInput = {
   relatedId: string;
   /** Whether the clinic has an active WhatsApp integration. */
   whatsappActive: boolean;
+  /** Email-only attachments (e.g. the canonical invoice PDF). */
+  emailAttachments?: readonly MessageAttachment[];
 };
 
 function templateVariableNames(
@@ -160,6 +163,7 @@ export async function dispatchPatientMessage(
       relatedType: input.relatedType,
       relatedId: input.relatedId,
       channelPreference: ["email"],
+      attachments: input.emailAttachments,
     });
   } else {
     result.email = { status: "not_attempted", reason: "no_address" };

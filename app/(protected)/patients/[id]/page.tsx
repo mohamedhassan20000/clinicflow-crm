@@ -6,22 +6,14 @@ import {
   formatClinicDate,
 } from "@/lib/datetime";
 import { getServerMoneyFormatter } from "@/lib/currency/server";
-import { AlertCircle, Archive, CalendarPlus, FileText, Pencil, Receipt, Trash2 } from "lucide-react";
-import { StatusBadge } from "@/components/appointments/status-badge";
+import { AlertCircle, Archive, CalendarPlus, FileText, Package, Pencil, Receipt, Trash2 } from "lucide-react";
 import { requireUser } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
 import { createClinicScopedAdminClient } from "@/lib/supabase/admin";
-import {
-  MedicalNotesList,
-  type MedicalNoteWithAttachments,
-} from "@/components/patients/medical-notes-list";
-import { NoteComposer } from "@/components/patients/note-composer";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DeletePatientButton } from "@/components/patients/delete-patient-button";
-import { AppointmentPaymentRow } from "@/components/patients/appointment-payment-row";
 import { SettleOutstandingDialog } from "@/components/patients/settle-outstanding-dialog";
-import { AddDepositDialog } from "@/components/patients/add-deposit-dialog";
 import { PatientAvatarControls } from "@/components/patients/patient-avatar-controls";
 import { PatientDocumentsSection } from "@/components/patients/patient-documents-section";
 import {
@@ -31,10 +23,22 @@ import {
   type PatientPackageService,
   type PatientPackageTemplate,
 } from "@/components/patients/patient-packages-section";
-import { FollowupsList, type FollowupItem } from "@/components/patients/followups-list";
 import { PatientAvatarPreview } from "@/components/patients/patient-avatar-preview";
+import { AppointmentHistorySection } from "@/components/patients/file/appointment-history-section";
+import { PatientDepositsSection } from "@/components/patients/file/patient-deposits-section";
+import { PatientFileClinicalActions } from "@/components/patients/file/patient-file-clinical-actions";
+import {
+  computeBillingTotals,
+  loadAppointmentHistory,
+  loadPatientDeposits,
+  PATIENT_FILE_APPOINTMENT_PREVIEW_LIMIT,
+} from "@/lib/patients/file-data";
+import { getDocumentTypeLabels } from "@/lib/documents/module-labels";
+import {
+  listClinicalAuthoringOptions,
+  type ClinicalAuthoringOptions,
+} from "@/actions/clinical/authoring";
 import { listPatientDocuments, type PatientDocumentsData } from "@/actions/patient-documents";
-import type { MedicalNoteAttachmentItem } from "@/actions/medical-note-attachments";
 import { formatDoctorName } from "@/lib/format-doctor";
 import { PageHeader } from "@/components/shared/page-header";
 import { resolveReturnTo, withReturnTo } from "@/lib/navigation/return-url";
@@ -42,6 +46,9 @@ import { getTranslations } from "next-intl/server";
 import { AssistantLauncherEntry } from "@/components/assistant/assistant-launcher-entry";
 import { resolveAssistantLauncher } from "@/lib/ai/launchers";
 import { ActivityTimeline } from "@/components/activity/activity-timeline";
+import { DocumentTriggerLabel } from "@/components/documents/document-trigger-label";
+
+const DEPOSITS_PREVIEW_LIMIT = 5;
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("protected");
@@ -55,6 +62,7 @@ interface PageProps {
 
 export default async function PatientDetailPage({ params, searchParams }: PageProps) {
   const t = await getTranslations("protected");
+  const tp = await getTranslations("patients");
   const { id } = await params;
   const pageSearchParams: { returnTo?: string } = searchParams ? await searchParams : {};
   const { returnTo } = pageSearchParams;
@@ -85,12 +93,8 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
     "id, full_name, file_number, national_id, phone, email, date_of_birth, blood_type, created_at, is_deleted, avatar_path, assigned_doctor_id, department_id, departments(id, name, color), assigned_doctor:profiles!assigned_doctor_id(id, full_name), insurance_providers(name)";
 
   // Full columns: base + trash/archive fields added by migration 20260517100000.
-  // Only used in the admin fallback (which only runs for deleted/archived rows,
-  // which only exist after the migration is applied).
   const PATIENT_SELECT_FULL = PATIENT_SELECT_BASE + ", is_archived, deleted_at, archived_at";
 
-  // Shape that covers both the regular query (base) and admin fallback (full).
-  // Archive/trash fields are optional — absent for active patients, present for deleted/archived.
   type PatientData = {
     id: string;
     full_name: string;
@@ -127,9 +131,6 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
     patientError = result.error as { code: string } | null;
   }
 
-  // Only use the admin fallback when RLS returned "no rows" (PGRST116), which
-  // means the patient exists but is deleted/archived. Other error codes (schema
-  // errors, auth) are not retried — they will correctly fall through to notFound().
   if (
     patientError?.code === "PGRST116" &&
     (user.role === "admin" || user.role === "receptionist")
@@ -161,9 +162,6 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
 
   if (isDoctor && !doctorCanAccessPatient) notFound();
 
-  // The contextual launcher is a scoped clinical capability. It is
-  // optional enhancement data: entitlement, admin visibility, usage, or AI
-  // persistence failures must never make the patient record unavailable.
   const patientAssistantContext = { type: "patient", patientId: patient.id } as const;
   const assistantPromise = isScopedClinical && !patient.is_deleted
     ? resolveAssistantLauncher({ user, context: patientAssistantContext })
@@ -178,43 +176,13 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
   }
 
   const [
-    { data: notes },
-    appointmentsResult,
-    { data: followups },
     { data: packageRows },
     { data: packageTemplates },
     { data: packageDepartments },
     { data: packageServices },
+    history,
+    docTypeLabels,
   ] = await Promise.all([
-    supabase
-      .from("medical_notes")
-      .select("id, patient_id, doctor_id, note, created_at, created_by, deleted_at, profiles!doctor_id(full_name)")
-      .eq("patient_id", id)
-      .is("deleted_at", null)
-      .order("created_at", { ascending: false })
-      .limit(3),
-    supabase
-      .from("appointments")
-      .select(
-        isScopedClinical
-          ? "id, scheduled_at, status, cancellation_reason, cancelled_at, package_id, package_session_number, profiles!doctor_id(full_name), departments(name, color), patient_packages(name, total_sessions, used_sessions)"
-          : "id, scheduled_at, status, payment_method, paid_at, total_amount, paid_amount, insurance_amount, insurance_calculation_mode, insurance_percentage, patient_responsibility, secondary_amount, deposit_amount, outstanding_amount, secondary_payment_method, payment_note, cancellation_reason, cancelled_at, package_id, package_session_number, profiles!doctor_id(full_name), departments(name, color), insurance_providers(name), patient_packages(name, total_sessions, used_sessions, price_per_session), appointment_services(id, name, price, quantity)",
-      )
-      .eq("patient_id", id)
-      .eq("clinic_id", user.clinicId)
-      .is("deleted_at", null)
-      .order("scheduled_at", { ascending: false })
-      .limit(3),
-    // Follow-ups recorded for this patient (any of their sessions).
-    supabase
-      .from("follow_ups")
-      .select(
-        "id, recorded_at, outcome, notes, appointment_id, recorded_by:profiles!recorded_by(full_name), appointment:appointments!appointment_id(scheduled_at, departments(name, color), profiles!doctor_id(full_name))",
-      )
-      .eq("patient_id", id)
-      .eq("clinic_id", user.clinicId)
-      .order("recorded_at", { ascending: false })
-      .limit(3),
     supabase
       .from("patient_packages")
       .select(
@@ -226,9 +194,7 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
       .order("updated_at", { ascending: false }),
     supabase
       .from("package_templates")
-      .select(
-        "id, department_id, name, total_sessions, price_per_session, total_price, notes, is_active",
-      )
+      .select("id, department_id, name, total_sessions, price_per_session, total_price, notes, is_active")
       .eq("clinic_id", user.clinicId)
       .eq("is_active", true)
       .order("name", { ascending: true }),
@@ -246,142 +212,73 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
       .eq("is_active", true)
       .is("deleted_at", null)
       .order("name", { ascending: true }),
+    loadAppointmentHistory(supabase, {
+      clinicId: user.clinicId,
+      patientId: id,
+      isScopedClinical,
+      limit: PATIENT_FILE_APPOINTMENT_PREVIEW_LIMIT,
+      includeNoteAttachments: canViewMedicalNotes,
+    }),
+    getDocumentTypeLabels(),
   ]);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const appointments = appointmentsResult.data as any[] | null;
   const patientPackages = (packageRows ?? []) as PatientPackageItem[];
-  const activePackageTemplates = (packageTemplates ??
-    []) as PatientPackageTemplate[];
-  const packageDepartmentOptions = (packageDepartments ??
-    []) as PatientPackageDepartment[];
+  const activePackageTemplates = (packageTemplates ?? []) as PatientPackageTemplate[];
+  const packageDepartmentOptions = (packageDepartments ?? []) as PatientPackageDepartment[];
   const packageServiceOptions = (packageServices ?? []) as PatientPackageService[];
-  const noteRows = (notes ?? []) as MedicalNoteWithAttachments[];
-  const noteIds = noteRows.map((note) => note.id);
-  const attachmentsByNote = new Map<string, MedicalNoteAttachmentItem[]>();
-
-  if (canViewMedicalNotes && noteIds.length > 0) {
-    const { data: attachmentRows } = await supabase
-      .from("medical_note_attachments")
-      .select(
-        "id, note_id, file_name, mime_type, size_bytes, created_at, uploaded_by, uploaded_by_profile:profiles!medical_note_attachments_uploaded_by_fkey(full_name)",
-      )
-      .eq("clinic_id", user.clinicId)
-      .eq("patient_id", id)
-      .in("note_id", noteIds)
-      .is("deleted_at", null)
-      .order("created_at", { ascending: false });
-
-    for (const row of (attachmentRows ?? []) as {
-      id: string;
-      note_id: string;
-      file_name: string;
-      mime_type: string;
-      size_bytes: number;
-      created_at: string;
-      uploaded_by: string | null;
-      uploaded_by_profile?: { full_name: string | null } | null;
-    }[]) {
-      const list = attachmentsByNote.get(row.note_id) ?? [];
-      list.push({
-        id: row.id,
-        fileName: row.file_name,
-        mimeType: row.mime_type,
-        sizeBytes: Number(row.size_bytes),
-        createdAt: row.created_at,
-        uploadedById: row.uploaded_by,
-        uploadedByName: row.uploaded_by_profile?.full_name ?? null,
-      });
-      attachmentsByNote.set(row.note_id, list);
-    }
-  }
-
-  const notesWithAttachments = noteRows.map((note) => ({
-    ...note,
-    attachments: attachmentsByNote.get(note.id) ?? [],
-  }));
 
   // Financial data is never loaded for scoped clinical roles.
-  const settlementsByAppt = new Map<
-    string,
-    {
-      id: string;
-      settled_at: string;
-      amount: number;
-      payment_method: string;
-      note: string | null;
-    }[]
-  >();
   let billingTotals = { billed: 0, collected: 0, outstanding: 0 };
   let accountBalance = 0;
+  let recentDeposits: Awaited<ReturnType<typeof loadPatientDeposits>>["transactions"] = [];
 
   if (!isScopedClinical) {
-    const [
-      { data: settlements },
-      { data: deposits },
-      { data: spentRows },
-    ] = await Promise.all([
-      supabase
-        .from("outstanding_settlements")
-        .select("id, appointment_id, settled_at, amount, payment_method, note")
-        .eq("patient_id", id)
-        .eq("clinic_id", user.clinicId)
-        .order("settled_at", { ascending: true }),
-      supabase
-        .from("patient_deposits")
-        .select("amount")
-        .eq("patient_id", id)
-        .eq("clinic_id", user.clinicId),
+    const [{ data: billableRows }, deposits] = await Promise.all([
       supabase
         .from("appointments")
-        .select("deposit_amount")
+        .select(
+          "status, total_amount, paid_amount, insurance_amount, secondary_amount, deposit_amount, outstanding_amount",
+        )
         .eq("patient_id", id)
         .eq("clinic_id", user.clinicId)
-        .is("deleted_at", null),
+        .is("deleted_at", null)
+        .eq("status", "completed"),
+      loadPatientDeposits(supabase, { clinicId: user.clinicId, patientId: id }),
     ]);
-
-    for (const s of settlements ?? []) {
-      if (!s.appointment_id) continue;
-      const list = settlementsByAppt.get(s.appointment_id) ?? [];
-      list.push({
-        id: s.id,
-        settled_at: s.settled_at,
-        amount: Number(s.amount ?? 0),
-        payment_method: s.payment_method,
-        note: s.note,
-      });
-      settlementsByAppt.set(s.appointment_id, list);
-    }
-
-    const totalDeposited = (deposits ?? []).reduce(
-      (s, r) => s + Number(r.amount ?? 0),
-      0,
-    );
-    const totalSpent = (spentRows ?? []).reduce(
-      (s, r) => s + Number(r.deposit_amount ?? 0),
-      0,
-    );
-    accountBalance = Math.max(0, Number((totalDeposited - totalSpent).toFixed(2)));
-
-    const completed = (appointments ?? []).filter((a) => a.status === "completed");
-    billingTotals = completed.reduce(
-      (acc, a) => {
-        acc.billed += (a as { total_amount?: number }).total_amount ?? 0;
-        acc.collected +=
-          ((a as { paid_amount?: number }).paid_amount ?? 0) +
-          ((a as { insurance_amount?: number }).insurance_amount ?? 0) +
-          ((a as { secondary_amount?: number }).secondary_amount ?? 0) +
-          ((a as { deposit_amount?: number }).deposit_amount ?? 0);
-        acc.outstanding += (a as { outstanding_amount?: number }).outstanding_amount ?? 0;
-        return acc;
-      },
-      { billed: 0, collected: 0, outstanding: 0 },
-    );
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    billingTotals = computeBillingTotals((billableRows ?? []) as any[]);
+    accountBalance = deposits.state.accountBalance;
+    recentDeposits = deposits.transactions.slice(0, DEPOSITS_PREVIEW_LIMIT);
   }
 
   const canEdit =
-    (user.role === "admin" || user.role === "receptionist") &&
-    !patient.is_deleted;
+    (isAdmin || isReceptionist) && !patient.is_deleted;
+
+  // Contextual clinical authoring is available to any authorized preparer for an
+  // active patient. Loading is best-effort — a failure never breaks the page.
+  let clinicalOptions: ClinicalAuthoringOptions | null = null;
+  if (!patient.is_deleted) {
+    try {
+      clinicalOptions = await listClinicalAuthoringOptions();
+    } catch {
+      clinicalOptions = null;
+    }
+  }
+  const clinicalActionsNode = clinicalOptions ? (
+    <PatientFileClinicalActions
+      patientId={id}
+      patientName={patient.full_name}
+      fileNumber={patient.file_number}
+      options={{
+        ...clinicalOptions,
+        appointments: clinicalOptions.appointments.filter(
+          (a) => a.patientId === id,
+        ),
+      }}
+      locale={clinicLocale.locale === "ar" ? "ar" : "en"}
+    />
+  ) : null;
+
   let patientDocuments: PatientDocumentsData | null = null;
   let patientDocumentsLoadFailed = false;
   if (canViewDocuments) {
@@ -406,6 +303,52 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase())
     .join("");
+  const billingSummaryNode = !isScopedClinical ? (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+          <Receipt className="h-4 w-4" />
+          {t("billing")}
+        </h3>
+        {canEdit && billingTotals.outstanding > 0 && (
+          <SettleOutstandingDialog
+            patientId={id}
+            outstanding={billingTotals.outstanding}
+            patientName={patient.full_name}
+          />
+        )}
+      </div>
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border/50 bg-border/40 sm:grid-cols-4">
+        <BillingCell label={t("billed")} amount={billingTotals.billed} formatAmount={fmtMoney} />
+        <BillingCell
+          label={t("collected")}
+          amount={billingTotals.collected}
+          formatAmount={fmtMoney}
+          accent="text-emerald-600 dark:text-emerald-400"
+        />
+        <BillingCell
+          label={t("outstanding")}
+          amount={billingTotals.outstanding}
+          formatAmount={fmtMoney}
+          accent={billingTotals.outstanding > 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}
+        />
+        <BillingCell
+          label={t("accountBalance")}
+          amount={accountBalance}
+          formatAmount={fmtMoney}
+          accent={accountBalance > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}
+        />
+      </div>
+      {billingTotals.outstanding > 0 && (
+        <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+          <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+          {t("thisPatientHasAnOutstandingBalance")} {" "}
+          <span className="font-semibold tabular-nums">{fmtMoney(billingTotals.outstanding)}</span>.
+        </div>
+      )}
+    </div>
+  ) : null;
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -445,6 +388,14 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
         }
         actions={
           <>
+            {!patient.is_deleted ? (
+              <Button asChild variant="outline" size="sm" className="gap-1.5">
+                <Link href={`/documents/roster-profile/patient-file?patientId=${encodeURIComponent(id)}`}>
+                  <FileText className="size-3.5" aria-hidden="true" />
+                  <DocumentTriggerLabel kind="patient-file" />
+                </Link>
+              </Button>
+            ) : null}
             {assistant ? (
               <AssistantLauncherEntry
                 resolution={assistant}
@@ -514,146 +465,109 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
             <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
               {t("profile")}</h2>
             <dl className="space-y-3 text-sm">
-              <div>
-                <dt className="text-xs text-muted-foreground">{t("fileNumber")}</dt>
-                <dd className="font-mono font-medium">
-                  {patient.file_number ?? "—"}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs text-muted-foreground">{t("nationalId")}</dt>
-                <dd className="font-mono font-medium">
-                  {patient.national_id ?? "—"}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs text-muted-foreground">{t("birthDate")}</dt>
-                <dd className="font-medium">
-                    {formatClinicDate(patient.date_of_birth, clinicLocale)}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs text-muted-foreground">{t("phone")}</dt>
-                <dd className="font-medium">{patient.phone}</dd>
-              </div>
-              <div>
-                <dt className="text-xs text-muted-foreground">{t("email")}</dt>
-                <dd className="font-medium break-all">{patient.email}</dd>
-              </div>
-              <div>
-                <dt className="text-xs text-muted-foreground">{t("department")}</dt>
-                <dd className="font-medium">
-                  {deptInfo ? (
-                    <span className="inline-flex items-center gap-1.5">
-                      <span
-                        aria-hidden
-                        className="h-2 w-2 rounded-full"
-                        style={{ backgroundColor: deptInfo.color }}
-                      />
-                      {deptInfo.name}
-                    </span>
-                  ) : (
-                    <span className="text-muted-foreground/60">{t("unassigned")}</span>
-                  )}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs text-muted-foreground">{t("treatingDoctor")}</dt>
-                <dd className="font-medium">
-                  {doctorName ? (
-                    formatDoctorName(doctorName)
-                  ) : (
-                    <span className="text-muted-foreground/60">{t("unassigned")}</span>
-                  )}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs text-muted-foreground">{t("insurance")}</dt>
-                <dd className="font-medium">
-                  {insuranceProviderName ?? (
-                    <span className="text-muted-foreground/60">
-                      {t("noInsurance")}</span>
-                  )}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs text-muted-foreground">{t("registered")}</dt>
-                <dd className="font-medium">
-                    {formatClinicDate(patient.created_at, clinicLocale)}
-                </dd>
-              </div>
+              <ProfileRow label={t("fileNumber")}>
+                <span className="font-mono font-medium">{patient.file_number ?? "—"}</span>
+              </ProfileRow>
+              <ProfileRow label={t("nationalId")}>
+                <span className="font-mono font-medium">{patient.national_id ?? "—"}</span>
+              </ProfileRow>
+              <ProfileRow label={t("birthDate")}>
+                <span className="font-medium">{formatClinicDate(patient.date_of_birth, clinicLocale)}</span>
+              </ProfileRow>
+              <ProfileRow label={t("phone")}>
+                <span className="font-medium">{patient.phone}</span>
+              </ProfileRow>
+              <ProfileRow label={t("email")}>
+                <span className="font-medium break-all">{patient.email}</span>
+              </ProfileRow>
+              <ProfileRow label={t("department")}>
+                {deptInfo ? (
+                  <span className="inline-flex items-center gap-1.5 font-medium">
+                    <span aria-hidden className="h-2 w-2 rounded-full" style={{ backgroundColor: deptInfo.color }} />
+                    {deptInfo.name}
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground/60">{t("unassigned")}</span>
+                )}
+              </ProfileRow>
+              <ProfileRow label={t("treatingDoctor")}>
+                {doctorName ? (
+                  <span className="font-medium">{formatDoctorName(doctorName)}</span>
+                ) : (
+                  <span className="text-muted-foreground/60">{t("unassigned")}</span>
+                )}
+              </ProfileRow>
+              <ProfileRow label={t("insurance")}>
+                {insuranceProviderName ? (
+                  <span className="font-medium">{insuranceProviderName}</span>
+                ) : (
+                  <span className="text-muted-foreground/60">{t("noInsurance")}</span>
+                )}
+              </ProfileRow>
+              <ProfileRow label={t("registered")}>
+                <span className="font-medium">{formatClinicDate(patient.created_at, clinicLocale)}</span>
+              </ProfileRow>
             </dl>
           </div>
         </div>
 
-        {/* Right column */}
+        {/* Right column — timeline workspace */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Billing summary strip — hidden for doctors */}
-          {!isScopedClinical && <div className="space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                <Receipt className="h-4 w-4" />
-                {t("billing")}</h2>
-              {canEdit && (
-                <div className="flex items-center gap-2">
-                  <AddDepositDialog
-                    patientId={id}
-                    patientName={patient.full_name}
-                  />
-                  {billingTotals.outstanding > 0 && (
-                    <SettleOutstandingDialog
-                      patientId={id}
-                      outstanding={billingTotals.outstanding}
-                      patientName={patient.full_name}
-                    />
-                  )}
-                </div>
-              )}
+          {/* Unified appointment history — latest 5 + contextual clinical actions */}
+          <AppointmentHistorySection
+            t={tp}
+            entries={history.entries}
+            settlementsByAppointment={history.settlementsByAppointment}
+            isScopedClinical={isScopedClinical}
+            docTypeLabels={docTypeLabels}
+            totalCount={history.totalCount}
+            patientId={id}
+            currentUserId={user.id}
+            canManageAllAttachments={isAdmin}
+            canMutateNotes={canManageMedicalNotes}
+            canViewNoteAttachments={canViewMedicalNotes}
+            canUploadNoteAttachments={canManageMedicalNotes}
+            canAuthorNotes={canManageMedicalNotes && !patient.is_deleted}
+            viewAllHref={withReturnTo(`${patientPath}/history`, patientUrl)}
+            actions={clinicalActionsNode}
+          />
+
+          {/* Deposits — recent + dedicated page (financial) */}
+          {!isScopedClinical && (
+            <PatientDepositsSection
+              t={tp}
+              patientId={id}
+              patientName={patient.full_name}
+              accountBalance={accountBalance}
+              transactions={recentDeposits}
+              formatMoney={fmtMoney}
+              clinicLocale={clinicLocale}
+              canManage={canEdit}
+              viewAllHref={withReturnTo(`${patientPath}/deposits`, patientUrl)}
+              billingSummary={billingSummaryNode}
+            />
+          )}
+
+          {/* Packages — recent/current + dedicated page */}
+          <div className="space-y-2">
+            <div className="flex justify-end print:hidden">
+              <Button asChild variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs">
+                <Link href={withReturnTo(`${patientPath}/packages`, patientUrl)}>
+                  <Package className="h-3 w-3" />
+                  {tp("viewAllPackages")}
+                </Link>
+              </Button>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-px rounded-xl border border-border/50 bg-border/40 overflow-hidden">
-              <BillingCell
-                label={t("billed")}
-                amount={billingTotals.billed}
-                formatAmount={fmtMoney}
-              />
-              <BillingCell
-                label={t("collected")}
-                amount={billingTotals.collected}
-                formatAmount={fmtMoney}
-                accent="text-emerald-600 dark:text-emerald-400"
-              />
-              <BillingCell
-                label={t("outstanding")}
-                amount={billingTotals.outstanding}
-                formatAmount={fmtMoney}
-                accent={
-                  billingTotals.outstanding > 0
-                    ? "text-amber-600 dark:text-amber-400"
-                    : "text-muted-foreground"
-                }
-              />
-              <BillingCell
-                label={t("accountBalance")}
-                amount={accountBalance}
-                formatAmount={fmtMoney}
-                accent={
-                  accountBalance > 0
-                    ? "text-emerald-600 dark:text-emerald-400"
-                    : "text-muted-foreground"
-                }
-              />
-            </div>
-            {billingTotals.outstanding > 0 && (
-              <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
-                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                {t("thisPatientHasAnOutstandingBalance")}{" "}
-                <span className="font-semibold tabular-nums">
-                  {fmtMoney(billingTotals.outstanding)}
-                </span>
-                .
-              </div>
-            )}
-          </div>}
+            <PatientPackagesSection
+              patientId={id}
+              packages={patientPackages}
+              departments={packageDepartmentOptions}
+              services={packageServiceOptions}
+              packageTemplates={activePackageTemplates}
+              patientDepartmentId={patient.department_id}
+              canManage={canEdit}
+            />
+          </div>
 
           {canViewDocuments && patientDocuments && (
             <PatientDocumentsSection
@@ -663,121 +577,7 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
             />
           )}
 
-          <PatientPackagesSection
-            patientId={id}
-            packages={patientPackages}
-            departments={packageDepartmentOptions}
-            services={packageServiceOptions}
-            packageTemplates={activePackageTemplates}
-            patientDepartmentId={patient.department_id}
-            canManage={canEdit}
-          />
-
-          {/* Appointments */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                {t("appointments")}</h2>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">
-                  {t("appointmentRecordCount", { count: appointments?.length ?? 0 })}
-                </span>
-                <Button asChild variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs">
-                  <Link href={withReturnTo(`${patientPath}/appointments-report`, patientUrl)}>
-                    <FileText className="h-3 w-3" />
-                    {t("fullReport")}</Link>
-                </Button>
-              </div>
-            </div>
-            <div className="rounded-xl border border-border/50 bg-card overflow-hidden">
-              {appointments && appointments.length > 0 ? (
-                <div>
-                  {appointments.map((a) =>
-                    isScopedClinical ? (
-                      <SimpleApptRow key={a.id} a={a as Parameters<typeof SimpleApptRow>[0]["a"]} clinicLocale={clinicLocale} />
-                    ) : (
-                      <AppointmentPaymentRow
-                        key={a.id}
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        a={a as any}
-                        settlements={settlementsByAppt.get(a.id) ?? []}
-                      />
-                    )
-                  )}
-                </div>
-              ) : (
-                <div className="px-5 py-6 text-center text-sm text-muted-foreground">
-                  {t("noAppointmentsYet")}</div>
-              )}
-            </div>
-            {!isScopedClinical && (appointments ?? []).some((a) => a.status === "completed") && (
-              <p className="text-[11px] text-muted-foreground">
-                {t("tipClickACompletedAppointmentTo")}</p>
-            )}
-          </div>
-
-          {/* Follow-up notes — receptionist phone-back records */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                {t("followUpNotes")}</h2>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">
-                  {t("followupRecordCount", { count: followups?.length ?? 0 })}
-                </span>
-                <Button asChild variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs">
-                  <Link href={withReturnTo(`${patientPath}/followups-report`, patientUrl)}>
-                    <FileText className="h-3 w-3" />
-                    {t("fullReport")}</Link>
-                </Button>
-              </div>
-            </div>
-            <div className="overflow-hidden rounded-xl border border-border/50 bg-card">
-              <FollowupsList followups={(followups ?? []) as FollowupItem[]} />
-            </div>
-          </div>
-
-          {/* Medical notes */}
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-              {t("medicalNotes")}</h2>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">
-                {t("medicalNoteCount", { count: notes?.length ?? 0 })}
-              </span>
-              {canViewMedicalNotes && (
-                <Button asChild variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs">
-                  <Link href={withReturnTo(`${patientPath}/medical-notes-report`, patientUrl)}>
-                    <FileText className="h-3 w-3" />
-                    {t("fullReport")}</Link>
-                </Button>
-              )}
-            </div>
-          </div>
-
-          {canManageMedicalNotes && !patient.is_deleted && (
-            <div className="rounded-xl border border-border/50 bg-card p-4">
-              <NoteComposer patientId={id} />
-            </div>
-          )}
-
-          {!canViewMedicalNotes && (
-            <div className="rounded-lg border border-border/30 bg-muted/20 px-4 py-3 text-xs text-muted-foreground">
-              {t("medicalNotesAreVisibleToClinical")}</div>
-          )}
-
-          {canViewMedicalNotes && (
-            <MedicalNotesList
-              notes={notesWithAttachments}
-              patientId={id}
-              currentUserId={user.id}
-              canManageAllAttachments={isAdmin}
-              canMutateNotes={canManageMedicalNotes}
-              canUploadAttachments={canManageMedicalNotes}
-            />
-          )}
-
-          {/* Patient activity trail (Phase 8D) */}
+          {/* Patient activity trail */}
           <div className="space-y-3">
             <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
               {t("patientActivity")}</h2>
@@ -789,48 +589,11 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
   );
 }
 
-function SimpleApptRow({
-  a,
-  clinicLocale,
-}: {
-  a: {
-    id: string;
-    scheduled_at: string;
-    status: string;
-    cancellation_reason?: string | null;
-    profiles?: { full_name: string } | null;
-    departments?: { name: string; color: string } | null;
-    insurance_providers?: { name: string } | null;
-    appointment_services?: { id: string; name: string; price: number; quantity: number }[];
-  };
-  clinicLocale: ReturnType<typeof clinicLocaleFromRow>;
-}) {
-  const dept = a.departments;
+function ProfileRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-3 px-4 py-3 text-sm border-b border-border/30 last:border-0 hover:bg-muted/20 transition-colors">
-      <div className="min-w-0 flex-1 space-y-0.5">
-        <p className="font-medium tabular-nums text-xs">
-                              {formatClinicDate(a.scheduled_at, clinicLocale, {
-            dateStyle: "medium",
-            timeStyle: "short",
-          })}
-        </p>
-        <p className="text-xs text-muted-foreground">
-          {formatDoctorName(a.profiles?.full_name)}
-          {dept?.name && (
-            <>
-              {" · "}
-              <span
-                style={{ color: dept.color }}
-                className="font-medium"
-              >
-                {dept.name}
-              </span>
-            </>
-          )}
-        </p>
-      </div>
-      <StatusBadge status={a.status as Parameters<typeof StatusBadge>[0]["status"]} />
+    <div>
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd>{children}</dd>
     </div>
   );
 }

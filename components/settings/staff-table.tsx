@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import { toast } from "sonner";
 import {
   MoreHorizontal,
@@ -11,6 +12,7 @@ import {
   Loader2,
   Trash2,
   FolderOpen,
+  FileText,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -104,6 +106,7 @@ interface StaffTableProps {
 
 export function StaffTable({ staff, departments, doctors, assignmentsByAssistant, currentUserId, lastSeenMap, isAdmin }: StaffTableProps) {
   const t = useTranslations("settings");
+  const tDocuments = useTranslations("documentPlatform.ui");
   const [editTarget, setEditTarget] = useState<StaffMember | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<StaffMember | null>(null);
   const [profileTarget, setProfileTarget] = useState<StaffMember | null>(null);
@@ -302,6 +305,12 @@ export function StaffTable({ staff, departments, doctors, assignmentsByAssistant
                           <FolderOpen className="me-2 h-4 w-4" />
                           {t("viewProfileAndFiles")}
                         </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <Link href={`/documents/roster-profile/staff-file?staffId=${encodeURIComponent(s.id)}`}>
+                            <FileText className="me-2 h-4 w-4" />
+                            {tDocuments("staffFileDocument")}
+                          </Link>
+                        </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={() => setEditTarget(s)}>
                           <Pencil className="me-2 h-4 w-4" />
@@ -351,6 +360,7 @@ export function StaffTable({ staff, departments, doctors, assignmentsByAssistant
 
       {/* Staff profile sheet */}
       <StaffProfileSheet
+        key={profileTarget?.id ?? "closed-staff-profile"}
         staff={profileTarget}
         open={!!profileTarget}
         onOpenChange={(open) => !open && setProfileTarget(null)}

@@ -121,7 +121,20 @@ describe("entitlement resolution", () => {
     // Hybrid is off by default in the plan catalog.
     expect(hasAiProviderMode(proAi, "hybrid")).toBe(false);
     expect(hasFeature(proAi, "ai.assistant_customization")).toBe(true);
+    expect(hasFeature(proAi, "ai.patient_auto")).toBe(false);
     expect(resolveAiRequestLimit(proAi)).toBe(1000);
+  });
+
+  it("enables patient auto replies through a Pro + AI clinic override", () => {
+    const testingClinic = resolveEntitlements({
+      clinicId: "clinic-1",
+      planSlug: "pro_ai",
+      planFeatures: PRO_AI_FEATURES,
+      planLimits: PRO_AI_LIMITS,
+      overrides: [{ feature_key: "ai.patient_auto", enabled: true }],
+      subscriptionAllowed: true,
+    });
+    expect(hasFeature(testingClinic, "ai.patient_auto")).toBe(true);
   });
 
   it("enables hybrid via a per-clinic ai.hybrid_fallback override (runbook path)", () => {

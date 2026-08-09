@@ -2,9 +2,11 @@ import "server-only";
 import * as Sentry from "@sentry/nextjs";
 import {
   createClinicScopedAdminClient,
+  downloadClinicDocumentPdf,
   getClinicReminderSettings,
 } from "@/lib/supabase/admin";
 import { formatClinicCurrency } from "@/lib/datetime";
+import { issueInvoiceDocument } from "@/lib/documents/invoice-issuance";
 import {
   invoiceIssuedCopy,
   patientCopyLocale,
@@ -18,22 +20,21 @@ import {
   type DispatchResult,
 } from "@/lib/messaging/automated-send";
 import { hasActiveWhatsAppChannel } from "@/lib/messaging/channel-management";
+import type { MessageAttachment } from "@/lib/messaging/types";
 
 /**
- * Event-driven invoice delivery (§7.3a, 2026-07-18 direction).
+ * Manual invoice delivery seam (§7.3a, 2026-07-19 flow revision).
  *
- * The moment an invoice is issued (billing completes on
- * `updateAppointmentStatus`), the invoice is delivered immediately to the
- * patient via WhatsApp + Email — no cron. Best-effort: a delivery failure never
- * fails billing, and every attempt is recorded on `outbound_messages`.
- *
- * P3 is deliberately **template-agnostic**: the pipeline is
+ * The pipeline is deliberately template-agnostic —
  *   compose summary  → render message → send
- * so P7 (System Templates & Document Engine) can replace the rendered document
- * (`renderInvoiceMessage`) with the professional, serialized invoice without
- * touching the compose or send stages or the calling action. The P3 summary is
- * the existing appointment/billing representation — no invoice table, no
- * serial number (those arrive in P7).
+ * — and P7-7 completes it without a parallel delivery system: the same seam now
+ * (1) issues the canonical, serialized professional invoice document
+ * (idempotent per appointment), and (2) attaches that stored PDF to the email
+ * channel. Email and WhatsApp remain independent, each idempotent on
+ * `invoice:<appointmentId>` via the `message_dispatches` ledger, and every
+ * attempt is still recorded on `outbound_messages`. A document-issuance or
+ * PDF-read failure degrades gracefully to the existing text summary rather than
+ * blocking delivery.
  */
 
 /** Minimal, template-agnostic P3 invoice representation. */
@@ -108,7 +109,10 @@ export async function buildInvoiceSummary(
  * P7 replaces this with the rendered professional document while keeping the
  * same input/output contract.
  */
-export function renderInvoiceMessage(summary: InvoiceSummary): {
+export function renderInvoiceMessage(
+  summary: InvoiceSummary,
+  documentNumber?: string | null,
+): {
   subject: string;
   body: string;
   templateValues: Record<TemplateVariable, string>;
@@ -130,9 +134,16 @@ export function renderInvoiceMessage(summary: InvoiceSummary): {
     outstandingText,
     hasOutstanding,
   });
+  // The professional invoice PDF (attached to email) carries the full detail;
+  // the message body references its canonical number when one was issued.
+  const numberLine = documentNumber
+    ? summary.locale === "ar"
+      ? `\nرقم الفاتورة: ${documentNumber}`
+      : `\nInvoice number: ${documentNumber}`
+    : "";
   return {
     subject: copy.subject,
-    body: copy.body,
+    body: `${copy.body}${numberLine}`,
     templateValues: {
       patient_name: summary.patient.full_name,
       clinic_name: summary.clinicName,
@@ -146,27 +157,83 @@ export function renderInvoiceMessage(summary: InvoiceSummary): {
 }
 
 /**
+ * Issue-and-read the canonical invoice PDF for email attachment. Best-effort:
+ * a failure here degrades to a text-only delivery so the patient still receives
+ * their invoice summary. Returns the attachment and the canonical number when
+ * available.
+ */
+async function prepareInvoiceAttachment(input: {
+  clinicId: string;
+  actorId: string;
+  appointmentId: string;
+  locale: PatientCopyLocale;
+}): Promise<{ attachment: MessageAttachment | null; documentNumber: string | null }> {
+  try {
+    const issued = await issueInvoiceDocument({
+      clinicId: input.clinicId,
+      actorId: input.actorId,
+      appointmentId: input.appointmentId,
+      locale: input.locale,
+    });
+    const download = await downloadClinicDocumentPdf({
+      clinicId: input.clinicId,
+      documentType: "INVOICE",
+      documentId: issued.documentId,
+    });
+    if (download.error || !download.data) {
+      return { attachment: null, documentNumber: issued.documentNumber };
+    }
+    const bytes = new Uint8Array(await download.data.arrayBuffer());
+    const filename = `${issued.documentNumber}.pdf`;
+    return {
+      attachment: {
+        filename,
+        content: Buffer.from(bytes).toString("base64"),
+        contentType: "application/pdf",
+      },
+      documentNumber: issued.documentNumber,
+    };
+  } catch (error) {
+    Sentry.captureException(error, {
+      tags: { scope: "messaging-invoice-attachment" },
+      extra: { appointmentId: input.appointmentId },
+    });
+    return { attachment: null, documentNumber: null };
+  }
+}
+
+/**
  * send stage: Email and WhatsApp dispatched independently (Email always if the
  * patient has one; WhatsApp only if the clinic has an active integration), each
  * idempotent on `invoice:<appointmentId>`, recorded on outbound_messages.
  *
  * Triggered manually from the "Send to patient" action (2026-07-19 flow
- * revision) — not automatically after billing. Returns the per-channel result
+ * revision) — not automatically after billing. P7-7 attaches the canonical
+ * serialized invoice PDF to the email channel. Returns the per-channel result
  * so the UI can report what was delivered; `null` when the invoice could not be
  * composed (missing appointment/patient).
  */
 export async function deliverIssuedInvoice(input: {
   clinicId: string;
   appointmentId: string;
+  actorId: string;
 }): Promise<DispatchResult | null> {
   try {
-    const [composed, whatsappActive] = await Promise.all([
+    const settings = await getClinicReminderSettings(input.clinicId);
+    const locale = patientCopyLocale(settings.data?.locale);
+    const [composed, whatsappActive, prepared] = await Promise.all([
       buildInvoiceSummary(input.clinicId, input.appointmentId),
       hasActiveWhatsAppChannel(input.clinicId),
+      prepareInvoiceAttachment({
+        clinicId: input.clinicId,
+        actorId: input.actorId,
+        appointmentId: input.appointmentId,
+        locale,
+      }),
     ]);
     if (!composed) return null;
     const { summary, templates } = composed;
-    const rendered = renderInvoiceMessage(summary);
+    const rendered = renderInvoiceMessage(summary, prepared.documentNumber);
 
     return await dispatchPatientMessage({
       clinicId: input.clinicId,
@@ -183,6 +250,7 @@ export async function deliverIssuedInvoice(input: {
       body: rendered.body,
       relatedType: "invoice",
       relatedId: input.appointmentId,
+      emailAttachments: prepared.attachment ? [prepared.attachment] : undefined,
     });
   } catch (error) {
     Sentry.captureException(error, {

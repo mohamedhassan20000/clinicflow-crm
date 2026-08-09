@@ -55,6 +55,12 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // P7-1: keep the Chromium binary outside the bundled server chunk and trace
+  // the exact local document fonts used by the offline PDF renderer.
+  serverExternalPackages: ["@sparticuz/chromium"],
+  outputFileTracingIncludes: {
+    "/*": ["./app/fonts/manrope/*.woff2", "./app/fonts/thmanyah/*.woff2"],
+  },
   images: {
     remotePatterns: [
       {

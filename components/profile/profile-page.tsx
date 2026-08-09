@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -15,6 +14,7 @@ import {
   User,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { InternationalPhoneInput } from "@/components/shared/international-phone-input";
@@ -27,6 +27,7 @@ import {
 } from "@/actions/profile";
 import { useTranslations } from "next-intl";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
+import { ClinicianCredentialsForm } from "@/components/clinical/clinician-credentials-form";
 
 interface ProfileData {
   id: string;
@@ -36,6 +37,10 @@ interface ProfileData {
   role: string;
   email: string;
   created_at: string;
+  professional_license_no?: string | null;
+  specialty?: string | null;
+  professional_title?: string | null;
+  signature_path?: string | null;
   department: { name: string; color: string } | null;
 }
 
@@ -53,6 +58,17 @@ export function ProfilePage({ profile }: { profile: ProfileData }) {
         <ProfileCard profile={profile} />
         <div className="space-y-6 lg:col-span-2">
           <DetailsForm profile={profile} />
+          {profile.role === "doctor" && (
+            <ClinicianCredentialsForm
+              staffId={profile.id}
+              initial={{
+                professionalLicenseNo: profile.professional_license_no ?? null,
+                specialty: profile.specialty ?? null,
+                professionalTitle: profile.professional_title ?? null,
+                hasSignature: Boolean(profile.signature_path),
+              }}
+            />
+          )}
           <PasswordForm />
         </div>
       </div>
@@ -124,32 +140,29 @@ function ProfileCard({ profile }: { profile: ProfileData }) {
     <div className="space-y-4 rounded-xl border border-border/50 bg-card p-5">
       <form action={formAction} className="flex flex-col items-center gap-3">
         <div className="relative">
-          <div
+          <Avatar
             className={cn(
-              "flex h-32 w-32 items-center justify-center overflow-hidden rounded-full border-4 border-background bg-primary/10 text-3xl font-semibold text-primary shadow-sm ring-1 ring-border/40",
+              "h-32 w-32 border-4 border-background bg-primary/10 text-3xl font-semibold text-primary shadow-sm ring-1 ring-border/40 after:hidden",
             )}
           >
-            {avatar ? (
-              <Image
+            {avatar && (
+              <AvatarImage
                 src={avatar}
                 alt={profile.full_name}
-                width={128}
-                height={128}
-                unoptimized={avatar.startsWith("blob:")}
                 className={cn(
-                  "h-full w-full object-cover",
                   avatarActionPending && "opacity-60",
                 )}
               />
-            ) : (
-              <span>{initials(profile.full_name) || "?"}</span>
             )}
+            <AvatarFallback className="bg-primary/10 text-3xl font-semibold text-primary">
+              {initials(profile.full_name) || "?"}
+            </AvatarFallback>
             {avatarActionPending && (
-              <span className="absolute inset-0 flex items-center justify-center bg-background/40">
+              <span className="absolute inset-0 z-30 flex items-center justify-center bg-background/40">
                 <Loader2 className="h-6 w-6 animate-spin text-primary" />
               </span>
             )}
-          </div>
+          </Avatar>
           <button
             type="button"
             onClick={() => fileRef.current?.click()}

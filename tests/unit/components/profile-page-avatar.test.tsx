@@ -32,15 +32,17 @@ const profile = {
 describe("ProfilePage avatar controls", () => {
   it("removes the current avatar from the profile card", async () => {
     const user = userEvent.setup();
-    render(<ProfilePage profile={profile} />);
+    const { container } = render(<ProfilePage profile={profile} />);
 
-    expect(screen.getByAltText("Maya Hassan")).toBeInTheDocument();
+    expect(container.querySelector('[data-slot="avatar-image-background"]')).toHaveStyle({
+      backgroundImage: 'url("https://signed.local/avatar.webp")',
+    });
 
     await user.click(screen.getByRole("button", { name: /remove photo/i }));
 
     await waitFor(() => {
       expect(removeAvatar).toHaveBeenCalled();
-      expect(screen.queryByAltText("Maya Hassan")).not.toBeInTheDocument();
+      expect(container.querySelector('[data-slot="avatar-image-background"]')).not.toBeInTheDocument();
     });
     expect(screen.getByText("MH")).toBeInTheDocument();
   });

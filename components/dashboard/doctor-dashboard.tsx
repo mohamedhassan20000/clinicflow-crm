@@ -18,9 +18,7 @@ import { formatDoctorName } from "@/lib/format-doctor";
 import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
 import { useTranslations } from "next-intl";
-
-const INPUT_CLS =
-  "h-8 rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground [color-scheme:light] dark:[color-scheme:dark] focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 disabled:opacity-50";
+import { DateRangePicker } from "@/components/ui/clinic-date-picker";
 
 type FilterMode = "today" | "week" | "month" | "custom";
 
@@ -185,21 +183,15 @@ export function DoctorDashboard({
           </button>
         ))}
         {filterMode === "custom" && (
-          <>
-            <input
-              type="date"
-              value={rangeFrom}
-              onChange={(e) => handleFromChange(e.target.value)}
-              className={INPUT_CLS}
-            />
-            <span className="text-xs text-muted-foreground">{t("to")}</span>
-            <input
-              type="date"
-              value={rangeTo}
-              onChange={(e) => handleToChange(e.target.value)}
-              className={INPUT_CLS}
-            />
-          </>
+          <DateRangePicker
+            from={rangeFrom}
+            to={rangeTo}
+            onFromChange={handleFromChange}
+            onToChange={handleToChange}
+            labels={{ from: t("from"), to: t("to") }}
+            className="w-full sm:w-[19rem]"
+            compact
+          />
         )}
         {isPending && <span className="text-xs text-muted-foreground animate-pulse">{t("loading")}</span>}
       </div>

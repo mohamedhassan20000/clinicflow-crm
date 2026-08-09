@@ -4,8 +4,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTransition } from "react";
 import { CalendarDays } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { DateRangePicker } from "@/components/ui/clinic-date-picker";
 import { cn } from "@/lib/utils";
 import type { ReportDateRange, ReportDateRangePreset } from "@/types/reports";
 import { useTranslations } from "next-intl";
@@ -72,32 +71,19 @@ export function ReportsDateFilter({ range }: { range: ReportDateRange }) {
         </div>
 
         <div className="flex flex-wrap items-end gap-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="reports-from" className="text-xs text-muted-foreground">
-              {t("from")}</Label>
-            <Input
-              id="reports-from"
-              type="date"
-              value={range.from}
-              onChange={(event) =>
-                updateParams({ preset: "custom", from: event.target.value, to: range.to })
-              }
-              className="h-8 w-36"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="reports-to" className="text-xs text-muted-foreground">
-              {t("to")}</Label>
-            <Input
-              id="reports-to"
-              type="date"
-              value={range.to}
-              onChange={(event) =>
-                updateParams({ preset: "custom", from: range.from, to: event.target.value })
-              }
-              className="h-8 w-36"
-            />
-          </div>
+          <DateRangePicker
+            id="reports-date-range"
+            from={range.from}
+            to={range.to}
+            labels={{ from: t("from"), to: t("to") }}
+            onFromChange={(from) =>
+              updateParams({ preset: "custom", from, to: range.to })
+            }
+            onToChange={(to) =>
+              updateParams({ preset: "custom", from: range.from, to })
+            }
+            className="w-full sm:w-[22rem]"
+          />
           <Button
             type="button"
             variant="outline"

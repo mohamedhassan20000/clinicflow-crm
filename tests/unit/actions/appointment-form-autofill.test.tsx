@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppointmentForm } from "@/components/appointments/appointment-form";
@@ -238,9 +238,12 @@ describe("appointment form patient context autofill", () => {
     renderAppointmentForm();
 
     await selectDoctor(user, "Doctor Two");
-    fireEvent.change(screen.getByLabelText(/date/i), {
-      target: { value: "2099-01-01" },
-    });
+    await user.click(screen.getByRole("button", { name: /^Date/i }));
+    await user.click(screen.getByRole("combobox", { name: "Year" }));
+    await user.click(screen.getByRole("option", { name: "2099" }));
+    await user.click(screen.getByRole("combobox", { name: "Month" }));
+    await user.click(screen.getByRole("option", { name: "January" }));
+    await user.click(screen.getByRole("gridcell", { name: /January 1, 2099/ }));
     const timeSelect = screen.getByRole("combobox", { name: /time/i });
     await waitFor(() => expect(timeSelect).toBeEnabled());
     await user.click(timeSelect);

@@ -5,6 +5,7 @@ import { Loader2, Plus, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { TimePicker } from "@/components/ui/clinic-date-picker";
 import { Label } from "@/components/ui/label";
 import { upsertClinicWorkingHours } from "@/actions/settings";
 import type { ActionResult } from "@/actions/settings";
@@ -131,20 +132,22 @@ export function ClinicWorkingHoursForm({ defaultValues, readOnly = false }: Prop
                       <span className="w-5 text-center text-xs text-muted-foreground">
                         {idx + 1}.
                       </span>
-                      <input
-                        type="time"
+                      <TimePicker
                         value={shift.shift_start}
                         disabled={readOnly || isPending}
-                        onChange={(e) => updateShift(dow, idx, "shift_start", e.target.value)}
-                        className="h-8 w-32 rounded-md border border-input bg-background px-2 text-sm text-foreground [color-scheme:light] dark:[color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                        onChange={(time) => updateShift(dow, idx, "shift_start", time)}
+                        label={t("startTime")}
+                        compact
+                        className="h-8 w-32 rounded-md px-2 text-sm"
                       />
                       <span className="text-xs text-muted-foreground">{t("to")}</span>
-                      <input
-                        type="time"
+                      <TimePicker
                         value={shift.shift_end}
                         disabled={readOnly || isPending}
-                        onChange={(e) => updateShift(dow, idx, "shift_end", e.target.value)}
-                        className="h-8 w-32 rounded-md border border-input bg-background px-2 text-sm text-foreground [color-scheme:light] dark:[color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                        onChange={(time) => updateShift(dow, idx, "shift_end", time)}
+                        label={t("endTime")}
+                        compact
+                        className="h-8 w-32 rounded-md px-2 text-sm"
                       />
                       {!readOnly && (
                         <button

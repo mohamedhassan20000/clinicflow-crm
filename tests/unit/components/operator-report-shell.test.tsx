@@ -19,7 +19,7 @@ const params = parseReportParams(definition, {
 
 describe("Pre-P2 WS7 ReportShell", () => {
   it("renders URL-owned filters, accessible sort state, pagination, and filtered export", () => {
-    render(
+    const { container } = render(
       <ReportShell
         definition={definition}
         params={params}
@@ -36,6 +36,9 @@ describe("Pre-P2 WS7 ReportShell", () => {
     );
 
     expect(screen.getByRole("combobox", { name: "Country" })).toHaveTextContent("KW");
+    expect(container.querySelector('input[type="date"]')).not.toBeInTheDocument();
+    expect(container.querySelector('input[name="createdFrom"]')).toHaveValue("2026-01-01");
+    expect(screen.getByRole("button", { name: /Created from/i })).toBeVisible();
     expect(screen.getByRole("columnheader", { name: /Created/ })).toHaveAttribute("aria-sort", "descending");
     expect(screen.getByText("Showing 26–26 of 26")).toBeInTheDocument();
     expect(screen.getByText("Page 2 of 2")).toBeInTheDocument();

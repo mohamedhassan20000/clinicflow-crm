@@ -87,13 +87,14 @@ function renderView() {
       doctors={[{ id: "doctor-1", full_name: "Dr Sara Emad" }]}
       scope="day"
       dateInput="2026-05-11"
-      activeDept={null}
+      fromInput="2026-05-11"
+      toInput="2026-05-11"
       activeOutcome={null}
-      activeQuery=""
       range={{
         start: "2026-05-11T00:00:00.000Z",
         end: "2026-05-11T23:59:59.999Z",
       }}
+      previewDocumentHref="/reports/follow-ups/document?from=2026-05-11&to=2026-05-11"
       readOnly
     />,
   );

@@ -17,7 +17,7 @@ function Avatar({
       data-slot="avatar"
       data-size={size}
       className={cn(
-        "group/avatar relative flex size-8 shrink-0 rounded-full select-none after:absolute after:inset-0 after:rounded-full after:border after:border-border after:mix-blend-darken data-[size=lg]:size-10 data-[size=sm]:size-6 dark:after:mix-blend-lighten",
+        "group/avatar relative isolate flex size-8 shrink-0 overflow-hidden rounded-full select-none after:pointer-events-none after:absolute after:inset-0 after:z-20 after:rounded-full after:border after:border-border after:mix-blend-darken data-[size=lg]:size-10 data-[size=sm]:size-6 dark:after:mix-blend-lighten",
         className
       )}
       {...props}
@@ -27,17 +27,29 @@ function Avatar({
 
 function AvatarImage({
   className,
+  src,
   ...props
 }: React.ComponentProps<typeof AvatarPrimitive.Image>) {
   return (
-    <AvatarPrimitive.Image
-      data-slot="avatar-image"
-      className={cn(
-        "aspect-square size-full rounded-full object-cover",
-        className
+    <>
+      {src && (
+        <span
+          data-slot="avatar-image-background"
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 z-0 scale-110 rounded-full bg-cover bg-center opacity-75 blur-[3px]"
+          style={{ backgroundImage: `url(${JSON.stringify(src)})` }}
+        />
       )}
-      {...props}
-    />
+      <AvatarPrimitive.Image
+        data-slot="avatar-image"
+        src={src}
+        className={cn(
+          "relative z-10 aspect-square size-full rounded-full object-contain",
+          className
+        )}
+        {...props}
+      />
+    </>
   )
 }
 
@@ -49,7 +61,7 @@ function AvatarFallback({
     <AvatarPrimitive.Fallback
       data-slot="avatar-fallback"
       className={cn(
-        "flex size-full items-center justify-center rounded-full bg-muted text-sm text-muted-foreground group-data-[size=sm]/avatar:text-xs",
+        "relative z-10 flex size-full items-center justify-center rounded-full bg-muted text-sm text-muted-foreground group-data-[size=sm]/avatar:text-xs",
         className
       )}
       {...props}

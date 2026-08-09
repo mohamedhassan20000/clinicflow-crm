@@ -1,15 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Archive, Trash2 } from "lucide-react";
+import { Archive, FileText, Trash2 } from "lucide-react";
 import { requireUser } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
 import { PatientTable } from "@/components/patients/patient-table";
 import { PatientsFilterBar } from "@/components/patients/filter-bar";
 import { formatDoctorName } from "@/lib/format-doctor";
-import { PrintHeader } from "@/components/shared/print-header";
 import { Button } from "@/components/ui/button";
 import { getTranslations } from "next-intl/server";
-import { clinicLocaleFromRow, formatClinicDate } from "@/lib/datetime";
+import { DocumentTriggerLabel } from "@/components/documents/document-trigger-label";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("protected");
@@ -158,33 +157,18 @@ export default async function PatientsPage({ searchParams }: PageProps) {
     has_outstanding_balance: outstandingPatientIds.has(patient.id),
   }));
 
-  const { data: clinic } = await supabase
-    .from("clinics")
-    .select("name, address, phone, logo_url, timezone, locale, digits")
-    .eq("id", user.clinicId)
-    .single();
-  const clinicLocale = clinicLocaleFromRow(clinic);
-
-  const generatedAt = formatClinicDate(new Date(), clinicLocale, {
-    dateStyle: "long",
-    timeStyle: "short",
-  });
   const patientScope = isDoctor
     ? t("inYourDepartment")
     : isAssistant
       ? t("inYourAssignedScope")
       : t("inYourClinic");
+  const documentQuery = new URLSearchParams();
+  if (q.trim()) documentQuery.set("q", q.trim());
+  if (dept) documentQuery.set("department", dept);
+  if (doctor) documentQuery.set("doctor", doctor);
 
   return (
     <div className="space-y-6">
-      <PrintHeader
-        clinicName={clinic?.name ?? ""}
-        clinicAddress={clinic?.address ?? null}
-        clinicPhone={clinic?.phone ?? null}
-        logoUrl={clinic?.logo_url ?? null}
-        documentName={t("patientRoster")}
-        generatedAt={generatedAt}
-      />
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">{t("patients")}</h1>
@@ -197,8 +181,14 @@ export default async function PatientsPage({ searchParams }: PageProps) {
             })}
           </p>
         </div>
-        {canManagePatients && (
-          <div className="flex items-center gap-2 print:hidden">
+        <div className="flex items-center gap-2 print:hidden">
+          <Button asChild variant="outline" size="sm" className="gap-1.5">
+            <Link href={`/documents/roster-profile/patient-list?${documentQuery}`}>
+              <FileText className="h-3.5 w-3.5" />
+              <DocumentTriggerLabel kind="patient-list" />
+            </Link>
+          </Button>
+          {canManagePatients && (<>
             <Button asChild variant="outline" size="sm" className="gap-1.5">
               <Link href="/patients/trash">
                 <Trash2 className="h-3.5 w-3.5" />
@@ -209,8 +199,8 @@ export default async function PatientsPage({ searchParams }: PageProps) {
                 <Archive className="h-3.5 w-3.5" />
                 {t("archive")}</Link>
             </Button>
-          </div>
-        )}
+          </>)}
+        </div>
       </div>
 
       <div className="print:hidden">
@@ -219,25 +209,6 @@ export default async function PatientsPage({ searchParams }: PageProps) {
           departments={departments ?? []}
           showScopeFilters={!isScopedViewer}
         />
-      </div>
-
-      {/* Print-only header */}
-      <div className="hidden print:block print:mb-4">
-        <h1 className="text-xl font-semibold">{t("patientRoster")}</h1>
-        <p className="text-xs text-muted-foreground">
-          {t("patientCount", { count: count ?? 0 })}
-          {" · "}
-          {activeDept
-            ? t("departmentnamed", { department: activeDept.name })
-            : activeDoctor
-              ? t("doctornamed", { doctor: formatDoctorName(activeDoctor.full_name) })
-              : t("allpatients")}
-          {activeDept &&
-            activeDoctor &&
-            t("doctorNamedSuffix", { doctor: formatDoctorName(activeDoctor.full_name) })}
-          {" · "}
-          {t("printed")}{formatClinicDate(new Date(), clinicLocale)}
-        </p>
       </div>
 
       <PatientTable

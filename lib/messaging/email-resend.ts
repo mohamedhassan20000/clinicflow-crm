@@ -93,11 +93,17 @@ export const resendEmailProvider: MessagingProvider = {
       return { ok: false, error: "Email sends require a subject." };
     }
     try {
+      const attachments = message.attachments?.map((attachment) => ({
+        filename: attachment.filename,
+        content: Buffer.from(attachment.content, "base64"),
+        ...(attachment.contentType ? { contentType: attachment.contentType } : {}),
+      }));
       const result = await getResend().emails.send({
         from: message.senderIdentity || DEFAULT_FROM,
         to: message.recipient,
         subject: message.subject,
         text: message.body,
+        ...(attachments && attachments.length > 0 ? { attachments } : {}),
       });
       if (result.error) {
         return { ok: false, error: sanitizeProviderError(result.error.message) };

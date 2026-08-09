@@ -11,29 +11,29 @@ import {
   Phone,
   PhoneOff,
   Pencil,
-  Printer,
+  FileText,
   Stethoscope,
-  X,
   AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Input } from "@/components/ui/input";
+import { DateRangePicker, SingleDatePicker } from "@/components/ui/clinic-date-picker";
 import { cn } from "@/lib/utils";
 import { RecordFollowupDialog } from "@/components/followups/record-dialog";
 import { PatientScopeFilterBar } from "@/components/shared/patient-scope-filter-bar";
-import { PrintHeader } from "@/components/shared/print-header";
 import { formatDoctorName } from "@/lib/format-doctor";
 import { useTranslations } from "next-intl";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
+import type { FollowupsDateScope } from "@/lib/followups/filters";
 
-type Scope = "day" | "yesterday" | "week" | "month";
+type Scope = FollowupsDateScope;
 
 const SCOPE_OPTIONS: { value: Scope; labelKey: string }[] = [
-  { value: "day", labelKey: "scopeToday" },
+  { value: "day", labelKey: "scopeSingleDay" },
   { value: "yesterday", labelKey: "scopeYesterday" },
   { value: "week", labelKey: "scopeLastWeek" },
   { value: "month", labelKey: "scopeLastMonth" },
+  { value: "custom", labelKey: "scopeCustomRange" },
 ];
 
 const UNASSIGNED_COLOR = "#94a3b8";
@@ -108,17 +108,13 @@ interface Props {
   doctors: { id: string; full_name: string }[];
   scope: Scope;
   dateInput: string;
-  activeDept: string | null;
+  fromInput: string;
+  toInput: string;
   hideScopeFilters?: boolean;
   activeOutcome: OutcomeFilter;
-  activeQuery: string;
   range: { start: string; end: string };
+  previewDocumentHref: string;
   readOnly?: boolean;
-  clinicName?: string;
-  clinicAddress?: string | null;
-  clinicPhone?: string | null;
-  clinicLogoUrl?: string | null;
-  generatedAt?: string;
 }
 
 const OUTCOME_META = {
@@ -152,22 +148,27 @@ export function FollowupsView({
   doctors,
   scope,
   dateInput,
-  activeDept,
+  fromInput,
+  toInput,
   hideScopeFilters = false,
   activeOutcome,
-  activeQuery,
   range,
+  previewDocumentHref,
   readOnly = false,
-  clinicName,
-  clinicAddress,
-  clinicPhone,
-  clinicLogoUrl,
-  generatedAt,
 }: Props) {
   const t = useTranslations("followups");
   const { formatDate, formatDateTime } = useClinicSettings();
-  const fmtDate = (value: string) => formatDate(value, { day: "2-digit", month: "short", year: "numeric" });
-  const fmtDateTime = (value: string) => formatDateTime(value, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+  const fmtDate = (value: string) => formatDate(value, {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+  const fmtDateTime = (value: string) => formatDateTime(value, {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
   const router = useRouter();
   const params = useSearchParams();
   const [, startTransition] = useTransition();
@@ -179,7 +180,7 @@ export function FollowupsView({
   const PAGE_SIZE = 10;
   const [pendingPages, setPendingPages] = useState<Record<string, number>>({});
   const [donePages, setDonePages] = useState<Record<string, number>>({});
-  const filtersKey = `${scope}|${dateInput}|${activeDept ?? ""}|${activeOutcome ?? ""}|${activeQuery}`;
+  const filtersKey = previewDocumentHref;
   useEffect(() => {
     queueMicrotask(() => {
       setPendingPages({});
@@ -253,17 +254,6 @@ export function FollowupsView({
       : `${fmtDate(range.start)} → ${fmtDate(range.end)}`;
   return (
     <div className="space-y-6">
-      {clinicName !== undefined && (
-        <PrintHeader
-          clinicName={clinicName}
-          clinicAddress={clinicAddress}
-          clinicPhone={clinicPhone}
-          logoUrl={clinicLogoUrl}
-          documentName={t("patientFollowUps")}
-          generatedAt={generatedAt ?? formatDateTime(new Date(), { dateStyle: "long", timeStyle: "short" })}
-        />
-      )}
-
       <div className="print:hidden flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <Link
@@ -277,17 +267,6 @@ export function FollowupsView({
         </div>
       </div>
 
-      {/* Print-only document subtitle */}
-      <div className="hidden print:block print:mb-4">
-        <h1 className="text-xl font-semibold">{t("patientFollowUps")}</h1>
-        <p className="text-xs text-muted-foreground">
-          {t(SCOPE_OPTIONS.find((o) => o.value === scope)?.labelKey ?? t("scopetoday"))} ·{" "}
-          {periodLabel}
-          {activeDept && t("departmentFilter", { department: departments.find((d) => d.id === activeDept)?.name ?? "—" })}
-          {activeQuery && t("patientFilter", { patient: activeQuery })}
-        </p>
-      </div>
-
       {/* Period toggle — independent from the search/filter row below */}
       <div className="flex flex-wrap items-center gap-3 print:hidden">
         <div className="inline-flex flex-wrap items-center gap-0.5 rounded-lg border border-border/60 bg-muted/40 p-0.5">
@@ -297,7 +276,10 @@ export function FollowupsView({
               <button
                 key={value}
                 type="button"
-                onClick={() => update({ scope: value })}
+                aria-pressed={active}
+                onClick={() => update(value === "custom"
+                  ? { scope: value, from: fromInput, to: toInput, date: null }
+                  : { scope: value, date: null, from: null, to: null })}
                 className={cn(
                   "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition",
                   active
@@ -311,21 +293,42 @@ export function FollowupsView({
             );
           })}
         </div>
-        <Input
-          type="date"
-          value={dateInput}
-          onChange={(e) => update({ date: e.target.value || null })}
-          className="h-8 w-[160px] text-xs"
-        />
-        {dateInput && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 gap-1 px-2 text-xs text-muted-foreground"
-            onClick={() => update({ date: null })}
-          >
-            <X className="h-3.5 w-3.5" />
-            {t("clearDate")}</Button>
+        {scope === "day" && (
+          <SingleDatePicker
+            value={dateInput}
+            onChange={(date) => update({
+              scope: "day",
+              date: date || null,
+              from: null,
+              to: null,
+            })}
+            label={t("date")}
+            compact
+            className="h-8 w-[160px] text-xs"
+          />
+        )}
+        {scope === "custom" && (
+          <DateRangePicker
+            id="followups-date-range"
+            from={fromInput}
+            to={toInput}
+            labels={{ from: t("from"), to: t("to") }}
+            onFromChange={(from) => update({
+              scope: "custom",
+              from,
+              to: toInput,
+              date: null,
+            })}
+            onToChange={(to) => update({
+              scope: "custom",
+              from: fromInput,
+              to,
+              date: null,
+            })}
+            enforceOrder
+            compact
+            className="w-full sm:w-[22rem]"
+          />
         )}
         <span className="text-xs text-muted-foreground">{periodLabel}</span>
       </div>
@@ -336,7 +339,7 @@ export function FollowupsView({
         <DayPicker
           scope={scope}
           range={range}
-          onPickDay={(d) => update({ scope: "day", date: d })}
+          onPickDay={(d) => update({ scope: "day", date: d, from: null, to: null })}
         />
       )}
 
@@ -351,7 +354,7 @@ export function FollowupsView({
         fallbackParams={{ name: ["q"] }}
         resetParamsOnApply={["completedPage"]}
         clearExtraParams={["q"]}
-        actions={<FollowupsPrintButton />}
+        actions={<FollowupsPreviewDocumentButton href={previewDocumentHref} />}
       />
 
       {/* Summary strip */}
@@ -897,17 +900,15 @@ export function FollowupsView({
   );
 }
 
-function FollowupsPrintButton() {
+function FollowupsPreviewDocumentButton({ href }: { href: string }) {
   const t = useTranslations("followups");
   return (
-    <Button
-      variant="outline"
-      size="sm"
-      className="h-7 gap-1.5 px-2 text-xs"
-      onClick={() => window.print()}
-    >
-      <Printer className="h-3.5 w-3.5" />
-      {t("print")}</Button>
+    <Button asChild variant="outline" size="sm" className="h-7 gap-1.5 px-2 text-xs">
+      <Link href={href}>
+        <FileText className="h-3.5 w-3.5" />
+        {t("previewDocument")}
+      </Link>
+    </Button>
   );
 }
 

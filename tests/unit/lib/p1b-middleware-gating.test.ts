@@ -114,6 +114,11 @@ describe("P1B middleware billing behavior", () => {
     expect(redirectPath(await updateSession(request("/patients")))).toBe(
       "/dashboard?billing=subscription_required",
     );
+    expect(
+      redirectPath(
+        await updateSession(request("/documents/roster-profile/patient-list")),
+      ),
+    ).toBe("/dashboard?billing=subscription_required");
     expect(redirectPath(await updateSession(request("/dashboard", "POST")))).toBe(
       "/dashboard?billing=subscription_required",
     );
@@ -214,6 +219,35 @@ describe("P1B middleware billing behavior", () => {
 
     expect(redirectPath(response)).toBe("/dashboard");
     expect(state.queriedTables).toContain("user_page_permissions");
+  });
+
+  it("applies source-page visibility to contextual document routes", async () => {
+    state.profile.data = {
+      role: "admin",
+      clinic_id: "clinic-1",
+      must_change_password: false,
+      is_active: true,
+    };
+    state.subscription.data = {
+      status: "active",
+      trial_ends_at: null,
+      current_period_end: null,
+    };
+    state.pagePermissions.data = [
+      { page_slug: "patients", is_visible: false },
+      { page_slug: "settings", is_visible: false },
+    ];
+
+    expect(
+      redirectPath(
+        await updateSession(request("/documents/roster-profile/patient-file")),
+      ),
+    ).toBe("/dashboard");
+    expect(
+      redirectPath(
+        await updateSession(request("/documents/roster-profile/staff-file")),
+      ),
+    ).toBe("/dashboard");
   });
 
   it("fails closed when saved Assistant visibility cannot be resolved", async () => {

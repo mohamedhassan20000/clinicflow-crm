@@ -193,6 +193,24 @@ function sourceFiles(directory, output = []) {
   return output;
 }
 
+/** Split a comma-separated list on top-level commas only (ignore nested (), [], {}). */
+function splitTopLevel(text) {
+  const parts = [];
+  let depth = 0;
+  let start = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index];
+    if (character === "(" || character === "[" || character === "{") depth += 1;
+    else if (character === ")" || character === "]" || character === "}") depth -= 1;
+    else if (character === "," && depth === 0) {
+      parts.push(text.slice(start, index));
+      start = index + 1;
+    }
+  }
+  parts.push(text.slice(start));
+  return parts.map((part) => part.trim()).filter(Boolean);
+}
+
 const used = new Set();
 // These namespaces are consumed through typed copy builders, structured `raw()` arrays, dynamic
 // navigation keys, or the Zod error map. Their individual leaf keys cannot be proven by a lexical
@@ -204,6 +222,9 @@ for (const path of ["app", "components", "actions", "lib"].flatMap((directory) =
   for (const match of source.matchAll(/\bconst\s+(\w+)\s*=\s*(?:await\s+)?(?:useTranslations|getTranslations)\("([^"]+)"\)/g)) {
     translators.set(match[1], match[2]);
   }
+  for (const match of source.matchAll(/\bconst\s+(\w+)\s*=\s*(?:await\s+)?getTranslations\(\{[^}]*\bnamespace:\s*"([^"]+)"[^}]*\}\)/g)) {
+    translators.set(match[1], match[2]);
+  }
   const translationPromises = new Map();
   for (const match of source.matchAll(/\bconst\s+(\w+)\s*=\s*getTranslations\("([^"]+)"\)/g)) {
     translationPromises.set(match[1], match[2]);
@@ -211,6 +232,24 @@ for (const path of ["app", "components", "actions", "lib"].flatMap((directory) =
   for (const match of source.matchAll(/\bconst\s+(\w+)\s*=\s*await\s+(\w+)\b/g)) {
     const namespace = translationPromises.get(match[2]);
     if (namespace) translators.set(match[1], namespace);
+  }
+  // Positional destructuring of a `Promise.all([...])` binds each name to the
+  // translator returned by the element at the same index, e.g.
+  //   const [t, tDocuments] = await Promise.all([
+  //     getTranslations("protected"),
+  //     getTranslations("documentPlatform.ui"),
+  //   ]);
+  // Align names to elements by top-level comma so those translators are seen.
+  for (const match of source.matchAll(/\bconst\s+\[([^\]]+)\]\s*=\s*await\s+Promise\.all\(\[([\s\S]*?)\]\)/g)) {
+    const names = match[1].split(",").map((name) => name.trim());
+    const elements = splitTopLevel(match[2]);
+    names.forEach((name, index) => {
+      const element = elements[index];
+      if (!name || !element || translators.has(name)) return;
+      const literal = element.match(/(?:useTranslations|getTranslations)\("([^"]+)"\)/)
+        ?? element.match(/getTranslations\(\{[^}]*\bnamespace:\s*"([^"]+)"[^}]*\}\)/);
+      if (literal) translators.set(name, literal[1]);
+    });
   }
   for (const [name, namespace] of translators) {
     const calls = new RegExp(`\\b${name}(?:\\.(?:raw|rich))?\\(([^)]+)\\)`, "g");
@@ -223,8 +262,14 @@ for (const path of ["app", "components", "actions", "lib"].flatMap((directory) =
 }
 
 const unused = [...flattened.en.keys()].filter((key) => {
-  const namespace = key.split(".")[0];
-  if (dynamicNamespaces.has(namespace)) return false;
+  // A namespace enters `dynamicNamespaces` either from the manual seed (top-level)
+  // or from auto-detection when a bound translator is called with a non-literal key
+  // (which can be a *nested* namespace, e.g. `documentPlatform.verification`). Honor
+  // both by prefix, so a dynamically-keyed nested namespace exempts its own subtree
+  // without having to exempt an entire top-level namespace.
+  if ([...dynamicNamespaces].some((namespace) => key === namespace || key.startsWith(`${namespace}.`))) {
+    return false;
+  }
   return ![...used].some((reference) => key === reference || key.startsWith(`${reference}.`));
 });
 const referencedMissing = [...used].filter((key) => !flattened.en.has(key));

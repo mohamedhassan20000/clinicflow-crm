@@ -45,6 +45,30 @@ describe("SettingsNav customize visibility", () => {
     );
   });
 
+  it("shows Documents settings only to the primary admin (canCustomize)", () => {
+    const { rerender } = render(
+      <SettingsNav canCustomize={false} canManageAi={false} />,
+    );
+    expect(screen.queryByRole("link", { name: "Documents" })).not.toBeInTheDocument();
+
+    rerender(<SettingsNav canCustomize canManageAi={false} />);
+    expect(screen.getByRole("link", { name: "Documents" })).toHaveAttribute(
+      "href",
+      "/settings/documents",
+    );
+  });
+
+  it("gates the documents settings page at the primary-admin boundary", () => {
+    const pageSource = readFileSync(
+      "app/(protected)/settings/documents/page.tsx",
+      "utf8",
+    );
+    const actionSource = readFileSync("actions/documents-settings.ts", "utf8");
+    expect(pageSource).toContain('requireRole("admin")');
+    expect(pageSource).toContain("isPrimaryClinicAdmin");
+    expect(actionSource).toContain("isPrimaryClinicAdmin");
+  });
+
   it("shows AI provider settings only when the server grants provider management", () => {
     const { rerender } = render(
       <SettingsNav canCustomize canManageAi={false} />,

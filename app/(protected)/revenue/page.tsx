@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import { toZonedTime } from "date-fns-tz";
 import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
+import { resolveDateRange, resolveRollingYearRange } from "@/lib/date-range";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
@@ -24,21 +26,7 @@ const REVENUE_PAGE_SIZE = 50;
 const SETTLEMENT_DETAIL_LIMIT = 50;
 
 // ─── date helpers (default clinic timezone) ─────────────────────────────────────────
-function toIstanbul(date: Date): Date {
-  return new Date(date.toLocaleString("en-US", { timeZone: DEFAULT_TIME_ZONE }));
-}
-
-function startOfDay(d: Date): Date {
-  const n = new Date(d);
-  n.setHours(0, 0, 0, 0);
-  return n;
-}
-function endOfDay(d: Date): Date {
-  const n = new Date(d);
-  n.setHours(23, 59, 59, 999);
-  return n;
-}
-function fmtInput(d: Date): string {
+function fmtCalendarInput(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
@@ -46,42 +34,30 @@ function fmtInput(d: Date): string {
 }
 
 function resolveRange(preset: PresetKey, from?: string, to?: string) {
-  const now = toIstanbul(new Date());
+  const now = new Date();
   if (preset === "custom" && from && to) {
-    return {
-      start: startOfDay(new Date(from)),
-      end: endOfDay(new Date(to)),
-    };
+    return resolveDateRange({ preset: "custom", from, to, now });
   }
   switch (preset) {
-    case "today": {
-      return { start: startOfDay(now), end: endOfDay(now) };
-    }
-    case "week": {
-      const day = now.getDay();
-      const diff = day === 0 ? -6 : 1 - day;
-      const mon = new Date(now);
-      mon.setDate(mon.getDate() + diff);
-      const sun = new Date(mon);
-      sun.setDate(sun.getDate() + 6);
-      return { start: startOfDay(mon), end: endOfDay(sun) };
-    }
+    case "today":
+      return resolveDateRange({ preset: "today", now });
+    case "week":
+      return resolveDateRange({ preset: "this_week", now });
     case "last_month": {
-      const first = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      const last = new Date(now.getFullYear(), now.getMonth(), 0);
-      return { start: startOfDay(first), end: endOfDay(last) };
+      const zonedNow = toZonedTime(now, DEFAULT_TIME_ZONE);
+      const first = new Date(zonedNow.getFullYear(), zonedNow.getMonth() - 1, 1);
+      const last = new Date(zonedNow.getFullYear(), zonedNow.getMonth(), 0);
+      return resolveDateRange({
+        from: fmtCalendarInput(first),
+        to: fmtCalendarInput(last),
+        now,
+      });
     }
-    case "last_year": {
-      const first = new Date(now.getFullYear() - 1, 0, 1);
-      const last = new Date(now.getFullYear() - 1, 11, 31);
-      return { start: startOfDay(first), end: endOfDay(last) };
-    }
+    case "last_year":
+      return resolveRollingYearRange(now);
     case "this_month":
-    default: {
-      const first = new Date(now.getFullYear(), now.getMonth(), 1);
-      const last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-      return { start: startOfDay(first), end: endOfDay(last) };
-    }
+    default:
+      return resolveDateRange({ preset: "this_month", now });
   }
 }
 
@@ -186,8 +162,8 @@ export default async function RevenuePage({ searchParams }: PageProps) {
     context: {
       type: "revenue",
       dateRange: {
-        from: fmtInput(range.start),
-        to: fmtInput(range.end),
+        from: range.from,
+        to: range.to,
       },
     },
   });
@@ -296,8 +272,8 @@ export default async function RevenuePage({ searchParams }: PageProps) {
     .eq("id", user.clinicId)
     .single();
 
-  const fromInput = sp.from ?? fmtInput(range.start);
-  const toInput = sp.to ?? fmtInput(range.end);
+  const fromInput = sp.from ?? range.from;
+  const toInput = sp.to ?? range.to;
   const assistant = await assistantPromise;
 
   return (

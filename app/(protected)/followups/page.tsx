@@ -1,16 +1,20 @@
 import type { Metadata } from "next";
-import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
 import { requireUser } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
 import { FollowupsView } from "@/components/followups/followups-view";
-import { getTranslations } from "next-intl/server";
+import { getLocale, getTranslations } from "next-intl/server";
+import {
+  buildFollowupsDocumentHref,
+  resolveFollowupsDateRange,
+} from "@/lib/followups/filters";
+import { resolveFollowupPatientIds } from "@/lib/followups/data";
+import type { Locale } from "@/lib/i18n/config";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("protected");
   return { title: t("metadataFollowUps") };
 }
 
-type Scope = "day" | "yesterday" | "week" | "month";
 type FollowupOutcome = "all_fine" | "has_problem" | "no_response";
 
 const PENDING_PREVIEW_LIMIT = 250;
@@ -42,6 +46,8 @@ interface PageProps {
   searchParams: Promise<{
     scope?: string;
     date?: string;
+    from?: string;
+    to?: string;
     q?: string;
     name?: string;
     file?: string;
@@ -52,45 +58,6 @@ interface PageProps {
     outcome?: string;
     completedPage?: string;
   }>;
-}
-
-function toIstanbul(date: Date): Date {
-  return new Date(date.toLocaleString("en-US", { timeZone: DEFAULT_TIME_ZONE }));
-}
-function startOfDay(d: Date) {
-  const n = new Date(d);
-  n.setHours(0, 0, 0, 0);
-  return n;
-}
-function endOfDay(d: Date) {
-  const n = new Date(d);
-  n.setHours(23, 59, 59, 999);
-  return n;
-}
-
-function resolveRange(scope: Scope, dateStr?: string) {
-  const base = dateStr ? new Date(dateStr) : toIstanbul(new Date());
-  if (scope === "day") return { start: startOfDay(base), end: endOfDay(base) };
-  if (scope === "yesterday") {
-    const y = new Date(base);
-    y.setDate(y.getDate() - 1);
-    return { start: startOfDay(y), end: endOfDay(y) };
-  }
-  if (scope === "week") {
-    // Rolling 7-day window: the 7 days *before* today (today excluded).
-    const yesterday = new Date(base);
-    yesterday.setDate(yesterday.getDate() - 1);
-    const start7 = new Date(yesterday);
-    start7.setDate(start7.getDate() - 6);
-    return { start: startOfDay(start7), end: endOfDay(yesterday) };
-  }
-  // Rolling 30-day window: the 30 days *before* today (so today itself is
-  // excluded). End of yesterday → start of the 30th day prior.
-  const yesterday = new Date(base);
-  yesterday.setDate(yesterday.getDate() - 1);
-  const start30 = new Date(yesterday);
-  start30.setDate(start30.getDate() - 29);
-  return { start: startOfDay(start30), end: endOfDay(yesterday) };
 }
 
 function toNumber(value: unknown): number {
@@ -124,7 +91,10 @@ function normalizeDashboardPayload(payload: unknown): FollowupsDashboardPayload 
 }
 
 export default async function FollowupsPage({ searchParams }: PageProps) {
-  const user = await requireUser();
+  const [user, locale] = await Promise.all([
+    requireUser(),
+    getLocale() as Promise<Locale>,
+  ]);
 
   const isDoctor = user.role === "doctor";
   const isAssistant = user.role === "assistant";
@@ -134,9 +104,7 @@ export default async function FollowupsPage({ searchParams }: PageProps) {
   const isScopedViewer = isDoctor || isAssistant;
 
   const sp = await searchParams;
-  const scope = ((sp.scope as Scope) ?? "day") as Scope;
-  const dateStr = sp.date ?? "";
-  const range = resolveRange(scope, dateStr);
+  const range = resolveFollowupsDateRange(sp);
   const q = sp.q?.trim() ?? "";
   const name = sp.name?.trim() ?? "";
   const file = sp.file?.trim() ?? "";
@@ -157,29 +125,44 @@ export default async function FollowupsPage({ searchParams }: PageProps) {
   })() satisfies FollowupOutcome | null;
   const completedPage = Math.max(1, Number(sp.completedPage ?? "1") || 1);
   const completedOffset = (completedPage - 1) * COMPLETED_PAGE_SIZE;
+  const previewDocumentHref = buildFollowupsDocumentHref({
+    range,
+    locale,
+    filters: {
+      doctorId: filterDoctor,
+      departmentId: filterDept,
+      outcome: filterOutcome,
+      patientQuery: q,
+      patientName: name,
+      patientFileNumber: file,
+      patientNationalId: nat,
+      patientPhone: phone,
+    },
+  });
 
   const supabase = await createClient();
-
-  // Patient search → resolve to IDs first so we can scope downstream queries.
-  let patientIdFilter: string[] | null = null;
-  if (q || name || file || nat || phone) {
-    let patientQuery = supabase
-      .from("patients")
-      .select("id")
-      .eq("clinic_id", user.clinicId)
-      .limit(500);
-    if (q) {
-      patientQuery = patientQuery.or(
-        `full_name.ilike.%${q}%,phone.ilike.%${q}%,file_number.ilike.%${q}%,national_id.ilike.%${q}%`,
-      );
-    }
-    if (name) patientQuery = patientQuery.ilike("full_name", `%${name}%`);
-    if (file) patientQuery = patientQuery.ilike("file_number", `%${file}%`);
-    if (nat) patientQuery = patientQuery.ilike("national_id", `%${nat}%`);
-    if (phone) patientQuery = patientQuery.ilike("phone", `%${phone}%`);
-    const { data: matches } = await patientQuery;
-    patientIdFilter = (matches ?? []).map((m) => m.id);
-  }
+  const departmentsPromise = supabase
+    .from("departments")
+    .select("id, name, color")
+    .eq("clinic_id", user.clinicId)
+    .eq("is_active", true)
+    .order("name");
+  const doctorsPromise = isScopedViewer
+    ? Promise.resolve({ data: [] })
+    : supabase
+        .from("profiles")
+        .select("id, full_name")
+        .eq("clinic_id", user.clinicId)
+        .eq("role", "doctor")
+        .eq("is_active", true)
+        .order("full_name");
+  const patientIdFilter = await resolveFollowupPatientIds(user.clinicId, {
+    query: q,
+    name,
+    fileNumber: file,
+    nationalId: nat,
+    phone,
+  }, supabase);
   const hasNoPatientMatches = patientIdFilter?.length === 0;
 
   const dashboardPromise = hasNoPatientMatches
@@ -196,37 +179,14 @@ export default async function FollowupsPage({ searchParams }: PageProps) {
         p_done_offset: completedOffset,
       } as never);
 
-  const [{ data: dashboardRaw }, { data: departments }, { data: doctors }, { data: clinic }] =
+  const [{ data: dashboardRaw }, { data: departments }, { data: doctors }] =
     await Promise.all([
       dashboardPromise,
-      supabase
-        .from("departments")
-        .select("id, name, color")
-        .eq("clinic_id", user.clinicId)
-        .eq("is_active", true)
-        .order("name"),
-      isScopedViewer
-        ? Promise.resolve({ data: [] })
-        : supabase
-            .from("profiles")
-            .select("id, full_name")
-            .eq("clinic_id", user.clinicId)
-            .eq("role", "doctor")
-            .eq("is_active", true)
-            .order("full_name"),
-      supabase
-        .from("clinics")
-        .select("name, address, phone, logo_url")
-        .eq("id", user.clinicId)
-        .single(),
+      departmentsPromise,
+      doctorsPromise,
     ]);
 
   const dashboard = normalizeDashboardPayload(dashboardRaw);
-
-  const generatedAt = new Date().toLocaleString("en-GB", {
-    dateStyle: "long",
-    timeStyle: "short",
-  });
 
   return (
     <FollowupsView
@@ -240,24 +200,20 @@ export default async function FollowupsPage({ searchParams }: PageProps) {
       completedPageSize={COMPLETED_PAGE_SIZE}
       departments={departments ?? []}
       doctors={doctors ?? []}
-      scope={scope}
-      dateInput={dateStr || ""}
-      activeDept={filterDept}
+      scope={range.scope}
+      dateInput={range.scope === "day" ? range.from : ""}
+      fromInput={range.from}
+      toInput={range.to}
       hideScopeFilters={isScopedViewer}
       activeOutcome={filterOutcome}
-      activeQuery={name || q || file || nat || phone}
       range={{
         start: range.start.toISOString(),
         end: range.end.toISOString(),
       }}
+      previewDocumentHref={previewDocumentHref}
       // Doctors are read-only; assistants operate their assigned doctors'
       // follow-ups (RLS + scoped action guards enforce the union scope).
       readOnly={isDoctor}
-      clinicName={clinic?.name ?? ""}
-      clinicAddress={clinic?.address ?? null}
-      clinicPhone={clinic?.phone ?? null}
-      clinicLogoUrl={clinic?.logo_url ?? null}
-      generatedAt={generatedAt}
     />
   );
 }

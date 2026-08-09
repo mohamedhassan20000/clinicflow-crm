@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import Link from "next/link";
+import { FileText } from "lucide-react";
 import { requireReportAccess } from "@/lib/reports/access";
 import {
   ALL_FILTER_VALUE,
@@ -13,9 +15,11 @@ import { ReceptionistPerformanceReport } from "@/components/reports/receptionist
 import { ReportPageHeader } from "@/components/reports/report-page-header";
 import { ReportSelectFilter } from "@/components/reports/report-select-filter";
 import { ReportsDateFilter } from "@/components/reports/reports-date-filter";
-import { getTranslations } from "next-intl/server";
+import { getLocale, getTranslations } from "next-intl/server";
 import { AssistantLauncherEntry } from "@/components/assistant/assistant-launcher-entry";
 import { resolveAssistantLauncher } from "@/lib/ai/launchers";
+import { Button } from "@/components/ui/button";
+import type { Locale } from "@/lib/i18n/config";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("protected");
@@ -27,11 +31,21 @@ type PageProps = {
 };
 
 export default async function ReceptionistPerformanceReportPage({ searchParams }: PageProps) {
-  const t = await getTranslations("protected");
+  const [t, tDocuments, locale] = await Promise.all([
+    getTranslations("protected"),
+    getTranslations("documentPlatform.ui"),
+    getLocale() as Promise<Locale>,
+  ]);
   const user = await requireReportAccess("receptionist_performance");
   const sp = await searchParams;
   const range = resolveReportsRange(sp);
   const receptionistId = cleanFilter(sp.receptionist);
+  const documentQuery = new URLSearchParams({
+    from: range.from,
+    to: range.to,
+    locale,
+  });
+  if (receptionistId) documentQuery.set("receptionist", receptionistId);
 
   const [clinic, receptionists, data, assistant] = await Promise.all([
     getClinicPrintMeta(user),
@@ -52,7 +66,17 @@ export default async function ReceptionistPerformanceReportPage({ searchParams }
       <ReportPageHeader
         title={t("receptionistPerformanceReport")}
         description={t("bookingsAndFollowUpsHandledBy")}
-        actions={<AssistantLauncherEntry resolution={assistant} role={user.role} />}
+        actions={(
+          <div className="flex flex-wrap items-center gap-2">
+            <Button asChild variant="outline">
+              <Link href={`/reports/receptionists/document?${documentQuery.toString()}`}>
+                <FileText data-icon="inline-start" />
+                {tDocuments("previewDocument")}
+              </Link>
+            </Button>
+            <AssistantLauncherEntry resolution={assistant} role={user.role} />
+          </div>
+        )}
       />
       <ReportsDateFilter range={range} />
       <ReportSelectFilter

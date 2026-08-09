@@ -155,7 +155,7 @@ export default async function RevenueDocumentPage({
         )}
       />
       <DocumentPreviewFilters
-        code="REVENUE_REPORT"
+        code={"REVENUE_REPORT" /* i18n-allow: stable internal document-type/catalog identifier, not user-facing copy */}
         locale={locale}
         fromModule={resolved.sp.origin === "documents"}
         draftId={resolved.sp.draftId}

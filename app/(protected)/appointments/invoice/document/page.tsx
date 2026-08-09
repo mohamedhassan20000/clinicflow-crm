@@ -95,7 +95,7 @@ export default async function InvoiceDocumentPage({
         title={t("draftInvoiceDocument")}
         backLabel={sp.origin === "documents" ? t("backToDocuments") : t("backToAppointments")}
         backHref={sp.origin === "documents" ? "/documents" : "/appointments"}
-        editHref={sp.origin === "documents" ? `/documents/new/invoice${sp.draftId ? `?draftId=${encodeURIComponent(sp.draftId)}` : ""}` : undefined}
+        editHref={sp.origin === "documents" ? `/documents/new/invoice${sp.draftId ? `?draftId=${encodeURIComponent(sp.draftId)}` /* i18n-allow: URL query syntax, not user-facing copy */ : ""}` : undefined}
         editLabel={t("edit")}
         localeLinks={(
           <div className="flex items-center gap-1 rounded-lg border bg-background p-1">

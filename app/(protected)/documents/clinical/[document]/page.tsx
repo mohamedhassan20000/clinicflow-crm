@@ -58,7 +58,7 @@ export default async function ClinicalDocumentPage({ params, searchParams }: {
   const copy = getClinicalDocumentCopy(locale, documentType);
   return <div className="flex flex-col gap-6"><Toolbar title={t("draftDocument", { name: copy.title })}
     backLabel={t("backToDocuments")} backHref="/documents"
-    editHref={`/documents/new/clinical/${slugValue}${sp.draftId ? `?draftId=${encodeURIComponent(sp.draftId)}` : ""}`} editLabel={t("edit")}
+    editHref={`/documents/new/clinical/${slugValue}${sp.draftId ? `?draftId=${encodeURIComponent(sp.draftId)}` /* i18n-allow: URL query syntax, not user-facing copy */ : ""}`} editLabel={t("edit")}
     localeLinks={<div className="flex items-center gap-1 rounded-lg border bg-background p-1">
       <Languages className="mx-1 size-4 text-muted-foreground" aria-hidden />
       <Button asChild size="sm" variant={locale === "en" ? "secondary" : "ghost"}><Link href={previewHref(slugValue, sp.recordId, "en", sp.draftId)}>{t("english")}</Link></Button>

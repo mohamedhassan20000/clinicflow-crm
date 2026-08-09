@@ -143,7 +143,7 @@ export default async function PatientHistoryDocumentPage({
         title={t("draftDocument", { name: copy.title })}
         backHref={sp.origin === "documents" ? "/documents" : backHref(previewParams)}
         backLabel={sp.origin === "documents" ? t("backToDocuments") : t("backToSource")}
-        editHref={sp.origin === "documents" ? `/documents/new/patient-history/${slugValue}${sp.draftId ? `?draftId=${encodeURIComponent(sp.draftId)}` : ""}` : undefined}
+        editHref={sp.origin === "documents" ? `/documents/new/patient-history/${slugValue}${sp.draftId ? `?draftId=${encodeURIComponent(sp.draftId)}` /* i18n-allow: URL query syntax, not user-facing copy */ : ""}` : undefined}
         editLabel={t("edit")}
         localeLinks={
           <div className="flex items-center gap-1 rounded-lg border bg-background p-1">

@@ -1,6 +1,8 @@
-import { FileText } from "lucide-react";
+import Link from "next/link";
+import { FileCheck2, FileText } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { PrintButton } from "@/components/patients/print-button";
+import { Button } from "@/components/ui/button";
 import { useTranslations } from "next-intl";
 
 export function PatientReportHeader({
@@ -10,6 +12,8 @@ export function PatientReportHeader({
   phone,
   title,
   countLabel,
+  documentHref,
+  showPrint = true,
 }: {
   patientHref: string;
   patientName: string;
@@ -17,6 +21,13 @@ export function PatientReportHeader({
   phone: string | null;
   title: string;
   countLabel: string;
+  /**
+   * P7-12 — when set, an engine "Generate document" action deep-links to the
+   * patient history/financial document preview surface (which then issues via
+   * the shared engine pipeline).
+   */
+  documentHref?: string;
+  showPrint?: boolean;
 }) {
   const t = useTranslations("patients");
   return (
@@ -37,7 +48,19 @@ export function PatientReportHeader({
           <p>{countLabel}</p>
         </div>
       }
-      actions={<PrintButton />}
+      actions={
+        <div className="flex flex-wrap items-center gap-2 print:hidden">
+          {documentHref ? (
+            <Button asChild variant="outline" size="sm">
+              <Link href={documentHref}>
+                <FileCheck2 data-icon="inline-start" />
+                {t("generateDocument")}
+              </Link>
+            </Button>
+          ) : null}
+          {showPrint ? <PrintButton /> : null}
+        </div>
+      }
     />
   );
 }

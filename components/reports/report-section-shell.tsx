@@ -4,13 +4,12 @@ import type { ReactNode } from "react";
 import { PrintHeader } from "@/components/shared/print-header";
 import {
   Card,
-  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { PrintSectionButton, type ReportPrintSection } from "@/components/reports/print-all-button";
+import type { ReportPrintSection } from "@/components/reports/print-all-button";
 import type { ClinicPrintMeta } from "@/types/reports";
 import { cn } from "@/lib/utils";
 import { useTranslations } from "next-intl";
@@ -46,9 +45,6 @@ export function ReportSectionShell({
           <CardDescription>
             {description} <span className="print:inline">({rangeLabel})</span>
           </CardDescription>
-          <CardAction>
-            <PrintSectionButton section={section} />
-          </CardAction>
         </CardHeader>
         <CardContent className="space-y-4">{children}</CardContent>
       </Card>

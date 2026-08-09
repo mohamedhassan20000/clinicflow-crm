@@ -18,6 +18,7 @@ const PROTECTED_PREFIXES = [
   "/notifications",
   "/revenue",
   "/reports",
+  "/documents",
   "/settings",
   "/profile",
   "/onboarding",

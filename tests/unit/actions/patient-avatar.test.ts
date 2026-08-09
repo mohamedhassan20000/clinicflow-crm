@@ -5,9 +5,9 @@ const PATIENT_ID = "22222222-2222-4222-8222-222222222222";
 const CLINIC_ID = "clinic-1";
 const AVATAR_PATH = `avatars/${CLINIC_ID}/${PATIENT_ID}/avatar.webp`;
 
-function avatarForm(fileType = "image/webp") {
+function avatarForm(fileType = "image/webp", size = 6) {
   const form = new FormData();
-  form.set("avatar", new File(["avatar"], "avatar.webp", { type: fileType }));
+  form.set("avatar", new File([new Uint8Array(size)], "avatar.webp", { type: fileType }));
   return form;
 }
 
@@ -77,6 +77,52 @@ describe("patient avatar actions", () => {
         ],
       }),
     );
+  });
+
+  it.each([1, 6])("accepts a %d MB patient photo", async (sizeMb) => {
+    const { uploadPatientAvatar, mocks } = await loadPatientAvatarActions();
+    mocks.state.tableResults["patients.select"] = {
+      data: { id: PATIENT_ID, avatar_path: null },
+      error: null,
+    };
+    mocks.state.tableResults["patients.update"] = { data: null, error: null };
+
+    const result = await uploadPatientAvatar(
+      PATIENT_ID,
+      avatarForm("image/webp", sizeMb * 1024 * 1024),
+    );
+
+    expect(result).toEqual({ ok: true });
+    expect(mocks.state.storageUpload).toHaveBeenCalledOnce();
+  });
+
+  it("rejects a patient photo larger than 6 MB with a clear message", async () => {
+    const { uploadPatientAvatar, mocks } = await loadPatientAvatarActions();
+    mocks.state.tableResults["patients.select"] = {
+      data: { id: PATIENT_ID, avatar_path: null },
+      error: null,
+    };
+
+    const result = await uploadPatientAvatar(
+      PATIENT_ID,
+      avatarForm("image/webp", 6 * 1024 * 1024 + 1),
+    );
+
+    expect(result).toEqual({ error: "Patient photo must be 6 MB or smaller." });
+    expect(mocks.state.storageFrom).not.toHaveBeenCalled();
+  });
+
+  it("continues to reject unsupported patient photo types", async () => {
+    const { uploadPatientAvatar, mocks } = await loadPatientAvatarActions();
+    mocks.state.tableResults["patients.select"] = {
+      data: { id: PATIENT_ID, avatar_path: null },
+      error: null,
+    };
+
+    const result = await uploadPatientAvatar(PATIENT_ID, avatarForm("image/gif"));
+
+    expect(result).toEqual({ error: "Avatar must be JPEG, PNG, or WebP." });
+    expect(mocks.state.storageFrom).not.toHaveBeenCalled();
   });
 
   it("blocks unauthorized avatar upload before storage access", async () => {

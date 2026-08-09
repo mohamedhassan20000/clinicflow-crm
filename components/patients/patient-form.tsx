@@ -15,7 +15,9 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { SingleDatePicker } from "@/components/ui/clinic-date-picker";
 import { Input } from "@/components/ui/input";
 import { PatientPhoneInput } from "@/components/patients/patient-phone-input";
 import {
@@ -247,7 +249,7 @@ function PatientFilesStep({
       <div className="space-y-3">
         <FileUploadRow
           label={t("profilePhoto")}
-          hint={t("jpegPngOrWebpMax2Mb")}
+          hint={t("jpegPngOrWebpMax6Mb")}
           fileRef={avatarRef}
           accept="image/jpeg,image/png,image/webp"
           uploading={avatarUploading}
@@ -379,14 +381,14 @@ export function PatientForm({
 
         {/* Optional profile photo picker */}
         <div className="flex items-center gap-4 rounded-lg border border-border/40 bg-muted/20 p-3">
-          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-muted overflow-hidden">
+          <Avatar className="h-14 w-14">
             {avatarPreview ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={avatarPreview} alt={t("preview")} className="h-full w-full object-cover" />
-            ) : (
+              <AvatarImage src={avatarPreview} alt={t("preview")} />
+            ) : null}
+            <AvatarFallback>
               <User className="h-7 w-7 text-muted-foreground" />
-            )}
-          </span>
+            </AvatarFallback>
+          </Avatar>
           <div className="flex flex-col gap-1.5 min-w-0">
             <p className="text-sm font-medium leading-none">
               {t("profilePhoto2")}{" "}
@@ -484,7 +486,13 @@ export function PatientForm({
               <FormItem>
                 <FormLabel>{t("dateOfBirth")}</FormLabel>
                 <FormControl>
-                  <Input {...field} type="date" disabled={isPending} />
+                  <SingleDatePicker
+                    value={field.value ?? ""}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                    label={t("dateOfBirth")}
+                    disabled={isPending}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>

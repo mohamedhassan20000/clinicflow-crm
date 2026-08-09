@@ -13,6 +13,7 @@ import { ensureDefaultPagePermissions } from "@/actions/page-permissions";
 import {
   createStaffSchema,
   updateStaffSchema,
+  staffProfileSectionSchema,
   departmentSchema,
   insuranceSchema,
   clinicSchema,
@@ -23,6 +24,11 @@ import {
   type DoctorScheduleValues,
 } from "@/lib/validations/settings";
 import { normalizePhone } from "@/lib/phone/registry";
+import { cleanClinicLogo } from "@/lib/images/clean-clinic-logo";
+import {
+  cleanedClinicLogoStoragePath,
+  ensureClinicLogoCleaned,
+} from "@/lib/images/clinic-logo-cleanup";
 
 export interface ActionResult {
   error?: string;
@@ -258,6 +264,45 @@ export async function updateStaff(
 
   if (user.role === "admin" || user.role === "manager") {
     await ensureDefaultPagePermissions(staffId, parsed.data.role, user.clinicId);
+  }
+
+  revalidateTag(`staff:${user.clinicId}`, {});
+  revalidatePath("/settings/staff");
+  return { success: true };
+}
+
+/** Saves only the editable Profile tab fields for one clinic staff member. */
+export async function updateStaffProfileSection(
+  staffId: string,
+  input: { full_name: string; phone: string | null },
+): Promise<ActionResult> {
+  const user = await requireRole(["admin", "manager"]);
+  const parsed = staffProfileSectionSchema.safeParse(input);
+  if (!parsed.success) {
+    return { error: await actionError("settings.validationError") };
+  }
+
+  const target = await getStaffTargetForClinic(staffId, user.clinicId);
+  if (!target) return { error: await actionError("settings.staffMemberNotFound") };
+  if (!managerCanManageTarget(user.role, target.role)) {
+    return { error: await actionError("settings.onlyAdminsCanManageAdminUsers") };
+  }
+
+  const supabase = await createClient();
+  const { error, count } = await supabase
+    .from("profiles")
+    .update({
+      full_name: parsed.data.full_name,
+      phone: parsed.data.phone ? normalizePhone(parsed.data.phone) : null,
+    }, { count: "exact" })
+    .eq("id", staffId)
+    .eq("clinic_id", user.clinicId);
+
+  if (error) {
+    return { error: await actionError("settings.weCouldNotCompleteThisRequestPleaseTryAgain") };
+  }
+  if (!count) {
+    return { error: await actionError("settings.couldNotUpdateThisStaffMemberYouMayLackPermission") };
   }
 
   revalidateTag(`staff:${user.clinicId}`, {});
@@ -770,6 +815,12 @@ export async function updateClinic(
     name: fd.get("name"),
     phone: fd.get("phone") || null,
     address: fd.get("address") || null,
+    email: fd.get("email") || null,
+    website: fd.get("website") || null,
+    license_no: fd.get("license_no") || null,
+    tax_id: fd.get("tax_id") || null,
+    document_footer: fd.get("document_footer") || null,
+    branding_metadata: fd.get("branding_metadata") || "{}",
     time_format: fd.get("time_format") || "24h",
   });
 
@@ -778,6 +829,16 @@ export async function updateClinic(
   }
 
   const supabase = await createClient();
+  const branding = user.role === "admin"
+    ? {
+        email: parsed.data.email,
+        website: parsed.data.website,
+        license_no: parsed.data.license_no,
+        tax_id: parsed.data.tax_id,
+        document_footer: parsed.data.document_footer,
+        branding_metadata: JSON.parse(parsed.data.branding_metadata),
+      }
+    : {};
   const { error } = await supabase
     .from("clinics")
     .update({
@@ -785,10 +846,24 @@ export async function updateClinic(
       phone: parsed.data.phone ? normalizePhone(parsed.data.phone) : null,
       address: parsed.data.address ?? null,
       time_format: parsed.data.time_format,
+      ...branding,
     })
     .eq("id", user.clinicId);
 
   if (error) return { error: await actionError("settings.weCouldNotCompleteThisRequestPleaseTryAgain") };
+
+  const { data: currentClinic } = await supabase
+    .from("clinics")
+    .select("logo_url")
+    .eq("id", user.clinicId)
+    .single();
+  if (currentClinic?.logo_url) {
+    await ensureClinicLogoCleaned({
+      supabase,
+      clinicId: user.clinicId,
+      logoUrl: currentClinic.logo_url,
+    });
+  }
 
   revalidatePath("/", "layout");
   return { success: true };
@@ -887,13 +962,24 @@ export async function uploadClinicLogo(fd: FormData): Promise<ActionResult & { u
     return { error: await actionError("settings.onlyPngJpegOrSvgFilesAreAccepted") };
   }
 
-  const ext = file.name.split(".").pop() ?? "png";
-  const path = `clinics/${user.clinicId}/logo.${ext}`;
+  let cleanedLogo: Awaited<ReturnType<typeof cleanClinicLogo>>;
+  try {
+    cleanedLogo = await cleanClinicLogo(
+      new Uint8Array(await file.arrayBuffer()),
+    );
+  } catch {
+    return { error: await actionError("settings.weCouldNotCompleteThisRequestPleaseTryAgain") };
+  }
+
+  const path = cleanedClinicLogoStoragePath(user.clinicId);
 
   const supabase = await createClient();
   const { error: uploadError } = await supabase.storage
     .from("clinic-assets")
-    .upload(path, file, { upsert: true, contentType: file.type });
+    .upload(path, cleanedLogo.bytes, {
+      upsert: true,
+      contentType: "image/png",
+    });
 
   if (uploadError) return { error: await actionError("settings.weCouldNotCompleteThisRequestPleaseTryAgain") };
 
@@ -903,7 +989,14 @@ export async function uploadClinicLogo(fd: FormData): Promise<ActionResult & { u
 
   const logoUrl = `${urlData.publicUrl}?t=${Date.now()}`;
 
-  await supabase.from("clinics").update({ logo_url: logoUrl }).eq("id", user.clinicId);
+  const { error: updateError } = await supabase
+    .from("clinics")
+    .update({ logo_url: logoUrl })
+    .eq("id", user.clinicId);
+
+  if (updateError) {
+    return { error: await actionError("settings.weCouldNotCompleteThisRequestPleaseTryAgain") };
+  }
 
   revalidatePath("/settings/clinic");
   return { success: true, url: logoUrl };
@@ -1146,8 +1239,8 @@ export async function upsertClinicWorkingHours(
 
 // ── Doctor schedule ───────────────────────────────────────────────────────────
 
-export async function getDoctorSchedule(
-  doctorId: string,
+export async function getStaffSchedule(
+  staffId: string,
 ): Promise<DoctorScheduleValues> {
   const user = await requireReadRole([
     "admin",
@@ -1158,10 +1251,26 @@ export async function getDoctorSchedule(
   ]);
   const supabase = await createClient();
 
+  const { data: target } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("id", staffId)
+    .eq("clinic_id", user.clinicId)
+    .eq("is_deleted", false)
+    .maybeSingle();
+  if (!target) {
+    return ALL_DAYS.map((day_of_week) => ({
+      day_of_week,
+      works: false,
+      start_time: null,
+      end_time: null,
+    }));
+  }
+
   const { data } = await supabase
     .from("doctor_schedules")
     .select("day_of_week, start_time, end_time")
-    .eq("doctor_id", doctorId)
+    .eq("doctor_id", staffId)
     .eq("clinic_id", user.clinicId)
     .order("day_of_week");
 
@@ -1178,12 +1287,15 @@ export async function getDoctorSchedule(
   });
 }
 
-export async function upsertDoctorSchedule(
-  doctorId: string,
+export async function upsertStaffSchedule(
+  staffId: string,
   _prev: ActionResult | null,
   fd: FormData,
 ): Promise<ActionResult> {
   const user = await requireRole(["admin"]);
+
+  const target = await getStaffTargetForClinic(staffId, user.clinicId);
+  if (!target) return { error: await actionError("settings.staffMemberNotFound") };
 
   const raw = fd.get("schedule");
   if (typeof raw !== "string") return { error: await actionError("settings.invalidPayload") };
@@ -1210,14 +1322,14 @@ export async function upsertDoctorSchedule(
       const clinicDay = clinicHours.find((c) => c.day_of_week === day.day_of_week);
       if (!clinicDay?.open || clinicDay.shifts.length === 0) {
         return {
-          error: await actionError("settings.doctorScheduleOnClosedDay", { day: await actionWeekday(day.day_of_week) }),
+          error: await actionError("settings.staffScheduleOnClosedDay", { day: await actionWeekday(day.day_of_week) }),
         };
       }
       const clinicOpen = clinicDay.shifts.reduce((min, s) => s.shift_start < min ? s.shift_start : min, clinicDay.shifts[0].shift_start);
       const clinicClose = clinicDay.shifts.reduce((max, s) => s.shift_end > max ? s.shift_end : max, clinicDay.shifts[0].shift_end);
       if (day.start_time < clinicOpen || day.end_time > clinicClose) {
         return {
-          error: await actionError("settings.doctorHoursOutsideClinicHours", {
+          error: await actionError("settings.staffHoursOutsideClinicHours", {
             day: await actionWeekday(day.day_of_week),
             start: day.start_time,
             end: day.end_time,
@@ -1232,7 +1344,7 @@ export async function upsertDoctorSchedule(
   const rows = result.data
     .filter((d) => d.works && d.start_time && d.end_time)
     .map((d) => ({
-      doctor_id: doctorId,
+      doctor_id: staffId,
       clinic_id: user.clinicId,
       day_of_week: d.day_of_week,
       start_time: d.start_time as string,
@@ -1244,7 +1356,7 @@ export async function upsertDoctorSchedule(
   const { error: delErr } = await supabase
     .from("doctor_schedules")
     .delete()
-    .eq("doctor_id", doctorId)
+    .eq("doctor_id", staffId)
     .eq("clinic_id", user.clinicId);
   if (delErr) return { error: await actionError("settings.weCouldNotCompleteThisRequestPleaseTryAgain") };
 
@@ -1258,3 +1370,7 @@ export async function upsertDoctorSchedule(
   revalidatePath("/settings/staff");
   return { success: true };
 }
+
+// Compatibility exports for existing callers outside the Staff drawer.
+export const getDoctorSchedule = getStaffSchedule;
+export const upsertDoctorSchedule = upsertStaffSchedule;

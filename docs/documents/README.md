@@ -1,9 +1,18 @@
 # P7A Document Requirements Catalog
 
-**Status:** P7A requirements baseline
+**Status:** P7A requirements baseline — **committed document set superseded 2026-08-01 (see note below)**
 **Roadmap:** [`docs/AI_AGENT_PLAN.md`](../AI_AGENT_PLAN.md) §8, P7A
 **Applies to:** the committed P7 system-template set only
 **Does not implement:** visual design, branding schema, rendering, numbering storage, authoring UI, delivery integration, or legal-acceptance capture
+
+> **Superseded document set (2026-08-01).** The **committed Phase 7 document set is now the
+> 16-document design-intake set** in [`docs/designs/document-platform/`](../designs/document-platform/README.md)
+> (see its `analysis/` and `analysis/15-comprehensive-review.md`), which **supersedes the 8-document
+> list below**. The two overlap on **invoice, prescription, sick-leave, and lab request** — for those
+> four, this catalog's requirements remain the business-requirements source of truth. **Receipt,
+> medical report, referral, and consent forms are deferred** (not built in this Phase 7). This catalog
+> also remains the precedent for the **additive extension pattern** (`EXTENDING_THE_CATALOG.md`) used
+> to add any future document. `AI_AGENT_PLAN.md` §8 records the same supersession.
 
 ## 1. Purpose
 

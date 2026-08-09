@@ -8,7 +8,7 @@ import { Check, ChevronsUpDown, Loader2, CalendarPlus, Info, Package } from "luc
 import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { SingleDatePicker } from "@/components/ui/clinic-date-picker";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Form,
@@ -742,16 +742,16 @@ export function AppointmentForm({
                 <FormItem>
                   <FormLabel>{t("date")}</FormLabel>
                   <FormControl>
-                    <Input
-                      type="date"
+                    <SingleDatePicker
+                      label={t("date")}
                       disabled={isPending}
                       value={dateVal}
                       min={today}
-                      onChange={(e) => {
+                      onChange={(date) => {
                         const t = timeVal || "09:00";
                         field.onChange(
-                          e.target.value
-                            ? buildClinicIso(e.target.value, t, locale.timeZone)
+                          date
+                            ? buildClinicIso(date, t, locale.timeZone)
                             : "",
                         );
                       }}

@@ -1,9 +1,6 @@
 "use client";
 
-import { Printer } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { PatientScopeFilterBar } from "@/components/shared/patient-scope-filter-bar";
-import { useTranslations } from "next-intl";
 
 interface Props {
   doctors: { id: string; full_name: string }[];
@@ -16,6 +13,9 @@ export function PatientsFilterBar({
   departments,
   showScopeFilters = true,
 }: Props) {
+  // P7 Phase 4 — the Print Roster button was removed; roster printing now happens
+  // only through the patient-list document Preview (the document-trigger entry
+  // point on the patients page header).
   return (
     <PatientScopeFilterBar
       basePath="/patients"
@@ -26,21 +26,6 @@ export function PatientsFilterBar({
       fallbackParams={{ name: ["q"] }}
       resetParamsOnApply={["page"]}
       clearExtraParams={["q"]}
-      actions={<PrintRosterButton />}
     />
-  );
-}
-
-function PrintRosterButton() {
-  const t = useTranslations("patients");
-  return (
-    <Button
-      variant="outline"
-      size="sm"
-      className="h-7 gap-1.5 px-2 text-xs"
-      onClick={() => window.print()}
-    >
-      <Printer className="h-3.5 w-3.5" />
-      {t("printRoster")}</Button>
   );
 }

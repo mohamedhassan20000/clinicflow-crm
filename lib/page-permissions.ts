@@ -22,6 +22,7 @@ export type PageSlug =
   | "followups"
   | "revenue"
   | "reports"
+  | "documents"
   | "settings";
 
 /**
@@ -135,6 +136,20 @@ export const PAGE_CATALOG: readonly PageDefinition[] = [
     }),
   },
   {
+    // P7-8 — the Central Document Factory. Every authorized role sees the hub;
+    // each sees only the document types their role is allowed (catalog
+    // pageRoles) and only the rows RLS scopes to them.
+    slug: "documents",
+    href: "/documents",
+    defaultVisibilityByRole: visibility({
+      admin: true,
+      receptionist: true,
+      manager: true,
+      doctor: true,
+      assistant: true,
+    }),
+  },
+  {
     slug: "settings",
     href: "/settings",
     defaultVisibilityByRole: visibility({ admin: true, manager: true }),
@@ -183,6 +198,20 @@ export function getRolePages(role: string | null | undefined): PageDefinition[] 
 
 export function getPageSlugFromPath(pathname: string): PageSlug | null {
   if (pathname === "/" || pathname.startsWith("/dashboard")) return "dashboard";
+  if (
+    pathname.startsWith("/documents/roster-profile/patient-list") ||
+    pathname.startsWith("/documents/roster-profile/patient-file")
+  ) return "patients";
+  if (
+    pathname.startsWith("/documents/roster-profile/system-members") ||
+    pathname.startsWith("/documents/roster-profile/staff-file")
+  ) return "settings";
+  // P7-8 — the Central Document Factory hub, the create flow, the detail page,
+  // and the clinical-authoring surfaces are gated by the `documents` slug. The
+  // roster-profile deep-links above deliberately keep their source-page slugs
+  // (they are reached contextually from patients/settings), so those checks
+  // must precede this generic prefix.
+  if (pathname.startsWith("/documents")) return "documents";
   if (pathname.startsWith("/patients")) return "patients";
   if (pathname.startsWith("/appointments")) return "appointments";
   if (pathname.startsWith("/assistant")) return "assistant";

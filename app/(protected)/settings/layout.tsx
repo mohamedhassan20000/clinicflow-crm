@@ -29,7 +29,11 @@ export default async function SettingsLayout({
     <div className="space-y-6">
       <SettingsPageHeader />
 
-      <SettingsNav canCustomize={canCustomize} canManageAi={canManageAi} />
+      <SettingsNav
+        canCustomize={canCustomize}
+        canManageAi={canManageAi}
+        canManageClinical={user.role === "admin"}
+      />
 
       {children}
     </div>

@@ -1,4 +1,21 @@
 {
   "$comment": "P2C i18n gate — the documented exception list. Whole-file exemptions only; a per-line exception belongs in the code as an `i18n-allow: <reason>` comment, where the reader will actually see it. Every entry needs a reason.",
-  "files": []
+  "files": [
+    {
+      "path": "components/documents/harness/document-engine-harness.tsx",
+      "reason": "P7-1 storybook-style fixture contains explicit paired English and Arabic copy in one implementation harness; production document copy remains template-owned."
+    },
+    {
+      "path": "app/(protected)/documents/engine-harness/page.tsx",
+      "reason": "P7-1 developer-only primitive harness label, not a product Documents-module surface; the rendered artifacts below are explicitly bilingual."
+    },
+    {
+      "path": "components/documents/harness/document-conformance-harness.tsx",
+      "reason": "P7-2 non-production conformance fixture intentionally contains paired English and Arabic sample copy; production document copy remains template-owned."
+    },
+    {
+      "path": "app/(protected)/documents/engine-harness/conformance/page.tsx",
+      "reason": "P7-2 developer-only conformance status and harness labels, never a production Documents-module surface."
+    }
+  ]
 }

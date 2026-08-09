@@ -11,9 +11,10 @@ import { useTranslations } from "next-intl";
 
 interface NoteComposerProps {
   patientId: string;
+  appointmentId?: string | null;
 }
 
-export function NoteComposer({ patientId }: NoteComposerProps) {
+export function NoteComposer({ patientId, appointmentId }: NoteComposerProps) {
   const t = useTranslations("patients");
   const [state, formAction, isPending] = useActionState(addMedicalNote, null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -33,6 +34,9 @@ export function NoteComposer({ patientId }: NoteComposerProps) {
   return (
     <form ref={formRef} action={formAction} className="space-y-3">
       <input type="hidden" name="patient_id" value={patientId} />
+      {appointmentId && (
+        <input type="hidden" name="appointment_id" value={appointmentId} />
+      )}
       <Textarea
         name="note"
         placeholder={t("writeAMedicalNote")}

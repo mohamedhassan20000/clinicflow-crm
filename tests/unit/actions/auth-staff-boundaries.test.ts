@@ -388,4 +388,61 @@ describe("staff permission boundaries", () => {
     expect(result).toEqual({ success: true });
     expect(mocks.state.revalidatePath).toHaveBeenCalledWith("/settings/staff");
   });
+
+  it("keeps the Profile section update scoped to name and phone for one staff member", async () => {
+    const { updateStaffProfileSection, mocks } = await loadSettingsActions();
+    mocks.state.authedUser.role = "admin";
+    mocks.state.tableResults["profiles.select"] = {
+      data: { id: STAFF_ID, clinic_id: "clinic-1", role: "receptionist" },
+      error: null,
+    };
+    mocks.state.tableResults["profiles.update"] = { data: null, error: null, count: 1 };
+
+    await expect(updateStaffProfileSection(STAFF_ID, {
+      full_name: "Updated Staff",
+      phone: "+905550000000",
+    })).resolves.toEqual({ success: true });
+
+    const update = mocks.state.queryLog.find((entry) =>
+      entry.table === "profiles" && entry.operation === "update");
+    expect(update?.args[0]).toEqual({
+      full_name: "Updated Staff",
+      phone: "+905550000000",
+    });
+    expect(update?.args[0]).not.toHaveProperty("avatar_url");
+    expect(update?.args[0]).not.toHaveProperty("professional_license_no");
+    expect(update?.args[0]).not.toHaveProperty("role");
+  });
+
+  it("saves a non-doctor schedule only for the targeted staff member", async () => {
+    const { upsertStaffSchedule, mocks } = await loadSettingsActions();
+    mocks.state.authedUser.role = "admin";
+    mocks.state.tableResults["profiles.select"] = {
+      data: { id: STAFF_ID, clinic_id: "clinic-1", role: "receptionist" },
+      error: null,
+    };
+    const fd = new FormData();
+    fd.set("schedule", JSON.stringify(Array.from({ length: 7 }, (_, day_of_week) => ({
+      day_of_week,
+      works: day_of_week === 1,
+      start_time: day_of_week === 1 ? "09:00" : null,
+      end_time: day_of_week === 1 ? "17:00" : null,
+    }))));
+
+    await expect(upsertStaffSchedule(STAFF_ID, null, fd)).resolves.toEqual({ success: true });
+    expect(mocks.state.queryLog).toContainEqual(expect.objectContaining({
+      table: "doctor_schedules",
+      operation: "delete",
+      args: ["eq", "doctor_id", STAFF_ID],
+    }));
+    const insert = mocks.state.queryLog.find((entry) =>
+      entry.table === "doctor_schedules" && entry.operation === "insert");
+    expect(insert?.args[0]).toEqual([{
+      doctor_id: STAFF_ID,
+      clinic_id: "clinic-1",
+      day_of_week: 1,
+      start_time: "09:00",
+      end_time: "17:00",
+    }]);
+  });
 });

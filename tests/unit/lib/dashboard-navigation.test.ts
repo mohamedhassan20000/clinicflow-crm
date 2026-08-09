@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { getTenantShellNavigation, OPERATOR_SHELL_NAVIGATION } from "@/lib/dashboard-navigation";
-import { getRolePageSlugs, type PageSlug } from "@/lib/page-permissions";
+import {
+  getPageSlugFromPath,
+  getRolePageSlugs,
+  type PageSlug,
+} from "@/lib/page-permissions";
 
 describe("dashboard navigation serialization", () => {
   it("transforms authoritative role visibility without adding unauthorized entries", () => {
@@ -46,6 +50,34 @@ describe("dashboard navigation serialization", () => {
         href: "/assistant",
         icon: "assistant",
         labelKey: "tenant.assistant",
+      }),
+    );
+  });
+
+  it("maps contextual document routes to their owning source page", () => {
+    expect(getPageSlugFromPath("/documents/roster-profile/patient-list")).toBe("patients");
+    expect(getPageSlugFromPath("/documents/roster-profile/patient-file")).toBe("patients");
+    expect(getPageSlugFromPath("/documents/roster-profile/system-members")).toBe("settings");
+    expect(getPageSlugFromPath("/documents/roster-profile/staff-file")).toBe("settings");
+  });
+
+  it("maps the P7-8 Central Document Factory hub, create flow, and detail to the documents slug", () => {
+    expect(getPageSlugFromPath("/documents")).toBe("documents");
+    expect(getPageSlugFromPath("/documents/new")).toBe("documents");
+    expect(getPageSlugFromPath("/documents/new/clinical/prescription")).toBe("documents");
+    expect(getPageSlugFromPath("/documents/clinical/prescription")).toBe("documents");
+    expect(getPageSlugFromPath("/documents/00000000-0000-0000-0000-000000000000")).toBe(
+      "documents",
+    );
+  });
+
+  it("exposes the documents entry in the tenant shell navigation for every role", () => {
+    expect(getRolePageSlugs("doctor")).toContain("documents");
+    expect(getTenantShellNavigation(getRolePageSlugs("doctor"))).toContainEqual(
+      expect.objectContaining({
+        href: "/documents",
+        icon: "documents",
+        labelKey: "tenant.documents",
       }),
     );
   });

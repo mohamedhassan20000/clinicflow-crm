@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -11,15 +11,17 @@ import {
   FolderOpen,
   GraduationCap,
   Loader2,
-  Phone,
   Save,
   Upload,
   User,
   X,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { TimePicker } from "@/components/ui/clinic-date-picker";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -30,24 +32,28 @@ import {
 } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  deleteStaffFile,
   listStaffFiles,
-  uploadStaffCertificate,
-  uploadStaffContract,
-  uploadStaffOtherDoc,
-  uploadStaffPhoto,
+  saveStaffDocuments,
   type StaffFile,
   type StaffFiles,
 } from "@/actions/staff-files";
-import { getDoctorSchedule, upsertDoctorSchedule, getClinicWorkingHours } from "@/actions/settings";
+import {
+  getClinicWorkingHours,
+  getStaffSchedule,
+  updateStaffProfileSection,
+  upsertStaffSchedule,
+} from "@/actions/settings";
 import type { DoctorScheduleValues, ClinicWorkingHoursValues } from "@/lib/validations/settings";
 import type { Tables } from "@/types/database";
 import { useTranslations } from "next-intl";
 import { ScopedAssistantLauncher } from "@/components/assistant/assistant-launcher-scope";
+import { ClinicianCredentialsForm } from "@/components/clinical/clinician-credentials-form";
 
 type StaffMember = Tables<"profiles"> & {
   departments: { name: string; color?: string | null } | null;
 };
+
+type PendingFile = File | null | undefined;
 
 const ROLE_LABEL_KEYS: Record<string, string> = {
   admin: "roleAdmin",
@@ -98,21 +104,41 @@ interface Props {
 
 export function StaffProfileSheet({ staff, open, onOpenChange, lastSeen, isAdmin }: Props) {
   const t = useTranslations("settings");
+  const tDocuments = useTranslations("documentPlatform.ui");
   const router = useRouter();
   const [files, setFiles] = useState<StaffFiles | null>(null);
   const [isPending, startTransition] = useTransition();
   // undefined = use staff.avatar_url prop; null = cleared; string = new signed url
   const [localAvatarUrl, setLocalAvatarUrl] = useState<string | null | undefined>(undefined);
+  const [pendingPhoto, setPendingPhoto] = useState<PendingFile>(undefined);
+  const [pendingContract, setPendingContract] = useState<PendingFile>(undefined);
+  const [pendingCertificates, setPendingCertificates] = useState<File[]>([]);
+  const [pendingOther, setPendingOther] = useState<File[]>([]);
+  const [removedPaths, setRemovedPaths] = useState<string[]>([]);
+  const [pendingPhotoUrl, setPendingPhotoUrl] = useState<string | null>(null);
 
   const photoRef = useRef<HTMLInputElement>(null);
   const contractRef = useRef<HTMLInputElement>(null);
   const certRef = useRef<HTMLInputElement>(null);
   const otherRef = useRef<HTMLInputElement>(null);
+  const pendingPhotoUrlRef = useRef<string | null>(null);
+  const staffId = staff?.id;
+
+  function resetDocumentDraft() {
+    if (pendingPhotoUrlRef.current) URL.revokeObjectURL(pendingPhotoUrlRef.current);
+    pendingPhotoUrlRef.current = null;
+    setPendingPhotoUrl(null);
+    setPendingPhoto(undefined);
+    setPendingContract(undefined);
+    setPendingCertificates([]);
+    setPendingOther([]);
+    setRemovedPaths([]);
+  }
 
   useEffect(() => {
-    if (!open || !staff) return;
+    if (!open || !staffId) return;
     let active = true;
-    listStaffFiles(staff.id)
+    listStaffFiles(staffId)
       .then((res) => {
         if (!active) return;
         if (res.error) {
@@ -122,86 +148,96 @@ export function StaffProfileSheet({ staff, open, onOpenChange, lastSeen, isAdmin
         else setFiles(res.data ?? null);
       });
     return () => { active = false; };
-  }, [open, staff]);
+  }, [open, staffId]);
+
+  useEffect(() => {
+    return () => {
+      if (pendingPhotoUrlRef.current) URL.revokeObjectURL(pendingPhotoUrlRef.current);
+    };
+  }, []);
+
+  function stagePhoto(file: File | undefined) {
+    if (!file) return;
+    if (pendingPhotoUrlRef.current) URL.revokeObjectURL(pendingPhotoUrlRef.current);
+    const url = URL.createObjectURL(file);
+    pendingPhotoUrlRef.current = url;
+    setPendingPhotoUrl(url);
+    setPendingPhoto(file);
+  }
 
   function handleOpenChange(nextOpen: boolean) {
     if (!nextOpen) {
       setFiles(null);
       setLocalAvatarUrl(undefined);
+      resetDocumentDraft();
     }
     onOpenChange(nextOpen);
   }
 
-  function triggerUpload(
-    ref: React.RefObject<HTMLInputElement | null>,
-    action: (staffId: string, fd: FormData) => Promise<{ data?: StaffFiles; error?: string }>,
-    isPhoto = false,
-  ) {
-    if (!staff || !ref.current) return;
-    ref.current.value = "";
-    ref.current.onchange = () => {
-      const file = ref.current?.files?.[0];
-      if (!file) return;
-      const fd = new FormData();
-      fd.set("file", file);
-      startTransition(async () => {
-        const res = await action(staff.id, fd);
-        if (res.error) toast.error(res.error);
-        else {
-          setFiles(res.data ?? null);
-          toast.success(t("fileUploaded"));
-          if (isPhoto) {
-            setLocalAvatarUrl(res.data?.photo?.url ?? null);
-            router.refresh();
-          }
-        }
-      });
-    };
-    ref.current.click();
+  function handleDelete(filePath: string) {
+    setRemovedPaths((current) => current.includes(filePath) ? current : [...current, filePath]);
+    if (filePath.includes("/photo.")) setPendingPhoto(null);
+    if (filePath.includes("/contract.")) setPendingContract(null);
   }
 
-  function handleDelete(filePath: string) {
+  function saveDocuments() {
     if (!staff) return;
+    const fd = new FormData();
+    fd.set("photo_action", pendingPhoto === undefined ? "keep" : pendingPhoto === null ? "remove" : "replace");
+    fd.set("contract_action", pendingContract === undefined ? "keep" : pendingContract === null ? "remove" : "replace");
+    if (pendingPhoto instanceof File) fd.set("photo", pendingPhoto);
+    if (pendingContract instanceof File) fd.set("contract", pendingContract);
+    pendingCertificates.forEach((file) => fd.append("certificates", file));
+    pendingOther.forEach((file) => fd.append("other", file));
+    fd.set("remove_paths", JSON.stringify(removedPaths));
     startTransition(async () => {
-      const res = await deleteStaffFile(staff.id, filePath);
+      const res = await saveStaffDocuments(staff.id, fd);
       if (res.error) toast.error(res.error);
       else {
         setFiles(res.data ?? null);
-        toast.success(t("fileRemoved"));
-        if (filePath.includes("/photo.")) {
-          setLocalAvatarUrl(null);
-          router.refresh();
-        }
+        setLocalAvatarUrl(res.data?.photo?.url ?? null);
+        resetDocumentDraft();
+        router.refresh();
+        toast.success(t("documentsSaved"));
       }
     });
   }
 
   if (!staff) return null;
   const loadingFiles = open && files === null;
+  const storedPhoto = pendingPhoto === null || (files?.photo && removedPaths.includes(files.photo.path))
+    ? null
+    : files?.photo ?? null;
+  const storedContract = pendingContract === null || (files?.contract && removedPaths.includes(files.contract.path))
+    ? null
+    : files?.contract ?? null;
+  const storedCertificates = (files?.certificates ?? []).filter((file) => !removedPaths.includes(file.path));
+  const storedOther = (files?.other ?? []).filter((file) => !removedPaths.includes(file.path));
 
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>
       <SheetContent
         side="inline-end"
+        aria-describedby={undefined}
         className="flex w-full flex-col gap-0 p-0 sm:max-w-2xl"
       >
         {/* ── Header ── */}
         <SheetHeader className="border-b border-border/50 px-8 py-5 pe-14">
           <div className="flex items-center gap-4">
-            {(localAvatarUrl !== undefined ? localAvatarUrl : staff.avatar_url) ? (
-              <Image
-                src={(localAvatarUrl !== undefined ? localAvatarUrl : staff.avatar_url)!}
-                alt={staff.full_name}
-                width={56}
-                height={56}
-                className="h-14 w-14 rounded-full object-cover ring-2 ring-border"
-              />
-            ) : (
-              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-muted ring-2 ring-border">
+            <Avatar className="h-14 w-14 ring-2 ring-border">
+              {(pendingPhoto === null
+                ? null
+                : pendingPhotoUrl ?? (localAvatarUrl !== undefined ? localAvatarUrl : staff.avatar_url)) && (
+                <AvatarImage
+                  src={(pendingPhotoUrl ?? (localAvatarUrl !== undefined ? localAvatarUrl : staff.avatar_url))!}
+                  alt={staff.full_name}
+                />
+              )}
+              <AvatarFallback>
                 <User className="h-7 w-7 text-muted-foreground" />
-              </span>
-            )}
-            <div className="min-w-0">
+              </AvatarFallback>
+            </Avatar>
+            <div className="min-w-0 flex-1">
               <SheetTitle className="text-lg leading-tight">
                 {staff.full_name}
               </SheetTitle>
@@ -229,17 +265,15 @@ export function StaffProfileSheet({ staff, open, onOpenChange, lastSeen, isAdmin
         {/* ── Tabs ── */}
         <Tabs defaultValue="profile" className="flex flex-1 flex-col overflow-hidden">
           {/* Hidden inputs */}
-          <input ref={photoRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" />
-          <input ref={contractRef} type="file" accept=".pdf,.doc,.docx,image/jpeg,image/png" className="hidden" />
-          <input ref={certRef} type="file" accept=".pdf,.doc,.docx,image/jpeg,image/png" className="hidden" />
-          <input ref={otherRef} type="file" accept=".pdf,.doc,.docx,image/jpeg,image/png" className="hidden" />
+          <input ref={photoRef} aria-label={t("profilePhoto")} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(event) => stagePhoto(event.target.files?.[0])} />
+          <input ref={contractRef} aria-label={t("employmentContract")} type="file" accept=".pdf,.doc,.docx,image/jpeg,image/png" className="hidden" onChange={(event) => setPendingContract(event.target.files?.[0])} />
+          <input ref={certRef} aria-label={t("universityCertificates")} type="file" multiple accept=".pdf,.doc,.docx,image/jpeg,image/png" className="hidden" onChange={(event) => setPendingCertificates((current) => [...current, ...Array.from(event.target.files ?? [])])} />
+          <input ref={otherRef} aria-label={t("otherDocuments")} type="file" multiple accept=".pdf,.doc,.docx,image/jpeg,image/png" className="hidden" onChange={(event) => setPendingOther((current) => [...current, ...Array.from(event.target.files ?? [])])} />
 
           <TabsList className="mx-8 mt-4 w-fit">
             <TabsTrigger value="profile">{t("profile")}</TabsTrigger>
             <TabsTrigger value="documents">{t("documents")}</TabsTrigger>
-            {staff.role === "doctor" && (
-              <TabsTrigger value="schedule">{t("schedule")}</TabsTrigger>
-            )}
+            <TabsTrigger value="schedule">{t("schedule")}</TabsTrigger>
           </TabsList>
 
           {/* ── Profile tab ── */}
@@ -248,7 +282,8 @@ export function StaffProfileSheet({ staff, open, onOpenChange, lastSeen, isAdmin
             className="flex-1 overflow-y-auto px-8 py-5"
           >
             <div className="space-y-5">
-              <InfoRow icon={<User className="h-4 w-4" />} label={t("fullName")} value={staff.full_name} />
+              <StaffProfileSection key={staff.id} staff={staff} />
+              <Separator />
               <InfoRow icon={<User className="h-4 w-4" />} label={t("role")} value={ROLE_LABEL_KEYS[staff.role] ? t(ROLE_LABEL_KEYS[staff.role]) : staff.role} />
               <InfoRow
                 icon={<User className="h-4 w-4" />}
@@ -263,9 +298,6 @@ export function StaffProfileSheet({ staff, open, onOpenChange, lastSeen, isAdmin
                     : staff.departments?.name ?? "—"
                 }
               />
-              {staff.phone && (
-                <InfoRow icon={<Phone className="h-4 w-4" />} label={t("phone")} value={staff.phone} />
-              )}
               <Separator />
               <InfoRow
                 icon={<CalendarDays className="h-4 w-4" />}
@@ -296,15 +328,29 @@ export function StaffProfileSheet({ staff, open, onOpenChange, lastSeen, isAdmin
                   {t("thisStaffMemberMustChangeTheir")}
                 </p>
               )}
+              {staff.role === "doctor" && (
+                <>
+                  <Separator />
+                  <ClinicianCredentialsForm
+                    key={staff.id}
+                    staffId={staff.id}
+                    readOnly={!isAdmin}
+                    initial={{
+                      professionalLicenseNo: staff.professional_license_no,
+                      specialty: staff.specialty,
+                      professionalTitle: staff.professional_title,
+                      hasSignature: Boolean(staff.signature_path),
+                    }}
+                  />
+                </>
+              )}
             </div>
           </TabsContent>
 
-          {/* ── Schedule tab (doctors only) ── */}
-          {staff.role === "doctor" && (
-            <TabsContent value="schedule" className="flex-1 overflow-y-auto px-8 py-5">
-              <DoctorScheduleTab doctorId={staff.id} open={open} isAdmin={!!isAdmin} />
-            </TabsContent>
-          )}
+          {/* ── Schedule tab ── */}
+          <TabsContent value="schedule" className="flex-1 overflow-y-auto px-8 py-5">
+            <StaffScheduleTab staffId={staff.id} open={open} isAdmin={!!isAdmin} />
+          </TabsContent>
 
           {/* ── Documents tab ── */}
           <TabsContent
@@ -317,12 +363,30 @@ export function StaffProfileSheet({ staff, open, onOpenChange, lastSeen, isAdmin
               </div>
             ) : (
               <div className="space-y-8">
+                <div
+                  data-testid="staff-documents-actions"
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/50 bg-muted/20 p-4"
+                >
+                  <div>
+                    <p className="text-sm font-medium">{tDocuments("staffFileDocument")}</p>
+                    <p className="text-xs text-muted-foreground">{t("staffFileDocumentDescription")}</p>
+                  </div>
+                  <Button asChild variant="outline" size="sm" className="gap-1.5">
+                    <Link href={`/documents/roster-profile/staff-file?staffId=${encodeURIComponent(staff.id)}`}>
+                      <FileText className="h-4 w-4" aria-hidden="true" />
+                      {tDocuments("staffFileDocument")}
+                    </Link>
+                  </Button>
+                </div>
+
+                <Separator />
+
                 {/* Profile photo */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium">{t("profilePhoto")}</p>
-                      <p className="text-xs text-muted-foreground">{t("jpegPngOrWebpMax2")}</p>
+                      <p className="text-xs text-muted-foreground">{t("jpegPngOrWebpMax6")}</p>
                     </div>
                     <div className="flex items-center gap-2">
                       <Button
@@ -331,19 +395,22 @@ export function StaffProfileSheet({ staff, open, onOpenChange, lastSeen, isAdmin
                         size="sm"
                         className="gap-1.5"
                         disabled={isPending}
-                        onClick={() => triggerUpload(photoRef, uploadStaffPhoto, true)}
+                        onClick={() => photoRef.current?.click()}
                       >
                         <Upload className="h-3.5 w-3.5" />
-                        {files?.photo ? t("change") : t("upload")}
+                        {pendingPhoto instanceof File || storedPhoto ? t("change") : t("upload")}
                       </Button>
-                      {files?.photo && (
+                      {(pendingPhoto instanceof File || storedPhoto) && (
                         <Button
                           type="button"
                           variant="ghost"
                           size="sm"
                           className="gap-1.5 text-destructive hover:text-destructive"
                           disabled={isPending}
-                          onClick={() => handleDelete(files.photo!.path)}
+                          onClick={() => {
+                            if (storedPhoto) handleDelete(storedPhoto.path);
+                            else setPendingPhoto(null);
+                          }}
                         >
                           <X className="h-3.5 w-3.5" />
                           {t("remove")}
@@ -351,16 +418,15 @@ export function StaffProfileSheet({ staff, open, onOpenChange, lastSeen, isAdmin
                       )}
                     </div>
                   </div>
-                  {files?.photo && (
+                  {(pendingPhoto instanceof File || storedPhoto) && (
                     <div className="flex items-center gap-3 rounded-lg border border-border/40 bg-muted/20 p-3">
-                      <Image
-                        src={files.photo.url}
-                        alt={t("staffPhoto")}
-                        width={48}
-                        height={48}
-                        className="h-12 w-12 rounded-full object-cover ring-2 ring-border"
-                      />
-                      <p className="text-xs text-muted-foreground truncate">{files.photo.name}</p>
+                      <Avatar className="h-12 w-12 ring-2 ring-border">
+                        <AvatarImage src={pendingPhotoUrl ?? storedPhoto?.url ?? ""} alt={t("staffPhoto")} />
+                        <AvatarFallback><User className="h-6 w-6" /></AvatarFallback>
+                      </Avatar>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {pendingPhoto instanceof File ? pendingPhoto.name : storedPhoto?.name}
+                      </p>
                     </div>
                   )}
                 </div>
@@ -372,10 +438,12 @@ export function StaffProfileSheet({ staff, open, onOpenChange, lastSeen, isAdmin
                   title={t("employmentContract")}
                   icon={<FileText className="h-4 w-4" />}
                   hint={t("pdfOrWordMax10Mb")}
-                  file={files?.contract ?? null}
+                  file={storedContract}
+                  pendingFile={pendingContract instanceof File ? pendingContract : undefined}
                   isPending={isPending}
-                  onUpload={() => triggerUpload(contractRef, uploadStaffContract)}
+                  onUpload={() => contractRef.current?.click()}
                   onDelete={handleDelete}
+                  onRemovePending={() => setPendingContract(null)}
                 />
 
                 <Separator />
@@ -385,10 +453,12 @@ export function StaffProfileSheet({ staff, open, onOpenChange, lastSeen, isAdmin
                   title={t("universityCertificates")}
                   icon={<GraduationCap className="h-4 w-4" />}
                   hint={t("pdfOrWordMax10MbEachMultiple")}
-                  files={files?.certificates ?? []}
+                  files={storedCertificates}
+                  pendingFiles={pendingCertificates}
                   isPending={isPending}
-                  onAdd={() => triggerUpload(certRef, uploadStaffCertificate)}
+                  onAdd={() => certRef.current?.click()}
                   onDelete={handleDelete}
+                  onRemovePending={(index) => setPendingCertificates((current) => current.filter((_, itemIndex) => itemIndex !== index))}
                   addLabel={t("addCertificate")}
                   emptyLabel={t("noCertificatesUploadedYet")}
                 />
@@ -400,13 +470,22 @@ export function StaffProfileSheet({ staff, open, onOpenChange, lastSeen, isAdmin
                   title={t("otherDocuments")}
                   icon={<FolderOpen className="h-4 w-4" />}
                   hint={t("pdfOrWordMax10MbEachMultiple")}
-                  files={files?.other ?? []}
+                  files={storedOther}
+                  pendingFiles={pendingOther}
                   isPending={isPending}
-                  onAdd={() => triggerUpload(otherRef, uploadStaffOtherDoc)}
+                  onAdd={() => otherRef.current?.click()}
                   onDelete={handleDelete}
+                  onRemovePending={(index) => setPendingOther((current) => current.filter((_, itemIndex) => itemIndex !== index))}
                   addLabel={t("addDocument")}
                   emptyLabel={t("noOtherDocumentsUploadedYet")}
                 />
+
+                <div className="flex justify-end pt-2">
+                  <Button type="button" onClick={saveDocuments} disabled={isPending} className="gap-2">
+                    {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                    {t("saveDocuments")}
+                  </Button>
+                </div>
               </div>
             )}
           </TabsContent>
@@ -417,6 +496,61 @@ export function StaffProfileSheet({ staff, open, onOpenChange, lastSeen, isAdmin
 }
 
 // ── Doctor Schedule Tab ───────────────────────────────────────────────────────
+
+function StaffProfileSection({ staff }: { staff: StaffMember }) {
+  const t = useTranslations("settings");
+  const router = useRouter();
+  const [fullName, setFullName] = useState(staff.full_name);
+  const [phone, setPhone] = useState(staff.phone ?? "");
+  const [saving, startSave] = useTransition();
+
+  function saveProfile() {
+    startSave(async () => {
+      const result = await updateStaffProfileSection(staff.id, {
+        full_name: fullName,
+        phone: phone || null,
+      });
+      if (result.error) toast.error(result.error);
+      else {
+        router.refresh();
+        toast.success(t("profileSaved"));
+      }
+    });
+  }
+
+  return (
+    <section className="space-y-4 rounded-xl border border-border/50 bg-card p-5">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label htmlFor={`staff-profile-name-${staff.id}`}>{t("fullName")}</Label>
+          <Input
+            id={`staff-profile-name-${staff.id}`}
+            value={fullName}
+            maxLength={100}
+            disabled={saving}
+            onChange={(event) => setFullName(event.target.value)}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor={`staff-profile-phone-${staff.id}`}>{t("phone")}</Label>
+          <Input
+            id={`staff-profile-phone-${staff.id}`}
+            type="tel"
+            value={phone}
+            disabled={saving}
+            onChange={(event) => setPhone(event.target.value)}
+          />
+        </div>
+      </div>
+      <div className="flex justify-end">
+        <Button type="button" onClick={saveProfile} disabled={saving} className="gap-2">
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          {t("saveProfile")}
+        </Button>
+      </div>
+    </section>
+  );
+}
 
 const SCHEDULE_DAY_KEYS = ["daySunday", "dayMonday", "dayTuesday", "dayWednesday", "dayThursday", "dayFriday", "daySaturday"];
 const SCHEDULE_DAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
@@ -429,12 +563,12 @@ function isClinicDayClosed(clinicHours: ClinicWorkingHoursValues, dow: number): 
   return !day?.open;
 }
 
-function DoctorScheduleTab({
-  doctorId,
+function StaffScheduleTab({
+  staffId,
   open,
   isAdmin,
 }: {
-  doctorId: string;
+  staffId: string;
   open: boolean;
   isAdmin: boolean;
 }) {
@@ -449,7 +583,7 @@ function DoctorScheduleTab({
     let active = true;
     queueMicrotask(() => { if (active) setSchedule(null); });
     Promise.all([
-      getDoctorSchedule(doctorId),
+      getStaffSchedule(staffId),
       getClinicWorkingHours(),
     ]).then(([scheduleData, hoursData]) => {
       if (!active) return;
@@ -457,7 +591,7 @@ function DoctorScheduleTab({
       setClinicHours(hoursData ?? []);
     });
     return () => { active = false; };
-  }, [open, doctorId]);
+  }, [open, staffId]);
 
   function toggleDay(dow: number, works: boolean) {
     setSchedule((prev) =>
@@ -486,13 +620,19 @@ function DoctorScheduleTab({
         if (!day.works || !day.start_time || !day.end_time) continue;
         const clinicDay = clinicHours.find((c) => c.day_of_week === day.day_of_week);
         if (!clinicDay?.open || clinicDay.shifts.length === 0) {
-          setSaveError(`${DAY_NAMES[day.day_of_week]} is a clinic closed day.`);
+          setSaveError(t("staffScheduleOnClosedDay", { day: DAY_NAMES[day.day_of_week] }));
           return;
         }
         const clinicOpen = clinicDay.shifts.reduce((min, s) => s.shift_start < min ? s.shift_start : min, clinicDay.shifts[0].shift_start);
         const clinicClose = clinicDay.shifts.reduce((max, s) => s.shift_end > max ? s.shift_end : max, clinicDay.shifts[0].shift_end);
         if (day.start_time < clinicOpen || day.end_time > clinicClose) {
-          setSaveError(`${DAY_NAMES[day.day_of_week]}: doctor hours (${day.start_time}–${day.end_time}) must be within clinic hours (${clinicOpen}–${clinicClose}).`);
+          setSaveError(t("staffHoursOutsideClinicHours", {
+            day: DAY_NAMES[day.day_of_week],
+            start: day.start_time,
+            end: day.end_time,
+            clinicOpen,
+            clinicClose,
+          }));
           return;
         }
       }
@@ -501,7 +641,7 @@ function DoctorScheduleTab({
     const fd = new FormData();
     fd.set("schedule", JSON.stringify(schedule));
     startSave(async () => {
-      const res = await upsertDoctorSchedule(doctorId, null, fd);
+      const res = await upsertStaffSchedule(staffId, null, fd);
       if (res.error) setSaveError(res.error);
       else toast.success(t("scheduleSaved"));
     });
@@ -519,7 +659,7 @@ function DoctorScheduleTab({
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <p className="text-xs text-muted-foreground">
-          {t("setWhichDaysThisDoctorWorks")}
+          {t("setWhichDaysThisStaffMemberWorks")}
         </p>
         <ScopedAssistantLauncher />
       </div>
@@ -545,14 +685,14 @@ function DoctorScheduleTab({
               <div className="flex items-center gap-3">
                 {/* i18n-allow: DOM id joining a doctor UUID and weekday index */}
                 <Checkbox
-                  id={`sched-${doctorId}-${dow}`} // i18n-allow: technical checkbox DOM id
+                  id={`sched-${staffId}-${dow}`} // i18n-allow: technical checkbox DOM id
                   checked={day.works}
                   onCheckedChange={(v) => isAdmin && !clinicClosed && toggleDay(dow, !!v)}
                   disabled={!isAdmin || saving || clinicClosed}
                 />
                 {/* i18n-allow: htmlFor must match the technical checkbox DOM id */}
                 <Label
-                  htmlFor={`sched-${doctorId}-${dow}`} // i18n-allow: technical DOM id reference
+                  htmlFor={`sched-${staffId}-${dow}`} // i18n-allow: technical DOM id reference
                   className="w-24 cursor-pointer text-sm font-medium select-none"
                 >
                   {t(SCHEDULE_DAY_KEYS[dow] ?? "daySunday")}
@@ -566,20 +706,22 @@ function DoctorScheduleTab({
 
               {day.works && !clinicClosed && (
                 <div className="mt-3 flex items-center gap-2 ps-7">
-                  <input
-                    type="time"
+                  <TimePicker
                     value={day.start_time ?? ""}
                     disabled={!isAdmin || saving}
-                    onChange={(e) => updateTime(dow, "start_time", e.target.value)}
-                    className="h-8 w-32 rounded-md border border-input bg-background px-2 text-sm text-foreground [color-scheme:light] dark:[color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                    onChange={(time) => updateTime(dow, "start_time", time)}
+                    label={t("startTime")}
+                    compact
+                    className="h-8 w-32 rounded-md px-2 text-sm"
                   />
                   <span className="text-xs text-muted-foreground">{t("to")}</span>
-                  <input
-                    type="time"
+                  <TimePicker
                     value={day.end_time ?? ""}
                     disabled={!isAdmin || saving}
-                    onChange={(e) => updateTime(dow, "end_time", e.target.value)}
-                    className="h-8 w-32 rounded-md border border-input bg-background px-2 text-sm text-foreground [color-scheme:light] dark:[color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                    onChange={(time) => updateTime(dow, "end_time", time)}
+                    label={t("endTime")}
+                    compact
+                    className="h-8 w-32 rounded-md px-2 text-sm"
                   />
                 </div>
               )}
@@ -637,6 +779,7 @@ function FileRow({
   isPending: boolean;
   onDelete: (path: string) => void;
 }) {
+  const t = useTranslations("settings");
   const displayName = file.name.replace(/^\d+_/, "");
   return (
     <div className="flex items-center gap-2 rounded-lg border border-border/50 bg-card px-3 py-2 text-sm">
@@ -655,6 +798,7 @@ function FileRow({
         variant="ghost"
         size="icon"
         className="h-6 w-6 shrink-0 text-muted-foreground hover:text-destructive"
+        aria-label={t("remove")}
         disabled={isPending}
         onClick={() => onDelete(file.path)}
       >
@@ -668,22 +812,46 @@ function FileRow({
   );
 }
 
+function PendingFileRow({ file, onDelete }: { file: File; onDelete: () => void }) {
+  const t = useTranslations("settings");
+  return (
+    <div className="flex items-center gap-2 rounded-lg border border-dashed border-border/60 bg-muted/20 px-3 py-2 text-sm">
+      <span className="flex-1 truncate font-medium">{file.name}</span>
+      <span className="shrink-0 text-xs text-muted-foreground">{formatSize(file.size)}</span>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="h-6 w-6 shrink-0 text-muted-foreground hover:text-destructive"
+        aria-label={t("remove")}
+        onClick={onDelete}
+      >
+        <X className="h-3.5 w-3.5" />
+      </Button>
+    </div>
+  );
+}
+
 function SingleFileSection({
   title,
   icon,
   hint,
   file,
+  pendingFile,
   isPending,
   onUpload,
   onDelete,
+  onRemovePending,
 }: {
   title: string;
   icon: React.ReactNode;
   hint: string;
   file: StaffFile | null;
+  pendingFile?: File;
   isPending: boolean;
   onUpload: () => void;
   onDelete: (path: string) => void;
+  onRemovePending: () => void;
 }) {
   const t = useTranslations("settings");
   return (
@@ -700,11 +868,13 @@ function SingleFileSection({
           onClick={onUpload}
         >
           <Upload className="h-3.5 w-3.5" />
-          {file ? t("replace") : t("upload")}
+          {pendingFile || file ? t("replace") : t("upload")}
         </Button>
       </div>
       <p className="text-xs text-muted-foreground">{hint}</p>
-      {file ? (
+      {pendingFile ? (
+        <PendingFileRow file={pendingFile} onDelete={onRemovePending} />
+      ) : file ? (
         <FileRow file={file} isPending={isPending} onDelete={onDelete} />
       ) : (
         <p className="rounded-lg border border-dashed border-border/60 py-6 text-center text-xs text-muted-foreground">
@@ -720,9 +890,11 @@ function MultiFileSection({
   icon,
   hint,
   files,
+  pendingFiles,
   isPending,
   onAdd,
   onDelete,
+  onRemovePending,
   addLabel,
   emptyLabel,
 }: {
@@ -730,9 +902,11 @@ function MultiFileSection({
   icon: React.ReactNode;
   hint: string;
   files: StaffFile[];
+  pendingFiles: File[];
   isPending: boolean;
   onAdd: () => void;
   onDelete: (path: string) => void;
+  onRemovePending: (index: number) => void;
   addLabel: string;
   emptyLabel: string;
 }) {
@@ -754,7 +928,7 @@ function MultiFileSection({
         </Button>
       </div>
       <p className="text-xs text-muted-foreground">{hint}</p>
-      {files.length === 0 ? (
+      {files.length === 0 && pendingFiles.length === 0 ? (
         <p className="rounded-lg border border-dashed border-border/60 py-6 text-center text-xs text-muted-foreground">
           {emptyLabel}
         </p>
@@ -762,6 +936,13 @@ function MultiFileSection({
         <div className="space-y-1.5">
           {files.map((f) => (
             <FileRow key={f.path} file={f} isPending={isPending} onDelete={onDelete} />
+          ))}
+          {pendingFiles.map((file, index) => (
+            <PendingFileRow
+              key={`${file.name}-${file.size}-${index}`}
+              file={file}
+              onDelete={() => onRemovePending(index)}
+            />
           ))}
         </div>
       )}

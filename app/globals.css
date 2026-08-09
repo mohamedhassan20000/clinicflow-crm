@@ -891,7 +891,7 @@ body:has(.forced-dark-scope) .toaster {
     backdrop-filter: none !important;
   }
   /* Hide app chrome — any element marked hidden-in-print */
-  header, nav, aside,
+  header:not(.cf-doc-header), nav:not(.cf-doc-footer-links), aside,
   [data-print="hide"],
   .print\:hidden {
     display: none !important;
@@ -903,7 +903,7 @@ body:has(.forced-dark-scope) .toaster {
   [class*="overflow"] {
     overflow: visible !important;
   }
-  main {
+  main:not(.cf-document-body) {
     padding: 0 !important;
     padding-top: 36px !important; /* clearance for compact header on page 1 */
     margin: 0 !important;

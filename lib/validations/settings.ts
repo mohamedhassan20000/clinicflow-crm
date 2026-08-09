@@ -48,8 +48,14 @@ export const updateStaffSchema = z.object({
   is_active: z.boolean(),
 }).superRefine(requireAssistantSupervisorIds);
 
+export const staffProfileSectionSchema = z.object({
+  full_name: staffFields.full_name,
+  phone: optionalPhone,
+});
+
 export type CreateStaffValues = z.infer<typeof createStaffSchema>;
 export type UpdateStaffValues = z.infer<typeof updateStaffSchema>;
+export type StaffProfileSectionValues = z.infer<typeof staffProfileSectionSchema>;
 
 // ── Department ───────────────────────────────────────────────────────────────
 
@@ -74,10 +80,57 @@ export type InsuranceValues = z.infer<typeof insuranceSchema>;
 
 // ── Clinic ───────────────────────────────────────────────────────────────────
 
+const optionalTrimmedText = (max: number) =>
+  z.string().max(max).optional().nullable().transform((value) => value?.trim() || null);
+
+const optionalEmail = z.string()
+  .max(254)
+  .optional()
+  .nullable()
+  .transform((value) => value?.trim() || null)
+  .refine((value) => !value || z.string().email().safeParse(value).success, {
+    message: "validation.invalidEmail",
+  });
+
+const optionalWebsite = z.string()
+  .max(500)
+  .optional()
+  .nullable()
+  .transform((value) => value?.trim() || null)
+  .refine((value) => {
+    if (!value) return true;
+    try {
+      const url = new URL(value);
+      return url.protocol === "https:" || url.protocol === "http:";
+    } catch {
+      return false;
+    }
+  }, { message: "validation.invalidFormat" });
+
+export const brandingMetadataJsonSchema = z.string()
+  .max(16_384)
+  .default("{}")
+  .superRefine((value, ctx) => {
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        ctx.addIssue({ code: "custom", message: "validation.invalidFormat" });
+      }
+    } catch {
+      ctx.addIssue({ code: "custom", message: "validation.invalidFormat" });
+    }
+  });
+
 export const clinicSchema = z.object({
   name: z.string().min(2, "validation.tooSmall").max(100),
   phone: optionalPhone,
   address: z.string().max(500).optional().nullable(),
+  email: optionalEmail,
+  website: optionalWebsite,
+  license_no: optionalTrimmedText(120),
+  tax_id: optionalTrimmedText(120),
+  document_footer: optionalTrimmedText(500),
+  branding_metadata: brandingMetadataJsonSchema,
   time_format: z.enum(["12h", "24h"]).default("24h"),
 });
 

@@ -15,6 +15,18 @@ export type OutboundRelatedType =
  */
 export type ChannelCredentials = Readonly<Record<string, string>>;
 
+/**
+ * A caller-supplied binary attachment. Only the email channel carries these;
+ * WhatsApp template sends ignore them. `content` is base64-encoded so the value
+ * is a plain serializable string across the send boundary.
+ */
+export type MessageAttachment = {
+  filename: string;
+  /** Base64-encoded file bytes. */
+  content: string;
+  contentType?: string;
+};
+
 /** What a caller asks the messaging layer to deliver. */
 export type OutboundMessageInput = {
   clinicId: string;
@@ -31,6 +43,8 @@ export type OutboundMessageInput = {
   templateParameters?: readonly string[];
   /** Preference order; defaults to whatsapp → email (§5.2). */
   channelPreference?: readonly MessageChannel[];
+  /** Email-only binary attachments (e.g. the canonical invoice PDF). */
+  attachments?: readonly MessageAttachment[];
 };
 
 /** What an adapter receives — channel-level, provider-agnostic. */
@@ -49,6 +63,8 @@ export type ProviderMessage = {
     language: string;
     parameters: readonly string[];
   };
+  /** Email-only binary attachments (e.g. the canonical invoice PDF). */
+  attachments?: readonly MessageAttachment[];
 };
 
 export type ProviderSendResult =

@@ -280,7 +280,7 @@ export function AddStaffDialog({
                   <DocSection
                     title={t("avatarPhoto")}
                     icon={<User className="h-4 w-4" />}
-                    hint={t("jpegPngOrWebpMax2")}
+                    hint={t("jpegPngOrWebpMax6")}
                     file={files?.photo ?? null}
                     isPending={isPending}
                     onUpload={() => triggerUpload(photoRef, uploadStaffPhoto)}

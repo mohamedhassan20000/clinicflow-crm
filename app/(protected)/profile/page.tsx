@@ -18,7 +18,7 @@ export default async function MyProfilePage() {
   const { data: profile } = await supabase
     .from("profiles")
     .select(
-      "id, full_name, phone, avatar_url, role, created_at, departments(name, color)",
+      "id, full_name, phone, avatar_url, role, created_at, professional_license_no, specialty, professional_title, signature_path, departments(name, color)",
     )
     .eq("id", user.id)
     .single();
@@ -38,6 +38,10 @@ export default async function MyProfilePage() {
         role: profile.role,
         email,
         created_at: profile.created_at,
+        professional_license_no: profile.professional_license_no,
+        specialty: profile.specialty,
+        professional_title: profile.professional_title,
+        signature_path: profile.signature_path,
         department: profile.departments
           ? { name: profile.departments.name, color: profile.departments.color }
           : null,

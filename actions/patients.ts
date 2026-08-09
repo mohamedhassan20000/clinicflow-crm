@@ -429,6 +429,7 @@ export async function addMedicalNote(
 
   const raw = {
     patient_id: formData.get("patient_id"),
+    appointment_id: formData.get("appointment_id") || null,
     note: formData.get("note"),
   };
 
@@ -444,6 +445,7 @@ export async function addMedicalNote(
   const supabase = await createClient();
   const { error } = await supabase.from("medical_notes").insert({
     patient_id: parsed.data.patient_id,
+    appointment_id: parsed.data.appointment_id ?? null,
     note: parsed.data.note,
     doctor_id: user.id,
     created_by: user.id,

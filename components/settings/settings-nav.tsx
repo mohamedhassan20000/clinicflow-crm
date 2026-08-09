@@ -12,6 +12,8 @@ const NAV = [
   { href: "/settings/packages", labelKey: "navPackages" },
   { href: "/settings/insurance", labelKey: "navInsurance" },
   { href: "/settings/clinic", labelKey: "navClinic" },
+  { href: "/settings/clinical", labelKey: "navClinical", clinicalAdminOnly: true },
+  { href: "/settings/documents", labelKey: "navDocuments", adminOnly: true },
   { href: "/settings/messaging", labelKey: "navMessaging" },
   { href: "/settings/templates", labelKey: "navTemplates" },
   { href: "/settings/ai", labelKey: "navAiProvider", aiOnly: true },
@@ -27,16 +29,19 @@ const NAV = [
 export function SettingsNav({
   canCustomize,
   canManageAi,
+  canManageClinical = false,
 }: {
   canCustomize: boolean;
   canManageAi: boolean;
+  canManageClinical?: boolean;
 }) {
   const t = useTranslations("settings");
   const pathname = usePathname();
   const nav = NAV.filter(
     (item) =>
       (!("adminOnly" in item) || canCustomize) &&
-      (!("aiOnly" in item) || canManageAi),
+      (!("aiOnly" in item) || canManageAi) &&
+      (!("clinicalAdminOnly" in item) || canManageClinical),
   );
 
   return (

@@ -5,6 +5,8 @@ const mocks = vi.hoisted(() => ({
   send: vi.fn(),
   waActive: vi.fn(),
   captureException: vi.fn(),
+  issueInvoice: vi.fn(),
+  downloadPdf: vi.fn(),
   tables: {} as Record<string, { data: unknown; error: unknown }>,
 }));
 
@@ -21,10 +23,14 @@ function tableChain(result: { data: unknown; error: unknown }) {
 vi.mock("@sentry/nextjs", () => ({ captureException: mocks.captureException }));
 vi.mock("@/lib/supabase/admin", () => ({
   getClinicReminderSettings: mocks.getSettings,
+  downloadClinicDocumentPdf: mocks.downloadPdf,
   createClinicScopedAdminClient: () => ({
     from: (table: string) =>
       tableChain(mocks.tables[table] ?? { data: null, error: null }),
   }),
+}));
+vi.mock("@/lib/documents/invoice-issuance", () => ({
+  issueInvoiceDocument: mocks.issueInvoice,
 }));
 vi.mock("@/lib/messaging/automated-send", () => ({
   dispatchPatientMessage: mocks.send,
@@ -73,6 +79,17 @@ beforeEach(() => {
     error: null,
   });
   mocks.waActive.mockResolvedValue(true);
+  mocks.issueInvoice.mockResolvedValue({
+    documentId: "44444444-4444-4444-8444-444444444444",
+    documentNumber: "INV-2026-0001",
+    verificationToken: "0123456789abcdef0123456789abcdef",
+    reused: false,
+  });
+  mocks.downloadPdf.mockResolvedValue({
+    data: { arrayBuffer: async () => new Uint8Array([37, 80, 68, 70]).buffer },
+    error: null,
+    storagePath: "documents/clinic/INVOICE/doc.pdf",
+  });
   mocks.send.mockResolvedValue({
     email: { status: "sent" },
     whatsapp: { status: "sent" },
@@ -131,9 +148,11 @@ describe("buildInvoiceSummary (compose stage)", () => {
   });
 });
 
+const actorId = "55555555-5555-4555-8555-555555555555";
+
 describe("deliverIssuedInvoice (send stage)", () => {
   it("sends immediately via the messaging boundary as an invoice", async () => {
-    await deliverIssuedInvoice({ clinicId, appointmentId });
+    await deliverIssuedInvoice({ clinicId, appointmentId, actorId });
     expect(mocks.send).toHaveBeenCalledOnce();
     expect(mocks.send.mock.calls[0][0]).toMatchObject({
       clinicId,
@@ -145,9 +164,39 @@ describe("deliverIssuedInvoice (send stage)", () => {
     });
   });
 
+  it("attaches the canonical invoice PDF to the email channel", async () => {
+    await deliverIssuedInvoice({ clinicId, appointmentId, actorId });
+    const dispatch = mocks.send.mock.calls[0][0] as {
+      emailAttachments?: { filename: string; content: string; contentType?: string }[];
+      body: string;
+    };
+    expect(mocks.issueInvoice).toHaveBeenCalledWith({
+      clinicId,
+      actorId,
+      appointmentId,
+      locale: "en",
+    });
+    expect(dispatch.emailAttachments).toHaveLength(1);
+    expect(dispatch.emailAttachments?.[0]).toMatchObject({
+      filename: "INV-2026-0001.pdf",
+      contentType: "application/pdf",
+    });
+    expect(dispatch.body).toContain("INV-2026-0001");
+  });
+
+  it("degrades to text-only delivery when the canonical PDF cannot be issued", async () => {
+    mocks.issueInvoice.mockRejectedValueOnce(new Error("issue failed"));
+    await deliverIssuedInvoice({ clinicId, appointmentId, actorId });
+    expect(mocks.send).toHaveBeenCalledOnce();
+    const dispatch = mocks.send.mock.calls[0][0] as { emailAttachments?: unknown[] };
+    expect(dispatch.emailAttachments).toBeUndefined();
+  });
+
   it("is best-effort — never throws and does not send when the appointment is missing", async () => {
     mocks.tables.appointments = { data: null, error: null };
-    await expect(deliverIssuedInvoice({ clinicId, appointmentId })).resolves.toBeNull();
+    await expect(
+      deliverIssuedInvoice({ clinicId, appointmentId, actorId }),
+    ).resolves.toBeNull();
     expect(mocks.send).not.toHaveBeenCalled();
   });
 });

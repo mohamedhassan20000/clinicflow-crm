@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import Link from "next/link";
+import { FileText } from "lucide-react";
 import { requireRole } from "@/lib/rbac";
 import { getCachedDepartments, getCachedStaff } from "@/lib/cache/reference-data";
 import { StaffByDepartment } from "@/components/settings/staff-by-department";
@@ -12,6 +14,8 @@ import { getTranslations } from "next-intl/server";
 import { AssistantLauncherEntry } from "@/components/assistant/assistant-launcher-entry";
 import { AssistantLauncherScope } from "@/components/assistant/assistant-launcher-scope";
 import { resolveAssistantLauncher } from "@/lib/ai/launchers";
+import { Button } from "@/components/ui/button";
+import { DocumentTriggerLabel } from "@/components/documents/document-trigger-label";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("protected");
@@ -96,6 +100,12 @@ export default async function StaffSettingsPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Button asChild variant="outline" size="sm">
+            <Link href="/documents/roster-profile/system-members">
+              <FileText data-icon="inline-start" />
+              <DocumentTriggerLabel kind="system-members" />
+            </Link>
+          </Button>
           <AssistantLauncherEntry resolution={staffAssistant} role={user.role} />
           <AddStaffDialog
             departments={

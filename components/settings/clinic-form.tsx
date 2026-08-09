@@ -20,6 +20,7 @@ import {
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -69,6 +70,12 @@ export function ClinicForm({ defaultValues, logoUrl: initialLogoUrl, readOnly = 
     fd.set("name", values.name);
     if (values.phone) fd.set("phone", values.phone);
     if (values.address) fd.set("address", values.address);
+    if (values.email) fd.set("email", values.email);
+    if (values.website) fd.set("website", values.website);
+    if (values.license_no) fd.set("license_no", values.license_no);
+    if (values.tax_id) fd.set("tax_id", values.tax_id);
+    if (values.document_footer) fd.set("document_footer", values.document_footer);
+    fd.set("branding_metadata", values.branding_metadata || "{}");
     fd.set("time_format", values.time_format ?? "24h");
     startTransition(() => formAction(fd));
   }
@@ -240,6 +247,136 @@ export function ClinicForm({ defaultValues, logoUrl: initialLogoUrl, readOnly = 
                       placeholder={t("fullAddress")}
                     />
                   </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <div className="border-t border-border/60 pt-5">
+              <h4 className="text-sm font-semibold">{t("documentBranding")}</h4>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {t("documentBrandingDescription")}
+              </p>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("brandingEmail")}</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        type="email"
+                        dir="ltr"
+                        value={field.value ?? ""}
+                        disabled={isPending || readOnly}
+                        placeholder={t("brandingEmailPlaceholder")}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="website"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("website")}</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        type="url"
+                        dir="ltr"
+                        value={field.value ?? ""}
+                        disabled={isPending || readOnly}
+                        placeholder="https://clinic.example"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="license_no"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("licenseNumber")}</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        dir="ltr"
+                        value={field.value ?? ""}
+                        disabled={isPending || readOnly}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="tax_id"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("taxVatIdentifier")}</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        dir="ltr"
+                        value={field.value ?? ""}
+                        disabled={isPending || readOnly}
+                      />
+                    </FormControl>
+                    <FormDescription>{t("taxVatIdentifierDescription")}</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <FormField
+              control={form.control}
+              name="document_footer"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("customDocumentFooter")}</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      {...field}
+                      value={field.value ?? ""}
+                      disabled={isPending || readOnly}
+                      rows={3}
+                      className="resize-none text-sm"
+                    />
+                  </FormControl>
+                  <FormDescription>{t("customDocumentFooterDescription")}</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="branding_metadata"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("additionalBrandingMetadata")}</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      {...field}
+                      dir="ltr"
+                      spellCheck={false}
+                      disabled={isPending || readOnly}
+                      rows={5}
+                      className="resize-y font-mono text-xs"
+                    />
+                  </FormControl>
+                  <FormDescription>{t("additionalBrandingMetadataDescription")}</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}

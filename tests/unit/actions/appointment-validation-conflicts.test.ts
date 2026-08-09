@@ -652,6 +652,49 @@ describe("dedicated appointment replacement action", () => {
       }),
     );
   });
+
+  it("uses the same original exclusion when loading replacement slot presentation data", async () => {
+    const { getReplacementAvailability, mocks } = await loadAppointmentsActions();
+    allowReplacementAvailability(mocks);
+    mocks.state.tableResults["clinics.select"] = {
+      data: { timezone: "UTC" },
+      error: null,
+    };
+    mocks.state.tableResults["appointments.select"] = [
+      { data: { doctor_id: DOCTOR_ID }, error: null },
+      { data: [], error: null },
+    ];
+    mocks.state.tableResults["profiles.select"] = [
+      { data: [{ id: DOCTOR_ID, full_name: "Dr Test" }], error: null },
+      {
+        data: {
+          id: DOCTOR_ID,
+          full_name: "Dr Test",
+          is_active: true,
+          is_deleted: false,
+          deleted_at: null,
+        },
+        error: null,
+      },
+    ];
+
+    const result = await getReplacementAvailability(
+      APPOINTMENT_ID,
+      DOCTOR_ID,
+      "2099-01-01",
+      30,
+    );
+
+    expect(result.error).toBeUndefined();
+    expect(result.data?.dateIso).toBe("2099-01-01");
+    expect(mocks.state.queryLog).toContainEqual(
+      expect.objectContaining({
+        table: "appointments",
+        operation: "select",
+        args: ["neq", "id", APPOINTMENT_ID],
+      }),
+    );
+  });
 });
 
 describe("appointment status and role boundaries", () => {

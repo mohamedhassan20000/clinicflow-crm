@@ -359,6 +359,8 @@ export async function sendMessage(
               parameters: input.templateParameters ?? [],
             }
           : undefined,
+        // Attachments only apply to email; the WhatsApp adapters ignore them.
+        attachments: selected.channel === "email" ? input.attachments : undefined,
       },
       credentials,
     );

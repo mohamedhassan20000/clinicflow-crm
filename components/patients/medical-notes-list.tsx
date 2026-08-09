@@ -4,7 +4,6 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { FileText, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import type { Tables } from "@/types/database";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -27,8 +26,16 @@ import type { MedicalNoteAttachmentItem } from "@/actions/medical-note-attachmen
 import { useTranslations } from "next-intl";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
 
-export type MedicalNoteWithAttachments = Tables<"medical_notes"> & {
-  profiles: { full_name: string } | null;
+export type MedicalNoteWithAttachments = {
+  id: string;
+  patient_id: string;
+  appointment_id?: string | null;
+  doctor_id: string;
+  created_by: string | null;
+  deleted_at?: string | null;
+  created_at: string;
+  note: string;
+  profiles: { full_name: string | null } | null;
   attachments?: MedicalNoteAttachmentItem[];
 };
 
@@ -38,6 +45,7 @@ interface MedicalNotesListProps {
   currentUserId: string;
   canManageAllAttachments: boolean;
   canMutateNotes?: boolean;
+  canViewAttachments?: boolean;
   canUploadAttachments?: boolean;
 }
 
@@ -47,6 +55,7 @@ export function MedicalNotesList({
   currentUserId,
   canManageAllAttachments,
   canMutateNotes = true,
+  canViewAttachments = true,
   canUploadAttachments = true,
 }: MedicalNotesListProps) {
   const t = useTranslations("patients");
@@ -156,15 +165,17 @@ export function MedicalNotesList({
               {note.note}
             </p>
           )}
-          <MedicalNoteAttachments
-            patientId={patientId}
-            noteId={note.id}
-            noteAuthorId={note.created_by}
-            currentUserId={currentUserId}
-            canManageAllAttachments={canManageAllAttachments}
-            canUploadAttachments={canUploadAttachments}
-            initialAttachments={note.attachments ?? []}
-          />
+          {canViewAttachments && (
+            <MedicalNoteAttachments
+              patientId={patientId}
+              noteId={note.id}
+              noteAuthorId={note.created_by}
+              currentUserId={currentUserId}
+              canManageAllAttachments={canManageAllAttachments}
+              canUploadAttachments={canUploadAttachments}
+              initialAttachments={note.attachments ?? []}
+            />
+          )}
         </div>
       ))}
 

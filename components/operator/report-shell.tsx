@@ -3,6 +3,7 @@ import { ArrowDown, ArrowUp, Download, FileBarChart, FilterX } from "lucide-reac
 import { ReportFilterCombobox } from "@/components/operator/report-filter-combobox";
 import { DataTable } from "@/components/shared/data-table";
 import { Button } from "@/components/ui/button";
+import { MonthPicker, SingleDatePicker } from "@/components/ui/clinic-date-picker";
 import { Input } from "@/components/ui/input";
 import { pathWithSearch } from "@/lib/navigation/return-url";
 import {
@@ -139,10 +140,26 @@ export function ReportShell({
                       <option key={option.value} value={option.value}>{option.label}</option>
                     ))}
                   </select>
+                ) : filter.kind === "date" ? (
+                  <SingleDatePicker
+                    key={`${filter.key}:${value}`}
+                    name={filter.key}
+                    defaultValue={value === filter.clearValue ? "" : value}
+                    label={filter.label}
+                    className="h-10 rounded-md"
+                  />
+                ) : filter.kind === "month" ? (
+                  <MonthPicker
+                    key={`${filter.key}:${value}`}
+                    name={filter.key}
+                    defaultValue={value === filter.clearValue ? "" : value}
+                    label={filter.label}
+                    className="h-10 rounded-md"
+                  />
                 ) : (
                   <Input
                     key={`${filter.key}:${value}`}
-                    type={filter.kind === "text" ? "text" : filter.kind}
+                    type="text"
                     name={filter.key}
                     defaultValue={value === filter.clearValue ? "" : value}
                     placeholder={filter.placeholder}

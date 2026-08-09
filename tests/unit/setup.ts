@@ -1,10 +1,13 @@
 import "@testing-library/jest-dom/vitest";
 import { vi } from "vitest";
 import { createFormatter, createTranslator } from "next-intl";
+import ar from "@/messages/ar.json";
 import en from "@/messages/en.json";
+import actionErrorsAr from "@/messages/action-errors/ar.json";
 import actionErrorsEn from "@/messages/action-errors/en.json";
 
 const englishMessages = { ...en, actionErrors: actionErrorsEn };
+const arabicMessages = { ...ar, actionErrors: actionErrorsAr };
 
 class ResizeObserverMock {
   observe() {}
@@ -73,10 +76,20 @@ vi.mock("next-intl", async (importOriginal) => {
 });
 
 vi.mock("next-intl/server", async () => ({
+  getRequestConfig: <T,>(createRequestConfig: T) => createRequestConfig,
   getLocale: async () => "en",
   getMessages: async () => englishMessages,
-  getTranslations: async (namespace?: string) =>
-    createTranslator({ locale: "en", messages: englishMessages, namespace: namespace as never }),
+  getTranslations: async (
+    input?: string | { locale?: string; namespace?: string },
+  ) => {
+    const locale = typeof input === "object" && input.locale === "ar" ? "ar" : "en";
+    const namespace = typeof input === "string" ? input : input?.namespace;
+    return createTranslator({
+      locale,
+      messages: locale === "ar" ? arabicMessages : englishMessages,
+      namespace: namespace as never,
+    });
+  },
   getFormatter: async () => createFormatter({ locale: "en" }),
   setRequestLocale: () => {},
 }));

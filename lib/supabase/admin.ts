@@ -131,6 +131,243 @@ export async function incrementClinicUsage(
   });
 }
 
+export type ReserveDocumentIssueInput = {
+  clinicId: string;
+  actorId: string;
+  documentType: string;
+  idempotencyKey: string;
+  locale: "ar" | "en";
+  numberingPrefix: string;
+  periodKey: string;
+  sequencePadding: number;
+  params: Json;
+  snapshot: Json;
+  watermark: string | null;
+  patientId?: string | null;
+  staffId?: string | null;
+  doctorId?: string | null;
+  appointmentId?: string | null;
+  invoiceId?: string | null;
+  regeneratedFrom?: string | null;
+};
+
+/**
+ * Reviewed P7-0 service boundary for idempotent document reservation. The
+ * caller must first run the catalog's billing-aware mutation guard and resolve
+ * the snapshot through RLS. The RPC re-validates actor/tenant references,
+ * serializes the idempotency key, and allocates at most one number.
+ */
+export async function reserveDocumentIssue(input: ReserveDocumentIssueInput) {
+  return createAdminClient().rpc("reserve_document_issue", {
+    p_clinic_id: input.clinicId,
+    p_actor_id: input.actorId,
+    p_doc_type: input.documentType,
+    p_idempotency_key: input.idempotencyKey,
+    p_locale: input.locale,
+    p_numbering_prefix: input.numberingPrefix,
+    p_period_key: input.periodKey,
+    p_sequence_padding: input.sequencePadding,
+    p_params: input.params,
+    p_snapshot: input.snapshot,
+    p_watermark_snapshot: input.watermark,
+    p_patient_id: input.patientId ?? undefined,
+    p_staff_id: input.staffId ?? undefined,
+    p_doctor_id: input.doctorId ?? undefined,
+    p_appointment_id: input.appointmentId ?? undefined,
+    p_invoice_id: input.invoiceId ?? undefined,
+    p_regenerated_from: input.regeneratedFrom ?? undefined,
+  });
+}
+
+export async function completeDocumentIssue(input: {
+  clinicId: string;
+  actorId: string;
+  documentId: string;
+  storagePath: string;
+  pageCount: number;
+}) {
+  return createAdminClient().rpc("complete_document_issue", {
+    p_clinic_id: input.clinicId,
+    p_actor_id: input.actorId,
+    p_document_id: input.documentId,
+    p_pdf_storage_path: input.storagePath,
+    p_page_count: input.pageCount,
+  });
+}
+
+export async function failDocumentIssue(input: {
+  clinicId: string;
+  actorId: string;
+  documentId: string;
+  failureCode: string;
+}) {
+  return createAdminClient().rpc("fail_document_issue", {
+    p_clinic_id: input.clinicId,
+    p_actor_id: input.actorId,
+    p_document_id: input.documentId,
+    p_failure_code: input.failureCode,
+  });
+}
+
+export type SaveDocumentDraftInput = {
+  draftId?: string | null;
+  clinicId: string;
+  actorId: string;
+  documentType: string;
+  locale: "ar" | "en";
+  params: Json;
+  patientId?: string | null;
+  staffId?: string | null;
+  doctorId?: string | null;
+  appointmentId?: string | null;
+};
+
+/**
+ * Server-only mutable authoring boundary. Drafts deliberately live outside the
+ * immutable numbered `documents` ledger and may be updated only before issue.
+ */
+export async function saveClinicDocumentDraft(input: SaveDocumentDraftInput) {
+  const admin = createAdminClient();
+  const values = {
+    clinic_id: input.clinicId,
+    doc_type: input.documentType,
+    locale: input.locale,
+    params: input.params,
+    patient_id: input.patientId ?? null,
+    staff_id: input.staffId ?? null,
+    doctor_id: input.doctorId ?? null,
+    appointment_id: input.appointmentId ?? null,
+    updated_by: input.actorId,
+  };
+
+  if (input.draftId) {
+    return admin
+      .from("document_drafts")
+      .update(values)
+      .eq("id", input.draftId)
+      .eq("clinic_id", input.clinicId)
+      .eq("status", "not_issued")
+      .select("*")
+      .single();
+  }
+
+  return admin
+    .from("document_drafts")
+    .insert({ ...values, created_by: input.actorId })
+    .select("*")
+    .single();
+}
+
+export async function resolveClinicDocumentDraft(input: {
+  draftId: string;
+  clinicId: string;
+  actorId: string;
+  documentId: string;
+}) {
+  return createAdminClient()
+    .from("document_drafts")
+    .update({
+      status: "issued",
+      issued_document_id: input.documentId,
+      resolved_at: new Date().toISOString(),
+      updated_by: input.actorId,
+    })
+    .eq("id", input.draftId)
+    .eq("clinic_id", input.clinicId)
+    .eq("status", "not_issued")
+    .select("id")
+    .maybeSingle();
+}
+
+export function clinicDocumentStoragePath(input: {
+  clinicId: string;
+  documentType: string;
+  documentId: string;
+}): string {
+  return `documents/${input.clinicId}/${input.documentType}/${input.documentId}.pdf`;
+}
+
+/**
+ * Reviewed P7-9 metadata-only read for the Documents Settings numbering view.
+ * `document_counters` is a server-only table (no authenticated SELECT policy;
+ * allocation is SECURITY DEFINER-only, doc 06). The Documents Settings page must
+ * still show admins the current prefix and the next sequence per type (doc 09
+ * §1.2), so this bounded helper reads only the non-sensitive counter columns
+ * (doc_type, period_key, next_seq — no PHI, no financial data) for one clinic.
+ * Callers must have passed the primary-admin gate first.
+ */
+export async function loadClinicDocumentCounters(clinicId: string) {
+  return createAdminClient()
+    .from("document_counters")
+    .select("doc_type, period_key, next_seq")
+    .eq("clinic_id", clinicId)
+    .order("doc_type", { ascending: true });
+}
+
+/**
+ * Reviewed P7-6 service boundary for reading a responsible physician's private
+ * signature asset. Callers cannot choose another tenant or staff directory.
+ */
+export async function downloadClinicianSignatureAsset(input: {
+  clinicId: string;
+  physicianId: string;
+  signaturePath: string;
+}) {
+  const expectedPrefix = `staff/${input.clinicId}/${input.physicianId}/signature/`;
+  if (
+    !input.signaturePath.startsWith(expectedPrefix)
+    || input.signaturePath.includes("..")
+  ) {
+    return { data: null, error: new Error("Invalid clinician signature path") };
+  }
+
+  return createAdminClient().storage
+    .from("clinic-assets")
+    .download(input.signaturePath);
+}
+
+/** Canonical PDFs are private and server-written; authenticated users read via RLS. */
+export async function uploadClinicDocumentPdf(input: {
+  clinicId: string;
+  documentType: string;
+  documentId: string;
+  pdf: Uint8Array;
+}) {
+  const storagePath = clinicDocumentStoragePath(input);
+  const result = await createAdminClient().storage
+    .from("clinic-documents")
+    .upload(storagePath, input.pdf, {
+      contentType: "application/pdf",
+      upsert: true,
+    });
+  return { ...result, storagePath };
+}
+
+/** Reads a canonical document PDF for server-side delivery (e.g. invoice email). */
+export async function downloadClinicDocumentPdf(input: {
+  clinicId: string;
+  documentType: string;
+  documentId: string;
+}) {
+  const storagePath = clinicDocumentStoragePath(input);
+  const result = await createAdminClient().storage
+    .from("clinic-documents")
+    .download(storagePath);
+  return { ...result, storagePath };
+}
+
+export async function removeClinicDocumentPdf(input: {
+  clinicId: string;
+  documentType: string;
+  documentId: string;
+}) {
+  const storagePath = clinicDocumentStoragePath(input);
+  const result = await createAdminClient().storage
+    .from("clinic-documents")
+    .remove([storagePath]);
+  return { ...result, storagePath };
+}
+
 /**
  * P4.5A service boundary for the durable AI reservation transaction. The RPC
  * atomically claims the legacy ai_messages unit and the managed-cost ceiling;
@@ -1640,6 +1877,7 @@ const CLINIC_SCOPED_TABLES = new Set([
   "coupon_redemptions",
   "departments",
   "doctor_schedules",
+  "document_drafts",
   "follow_ups",
   "followup_sequences",
   "inbound_messages",
@@ -1675,6 +1913,9 @@ const READ_ONLY_CLINIC_SCOPED_TABLES = new Set([
   "assistant_doctor_assignments",
   "assistant_launcher_settings",
   "assistant_launcher_user_overrides",
+  "document_events",
+  "document_settings",
+  "documents",
 ]);
 
 const JOIN_SCOPED_TABLES = new Set([

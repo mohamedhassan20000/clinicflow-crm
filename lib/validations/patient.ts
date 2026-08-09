@@ -44,6 +44,7 @@ export type PatientFormValues = z.infer<typeof patientSchema>;
 
 export const medicalNoteSchema = z.object({
   patient_id: z.string().uuid(),
+  appointment_id: z.string().uuid().optional().nullable(),
   note: z.string().min(1, "validation.tooSmall").max(5000, "validation.tooBig"),
 });
 

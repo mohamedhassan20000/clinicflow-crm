@@ -2,6 +2,7 @@ import { Gift } from "lucide-react";
 import { createCoupon, setCouponActive } from "@/actions/operator";
 import { OperatorActionForm } from "@/components/operator/operator-action-form";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { SingleDatePicker } from "@/components/ui/clinic-date-picker";
 import { TableEmptyState } from "@/components/shared/data-table";
 import { listOperatorClinics } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -45,7 +46,7 @@ export default async function OperatorCouponsPage() {
             </select>
             <input name="months" type="number" min={1} max={120} placeholder={t("monthsMonthsFree")} className="rounded-md border bg-background px-2 py-1 text-sm" />
             <input name="percent" type="number" min={1} max={100} placeholder={t("percentDiscount2")} className="rounded-md border bg-background px-2 py-1 text-sm" />
-            <input name="expiresAt" type="date" title={t("expiryDateInclusiveRedeemableThroughThe")} className="rounded-md border bg-background px-2 py-1 text-sm" />
+            <SingleDatePicker name="expiresAt" label={t("expires")} title={t("expiryDateInclusiveRedeemableThroughThe")} className="rounded-md" />
             <input name="maxRedemptions" type="number" min={1} placeholder={t("maxRedemptions")} className="rounded-md border bg-background px-2 py-1 text-sm" />
             <select name="clinicId" className="rounded-md border bg-background px-2 py-1 text-sm" defaultValue="">
               <option value="">{t("noClinicAssignment")}</option>

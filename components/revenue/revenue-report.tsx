@@ -17,10 +17,9 @@ import {
   Building2,
 } from "lucide-react";
 import type { ComponentType } from "react";
-import { useTransition } from "react";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
+import { DateRangePicker } from "@/components/ui/clinic-date-picker";
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { formatDoctorName } from "@/lib/format-doctor";
@@ -170,6 +169,8 @@ export function RevenueReport({
   const router = useRouter();
   const searchParams = useSearchParams();
   const [, startTransition] = useTransition();
+  const [draftFrom, setDraftFrom] = useState(fromInput);
+  const [draftTo, setDraftTo] = useState(toInput);
 
   function updateParams(next: Record<string, string | null>) {
     const params = new URLSearchParams(searchParams?.toString() ?? "");
@@ -272,38 +273,25 @@ export function RevenueReport({
         </div>
         {preset === "custom" && (
           <form
-            className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1fr_auto] items-end"
+            className="flex flex-wrap items-end gap-3"
             onSubmit={(e) => {
               e.preventDefault();
-              const fd = new FormData(e.currentTarget);
-              const from = String(fd.get("from") ?? "");
-              const to = String(fd.get("to") ?? "");
-              if (from && to) {
-                updateParams({ preset: "custom", from, to });
+              if (draftFrom && draftTo) {
+                updateParams({ preset: "custom", from: draftFrom, to: draftTo });
               }
             }}
           >
-            <div className="space-y-1.5">
-              <Label htmlFor="from" className="text-xs">{t("from")}</Label>
-              <Input
-                id="from"
-                name="from"
-                type="date"
-                defaultValue={fromInput}
-                required
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="to" className="text-xs">{t("to")}</Label>
-              <Input
-                id="to"
-                name="to"
-                type="date"
-                defaultValue={toInput}
-                required
-              />
-            </div>
-            <Button type="submit" className="h-10">{t("apply")}</Button>
+            <DateRangePicker
+              from={draftFrom}
+              to={draftTo}
+              onFromChange={setDraftFrom}
+              onToChange={setDraftTo}
+              labels={{ from: t("from"), to: t("to") }}
+              className="w-full sm:w-[22rem]"
+            />
+            <Button type="submit" className="h-10" disabled={!draftFrom || !draftTo}>
+              {t("apply")}
+            </Button>
           </form>
         )}
       </div>

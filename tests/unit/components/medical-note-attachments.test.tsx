@@ -66,7 +66,8 @@ describe("MedicalNotesList attachments", () => {
         canManageAllAttachments={false}
         notes={[
           {
-            id: "note-1",
+        id: "note-1",
+        appointment_id: null,
             patient_id: "patient-1",
             doctor_id: "doctor-1",
             created_by: "user-1",

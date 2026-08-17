@@ -13,7 +13,15 @@ describe("P6C Meta onboarding production configuration", () => {
     );
   });
 
-  it("renders the honest disabled placeholder even without public Meta config and keeps P6D diagnostics out", () => {
+  /**
+   * P7E retired Embedded Signup from the clinic-facing page: the two methods a
+   * clinic is offered are the linked-device QR pairing and its own Meta Cloud
+   * API credentials. The wizard component is retained for the channels that
+   * already went through it, and keeps its honest disabled placeholder, but the
+   * settings page must not mount it — clicking "Connect with QR" must never
+   * reach a Facebook login.
+   */
+  it("offers only the two per-clinic methods and mounts no Embedded Signup surface", () => {
     const page = readFileSync(
       "app/(protected)/settings/messaging/page.tsx",
       "utf8",
@@ -22,11 +30,46 @@ describe("P6C Meta onboarding production configuration", () => {
       "components/settings/whatsapp-onboarding-wizard.tsx",
       "utf8",
     );
-    expect(page).toContain("<WhatsAppOnboardingWizard");
-    expect(page).not.toContain("metaConfig || metaState.configured");
+    expect(page).toContain("<WhatsAppQrConnectCard");
+    expect(page).toContain("<MetaApiConnectCard");
+    expect(page).not.toContain("<WhatsAppOnboardingWizard");
+    expect(page).not.toContain("NEXT_PUBLIC_META_CONFIG_ID");
+    expect(page).not.toContain("NEXT_PUBLIC_META_COEXISTENCE_CONFIG_ID");
     expect(wizard).toContain('t("metaNotConfigured")');
     expect(wizard).not.toContain('t("qualityRatingLabel")');
     expect(wizard).not.toContain('t("messagingLimitLabel")');
+  });
+
+  /**
+   * The QR card is the surface that replaced the Embedded Signup one, so it is
+   * pinned here: no Facebook SDK, no popup protocol, no signup configuration.
+   */
+  it("keeps the QR connection card free of any Meta login machinery", () => {
+    const card = readFileSync(
+      "components/settings/whatsapp-qr-connect-card.tsx",
+      "utf8",
+    );
+    for (const forbidden of [
+      "connect.facebook.net",
+      "FB.login",
+      "WA_EMBEDDED_SIGNUP",
+      "whatsapp_business_app_onboarding",
+      "config_id",
+      "META_COEXISTENCE",
+    ]) {
+      expect(card).not.toContain(forbidden);
+    }
+  });
+
+  it("documents the linked-device pairing service configuration", () => {
+    const example = readFileSync(".env.example", "utf8");
+    for (const key of [
+      "WHATSAPP_WORKER_URL",
+      "WHATSAPP_WORKER_TOKEN",
+      "WHATSAPP_WORKER_CALLBACK_SECRET",
+    ]) {
+      expect(example).toContain(`${key}=`);
+    }
   });
 
   it("documents every required server and public Meta environment variable", () => {

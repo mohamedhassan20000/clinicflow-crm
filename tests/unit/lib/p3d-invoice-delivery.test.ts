@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   getSettings: vi.fn(),
   send: vi.fn(),
-  waActive: vi.fn(),
+  waProvider: vi.fn(),
   captureException: vi.fn(),
   issueInvoice: vi.fn(),
   downloadPdf: vi.fn(),
@@ -33,10 +33,11 @@ vi.mock("@/lib/documents/invoice-issuance", () => ({
   issueInvoiceDocument: mocks.issueInvoice,
 }));
 vi.mock("@/lib/messaging/automated-send", () => ({
+  AUTOMATED_TEMPLATE_APPROVAL_STATES: ["approved", "submitted", "draft"],
   dispatchPatientMessage: mocks.send,
 }));
 vi.mock("@/lib/messaging/channel-management", () => ({
-  hasActiveWhatsAppChannel: mocks.waActive,
+  getActiveWhatsAppProvider: mocks.waProvider,
 }));
 
 import {
@@ -78,7 +79,7 @@ beforeEach(() => {
     },
     error: null,
   });
-  mocks.waActive.mockResolvedValue(true);
+  mocks.waProvider.mockResolvedValue("meta");
   mocks.issueInvoice.mockResolvedValue({
     documentId: "44444444-4444-4444-8444-444444444444",
     documentNumber: "INV-2026-0001",

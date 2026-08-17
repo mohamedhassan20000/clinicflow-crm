@@ -18,6 +18,7 @@ import { resendEmailProvider } from "@/lib/messaging/email-resend";
 import type { MessagingProvider } from "@/lib/messaging/provider";
 import { sanitizeProviderError } from "@/lib/messaging/scrub";
 import { dialog360WhatsAppProvider } from "@/lib/messaging/whatsapp-dialog360";
+import { linkedDeviceWhatsAppProvider } from "@/lib/messaging/whatsapp-linked-device";
 import { metaWhatsAppProvider } from "@/lib/messaging/whatsapp-meta";
 import type {
   ChannelCredentials,
@@ -71,10 +72,14 @@ const CHANNEL_FEATURE: Partial<Record<MessageChannel, string>> = {
   whatsapp: "whatsapp",
 };
 
-/** Meta-direct registers here in P6C; domain callers remain provider-neutral. */
+/**
+ * Meta-direct registered here in P6C, the linked-device pairing in P7E; domain
+ * callers remain provider-neutral and never choose a transport themselves.
+ */
 const ADAPTERS: Partial<Record<MessagingProviderId, MessagingProvider>> = {
   dialog360: dialog360WhatsAppProvider,
   meta: metaWhatsAppProvider,
+  linked_device: linkedDeviceWhatsAppProvider,
   resend: resendEmailProvider,
 };
 
@@ -274,11 +279,19 @@ export async function sendMessage(
       )
       .eq("id", input.templateId)
       .maybeSingle();
+    // Provider approval is a Cloud API concept: Meta reviews a template before
+    // a WABA may send it. A linked device sends from the clinic's own WhatsApp
+    // account, where the template is just the clinic's own text and no reviewer
+    // exists — so only an explicitly rejected template is refused there.
+    const approvalOk =
+      selected.provider === "linked_device"
+        ? templateResult.data?.approval_status !== "rejected"
+        : templateResult.data?.approval_status === "approved";
     if (
       templateResult.error ||
       !templateResult.data ||
       templateResult.data.channel !== selected.channel ||
-      templateResult.data.approval_status !== "approved"
+      !approvalOk
     ) {
       return failure("TEMPLATE_NOT_APPROVED");
     }
@@ -298,8 +311,13 @@ export async function sendMessage(
     body = rendered;
   }
 
+  // The 24-hour service window is a Cloud API business rule enforced by Meta on
+  // WABA traffic. A linked device sends from the clinic's own WhatsApp account,
+  // where no such window exists and no template mechanism exists to reopen one,
+  // so applying the gate there would block sends WhatsApp itself allows.
   if (
     conversation?.channel === "whatsapp" &&
+    selected.provider !== "linked_device" &&
     (!conversation.window_expires_at ||
       new Date(conversation.window_expires_at).valueOf() <= Date.now()) &&
     !template

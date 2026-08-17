@@ -1,0 +1,12 @@
+# Everything the image builds for itself, plus everything it must never carry.
+node_modules
+dist
+
+# Secrets. The worker's configuration comes from the platform's environment, so
+# a local .env has no business inside an image.
+.env
+.env.*
+!.env.example
+
+*.log
+.DS_Store

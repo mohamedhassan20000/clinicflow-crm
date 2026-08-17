@@ -110,6 +110,21 @@ export type WebhookEvent =
       receivedAt: string | null;
     }
   | {
+      /**
+       * P7E, linked-device only: a message the clinic sent from the phone
+       * itself, which the paired device receives a copy of. It is mirrored into
+       * the inbox thread as an outbound message so staff see the whole
+       * conversation, and never counted against messaging usage — ClinicFlow
+       * did not send it. Messages ClinicFlow *did* send arrive here too and are
+       * discarded by provider-message-id uniqueness.
+       */
+      kind: "outbound_echo";
+      recipient: string;
+      providerMessageId: string;
+      body: string;
+      occurredAt: string | null;
+    }
+  | {
       kind: "status";
       providerMessageId: string;
       clientReference?: string | null;

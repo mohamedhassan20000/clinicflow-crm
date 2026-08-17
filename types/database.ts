@@ -146,7 +146,9 @@ export type Database = {
           conversation_id: string
           created_at: string
           id: string
+          parts: Json | null
           role: Database["public"]["Enums"]["agent_message_role"]
+          sequence: number
           tool_name: string | null
         }
         Insert: {
@@ -155,7 +157,9 @@ export type Database = {
           conversation_id: string
           created_at?: string
           id?: string
+          parts?: Json | null
           role: Database["public"]["Enums"]["agent_message_role"]
+          sequence?: never
           tool_name?: string | null
         }
         Update: {
@@ -164,7 +168,9 @@ export type Database = {
           conversation_id?: string
           created_at?: string
           id?: string
+          parts?: Json | null
           role?: Database["public"]["Enums"]["agent_message_role"]
+          sequence?: never
           tool_name?: string | null
         }
         Relationships: [
@@ -181,6 +187,232 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "agent_conversations"
             referencedColumns: ["id", "clinic_id"]
+          },
+        ]
+      }
+      ai_action_confirmations: {
+        Row: {
+          action_id: string
+          actor_id: string
+          after_digest: string | null
+          before_digest: string | null
+          clinic_id: string
+          consumed_at: string | null
+          conversation_id: string
+          created_at: string
+          expires_at: string
+          id: string
+          input_digest: string
+          reauth_nonce_hash: string | null
+          risk_class: string
+          step_up_verified_at: string | null
+          target_user_id: string | null
+          token_hash: string
+        }
+        Insert: {
+          action_id: string
+          actor_id: string
+          after_digest?: string | null
+          before_digest?: string | null
+          clinic_id: string
+          consumed_at?: string | null
+          conversation_id: string
+          created_at?: string
+          expires_at: string
+          id?: string
+          input_digest: string
+          reauth_nonce_hash?: string | null
+          risk_class?: string
+          step_up_verified_at?: string | null
+          target_user_id?: string | null
+          token_hash: string
+        }
+        Update: {
+          action_id?: string
+          actor_id?: string
+          after_digest?: string | null
+          before_digest?: string | null
+          clinic_id?: string
+          consumed_at?: string | null
+          conversation_id?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          input_digest?: string
+          reauth_nonce_hash?: string | null
+          risk_class?: string
+          step_up_verified_at?: string | null
+          target_user_id?: string | null
+          token_hash?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_action_confirmations_target_clinic_fkey"
+            columns: ["target_user_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id", "clinic_id"]
+          },
+          {
+            foreignKeyName: "ai_action_confirmations_actor_clinic_fkey"
+            columns: ["actor_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id", "clinic_id"]
+          },
+          {
+            foreignKeyName: "ai_action_confirmations_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_action_confirmations_conversation_clinic_fkey"
+            columns: ["conversation_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "agent_conversations"
+            referencedColumns: ["id", "clinic_id"]
+          },
+        ]
+      }
+      ai_action_receipts: {
+        Row: {
+          action_id: string
+          actor_id: string
+          after_digest: string | null
+          ai_request_id: string | null
+          authorization_outcome: string
+          before_digest: string | null
+          clinic_id: string
+          conversation_id: string
+          created_at: string
+          denial_reason: string | null
+          error_code: string | null
+          id: string
+          input_digest: string
+          outcome: string
+          phase: string
+          risk_class: string
+          target_record_ids: string[]
+          target_table: string | null
+        }
+        Insert: {
+          action_id: string
+          actor_id: string
+          after_digest?: string | null
+          ai_request_id?: string | null
+          authorization_outcome: string
+          before_digest?: string | null
+          clinic_id: string
+          conversation_id: string
+          created_at?: string
+          denial_reason?: string | null
+          error_code?: string | null
+          id?: string
+          input_digest: string
+          outcome: string
+          phase: string
+          risk_class: string
+          target_record_ids?: string[]
+          target_table?: string | null
+        }
+        Update: {
+          action_id?: string
+          actor_id?: string
+          after_digest?: string | null
+          ai_request_id?: string | null
+          authorization_outcome?: string
+          before_digest?: string | null
+          clinic_id?: string
+          conversation_id?: string
+          created_at?: string
+          denial_reason?: string | null
+          error_code?: string | null
+          id?: string
+          input_digest?: string
+          outcome?: string
+          phase?: string
+          risk_class?: string
+          target_record_ids?: string[]
+          target_table?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_action_receipts_actor_clinic_fkey"
+            columns: ["actor_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id", "clinic_id"]
+          },
+          {
+            foreignKeyName: "ai_action_receipts_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_action_receipts_conversation_clinic_fkey"
+            columns: ["conversation_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "agent_conversations"
+            referencedColumns: ["id", "clinic_id"]
+          },
+        ]
+      }
+      ai_privileged_action_rate_limits: {
+        Row: {
+          action_date: string
+          actor_id: string
+          clinic_id: string
+          conversation_id: string
+          execute_count: number
+          id: string
+          preview_count: number
+          updated_at: string
+        }
+        Insert: {
+          action_date: string
+          actor_id: string
+          clinic_id: string
+          conversation_id: string
+          execute_count?: number
+          id?: string
+          preview_count?: number
+          updated_at?: string
+        }
+        Update: {
+          action_date?: string
+          actor_id?: string
+          clinic_id?: string
+          conversation_id?: string
+          execute_count?: number
+          id?: string
+          preview_count?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_privileged_rate_actor_clinic_fkey"
+            columns: ["actor_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id", "clinic_id"]
+          },
+          {
+            foreignKeyName: "ai_privileged_rate_conversation_clinic_fkey"
+            columns: ["conversation_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "agent_conversations"
+            referencedColumns: ["id", "clinic_id"]
+          },
+          {
+            foreignKeyName: "ai_privileged_action_rate_limits_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -395,6 +627,7 @@ export type Database = {
       }
       ai_commercial_terms: {
         Row: {
+          accepted_at: string | null
           addon_budget_micros: number
           change_reason: string
           clinic_id: string
@@ -406,6 +639,7 @@ export type Database = {
           updated_by: string
         }
         Insert: {
+          accepted_at?: string | null
           addon_budget_micros?: number
           change_reason: string
           clinic_id: string
@@ -417,6 +651,7 @@ export type Database = {
           updated_by: string
         }
         Update: {
+          accepted_at?: string | null
           addon_budget_micros?: number
           change_reason?: string
           clinic_id?: string
@@ -843,6 +1078,7 @@ export type Database = {
       }
       appointments: {
         Row: {
+          ai_action_receipt_id: string | null
           ai_patient_conversation_id: string | null
           ai_workflow_run_id: string | null
           ai_workflow_step_id: string | null
@@ -895,6 +1131,7 @@ export type Database = {
           updated_by: string | null
         }
         Insert: {
+          ai_action_receipt_id?: string | null
           ai_patient_conversation_id?: string | null
           ai_workflow_run_id?: string | null
           ai_workflow_step_id?: string | null
@@ -947,6 +1184,7 @@ export type Database = {
           updated_by?: string | null
         }
         Update: {
+          ai_action_receipt_id?: string | null
           ai_patient_conversation_id?: string | null
           ai_workflow_run_id?: string | null
           ai_workflow_step_id?: string | null
@@ -1315,6 +1553,7 @@ export type Database = {
           connection_state: string | null
           created_at: string
           credentials_encrypted: string | null
+          history_sync_requested_at: string | null
           id: string
           last_signal_at: string | null
           last_state_reason: string | null
@@ -1323,6 +1562,7 @@ export type Database = {
           last_verified_webhook_at: string | null
           last_webhook_check_at: string | null
           messaging_limit_tier: string | null
+          onboarding_flow: string | null
           phone_status: string | null
           provider: Database["public"]["Enums"]["messaging_provider"]
           provider_account_id: string | null
@@ -1343,6 +1583,7 @@ export type Database = {
           connection_state?: string | null
           created_at?: string
           credentials_encrypted?: string | null
+          history_sync_requested_at?: string | null
           id?: string
           last_signal_at?: string | null
           last_state_reason?: string | null
@@ -1351,6 +1592,7 @@ export type Database = {
           last_verified_webhook_at?: string | null
           last_webhook_check_at?: string | null
           messaging_limit_tier?: string | null
+          onboarding_flow?: string | null
           phone_status?: string | null
           provider: Database["public"]["Enums"]["messaging_provider"]
           provider_account_id?: string | null
@@ -1371,6 +1613,7 @@ export type Database = {
           connection_state?: string | null
           created_at?: string
           credentials_encrypted?: string | null
+          history_sync_requested_at?: string | null
           id?: string
           last_signal_at?: string | null
           last_state_reason?: string | null
@@ -1379,6 +1622,7 @@ export type Database = {
           last_verified_webhook_at?: string | null
           last_webhook_check_at?: string | null
           messaging_limit_tier?: string | null
+          onboarding_flow?: string | null
           phone_status?: string | null
           provider?: Database["public"]["Enums"]["messaging_provider"]
           provider_account_id?: string | null
@@ -4922,11 +5166,203 @@ export type Database = {
         }
         Relationships: []
       }
+      whatsapp_linked_device_auth: {
+        Row: {
+          clinic_id: string
+          created_at: string
+          key_id: string
+          key_type: string
+          updated_at: string
+          value_encrypted: string
+        }
+        Insert: {
+          clinic_id: string
+          created_at?: string
+          key_id: string
+          key_type: string
+          updated_at?: string
+          value_encrypted: string
+        }
+        Update: {
+          clinic_id?: string
+          created_at?: string
+          key_id?: string
+          key_type?: string
+          updated_at?: string
+          value_encrypted?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_linked_device_auth_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_linked_device_sessions: {
+        Row: {
+          clinic_id: string
+          connected_at: string | null
+          created_at: string
+          desired_state: string
+          id: string
+          last_error: string | null
+          last_heartbeat_at: string | null
+          phone_number: string | null
+          qr_expires_at: string | null
+          qr_payload: string | null
+          status: string
+          updated_at: string
+          worker_id: string | null
+        }
+        Insert: {
+          clinic_id: string
+          connected_at?: string | null
+          created_at?: string
+          desired_state?: string
+          id?: string
+          last_error?: string | null
+          last_heartbeat_at?: string | null
+          phone_number?: string | null
+          qr_expires_at?: string | null
+          qr_payload?: string | null
+          status?: string
+          updated_at?: string
+          worker_id?: string | null
+        }
+        Update: {
+          clinic_id?: string
+          connected_at?: string | null
+          created_at?: string
+          desired_state?: string
+          id?: string
+          last_error?: string | null
+          last_heartbeat_at?: string | null
+          phone_number?: string | null
+          qr_expires_at?: string | null
+          qr_payload?: string | null
+          status?: string
+          updated_at?: string
+          worker_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_linked_device_sessions_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: true
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      begin_ai_action_receipt: {
+        Args: {
+          p_action_id: string
+          p_actor_id: string
+          p_ai_request_id: string | null
+          p_clinic_id: string
+          p_conversation_id: string
+          p_input_digest: string
+          p_phase: string
+          p_risk_class: string
+        }
+        Returns: string
+      }
+      claim_ai_action_confirmation: {
+        Args:
+          | {
+              p_action_id: string
+              p_actor_id: string
+              p_clinic_id: string
+              p_consumed_at: string
+              p_conversation_id: string
+              p_input_digest: string
+              p_token_hash: string
+            }
+          | {
+          p_action_id: string
+          p_actor_id: string
+          p_clinic_id: string
+          p_consumed_at: string
+          p_conversation_id: string
+          p_input_digest: string
+          p_after_digest: string | null
+          p_before_digest: string | null
+          p_reauth_nonce_hash: string | null
+          p_target_user_id: string | null
+          p_token_hash: string
+            }
+        Returns: string
+      }
+      finalize_ai_action_receipt: {
+        Args: {
+          p_actor_id: string
+          p_after_digest: string | null
+          p_authorization_outcome: string
+          p_before_digest: string | null
+          p_clinic_id: string
+          p_denial_reason: string | null
+          p_error_code: string | null
+          p_outcome: string
+          p_receipt_id: string
+          p_target_record_ids: string[]
+          p_target_table: string | null
+        }
+        Returns: boolean
+      }
+      issue_ai_action_confirmation: {
+        Args:
+          | {
+              p_action_id: string
+              p_actor_id: string
+              p_clinic_id: string
+              p_conversation_id: string
+              p_expires_at: string
+              p_input_digest: string
+              p_token_hash: string
+            }
+          | {
+          p_action_id: string
+          p_actor_id: string
+          p_clinic_id: string
+          p_conversation_id: string
+          p_expires_at: string
+          p_input_digest: string
+          p_after_digest: string | null
+          p_before_digest: string | null
+          p_risk_class: string
+          p_target_user_id: string | null
+          p_token_hash: string
+            }
+        Returns: string
+      }
+      consume_ai_privileged_action_rate_limit: {
+        Args: {
+          p_actor_id: string
+          p_clinic_id: string
+          p_conversation_id: string
+          p_occurred_at: string
+          p_phase: string
+        }
+        Returns: boolean
+      }
+      verify_ai_action_step_up: {
+        Args: {
+          p_actor_id: string
+          p_clinic_id: string
+          p_reauth_nonce_hash: string
+          p_token_hash: string
+          p_verified_at: string
+        }
+        Returns: boolean
+      }
       cancel_issued_document: {
         Args: { p_document_id: string }
         Returns: {
@@ -5621,6 +6057,21 @@ export type Database = {
         }
         Returns: boolean
       }
+      purge_ai_retention_data: {
+        Args: {
+          p_batch_limit?: number
+          p_confirmation_retention_days: number
+          p_message_retention_days: number
+          p_now?: string
+          p_receipt_retention_days: number
+        }
+        Returns: {
+          deleted_confirmations: number
+          deleted_messages: number
+          deleted_receipts: number
+          scrubbed_conversations: number
+        }[]
+      }
       record_analytical_document_reprint: {
         Args: { p_document_id: string }
         Returns: {
@@ -6104,7 +6555,7 @@ export type Database = {
       coupon_kind: "lifetime_free" | "months_free" | "percent_discount"
       follow_up_outcome: "all_fine" | "has_problem" | "no_response"
       message_channel: "whatsapp" | "email"
-      messaging_provider: "dialog360" | "meta" | "resend"
+      messaging_provider: "dialog360" | "meta" | "resend" | "linked_device"
       outbound_message_status:
         | "queued"
         | "sent"
@@ -6270,7 +6721,7 @@ export const Constants = {
       coupon_kind: ["lifetime_free", "months_free", "percent_discount"],
       follow_up_outcome: ["all_fine", "has_problem", "no_response"],
       message_channel: ["whatsapp", "email"],
-      messaging_provider: ["dialog360", "meta", "resend"],
+      messaging_provider: ["dialog360", "meta", "resend", "linked_device"],
       outbound_message_status: [
         "queued",
         "sent",

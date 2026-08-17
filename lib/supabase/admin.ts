@@ -3,6 +3,8 @@ import { createClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/types/database";
 import type { FxSnapshot } from "@/lib/currency/provider";
 import { requirePlatformAdmin } from "@/lib/rbac";
+import { resolveSubscriptionAccess } from "@/lib/billing/access";
+import { resolveEffectiveAiFeature } from "@/lib/ai/commercial-policy";
 
 /**
  * Service-role Supabase client. Server-only.
@@ -177,6 +179,22 @@ export async function reserveDocumentIssue(input: ReserveDocumentIssueInput) {
     p_invoice_id: input.invoiceId ?? undefined,
     p_regenerated_from: input.regeneratedFrom ?? undefined,
   });
+}
+
+/** Find an immutable completed artifact before retrying a natural idempotency key. */
+export async function findCompletedClinicDocument(input: {
+  clinicId: string;
+  documentType: string;
+  idempotencyKey: string;
+}) {
+  return createAdminClient()
+    .from("documents")
+    .select("id, document_number, verification_token, status")
+    .eq("clinic_id", input.clinicId)
+    .eq("doc_type", input.documentType)
+    .eq("idempotency_key", input.idempotencyKey)
+    .in("status", ["issued", "cancelled", "void"])
+    .maybeSingle();
 }
 
 export async function completeDocumentIssue(input: {
@@ -553,6 +571,175 @@ export async function logAgentToolCall(input: {
 }
 
 /**
+ * Phase 3 reviewed service boundary for confirmation/receipt control-plane
+ * state. These RPCs never execute a clinic-domain mutation and never receive
+ * action arguments, previews, prompts, completions, or free text. The actual
+ * action handler continues to run with the authenticated caller and RLS.
+ */
+export async function issueAiActionConfirmation(input: {
+  tokenHash: string;
+  clinicId: string;
+  actorId: string;
+  conversationId: string;
+  actionId: string;
+  inputDigest: string;
+  expiresAt: string;
+  riskClass?: string;
+  privilegedBinding?: {
+    targetUserId: string;
+    beforeDigest: string;
+    afterDigest: string;
+  };
+}) {
+  return createAdminClient().rpc("issue_ai_action_confirmation", {
+    p_token_hash: input.tokenHash,
+    p_clinic_id: input.clinicId,
+    p_actor_id: input.actorId,
+    p_conversation_id: input.conversationId,
+    p_action_id: input.actionId,
+    p_input_digest: input.inputDigest,
+    p_expires_at: input.expiresAt,
+    p_risk_class: input.riskClass ?? "normal",
+    p_target_user_id: input.privilegedBinding?.targetUserId ?? null,
+    p_before_digest: input.privilegedBinding?.beforeDigest ?? null,
+    p_after_digest: input.privilegedBinding?.afterDigest ?? null,
+  });
+}
+
+export async function verifyAiActionStepUp(input: {
+  tokenHash: string;
+  clinicId: string;
+  actorId: string;
+  reauthNonceHash: string;
+  verifiedAt: string;
+}) {
+  return createAdminClient().rpc("verify_ai_action_step_up", {
+    p_token_hash: input.tokenHash,
+    p_clinic_id: input.clinicId,
+    p_actor_id: input.actorId,
+    p_reauth_nonce_hash: input.reauthNonceHash,
+    p_verified_at: input.verifiedAt,
+  });
+}
+
+export async function claimAiActionConfirmation(input: {
+  tokenHash: string;
+  clinicId: string;
+  actorId: string;
+  conversationId: string;
+  actionId: string;
+  inputDigest: string;
+  consumedAt: string;
+  privilegedBinding?: {
+    targetUserId: string;
+    beforeDigest: string;
+    afterDigest: string;
+  };
+  reauthNonceHash?: string;
+}) {
+  return createAdminClient().rpc("claim_ai_action_confirmation", {
+    p_token_hash: input.tokenHash,
+    p_clinic_id: input.clinicId,
+    p_actor_id: input.actorId,
+    p_conversation_id: input.conversationId,
+    p_action_id: input.actionId,
+    p_input_digest: input.inputDigest,
+    p_consumed_at: input.consumedAt,
+    p_target_user_id: input.privilegedBinding?.targetUserId ?? null,
+    p_before_digest: input.privilegedBinding?.beforeDigest ?? null,
+    p_after_digest: input.privilegedBinding?.afterDigest ?? null,
+    p_reauth_nonce_hash: input.reauthNonceHash ?? null,
+  });
+}
+
+export async function consumeAiPrivilegedActionRateLimit(input: {
+  clinicId: string;
+  actorId: string;
+  conversationId: string;
+  phase: string;
+  occurredAt: string;
+}) {
+  return createAdminClient().rpc("consume_ai_privileged_action_rate_limit", {
+    p_clinic_id: input.clinicId,
+    p_actor_id: input.actorId,
+    p_conversation_id: input.conversationId,
+    p_phase: input.phase,
+    p_occurred_at: input.occurredAt,
+  });
+}
+
+export async function beginAiActionReceipt(input: {
+  clinicId: string;
+  actorId: string;
+  conversationId: string;
+  aiRequestId: string | null;
+  actionId: string;
+  riskClass: string;
+  phase: string;
+  inputDigest: string;
+}) {
+  return createAdminClient().rpc("begin_ai_action_receipt", {
+    p_clinic_id: input.clinicId,
+    p_actor_id: input.actorId,
+    p_conversation_id: input.conversationId,
+    p_ai_request_id: input.aiRequestId,
+    p_action_id: input.actionId,
+    p_risk_class: input.riskClass,
+    p_phase: input.phase,
+    p_input_digest: input.inputDigest,
+  });
+}
+
+export async function finalizeAiActionReceipt(input: {
+  receiptId: string;
+  clinicId: string;
+  actorId: string;
+  authorizationOutcome: string;
+  denialReason: string | null;
+  targetTable: string | null;
+  targetRecordIds: readonly string[];
+  beforeDigest: string | null;
+  afterDigest: string | null;
+  outcome: string;
+  errorCode: string | null;
+}) {
+  return createAdminClient().rpc("finalize_ai_action_receipt", {
+    p_receipt_id: input.receiptId,
+    p_clinic_id: input.clinicId,
+    p_actor_id: input.actorId,
+    p_authorization_outcome: input.authorizationOutcome,
+    p_denial_reason: input.denialReason,
+    p_target_table: input.targetTable,
+    p_target_record_ids: [...input.targetRecordIds],
+    p_before_digest: input.beforeDigest,
+    p_after_digest: input.afterDigest,
+    p_outcome: input.outcome,
+    p_error_code: input.errorCode,
+  });
+}
+
+/**
+ * Phase 6 retention purge. Service-role only, like every other AI control-plane
+ * RPC; the windows are supplied by `lib/ai/retention.ts` rather than being
+ * literals in SQL, so the policy has exactly one home.
+ */
+export async function purgeAiRetentionData(input: {
+  messageRetentionDays: number;
+  receiptRetentionDays: number;
+  confirmationRetentionDays: number;
+  batchLimit: number;
+  now?: string;
+}) {
+  return createAdminClient().rpc("purge_ai_retention_data", {
+    p_message_retention_days: input.messageRetentionDays,
+    p_receipt_retention_days: input.receiptRetentionDays,
+    p_confirmation_retention_days: input.confirmationRetentionDays,
+    p_batch_limit: input.batchLimit,
+    ...(input.now ? { p_now: input.now } : {}),
+  });
+}
+
+/**
  * P5B (§6.2): the clinic fields the patient-reply orchestrator needs to resolve
  * mode, locale, and canned escalation copy. `clinics` has no clinic_id column,
  * so it is read by primary key here rather than through the auto-scoping client.
@@ -780,7 +967,10 @@ export async function findClinicChannelByProviderAccount(
 ) {
   return createAdminClient()
     .from("clinic_channels")
-    .select("id, clinic_id, sender_identity, status")
+    // credentials_encrypted is selected so a P7D manual channel's own app
+    // secret can verify the signature of a WABA-routed callback, exactly as it
+    // does for a phone-routed one.
+    .select("id, clinic_id, sender_identity, status, credentials_encrypted")
     .eq("channel", "whatsapp")
     .eq("provider", provider)
     .eq("provider_account_id", providerAccountId)
@@ -1046,7 +1236,7 @@ export async function getWhatsAppChannelStateRow(
   return createClinicScopedAdminClient(clinicId)
     .from("clinic_channels")
     .select(
-      "id, provider, provider_account_id, status, credentials_encrypted, connection_state, business_verification_status, account_review_status, phone_status, quality_rating, messaging_limit_tier, webhook_subscribed, last_synced_at, last_signal_at, last_state_reason, connected_at, updated_at",
+      "id, provider, provider_account_id, status, credentials_encrypted, connection_state, business_verification_status, account_review_status, phone_status, quality_rating, messaging_limit_tier, webhook_subscribed, last_synced_at, last_signal_at, last_state_reason, connected_at, updated_at, onboarding_flow, history_sync_requested_at",
     )
     .eq("channel", "whatsapp")
     .eq("provider", provider)
@@ -1355,9 +1545,13 @@ export async function loadOperatorAiUsageReport(input: {
  */
 export async function loadOperatorAiProviderHealthSource() {
   const db = createAdminClient();
-  const [clinics, subscriptions, policies, connections] = await Promise.all([
+  const [clinics, subscriptions, policies, connections, terms, overrides] = await Promise.all([
     db.from("clinics").select("id, name").order("name"),
-    db.from("subscriptions").select("clinic_id, plans(slug)"),
+    db
+      .from("subscriptions")
+      .select(
+        "clinic_id, status, trial_ends_at, current_period_end, plans(is_active, features)",
+      ),
     db
       .from("ai_clinic_provider_policies")
       .select("clinic_id, credential_mode, updated_at"),
@@ -1365,21 +1559,55 @@ export async function loadOperatorAiProviderHealthSource() {
       .from("ai_provider_connections")
       .select("clinic_id, provider, health_status, last_error_code, tested_at, rotated_at")
       .eq("lifecycle_status", "active"),
+    db.from("ai_commercial_terms").select("clinic_id, accepted_at"),
+    db
+      .from("clinic_feature_overrides")
+      .select("clinic_id, enabled")
+      .eq("feature_key", "ai_assistant"),
   ]);
-  const error = clinics.error ?? subscriptions.error ?? policies.error ?? connections.error;
+  const error = clinics.error
+    ?? subscriptions.error
+    ?? policies.error
+    ?? connections.error
+    ?? terms.error
+    ?? overrides.error;
   if (error) return { data: null, error };
   const policyByClinic = new Map((policies.data ?? []).map((row) => [row.clinic_id, row]));
   const connectionByClinic = new Map((connections.data ?? []).map((row) => [row.clinic_id, row]));
-  const proAiClinicIds = new Set(
+  const acceptedTermsClinics = new Set(
+    (terms.data ?? [])
+      .filter((row) => row.accepted_at != null)
+      .map((row) => row.clinic_id),
+  );
+  const umbrellaOverrideByClinic = new Map(
+    (overrides.data ?? []).map((row) => [row.clinic_id, row.enabled]),
+  );
+  const entitledClinicIds = new Set(
     (subscriptions.data ?? [])
-      .filter((subscription) => subscription.plans?.slug === "pro_ai")
+      .filter((subscription) => {
+        const planFeatures = subscription.plans?.features;
+        const planUmbrella = Boolean(planFeatures
+          && typeof planFeatures === "object"
+          && !Array.isArray(planFeatures)
+          && planFeatures.ai_assistant === true);
+        return subscription.plans?.is_active === true
+          && resolveEffectiveAiFeature({
+            subscriptionAllowed: resolveSubscriptionAccess(subscription).allowed,
+            termsAccepted: acceptedTermsClinics.has(subscription.clinic_id),
+            features: {
+              ai_assistant:
+                umbrellaOverrideByClinic.get(subscription.clinic_id) ?? planUmbrella,
+            },
+            featureKey: "ai_assistant",
+          });
+      })
       .map((subscription) => subscription.clinic_id),
   );
   return {
     data: (clinics.data ?? [])
       .filter(
         (clinic) =>
-          proAiClinicIds.has(clinic.id) ||
+          entitledClinicIds.has(clinic.id) ||
           policyByClinic.has(clinic.id) ||
           connectionByClinic.has(clinic.id),
       )
@@ -1702,7 +1930,7 @@ export async function getOperatorClinicHistory(
   }
 
   const currentPeriodStart = `${new Date().getUTCFullYear()}-${String(new Date().getUTCMonth() + 1).padStart(2, "0")}-01`;
-  const [clinic, subscription, workingHours, invitations, redemptions, overrides, usageRows, plans, aiTerms, aiBudget] =
+  const [clinic, subscription, workingHours, invitations, redemptions, overrides, usageRows, plans, aiTerms, aiBudget, effectiveAiAssistant] =
     await Promise.all([
       db
         .from("clinics")
@@ -1743,7 +1971,7 @@ export async function getOperatorClinicHistory(
       db.from("plans").select("slug, name_en").eq("is_active", true).order("slug"),
       db
         .from("ai_commercial_terms")
-        .select("included_budget_override_micros, addon_budget_micros, overage_mode, overage_budget_micros, change_reason, updated_at")
+        .select("included_budget_override_micros, addon_budget_micros, overage_mode, overage_budget_micros, change_reason, accepted_at, updated_at")
         .eq("clinic_id", clinicId)
         .maybeSingle(),
       db
@@ -1752,11 +1980,15 @@ export async function getOperatorClinicHistory(
         .eq("clinic_id", clinicId)
         .eq("period_start", currentPeriodStart)
         .maybeSingle(),
+      db.rpc("effective_ai_feature", {
+        p_clinic_id: clinicId,
+        p_feature_key: "ai_assistant",
+      }),
     ]);
 
   if (clinic.error) return { data: null, error: clinic.error };
   if (!clinic.data) return { data: null, error: null };
-  const firstError = [subscription, workingHours, invitations, redemptions, overrides, usageRows, plans, aiTerms, aiBudget]
+  const firstError = [subscription, workingHours, invitations, redemptions, overrides, usageRows, plans, aiTerms, aiBudget, effectiveAiAssistant]
     .map((result) => result.error)
     .find(Boolean);
   if (firstError) return { data: null, error: firstError };
@@ -1805,6 +2037,7 @@ export async function getOperatorClinicHistory(
       plans: plans.data ?? [],
       aiTerms: aiTerms.data,
       aiBudget: aiBudget.data,
+      effectiveAiAssistant: effectiveAiAssistant.data === true,
       auditEvents: [...safeAudit.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
       auditTruncated: clinicAudit.truncated || invitationAudit.truncated,
     },
@@ -1902,6 +2135,11 @@ const CLINIC_SCOPED_TABLES = new Set([
   "user_customizations",
   "user_page_permissions",
   "user_report_permissions",
+  // P7E: the linked-device pairing. The worker owns the happy path; the app
+  // reads the status projection and, when the worker is unreachable, still has
+  // to be able to tear its own clinic's pairing down.
+  "whatsapp_linked_device_auth",
+  "whatsapp_linked_device_sessions",
 ]);
 
 // These tables may be read through the tenant-scoped service client, but their
@@ -1909,6 +2147,7 @@ const CLINIC_SCOPED_TABLES = new Set([
 // the authenticated primary admin's JWT, supervision writes use the atomic
 // replacement RPC, and activity events remain append-only.
 const READ_ONLY_CLINIC_SCOPED_TABLES = new Set([
+  "ai_action_receipts",
   "activity_events",
   "assistant_doctor_assignments",
   "assistant_launcher_settings",

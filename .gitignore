@@ -53,8 +53,18 @@ yarn-error.log*
 # vercel
 .vercel
 
+# `next dev --experimental-https` self-signed cert + local mkcert CA
+/certificates/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
 
 /.p2c-messages/
+
+# local Supabase sync artifacts (DB backups + remote data export) — never commit
+/.local-db-sync/
+
+# services/ are separately deployed Node services with their own installs
+/services/*/node_modules
+/services/*/dist

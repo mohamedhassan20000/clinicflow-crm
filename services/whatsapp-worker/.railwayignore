@@ -1,0 +1,16 @@
+# What `railway up` must not upload from this directory.
+#
+# The Docker build installs dependencies and compiles TypeScript itself, so the
+# local node_modules and dist are pure upload weight. The .env entries matter
+# more: this directory is not tracked by git, so nothing else would stop a local
+# development .env — Supabase service role included — from being shipped to the
+# build service.
+node_modules
+dist
+
+.env
+.env.*
+!.env.example
+
+*.log
+.DS_Store

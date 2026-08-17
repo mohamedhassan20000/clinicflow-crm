@@ -39,6 +39,7 @@ const emptyState = {
   phoneStatus: null,
   lastSyncedAt: null,
   connectedAt: null,
+  onboardingFlow: null,
 };
 
 afterEach(() => {

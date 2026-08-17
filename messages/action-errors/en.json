@@ -173,6 +173,11 @@
     "invalidMetaOnboardingDetails": "The WhatsApp connection could not be completed. Please restart the connect flow.",
     "metaPhoneNumberAlreadyConnected": "This WhatsApp number is already connected to another clinic.",
     "couldNotCompleteMetaOnboarding": "Could not complete the WhatsApp connection with Meta. Please try again.",
+    "couldNotConnectWhatsAppBusiness": "The WhatsApp Business connection could not be completed. Please try again.",
+    "enterValidMetaApiCredentials": "Enter valid Meta API credentials. Check the App ID, App Secret, access token, phone number ID and WhatsApp Business account ID.",
+    "couldNotVerifyMetaApiCredentials": "Meta did not accept these credentials. Check them in your Meta app and try again.",
+    "disconnectBeforeConnectingADifferentNumber": "A different WhatsApp number is already connected. Disconnect it before connecting another one.",
+    "couldNotDisconnectWhatsApp": "Could not disconnect WhatsApp. Please try again.",
     "couldNotRefreshConnectionStatus": "Could not refresh the connection status. Please try again.",
     "invalidWhatsAppHealthAction": "That WhatsApp diagnostic action is not available.",
     "whatsAppHealthChannelUnavailable": "Connect a WhatsApp channel before running diagnostics.",
@@ -202,7 +207,9 @@
     "templateNameAlreadyExists": "A template with this name and language already exists.",
     "templateCannotBeDeletedWhileSubmitted": "A template cannot be deleted while it is under review.",
     "couldNotDeleteTemplate": "The template could not be deleted. Please try again.",
-    "suggestionUnavailable": "This suggested reply is no longer available."
+    "suggestionUnavailable": "This suggested reply is no longer available.",
+    "theWhatsAppConnectionServiceIsUnavailable": "The WhatsApp connection service is unavailable right now. Please try again in a moment.",
+    "disconnectTheMetaApiConnectionFirst": "This clinic is already connected with the Meta API. Disconnect it first to connect with a QR code."
   },
   "notifications": {
     "couldNotUpdateNotifications": "Notifications could not be updated. Please try again."
@@ -376,7 +383,10 @@
     "patientAiInvalidFaq": "Please provide a valid question and answer.",
     "patientAiFaqDuplicate": "An FAQ with this question already exists.",
     "patientAiCouldNotSaveFaq": "We couldn't save this FAQ. Please try again.",
-    "patientAiFaqNotFound": "This FAQ could not be found."
+    "patientAiFaqNotFound": "This FAQ could not be found.",
+    "thePrimaryClinicAdminRoleCannotBeChanged": "The Assistant cannot change the primary clinic admin's role. Do it in Settings → Staff.",
+    "thePrimaryClinicAdminCannotBeDeactivated": "The Assistant cannot deactivate the primary clinic admin's account. Do it in Settings → Staff.",
+    "thePrimaryClinicAdminCannotBeDeleted": "The Assistant cannot delete the primary clinic admin's account. Do it in Settings → Staff."
   },
   "clinical": {
     "validationError": "Please correct the clinical record fields and try again.",

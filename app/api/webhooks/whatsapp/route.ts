@@ -20,6 +20,7 @@ import {
   metaWhatsAppProvider,
 } from "@/lib/messaging/whatsapp-meta";
 import { recordWebhookRouteRejection } from "@/lib/messaging/webhook-telemetry";
+import { matchesWebhookVerifyToken } from "@/lib/messaging/webhook-verify-token";
 import {
   createClinicScopedAdminClient,
   findClinicChannelByProviderAccount,
@@ -33,14 +34,25 @@ import {
  * `hub.mode=subscribe` and a verify token when the webhook is registered; we echo
  * `hub.challenge` only on an exact, timing-independent token match. 360dialog does
  * not use this handshake, so a missing/mismatched token is a plain 403.
+ *
+ * P7D adds the per-clinic variant. A clinic connecting its own Meta app
+ * registers the callback as `…/whatsapp?clinic=<id>` and pastes the verify token
+ * ClinicFlow showed them, which is derived from that clinic id. The platform
+ * token is still accepted (unparameterized) for every platform-brokered channel.
+ * A `clinic` parameter never grants anything by itself — it only selects which
+ * token must match, and it plays no part in routing an actual event.
  */
 export function GET(request: Request) {
   const url = new URL(request.url);
   const mode = url.searchParams.get("hub.mode");
   const token = url.searchParams.get("hub.verify_token");
   const challenge = url.searchParams.get("hub.challenge");
-  const expected = process.env.META_WEBHOOK_VERIFY_TOKEN;
-  if (mode === "subscribe" && expected && token === expected && challenge) {
+  const clinicId = url.searchParams.get("clinic");
+  const platformToken = process.env.META_WEBHOOK_VERIFY_TOKEN;
+  const accepted = clinicId
+    ? matchesWebhookVerifyToken(clinicId, token)
+    : Boolean(platformToken) && token === platformToken;
+  if (mode === "subscribe" && accepted && challenge) {
     return new NextResponse(challenge, {
       status: 200,
       headers: { "content-type": "text/plain", "Cache-Control": "no-store" },
@@ -62,14 +74,6 @@ async function handleMeta(request: Request): Promise<NextResponse> {
     return unauthorizedWebhookResponse();
   }
 
-  // Meta signs every webhook for our single app with the platform app secret, so
-  // authenticity is verified before any clinic lookup (§9.2). Invalid/unsigned →
-  // 401, matching the P3B posture.
-  if (!(await metaWhatsAppProvider.verifySignature(signatureRequest, {}))) {
-    await recordWebhookRouteRejection("meta", "signature");
-    return unauthorizedWebhookResponse();
-  }
-
   const phoneNumberId = extractMetaPhoneNumberId(payload);
   const wabaId = extractMetaWabaId(payload);
   const providerTemplateId = extractMetaTemplateId(payload);
@@ -78,7 +82,41 @@ async function handleMeta(request: Request): Promise<NextResponse> {
     : wabaId
       ? await findClinicChannelByProviderAccount("meta", wabaId)
       : { data: null, error: null };
+  // A failed lookup is answered before the signature check: we cannot tell an
+  // unsigned request from a correctly signed one whose channel we simply could
+  // not read, and a 503 asks Meta to retry rather than discarding the event.
+  if (channel.error) {
+    Sentry.captureException(channel.error, {
+      tags: { scope: "webhook-routing", provider: "meta" },
+    });
+    return unavailableWebhookResponse();
+  }
   let routedClinicId = channel.data?.clinic_id;
+
+  // Authenticity, before anything is read out of the payload or written (§9.2).
+  //
+  // Platform-brokered channels are all signed by our one app with the platform
+  // app secret. A P7D channel belongs to the clinic's own Meta app, so Meta
+  // signs it with *their* app secret, which lives in that channel's encrypted
+  // envelope. Deciding which secret to use therefore requires routing first —
+  // the same ordering the 360dialog path below has always used. Routing is a
+  // pair of indexed reads with no side effects, and an unroutable or
+  // unverifiable request is still a 401 that reaches no clinic data.
+  let signingCredentials: Awaited<ReturnType<typeof decryptChannelCredentials>> = {};
+  if (channel.data?.credentials_encrypted) {
+    try {
+      signingCredentials = decryptChannelCredentials(channel.data.credentials_encrypted);
+    } catch (error) {
+      Sentry.captureException(error, { tags: { scope: "webhook", provider: "meta" } });
+      return unavailableWebhookResponse();
+    }
+  }
+  if (
+    !(await metaWhatsAppProvider.verifySignature(signatureRequest, signingCredentials))
+  ) {
+    await recordWebhookRouteRejection("meta", "signature");
+    return unauthorizedWebhookResponse();
+  }
   if (!routedClinicId && providerTemplateId) {
     const binding = await findMessageTemplateBindingForWebhook(
       "meta",
@@ -91,12 +129,6 @@ async function handleMeta(request: Request): Promise<NextResponse> {
       return unavailableWebhookResponse();
     }
     routedClinicId = binding.data?.clinic_id;
-  }
-  if (channel.error) {
-    Sentry.captureException(channel.error, {
-      tags: { scope: "webhook-routing", provider: "meta" },
-    });
-    return unavailableWebhookResponse();
   }
 
   try {

@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({
   listCandidates: vi.fn(),
   getSettings: vi.fn(),
   dispatch: vi.fn(),
-  waActive: vi.fn(),
+  waProvider: vi.fn(),
   emit: vi.fn(),
   captureMessage: vi.fn(),
   captureException: vi.fn(),
@@ -33,6 +33,7 @@ vi.mock("@/lib/supabase/admin", () => ({
   }),
 }));
 vi.mock("@/lib/messaging/automated-send", () => ({
+  AUTOMATED_TEMPLATE_APPROVAL_STATES: ["approved", "submitted", "draft"],
   dispatchPatientMessage: mocks.dispatch,
   anyChannelSent: (r: { email?: { status: string }; whatsapp?: { status: string } }) =>
     r?.email?.status === "sent" || r?.whatsapp?.status === "sent",
@@ -40,7 +41,7 @@ vi.mock("@/lib/messaging/automated-send", () => ({
     r?.email?.status === "failed" || r?.whatsapp?.status === "failed",
 }));
 vi.mock("@/lib/messaging/channel-management", () => ({
-  hasActiveWhatsAppChannel: mocks.waActive,
+  getActiveWhatsAppProvider: mocks.waProvider,
 }));
 vi.mock("@/lib/notifications/emit", () => ({
   emitClinicNotification: mocks.emit,
@@ -95,7 +96,7 @@ beforeEach(() => {
     data: [{ id: doctorId, full_name: "Dr. Ali" }],
     error: null,
   };
-  mocks.waActive.mockResolvedValue(false);
+  mocks.waProvider.mockResolvedValue(null);
   mocks.dispatch.mockResolvedValue(sentResult);
   mocks.emit.mockResolvedValue({ created: 1 });
 });
@@ -189,7 +190,7 @@ describe("runAppointmentReminders (daily model, independent channels)", () => {
       channel: "whatsapp",
     };
     mocks.tables.message_templates = { data: [template], error: null };
-    mocks.waActive.mockResolvedValue(true);
+    mocks.waProvider.mockResolvedValue("meta");
     mocks.listCandidates.mockResolvedValue({ data: [candidate()], error: null });
     await runAppointmentReminders(now);
     const input = mocks.dispatch.mock.calls[0][0];

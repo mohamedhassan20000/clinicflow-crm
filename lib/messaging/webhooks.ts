@@ -4,8 +4,10 @@ import {
   applyMessageTemplateProviderStatus,
   advanceOutboundMessageStatus,
   createClinicScopedAdminClient,
+  finalizeOutboundMessage,
   persistWhatsAppInbound,
 } from "@/lib/supabase/admin";
+import { buildBodyPreview } from "@/lib/messaging/send";
 import { normalizePhone } from "@/lib/phone/registry";
 import { sanitizeProviderError } from "@/lib/messaging/scrub";
 import { emitClinicNotification } from "@/lib/notifications/emit";
@@ -22,6 +24,8 @@ import type {
 
 type ProcessingSummary = {
   inbound: number;
+  /** P7E: messages mirrored in from the clinic's own phone. */
+  echoes: number;
   statuses: number;
   templates: number;
   states: number;
@@ -100,6 +104,72 @@ async function persistInboundMessage(
   return "inserted";
 }
 
+/**
+ * P7E: mirrors a message the clinic sent from their own phone into the existing
+ * outbound pipeline, so the inbox thread reads as one conversation instead of
+ * half of one.
+ *
+ * Only threads that already exist are mirrored: an outbound-only echo is not a
+ * reason to open a conversation, and a patient who has never written to the
+ * clinic must not appear in the inbox because of a message sent to them from a
+ * phone. Usage counters are deliberately untouched — ClinicFlow did not send
+ * this. Re-delivery of the same message, and the echo of a message ClinicFlow
+ * itself just sent, both collapse on the unique provider-message-id index.
+ */
+async function persistOutboundEcho(
+  clinicId: string,
+  event: Extract<WebhookEvent, { kind: "outbound_echo" }>,
+): Promise<boolean> {
+  const recipient = senderE164(event.recipient);
+  const client = createClinicScopedAdminClient(clinicId);
+  const conversation = await client
+    .from("conversations")
+    .select("id")
+    .eq("channel", "whatsapp")
+    .eq("participant_address", recipient)
+    .maybeSingle();
+  if (conversation.error) throw new Error("OUTBOUND_ECHO_LOOKUP_FAILED");
+  if (!conversation.data) return false;
+
+  const inserted = await client
+    .from("outbound_messages")
+    .insert({
+      clinic_id: clinicId,
+      channel: "whatsapp",
+      provider: "linked_device",
+      recipient,
+      // Written at insert time so the unique (provider, provider_message_id)
+      // index is what decides whether this message is already known.
+      provider_message_id: event.providerMessageId,
+      body_preview: buildBodyPreview(event.body || "[Empty message]"),
+      related_type: "manual",
+      related_id: conversation.data.id,
+      status: "queued",
+    })
+    .select("id")
+    .maybeSingle();
+  if (inserted.error) {
+    // A duplicate provider message id means this message is already recorded —
+    // either ClinicFlow sent it, or this callback was delivered twice. That is
+    // a replay, not a failure.
+    if (inserted.error.code === "23505") return false;
+    throw new Error("OUTBOUND_ECHO_INSERT_FAILED");
+  }
+  if (!inserted.data) return false;
+
+  const finalized = await finalizeOutboundMessage({
+    clinicId,
+    outboundMessageId: inserted.data.id,
+    status: "sent",
+    providerMessageId: event.providerMessageId,
+    error: null,
+    costMicro: null,
+    occurredAt: event.occurredAt ?? new Date().toISOString(),
+  });
+  if (finalized.error) throw new Error("OUTBOUND_ECHO_FINALIZE_FAILED");
+  return finalized.data === true;
+}
+
 async function persistStatus(
   provider: MessagingProviderId,
   event: Extract<WebhookEvent, { kind: "status" }>,
@@ -173,6 +243,7 @@ export async function processMessagingWebhookEvents(input: {
 }): Promise<ProcessingSummary> {
   const summary: ProcessingSummary = {
     inbound: 0,
+    echoes: 0,
     statuses: 0,
     templates: 0,
     states: 0,
@@ -203,6 +274,17 @@ export async function processMessagingWebhookEvents(input: {
         }
         throw error;
       }
+      continue;
+    }
+    if (event.kind === "outbound_echo") {
+      // Only a paired device can observe what was sent from the phone; no other
+      // transport may write history it did not carry.
+      if (input.provider !== "linked_device" || !input.clinicId) {
+        summary.ignored += 1;
+        continue;
+      }
+      if (await persistOutboundEcho(input.clinicId, event)) summary.echoes += 1;
+      else summary.ignored += 1;
       continue;
     }
     if (event.kind === "status") {

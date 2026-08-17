@@ -173,6 +173,11 @@
     "invalidMetaOnboardingDetails": "تعذر إكمال اتصال واتساب. يرجى إعادة بدء عملية الربط.",
     "metaPhoneNumberAlreadyConnected": "رقم واتساب هذا مرتبط بالفعل بعيادة أخرى.",
     "couldNotCompleteMetaOnboarding": "تعذر إكمال اتصال واتساب مع Meta. يرجى المحاولة مرة أخرى.",
+    "couldNotConnectWhatsAppBusiness": "تعذّر إكمال ربط واتساب الأعمال. يرجى إعادة المحاولة.",
+    "enterValidMetaApiCredentials": "أدخل بيانات Meta API صحيحة. تحقّق من معرّف التطبيق والمفتاح السري ورمز الوصول ومعرّف رقم الهاتف ومعرّف حساب واتساب للأعمال.",
+    "couldNotVerifyMetaApiCredentials": "لم تقبل Meta هذه البيانات. راجعها في تطبيق Meta الخاص بك ثم حاول مرة أخرى.",
+    "disconnectBeforeConnectingADifferentNumber": "يوجد رقم واتساب آخر متصل بالفعل. افصله قبل توصيل رقم مختلف.",
+    "couldNotDisconnectWhatsApp": "تعذّر فصل واتساب. حاول مرة أخرى.",
     "couldNotRefreshConnectionStatus": "تعذر تحديث حالة الاتصال. يرجى المحاولة مرة أخرى.",
     "invalidWhatsAppHealthAction": "إجراء تشخيص واتساب هذا غير متاح.",
     "whatsAppHealthChannelUnavailable": "اربط قناة واتساب قبل تشغيل التشخيص.",
@@ -202,7 +207,9 @@
     "templateNameAlreadyExists": "يوجد قالب بهذا الاسم واللغة بالفعل.",
     "templateCannotBeDeletedWhileSubmitted": "لا يمكن حذف القالب أثناء مراجعته.",
     "couldNotDeleteTemplate": "تعذر حذف القالب. يرجى المحاولة مرة أخرى.",
-    "suggestionUnavailable": "لم يعد هذا الرد المقترح متاحًا."
+    "suggestionUnavailable": "لم يعد هذا الرد المقترح متاحًا.",
+    "theWhatsAppConnectionServiceIsUnavailable": "خدمة ربط واتساب غير متاحة حالياً. يرجى المحاولة مرة أخرى بعد قليل.",
+    "disconnectTheMetaApiConnectionFirst": "هذه العيادة متصلة بالفعل عبر Meta API. افصل الاتصال أولاً للربط باستخدام رمز QR."
   },
   "notifications": {
     "couldNotUpdateNotifications": "تعذر تحديث الإشعارات. يرجى المحاولة مرة أخرى."
@@ -376,7 +383,10 @@
     "patientAiInvalidFaq": "يرجى إدخال سؤال وإجابة صالحين.",
     "patientAiFaqDuplicate": "يوجد سؤال بهذا النص مسبقًا.",
     "patientAiCouldNotSaveFaq": "تعذّر حفظ هذا السؤال. يرجى المحاولة مرة أخرى.",
-    "patientAiFaqNotFound": "تعذّر العثور على هذا السؤال."
+    "patientAiFaqNotFound": "تعذّر العثور على هذا السؤال.",
+    "thePrimaryClinicAdminRoleCannotBeChanged": "لا يستطيع المساعد تغيير دور مسؤول العيادة الأساسي. نفّذ ذلك من الإعدادات ← الموظفون.",
+    "thePrimaryClinicAdminCannotBeDeactivated": "لا يستطيع المساعد تعطيل حساب مسؤول العيادة الأساسي. نفّذ ذلك من الإعدادات ← الموظفون.",
+    "thePrimaryClinicAdminCannotBeDeleted": "لا يستطيع المساعد حذف حساب مسؤول العيادة الأساسي. نفّذ ذلك من الإعدادات ← الموظفون."
   },
   "clinical": {
     "validationError": "يرجى تصحيح حقول السجل السريري والمحاولة مرة أخرى.",

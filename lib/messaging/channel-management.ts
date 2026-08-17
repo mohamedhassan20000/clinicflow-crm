@@ -10,6 +10,10 @@ import {
 import {
   exchangeMetaSignupCode,
   provisionMetaEmbeddedSignup,
+  requestMetaSmbDataSync,
+  verifyManualMetaCredentials,
+  type ManualMetaCredentialsInput,
+  type MetaOnboardingFlow,
 } from "@/lib/messaging/whatsapp-meta";
 import {
   activateWhatsAppProvider,
@@ -17,6 +21,12 @@ import {
   findClinicChannelIdentityOwner,
 } from "@/lib/supabase/admin";
 import { normalizePhone } from "@/lib/phone/registry";
+import { deriveWebhookVerifyToken } from "@/lib/messaging/webhook-verify-token";
+import type { MessagingProviderId } from "@/lib/messaging/types";
+import {
+  toWhatsAppBusinessConnectionView,
+  type WhatsAppBusinessConnectionView,
+} from "@/lib/messaging/connection-view";
 
 export type WhatsAppChannelStatus = {
   configured: boolean;
@@ -38,20 +48,56 @@ function webhookUrl(): string | null {
 }
 
 /**
+ * P7D — what a clinic must paste into the Webhooks section of *their own* Meta
+ * app when connecting with their own credentials.
+ *
+ * Both values are clinic-specific and safe to show a clinic admin: the callback
+ * URL is public by nature, and the verify token is a one-way derivation that
+ * only governs Meta's subscription handshake for this clinic. No platform
+ * secret, app id or internal identifier is involved. Returns null when the
+ * environment cannot produce them, so the UI can say so plainly instead of
+ * rendering a half-configured instruction.
+ */
+export function getMetaWebhookSetup(
+  clinicId: string,
+): { callbackUrl: string; verifyToken: string } | null {
+  const base = webhookUrl();
+  const verifyToken = deriveWebhookVerifyToken(clinicId);
+  if (!base || !verifyToken) return null;
+  const url = new URL(base);
+  url.searchParams.set("clinic", clinicId);
+  return { callbackUrl: url.toString(), verifyToken };
+}
+
+/**
  * Whether the clinic has an active WhatsApp integration — the gate for
  * attempting a WhatsApp send at all (2026-07-19 flow revision). Email never
  * depends on this. Best-effort: any error resolves to false (email-only).
  */
 export async function hasActiveWhatsAppChannel(clinicId: string): Promise<boolean> {
+  return (await getActiveWhatsAppProvider(clinicId)) !== null;
+}
+
+/**
+ * Which transport currently carries this clinic's WhatsApp, if any.
+ *
+ * Callers that only need "can we send at all?" use hasActiveWhatsAppChannel.
+ * The automated flows need the transport itself, because a Cloud API send must
+ * use a Meta-approved template while a linked device has no template catalogue
+ * to approve anything in. Best-effort: any error resolves to null (email-only).
+ */
+export async function getActiveWhatsAppProvider(
+  clinicId: string,
+): Promise<MessagingProviderId | null> {
   const client = createClinicScopedAdminClient(clinicId);
   const result = await client
     .from("clinic_channels")
-    .select("id")
+    .select("provider")
     .eq("channel", "whatsapp")
     .eq("status", "active")
     .limit(1)
     .maybeSingle();
-  return !result.error && !!result.data;
+  return result.error ? null : (result.data?.provider ?? null);
 }
 
 export async function getWhatsAppChannelStatus(
@@ -104,6 +150,8 @@ export type MetaChannelState = {
   phoneStatus: string | null;
   lastSyncedAt: string | null;
   connectedAt: string | null;
+  /** P7C: how this channel was onboarded; null on legacy rows. */
+  onboardingFlow: MetaOnboardingFlow | null;
 };
 
 /**
@@ -125,12 +173,13 @@ export async function getMetaChannelState(clinicId: string): Promise<MetaChannel
     phoneStatus: null,
     lastSyncedAt: null,
     connectedAt: null,
+    onboardingFlow: null,
   };
   const client = createClinicScopedAdminClient(clinicId);
   const result = await client
     .from("clinic_channels")
     .select(
-      "status, connection_state, last_state_reason, quality_rating, messaging_limit_tier, business_verification_status, phone_status, last_synced_at, connected_at, credentials_encrypted",
+      "status, connection_state, last_state_reason, quality_rating, messaging_limit_tier, business_verification_status, phone_status, last_synced_at, connected_at, credentials_encrypted, onboarding_flow",
     )
     .eq("channel", "whatsapp")
     .eq("provider", "meta")
@@ -158,7 +207,57 @@ export async function getMetaChannelState(clinicId: string): Promise<MetaChannel
     phoneStatus: result.data.phone_status,
     lastSyncedAt: result.data.last_synced_at,
     connectedAt: result.data.connected_at,
+    onboardingFlow: asOnboardingFlow(result.data.onboarding_flow),
   };
+}
+
+/**
+ * P7E — the one answer to "who owns this clinic's WhatsApp number?".
+ *
+ * A clinic has exactly one WhatsApp channel, and two methods can establish it.
+ * Both cards on the settings page render from this single projection, so they
+ * can never contradict each other about which of them owns the connection. The
+ * linked-device pairing is checked first because it is the only transport whose
+ * channel row is written by the worker, and its presence is decisive.
+ *
+ * Only non-secret facts cross: a coarse status, the display number, when it
+ * connected, and which method did it.
+ */
+export async function getWhatsAppConnectionView(
+  clinicId: string,
+): Promise<WhatsAppBusinessConnectionView> {
+  const client = createClinicScopedAdminClient(clinicId);
+  const linked = await client
+    .from("clinic_channels")
+    .select("status, connected_at, sender_identity")
+    .eq("channel", "whatsapp")
+    .eq("provider", "linked_device")
+    .maybeSingle();
+  if (!linked.error && linked.data) {
+    return {
+      status:
+        linked.data.status === "active"
+          ? "connected"
+          : linked.data.status === "error"
+            ? "failed"
+            : "verifying",
+      // The pairing's sender identity *is* the paired number in E.164; there is
+      // no separate provider display value to decrypt.
+      displayPhoneNumber: linked.data.sender_identity,
+      connectedAt: linked.data.connected_at,
+      mode: "linked_device",
+    };
+  }
+  return toWhatsAppBusinessConnectionView(await getMetaChannelState(clinicId));
+}
+
+/** Narrows the stored (nullable, legacy-tolerant) column to the known flows. */
+function asOnboardingFlow(value: string | null): MetaOnboardingFlow | null {
+  return value === "coexistence" ||
+    value === "embedded_signup" ||
+    value === "manual_api"
+    ? value
+    : null;
 }
 
 /** Connects a new number or rotates an existing number's API/webhook secrets. */
@@ -265,7 +364,16 @@ export async function connectMetaChannel(input: {
   code: string;
   phoneNumberId: string;
   wabaId: string;
+  /**
+   * P7C. `coexistence` connects a number that stays live in the clinic's
+   * WhatsApp Business app: provisioning skips Cloud API phone registration,
+   * subscribes the extra Business-app webhook fields, and requests the one-time
+   * contacts/history synchronization Meta only allows within 24 hours.
+   * Defaults to the P6C Cloud-API-only flow.
+   */
+  flow?: MetaOnboardingFlow;
 }): Promise<MetaConnectResult> {
+  const flow: MetaOnboardingFlow = input.flow ?? "embedded_signup";
   const identityOwner = await findClinicChannelIdentityOwner("meta", input.phoneNumberId);
   if (identityOwner.error) return { ok: false, code: "DATABASE" };
   if (identityOwner.data && identityOwner.data.clinic_id !== input.clinicId) {
@@ -309,6 +417,7 @@ export async function connectMetaChannel(input: {
           webhook_subscribed: false,
           last_signal_at: now,
           last_state_reason: null,
+          onboarding_flow: flow,
         })
         .select("id")
         .maybeSingle();
@@ -323,6 +432,7 @@ export async function connectMetaChannel(input: {
     oauthAccessToken: exchanged.accessToken,
     phoneNumberId: input.phoneNumberId,
     wabaId: input.wabaId,
+    flow,
   });
   if (!provisioned.ok) return { ok: false, code: "PROVIDER" };
 
@@ -332,6 +442,19 @@ export async function connectMetaChannel(input: {
   } catch {
     return { ok: false, code: "CONFIGURATION" };
   }
+
+  // P7C: Meta only accepts the Business-app contacts/history backfill within 24
+  // hours of onboarding, so it is requested here rather than deferred to the
+  // reconciliation cron. It is deliberately best-effort — a refused backfill
+  // still leaves a fully working channel for new conversations, so it must not
+  // fail the connection. Meta answers asynchronously over the webhook.
+  const historySync =
+    flow === "coexistence"
+      ? await requestMetaSmbDataSync(provisioned.channel).catch(() => ({
+          contacts: false,
+          history: false,
+        }))
+      : null;
 
   const stored = await client
     .from("clinic_channels")
@@ -343,6 +466,12 @@ export async function connectMetaChannel(input: {
       webhook_subscribed: true,
       last_signal_at: now,
       last_state_reason: null,
+      onboarding_flow: flow,
+      // Only stamped on an actually-requested backfill; never cleared, so a
+      // later reconnect cannot erase the record of the original 24h window.
+      ...(historySync?.contacts || historySync?.history
+        ? { history_sync_requested_at: now }
+        : {}),
     })
     .eq("id", claim.data.id)
     .eq("provider", "meta")
@@ -351,4 +480,159 @@ export async function connectMetaChannel(input: {
   if (stored.error || !stored.data) return { ok: false, code: "DATABASE" };
 
   return { ok: true, channelId: stored.data.id };
+}
+
+export type ManualMetaConnectResult =
+  | { ok: true; channelId: string; displayPhoneNumber: string }
+  | {
+      ok: false;
+      code: "CONFIGURATION" | "PROVIDER" | "IDENTITY_TAKEN" | "DATABASE";
+    };
+
+/**
+ * P7D — connects a clinic's *own* Meta / WhatsApp Cloud API credentials.
+ *
+ * This is the second of the two supported per-clinic connection methods, and it
+ * is the only one in which nothing platform-owned ends up on the channel: the
+ * stored envelope holds the clinic's own app id, app secret and permanent access
+ * token, so their sends go out on their account and their webhooks are verified
+ * against their app secret.
+ *
+ * Two-clinic safety is identical to the Embedded Signup path and is enforced
+ * twice: `findClinicChannelIdentityOwner` refuses a number already owned by
+ * another clinic, and the global `clinic_channels_whatsapp_sender_unique_idx`
+ * closes the preflight race at the database. A clinic may therefore only ever
+ * (re)claim a number no other clinic holds.
+ *
+ * Unlike the signup flows, the credentials are verified against Meta *before*
+ * the identity is claimed: nothing here is resumable — there is no popup to
+ * return from — so a rejected credential set should leave no row behind.
+ */
+export async function connectMetaChannelManually(input: {
+  clinicId: string;
+  credentials: ManualMetaCredentialsInput;
+}): Promise<ManualMetaConnectResult> {
+  const { clinicId, credentials } = input;
+
+  const identityOwner = await findClinicChannelIdentityOwner(
+    "meta",
+    credentials.phoneNumberId,
+  );
+  if (identityOwner.error) return { ok: false, code: "DATABASE" };
+  if (identityOwner.data && identityOwner.data.clinic_id !== clinicId) {
+    return { ok: false, code: "IDENTITY_TAKEN" };
+  }
+
+  const verified = await verifyManualMetaCredentials(credentials);
+  if (!verified.ok) return { ok: false, code: "PROVIDER" };
+
+  let encrypted: string;
+  try {
+    encrypted = encryptChannelCredentials({
+      accessToken: credentials.accessToken,
+      phoneNumberId: credentials.phoneNumberId,
+      wabaId: credentials.wabaId,
+      appId: credentials.appId,
+      appSecret: credentials.appSecret,
+      displayPhoneNumber: verified.verification.displayPhoneNumber,
+    });
+  } catch {
+    return { ok: false, code: "CONFIGURATION" };
+  }
+
+  // A clinic reconnecting or rotating its own credentials keeps its existing
+  // row; switching to a *different* number requires disconnecting first, so the
+  // released identity is never silently re-pointed while conversations,
+  // templates and message history still reference it.
+  const now = new Date().toISOString();
+  const client = createClinicScopedAdminClient(clinicId);
+  const existing = await client
+    .from("clinic_channels")
+    .select("id, sender_identity")
+    .eq("channel", "whatsapp")
+    .eq("provider", "meta")
+    .maybeSingle();
+  if (existing.error) return { ok: false, code: "DATABASE" };
+  if (existing.data && existing.data.sender_identity !== credentials.phoneNumberId) {
+    return { ok: false, code: "CONFIGURATION" };
+  }
+
+  const row = {
+    credentials_encrypted: encrypted,
+    provider_account_id: credentials.wabaId,
+    onboarding_flow: "manual_api" as const,
+    // The clinic's own account is already live, so the derived state only waits
+    // on the reconciliation poll to confirm phone health — it is never claimed
+    // as connected here.
+    status: "pending" as const,
+    connection_state: "connecting_to_meta",
+    connected_at: null,
+    webhook_subscribed: verified.verification.webhookSubscribed,
+    phone_status: verified.verification.phoneStatus,
+    last_signal_at: now,
+    last_state_reason: null,
+  };
+
+  const stored = existing.data
+    ? await client
+        .from("clinic_channels")
+        .update(row)
+        .eq("id", existing.data.id)
+        .eq("provider", "meta")
+        .select("id")
+        .maybeSingle()
+    : await client
+        .from("clinic_channels")
+        .insert({
+          clinic_id: clinicId,
+          channel: "whatsapp",
+          provider: "meta",
+          sender_identity: credentials.phoneNumberId,
+          ...row,
+        })
+        .select("id")
+        .maybeSingle();
+  if (stored.error || !stored.data) {
+    // A unique-index violation here means another clinic claimed the number
+    // between the preflight and the write.
+    return { ok: false, code: existing.data ? "DATABASE" : "IDENTITY_TAKEN" };
+  }
+
+  return {
+    ok: true,
+    channelId: stored.data.id,
+    displayPhoneNumber: verified.verification.displayPhoneNumber,
+  };
+}
+
+/**
+ * Removes this clinic's Meta WhatsApp channel, whichever flow created it.
+ *
+ * Deleting the row (rather than deactivating it) is deliberate: it releases the
+ * globally unique WhatsApp sender identity so the clinic can reconnect a
+ * different number, and so a number a clinic genuinely gave up can be claimed by
+ * whoever owns it next. Conversations, templates and message history are keyed
+ * by clinic, not by channel, and are untouched.
+ *
+ * Clinic-scoped by construction — the delete cannot reach another tenant's row.
+ * The retained 360dialog channel, if any, is restored as the active transport so
+ * disconnecting Meta degrades to the existing provider instead of silencing the
+ * clinic.
+ */
+export async function disconnectMetaChannel(
+  clinicId: string,
+): Promise<{ ok: true } | { ok: false; code: "DATABASE" }> {
+  const client = createClinicScopedAdminClient(clinicId);
+  const removed = await client
+    .from("clinic_channels")
+    .delete()
+    .eq("channel", "whatsapp")
+    .eq("provider", "meta");
+  if (removed.error) return { ok: false, code: "DATABASE" };
+
+  // Best-effort: only meaningful for clinics still carrying a 360dialog row from
+  // before the Meta cutover. A clinic without one is simply left with no
+  // WhatsApp channel, which the send path already degrades to email for.
+  await activateWhatsAppProvider(clinicId, "dialog360").catch(() => undefined);
+  return { ok: true };
 }

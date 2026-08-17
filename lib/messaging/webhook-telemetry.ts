@@ -1,6 +1,6 @@
 import "server-only";
 
-export type WhatsAppWebhookProvider = "dialog360" | "meta";
+export type WhatsAppWebhookProvider = "dialog360" | "meta" | "linked_device";
 export type WebhookRejectionKind = "signature" | "rate_limit";
 
 export type WebhookRouteTelemetry = {

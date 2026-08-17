@@ -77,7 +77,7 @@ describe("P6C Meta WhatsApp adapter", () => {
     );
     expect(result).toEqual({ ok: true, providerMessageId: "wamid.meta-out-1", costMicro: null });
     const [url, init] = vi.mocked(fetch).mock.calls[0];
-    expect(String(url)).toBe("https://graph.test/v21.0/551234567890/messages");
+    expect(String(url)).toBe("https://graph.test/v23.0/551234567890/messages");
     expect((init?.headers as Record<string, string>).authorization).toContain("Bearer");
 
     vi.mocked(fetch).mockResolvedValue(
@@ -327,12 +327,15 @@ describe("P6C Meta WhatsApp adapter", () => {
         qualityRating: "GREEN",
         messagingLimitTier: null,
         webhookSubscribed: true,
+        // Meta omitted is_on_biz_app here, so the snapshot reports "unknown"
+        // rather than guessing either way.
+        phoneOnBusinessApp: null,
       },
     });
     const requested = vi.mocked(fetch).mock.calls.map(([input]) => String(input)).join("\n");
     expect(requested).toContain("fields=account_review_status");
     expect(requested).toContain(
-      "fields=verified_name,display_phone_number,code_verification_status,quality_rating",
+      "fields=verified_name,display_phone_number,code_verification_status,quality_rating,platform_type,is_on_biz_app",
     );
     expect(requested).not.toContain("business_verification_status");
     expect(requested).not.toContain("messaging_limit_tier");

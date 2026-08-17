@@ -71,6 +71,47 @@ export const metaOnboardingCompletionSchema = z.object({
   wabaId: z.string().trim().regex(/^\d{5,32}$/, "validation.invalidFormat"),
 });
 
+/**
+ * P7C: the WhatsApp Business App Coexistence completion payload. Identical
+ * shape to the standard completion — the popup returns the same ids — but kept
+ * as its own schema so the two entry points can never be confused, and so the
+ * Coexistence action can only ever produce a Coexistence channel. The
+ * client-supplied ids remain untrusted claims that the server re-verifies
+ * against Meta before any credential is stored.
+ */
+export const whatsappBusinessOnboardingSchema = metaOnboardingCompletionSchema;
+
+/**
+ * P7D: the clinic-supplied Meta / WhatsApp Cloud API credential set for the
+ * manual connection method. These are the clinic's *own* values — the app id and
+ * secret of their Meta app, a permanent system-user access token issued by it,
+ * and the two Cloud API identifiers.
+ *
+ * Shapes are checked here only to reject obvious typos before a provider call;
+ * authority rests with `verifyManualMetaCredentials`, which proves every value
+ * against Meta. Upper bounds keep an oversized paste out of the encryption
+ * envelope. The display phone number is deliberately absent: it is read back
+ * from Meta rather than typed, so it can never disagree with the connected
+ * number shown to the clinic.
+ */
+export const manualMetaConnectionSchema = z.object({
+  appId: z.string().trim().regex(/^\d{5,32}$/, "validation.invalidFormat"),
+  appSecret: z
+    .string()
+    .trim()
+    .regex(/^[a-f0-9]{32}$/i, "validation.invalidFormat"),
+  accessToken: z
+    .string()
+    .trim()
+    .min(32, "validation.tooSmall")
+    .max(1000, "validation.tooBig")
+    // Meta tokens are URL-safe opaque strings; anything with whitespace or
+    // quotes is a copy-paste accident rather than a token.
+    .regex(/^[A-Za-z0-9_\-.|~]+$/, "validation.invalidFormat"),
+  phoneNumberId: z.string().trim().regex(/^\d{5,32}$/, "validation.invalidFormat"),
+  wabaId: z.string().trim().regex(/^\d{5,32}$/, "validation.invalidFormat"),
+});
+
 export const inboxReplySchema = z
   .object({
     conversationId: z.string().uuid("validation.invalidFormat"),

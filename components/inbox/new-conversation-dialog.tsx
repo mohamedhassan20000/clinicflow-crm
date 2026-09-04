@@ -244,14 +244,14 @@ export function NewConversationDialog({ contacts, directory }: Props) {
                   className="h-full min-h-0 min-w-0 overflow-hidden rounded-md px-2 py-0 text-center text-[13px] leading-none sm:text-sm"
                 >
                   <span className="min-w-0 truncate" dir="auto">{t("clinicGroup")}</span>
-                  <span className="shrink-0 tabular-nums" dir="ltr">({allGroups.clinic.length})</span>
+                  <span className={"shrink-0 tabular-nums" /* i18n-allow: Tailwind utility classes, not user-facing copy */} dir="ltr">({allGroups.clinic.length})</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value="whatsapp"
                   className="h-full min-h-0 min-w-0 overflow-hidden rounded-md px-2 py-0 text-center text-[13px] leading-none sm:text-sm"
                 >
                   <span className="min-w-0 truncate" dir="auto">{t("whatsappGroup")}</span>
-                  <span className="shrink-0 tabular-nums" dir="ltr">({allGroups.whatsapp.length})</span>
+                  <span className={"shrink-0 tabular-nums" /* i18n-allow: Tailwind utility classes, not user-facing copy */} dir="ltr">({allGroups.whatsapp.length})</span>
                 </TabsTrigger>
               </TabsList>
 

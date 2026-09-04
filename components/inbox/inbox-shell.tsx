@@ -688,9 +688,10 @@ export function InboxShell({
             </Button>
           )}
           {/* P17 (§7) — the clinic-wide AI reply setting, where WhatsApp is
-              actually read. Same stored value and same action as Settings →
-              Messaging; per-conversation overrides and Pause AI are unchanged
-              and still win where they apply. */}
+              actually read. Same stored value and same action as Settings → Messaging.
+              i18n-allow: implementation note inside a JSX comment, never rendered.
+              Per-conversation overrides and Pause AI are unchanged and still win
+              where they apply. */}
           <InboxAiRepliesControl
             mode={data.clinicAi?.mode ?? "off"}
             overrideCount={data.clinicAi?.overrideCount ?? 0}

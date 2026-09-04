@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { WorkerConfig } from "./config.ts";
-import type { MediaUploadResult } from "./media.ts";
+import type { MediaUploadResult } from "./media-types.ts";
 
 /**
  * Every database access this worker makes, in one place.

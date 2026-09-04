@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { downloadMediaMessage, type WAMessage } from "baileys";
 import type { CallbackAttachment } from "./callback.ts";
+import type { MediaUploadResult } from "./media-types.ts";
 
 /**
  * Patient attachments, from an encrypted WhatsApp blob to a row the clinic can
@@ -352,15 +353,7 @@ export type MediaUploader = (input: {
   contentType: string;
 }) => Promise<boolean | MediaUploadResult>;
 
-export type MediaUploadResult =
-  | { ok: true }
-  | {
-      ok: false;
-      /** Coarse, privacy-safe failure family. Never an upstream error message. */
-      errorCategory: string;
-      /** A sanitized HTTP/service code, never an object path or response body. */
-      errorCode: string;
-    };
+export type { MediaUploadResult };
 
 export type MediaDownloader = (message: WAMessage) => Promise<Buffer>;
 

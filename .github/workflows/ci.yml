@@ -50,6 +50,8 @@ jobs:
         run: pnpm i18n:unused
 
       - name: Typecheck
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
         run: pnpm typecheck
 
       - name: Unit tests

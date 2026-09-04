@@ -49,6 +49,9 @@ jobs:
       - name: i18n unused-key gate
         run: pnpm i18n:unused
 
+      - name: WhatsApp worker install
+        run: pnpm whatsapp:worker:install
+
       - name: Typecheck
         env:
           NODE_OPTIONS: --max-old-space-size=4096
@@ -85,9 +88,6 @@ jobs:
       # start path — a caller answered before the socket is up, one socket per
       # clinic, and failures on the asynchronous half — which nothing in the
       # application's own tests can reach.
-      - name: WhatsApp worker install
-        run: pnpm whatsapp:worker:install
-
       - name: WhatsApp worker typecheck
         run: pnpm whatsapp:worker:typecheck
 

@@ -447,7 +447,10 @@ describe("P5A atomic pending caps, staff displacement compatibility, and TTL", (
         end_time: "18:00",
         is_enabled: true,
       })),
-      { onConflict: "doctor_id,day_of_week" },
+      // P14 replaced `ds_unique (doctor_id, day_of_week)` with
+      // `ds_unique_interval (doctor_id, day_of_week, start_time)` so a staff
+      // member can hold more than one shift per weekday.
+      { onConflict: "doctor_id,day_of_week,start_time" },
     );
     expect(schedules.error).toBeNull();
 

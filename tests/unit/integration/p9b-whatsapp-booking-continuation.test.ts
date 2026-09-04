@@ -534,11 +534,14 @@ describe("P9C · booking for somebody else", () => {
       ...details,
       for_someone_else: true,
     });
+    // The clarification carries the spelling the patient is being shown, and
+    // nothing else about the name: the Arabic they typed is kept beside the
+    // filed spelling on the staged row (`full_name_original`) for staff review,
+    // not returned here — at this point nothing is staged at all.
     expect(unconfirmed).toMatchObject({
       registered: false,
       reason: "name_spelling_confirmation_required",
       proposed_name: "Ali Alngar",
-      original_name: "على النجار",
     });
     const stagedYet = await service
       .from("ai_patient_intakes")
@@ -547,11 +550,25 @@ describe("P9C · booking for somebody else", () => {
     if (stagedYet.error) throw stagedYet.error;
     expect(stagedYet.data).toHaveLength(0);
 
-    // They confirm, and the file is staged under the spelling they saw.
+    // They confirm the spelling. The name is settled, so the last optional
+    // question — blood type — is asked once, still before anything is staged.
+    const bloodTypeGate = await call("register_patient", {
+      ...details,
+      for_someone_else: true,
+      name_spelling_confirmed: true,
+    });
+    expect(bloodTypeGate).toMatchObject({
+      registered: false,
+      needs_clarification: true,
+      reason: "blood_type_required",
+    });
+
+    // They answer it, and the file is staged under the spelling they saw.
     const registered = await call("register_patient", {
       ...details,
       for_someone_else: true,
       name_spelling_confirmed: true,
+      blood_type: "O+",
     });
     expect(registered.technical_error).toBeUndefined();
     expect(registered).toMatchObject({

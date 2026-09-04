@@ -164,7 +164,11 @@ beforeAll(async () => {
       channel: "whatsapp",
       provider: "dialog360",
       recipient: "+96550000001",
+      // A manual outbound row is only visible through the conversation it
+      // belongs to, so `related_id` has to be the real one — the WhatsApp
+      // account-scope policy resolves the conversation from it.
       related_type: "manual",
+      related_id: conversationA,
       template_id: templateA,
     },
     {
@@ -174,6 +178,7 @@ beforeAll(async () => {
       provider: "resend",
       recipient: "patient-b@example.com",
       related_type: "manual",
+      related_id: conversationB,
     },
   ]);
   if (outbound.error) throw outbound.error;

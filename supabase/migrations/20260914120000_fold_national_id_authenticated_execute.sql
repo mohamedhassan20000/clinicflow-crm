@@ -1,0 +1,65 @@
+-- ---------------------------------------------------------------------------
+-- Restore authenticated patient writes: EXECUTE on `fold_national_id`
+--
+-- ## The defect
+--
+-- `20260911120000_existing_patient_identity_discovery.sql` added
+--
+--   create index patients_clinic_folded_national_id_idx
+--     on public.patients (clinic_id, public.fold_national_id(national_id))
+--     where (not is_deleted) and deleted_at is null;
+--
+-- while `20260818120000_p8_whatsapp_history_takeover_attachments.sql` had
+-- revoked that function from `authenticated` and granted it to `service_role`
+-- alone. Postgres evaluates an expression index as the *writing* role, so from
+-- the moment the index exists every authenticated write that has to maintain
+-- an entry in it fails:
+--
+--   ERROR 42501: permission denied for function fold_national_id
+--
+-- Confirmed live in Production (migration applied, index present,
+-- `has_function_privilege('authenticated', …)` false). Observed blast radius:
+--
+--   * INSERT into `patients` — always fails. No staff user can create a patient.
+--   * UPDATE that changes `national_id` (or `clinic_id`) — always fails.
+--   * UPDATE of any other column — usually succeeds, because a HOT update
+--     writes no index entry and the expression is never evaluated. It fails
+--     whenever HOT is unavailable (a full page), which makes the symptom
+--     intermittent rather than absent.
+--
+-- ## The fix
+--
+-- One grant, and nothing else. The index, the function body, every RLS policy
+-- and every other grant are left exactly as they are.
+--
+-- ## Why this is safe to expose
+--
+-- `fold_national_id` is a pure normalizer: `language sql`, `immutable`,
+-- `set search_path = ''`, and — importantly — NOT `security definer`. Its body
+-- reads no table, no sequence and no setting; it calls only `pg_catalog`
+-- builtins (`translate`, `regexp_replace`, `lower`, `nullif`, `coalesce`) on
+-- its own argument. It maps Arabic-Indic digits to ASCII, strips every
+-- non-alphanumeric character, lowercases, and returns NULL for an empty
+-- result.
+--
+-- So the value it returns is a deterministic function of text the caller
+-- already holds. It cannot confirm that any id exists, cannot be steered at
+-- another clinic's rows, and reveals nothing a caller could not compute
+-- client-side with a regex. It is not an existence oracle, and granting it
+-- does not widen `patients`: reading that table is still governed entirely by
+-- its RLS policies, which this migration does not touch.
+--
+-- `anon` and `public` stay revoked — an unauthenticated caller has no write to
+-- perform and therefore no reason to hold it. `service_role` keeps the grant
+-- it already had. The five SECURITY DEFINER callers
+-- (`identify_patient_for_booking`, `stage_patient_intake_from_conversation`,
+-- `lookup_patient_appointments_by_identity`, `approve_ai_patient_intake`,
+-- `find_clinic_patient_by_identity`) execute as their owner and were never
+-- affected either way; likewise the `ai_patient_intakes.national_id_folded`
+-- generated column, whose table exposes no authenticated INSERT policy.
+--
+-- Additive only: no data read, written or deleted; no table, column, index,
+-- constraint, policy or function definition altered.
+-- ---------------------------------------------------------------------------
+
+grant execute on function public.fold_national_id(text) to authenticated;

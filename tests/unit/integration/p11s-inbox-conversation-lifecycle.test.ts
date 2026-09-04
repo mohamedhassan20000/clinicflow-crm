@@ -54,6 +54,11 @@ const staffId = randomUUID();
 const patientId = randomUUID();
 const conversationId = randomUUID();
 const sender = `+2014${String(Date.now()).slice(-8)}`;
+// The clinic's own linked WhatsApp account. An active `linked_device`
+// channel puts every authenticated read on the account branch of the
+// isolation policies, so the session identity and the conversation scope
+// below are what make this clinic's own threads visible to its own staff.
+const linkedAccountId = `+2015${String(Date.now()).slice(-8)}`;
 const email = `${suffix}@example.test`;
 const password = "P11SInbox12345!";
 
@@ -63,6 +68,7 @@ async function cleanup() {
   await service.from("outbound_messages").delete().eq("clinic_id", clinicId);
   await service.from("conversations").delete().eq("clinic_id", clinicId);
   await service.from("clinic_channels").delete().eq("clinic_id", clinicId);
+  await service.from("whatsapp_linked_device_sessions").delete().eq("clinic_id", clinicId);
   await service.from("patients").delete().eq("clinic_id", clinicId);
   await service.from("profiles").delete().eq("id", staffId);
   await service.auth.admin.deleteUser(staffId).catch(() => undefined);
@@ -80,6 +86,14 @@ beforeAll(async () => {
     sender_identity: `p11s${Date.now()}`, status: "active",
   });
   if (r.error) throw r.error;
+  // `current_whatsapp_linked_account_id()` reads this row. Without it the
+  // account branch compares against NULL and a restrictive policy admits
+  // nothing — the channel alone is not an identity.
+  r = await service.from("whatsapp_linked_device_sessions").insert({
+    clinic_id: clinicId, status: "connected", desired_state: "online",
+    authenticated_account_id: linkedAccountId, phone_number: linkedAccountId,
+  });
+  if (r.error) throw r.error;
   const auth = await service.auth.admin.createUser({ id: staffId, email, password, email_confirm: true });
   if (auth.error) throw auth.error;
   r = await service.from("profiles").insert({
@@ -95,7 +109,7 @@ beforeAll(async () => {
   r = await service.from("conversations").insert({
     id: conversationId, clinic_id: clinicId, channel: "whatsapp", participant_address: sender,
     patient_id: patientId, patient_link_status: "automatic", display_name: "Ahmed", status: "open",
-    last_message_at: new Date().toISOString(),
+    last_message_at: new Date().toISOString(), whatsapp_account_id: linkedAccountId,
   });
   if (r.error) throw r.error;
 

@@ -41,7 +41,13 @@ async function existingPath(paths: readonly string[]): Promise<string | null> {
   return null;
 }
 
-function chromiumLaunchArgs(
+/**
+ * The launch flags that go with a resolved executable. Exported so tests that
+ * drive a real browser reuse this decision rather than re-deriving it — a
+ * second copy keyed on `/Applications/` alone hands Sparticuz's Lambda flags to
+ * a normal Linux Chrome and the browser never comes up.
+ */
+export function chromiumLaunchArgs(
   executablePath: string,
   serverlessArgs: readonly string[],
 ): string[] {

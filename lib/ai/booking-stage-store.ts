@@ -960,6 +960,11 @@ export async function openBookingStageTurn(
     });
     const stage = recorded?.stage ?? deriveConversationStage(identity).stage;
     let state = recorded?.state ?? identity.bookingStage;
+    // The record just written is the authoritative state for the rest of this
+    // turn. Every later `recordStageTurn` re-derives its base from
+    // `identity.bookingStage`, so leaving it stale here lets a same-turn write
+    // restore a latch this call cleared — notably `unescalated`.
+    if (recorded) identity = { ...identity, bookingStage: recorded.state };
     // A — who this booking is *for*, established before anything is collected
     // and never inferred from `conversations.patient_id`.
     //

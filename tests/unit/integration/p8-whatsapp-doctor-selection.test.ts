@@ -234,6 +234,23 @@ async function call(name: string, input: Record<string, unknown> = {}) {
   >;
 }
 
+/**
+ * Puts the shared conversation back to the state a brand-new thread is in.
+ *
+ * Every case in this file drives the same conversation, and a settled doctor
+ * survives from one to the next. That is not incidental to the case below: once
+ * a doctor is settled, a bare `doctor_id` carried by the model cannot switch
+ * doctors on its own — only patient-authored text can — so a case that means to
+ * ask about a *different* doctor has to start from no settled doctor at all.
+ */
+async function resetBookingState() {
+  const reset = await service
+    .from("conversations")
+    .update({ ai_booking_stage: null, ai_collected_data: {} })
+    .eq("id", conversationId);
+  if (reset.error) throw reset.error;
+}
+
 function names(result: Record<string, unknown>, key = "doctors") {
   return ((result[key] ?? []) as Array<{ name: string }>).map((item) => item.name);
 }
@@ -300,6 +317,10 @@ describe("WhatsApp doctor selection over real data", () => {
   });
 
   it("explains the on-leave doctor rather than returning an empty day list", async () => {
+    // The preceding case settled أحمد نبيل on this conversation. The anti-switch
+    // rule would rightly keep him, so the thread is reset rather than the rule
+    // relaxed: this case is about a patient asking after هالة فؤاد from scratch.
+    await resetBookingState();
     const result = await call("list_available_days", {
       doctor_id: onLeaveId,
       duration_minutes: 30,

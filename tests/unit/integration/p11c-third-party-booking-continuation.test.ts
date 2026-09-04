@@ -128,6 +128,7 @@ const CHILD = {
   dob: "12 May 2015",
   email: `child-${suffix}@example.com`,
   phone: "+20134567890",
+  bloodType: "O+",
 };
 
 let conversationId = "";
@@ -479,14 +480,28 @@ describe("P11C §4 · doctor → day → time → third-party intake → pending
     });
     expect(premature).toMatchObject({ created: false, reason: "intake_required" });
 
-    // Third-party intake.
-    const registered = await call("register_patient", {
+    // Third-party intake. The identifying fields are complete, so the last
+    // thing standing between them and a staged file is the optional blood-type
+    // question — asked once, before anything is written.
+    const details = {
       for_someone_else: true,
       full_name: CHILD.name,
       national_id: CHILD.nationalId,
       date_of_birth: CHILD.dob,
       email: CHILD.email,
       phone: CHILD.phone,
+    };
+    const bloodTypeGate = await call("register_patient", details);
+    expect(bloodTypeGate).toMatchObject({
+      registered: false,
+      needs_clarification: true,
+      reason: "blood_type_required",
+    });
+
+    // They answer it, and only now is the file staged.
+    const registered = await call("register_patient", {
+      ...details,
+      blood_type: CHILD.bloodType,
     });
     // Staged, never registered: a third party's file is a proposal for staff.
     expect(registered).toMatchObject({

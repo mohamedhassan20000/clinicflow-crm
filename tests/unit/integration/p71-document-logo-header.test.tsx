@@ -3,7 +3,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import type { Browser } from "puppeteer-core";
 import { DocumentPage } from "@/components/documents/engine";
 import { buildDocumentHtml } from "@/lib/documents/pdf";
-import { resolveChromiumExecutablePath } from "@/lib/documents/pdf/render";
+import { chromiumLaunchArgs, resolveChromiumExecutablePath } from "@/lib/documents/pdf/render";
 
 /**
  * The clinic logo and the document header are shared by every document type, so
@@ -65,9 +65,10 @@ async function launch() {
   ]);
   browser = await puppeteer.launch({
     executablePath,
-    args: executablePath.startsWith("/Applications/")
-      ? ["--no-sandbox", "--disable-setuid-sandbox"]
-      : chromium.args,
+    // The same decision production makes. Duplicating it here once meant a
+    // macOS-only `/Applications/` probe, which on Linux CI passed Lambda flags
+    // to a desktop Chrome and timed out.
+    args: chromiumLaunchArgs(executablePath, chromium.args),
     headless: true,
   });
   return browser;

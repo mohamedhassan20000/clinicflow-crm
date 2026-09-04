@@ -23,6 +23,7 @@ import {
 import { normalizePhone } from "@/lib/phone/registry";
 import { deriveWebhookVerifyToken } from "@/lib/messaging/webhook-verify-token";
 import type { MessagingProviderId } from "@/lib/messaging/types";
+import { resolveActiveChannels } from "@/lib/messaging/provider-policy";
 import {
   toWhatsAppBusinessConnectionView,
   type WhatsAppBusinessConnectionView,
@@ -92,12 +93,21 @@ export async function getActiveWhatsAppProvider(
   const client = createClinicScopedAdminClient(clinicId);
   const result = await client
     .from("clinic_channels")
-    .select("provider")
+    .select("channel, provider")
     .eq("channel", "whatsapp")
-    .eq("status", "active")
-    .limit(1)
+    .eq("status", "active");
+  if (result.error) return null;
+  return resolveActiveChannels(result.data ?? []).get("whatsapp")?.provider ?? null;
+}
+
+/** Current Baileys-proved linked account. Null means fail closed. */
+export async function getCurrentLinkedWhatsAppAccount(clinicId: string): Promise<string | null> {
+  const result = await createClinicScopedAdminClient(clinicId)
+    .from("whatsapp_linked_device_sessions")
+    .select("authenticated_account_id")
+    .eq("clinic_id", clinicId)
     .maybeSingle();
-  return result.error ? null : (result.data?.provider ?? null);
+  return result.error ? null : result.data?.authenticated_account_id ?? null;
 }
 
 export async function getWhatsAppChannelStatus(

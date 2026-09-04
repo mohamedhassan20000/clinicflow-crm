@@ -86,6 +86,18 @@ function pretty(value: string | null): string {
   return value ? value.replaceAll("_", " ").toLowerCase() : "—";
 }
 
+/**
+ * Every recovery action in the registry drives a Cloud API credential — a
+ * template sync, a webhook registration, a credentialed provider probe. A
+ * linked device has none of them, so the whole panel is reported as not
+ * applicable rather than offered and then refused by the server.
+ */
+function isCloudApiProvider(
+  provider: WhatsAppHealthSnapshot["provider"],
+): boolean {
+  return provider === "meta" || provider === "dialog360";
+}
+
 function StatusMark({
   status,
 }: {
@@ -185,9 +197,31 @@ export function WhatsAppHealthDashboard({ snapshot, entitled }: Props) {
           timeStyle: "short",
         })
       : "—";
+  const linkedDevice = snapshot.linkedDevice;
+  const cloudApi = isCloudApiProvider(snapshot.provider);
+  const providerLabel =
+    snapshot.provider === "meta"
+      ? t("healthProviderMeta")
+      : snapshot.provider === "dialog360"
+        ? t("healthProviderDialog360")
+        : snapshot.provider === "linked_device"
+          ? t("healthProviderLinkedDevice")
+          : t("statusNotConnected");
+  const notApplicable = t("notAvailableOnConnection");
+  // Route-level rejection counters only exist for a provider callback. On a
+  // linked device the absence of a number is "not applicable", never "the
+  // telemetry backend is down".
   const telemetryUnavailable =
-    snapshot.webhook.signatureFailures === null ||
-    snapshot.webhook.rateLimitRejections === null;
+    cloudApi &&
+    (snapshot.webhook.signatureFailures === null ||
+      snapshot.webhook.rateLimitRejections === null);
+  const heartbeatLabel = !linkedDevice
+    ? notApplicable
+    : linkedDevice.heartbeat === "online"
+      ? t("healthWorker_online")
+      : linkedDevice.heartbeat === "stale"
+        ? t("healthWorker_stale")
+        : t("healthWorker_offline");
   const overallStatus = !snapshot.configured
     ? "not_connected"
     : snapshot.readiness.ready
@@ -207,6 +241,7 @@ export function WhatsAppHealthDashboard({ snapshot, entitled }: Props) {
         : t("healthWebhook_unknown");
   const readinessLabels = {
     channel: t("healthReadiness_channel"),
+    session: t("healthReadiness_session"),
     webhook: t("healthReadiness_webhook"),
     template: t("healthReadiness_template"),
     business_verification: t("healthReadiness_business_verification"),
@@ -289,13 +324,7 @@ export function WhatsAppHealthDashboard({ snapshot, entitled }: Props) {
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/65">
               {t("healthCurrentRoute")}
             </p>
-            <p className="mt-3 text-2xl font-semibold">
-              {snapshot.provider === "meta"
-                ? t("healthProviderMeta")
-                : snapshot.provider === "dialog360"
-                  ? t("healthProviderDialog360")
-                  : t("statusNotConnected")}
-            </p>
+            <p className="mt-3 text-2xl font-semibold">{providerLabel}</p>
             <p className="mt-1 text-sm text-white/70">
               {snapshot.connectionState
                 ? pretty(snapshot.connectionState)
@@ -331,14 +360,33 @@ export function WhatsAppHealthDashboard({ snapshot, entitled }: Props) {
             label={t("connectionStatus")}
             value={pretty(snapshot.connectionState ?? snapshot.channelStatus)}
           />
-          <DataPoint
-            label={t("healthWebhookStatus")}
-            value={webhookLabel}
-          />
-          <DataPoint
-            label={t("healthLastVerifiedEvent")}
-            value={dateTime(snapshot.webhook.lastVerifiedAt)}
-          />
+          {linkedDevice ? (
+            <>
+              <DataPoint
+                label={t("healthConnectedNumber")}
+                value={
+                  linkedDevice.phoneNumber ? (
+                    <span dir="ltr">{linkedDevice.phoneNumber}</span>
+                  ) : (
+                    "—"
+                  )
+                }
+              />
+              <DataPoint
+                label={t("healthWorkerHeartbeat")}
+                value={heartbeatLabel}
+                unavailable={linkedDevice.heartbeat === "offline"}
+              />
+            </>
+          ) : (
+            <>
+              <DataPoint label={t("healthWebhookStatus")} value={webhookLabel} />
+              <DataPoint
+                label={t("healthLastVerifiedEvent")}
+                value={dateTime(snapshot.webhook.lastVerifiedAt)}
+              />
+            </>
+          )}
           <DataPoint
             label={t("healthLastIncoming")}
             value={dateTime(snapshot.lastIncomingAt)}
@@ -354,8 +402,14 @@ export function WhatsAppHealthDashboard({ snapshot, entitled }: Props) {
             }
           />
           <DataPoint
-            label={t("lastSyncedLabel")}
-            value={dateTime(snapshot.lastSyncedAt)}
+            label={
+              linkedDevice ? t("healthLastHeartbeat") : t("lastSyncedLabel")
+            }
+            value={dateTime(
+              linkedDevice
+                ? linkedDevice.lastHeartbeatAt
+                : snapshot.lastSyncedAt,
+            )}
           />
         </div>
       </section>
@@ -378,13 +432,7 @@ export function WhatsAppHealthDashboard({ snapshot, entitled }: Props) {
                 </div>
               </div>
               <CardAction>
-                <Badge variant="outline">
-                  {snapshot.provider === "meta"
-                    ? t("healthProviderMeta")
-                    : snapshot.provider === "dialog360"
-                      ? t("healthProviderDialog360")
-                      : t("statusNotConnected")}
-                </Badge>
+                <Badge variant="outline">{providerLabel}</Badge>
               </CardAction>
             </CardHeader>
             <CardContent>
@@ -457,33 +505,51 @@ export function WhatsAppHealthDashboard({ snapshot, entitled }: Props) {
               <dl className="grid gap-3 sm:grid-cols-2">
                 <DataPoint
                   label={t("healthApprovedTemplates")}
-                  value={format.number(snapshot.templates.approved)}
+                  value={
+                    cloudApi
+                      ? format.number(snapshot.templates.approved)
+                      : notApplicable
+                  }
+                  unavailable={!cloudApi}
                 />
                 <DataPoint
                   label={t("healthTemplatesTotal")}
-                  value={format.number(snapshot.templates.total)}
+                  value={
+                    cloudApi
+                      ? format.number(snapshot.templates.total)
+                      : notApplicable
+                  }
+                  unavailable={!cloudApi}
                 />
                 <DataPoint
                   label={t("healthSignatureFailures", {
                     hours: snapshot.webhook.telemetryWindowHours,
                   })}
                   value={
-                    snapshot.webhook.signatureFailures === null
-                      ? t("healthTelemetryUnavailable")
-                      : format.number(snapshot.webhook.signatureFailures)
+                    !cloudApi
+                      ? notApplicable
+                      : snapshot.webhook.signatureFailures === null
+                        ? t("healthTelemetryUnavailable")
+                        : format.number(snapshot.webhook.signatureFailures)
                   }
-                  unavailable={snapshot.webhook.signatureFailures === null}
+                  unavailable={
+                    !cloudApi || snapshot.webhook.signatureFailures === null
+                  }
                 />
                 <DataPoint
                   label={t("healthRateLimitRejections", {
                     hours: snapshot.webhook.telemetryWindowHours,
                   })}
                   value={
-                    snapshot.webhook.rateLimitRejections === null
-                      ? t("healthTelemetryUnavailable")
-                      : format.number(snapshot.webhook.rateLimitRejections)
+                    !cloudApi
+                      ? notApplicable
+                      : snapshot.webhook.rateLimitRejections === null
+                        ? t("healthTelemetryUnavailable")
+                        : format.number(snapshot.webhook.rateLimitRejections)
                   }
-                  unavailable={snapshot.webhook.rateLimitRejections === null}
+                  unavailable={
+                    !cloudApi || snapshot.webhook.rateLimitRejections === null
+                  }
                 />
               </dl>
               <p className="text-xs text-muted-foreground">
@@ -517,6 +583,7 @@ export function WhatsAppHealthDashboard({ snapshot, entitled }: Props) {
                 const unavailable =
                   !snapshot.configured ||
                   !entitled ||
+                  !cloudApi ||
                   (item.metaOnly && snapshot.provider !== "meta");
                 const busy = isPending && pendingAction === item.action;
                 return (
@@ -547,9 +614,10 @@ export function WhatsAppHealthDashboard({ snapshot, entitled }: Props) {
                       )}
                       {t(item.title)}
                     </Button>
-                    {item.metaOnly && snapshot.provider !== "meta" ? (
+                    {!cloudApi ||
+                    (item.metaOnly && snapshot.provider !== "meta") ? (
                       <p className="mt-2 text-xs text-muted-foreground">
-                        {t("notAvailableOnConnection")}
+                        {notApplicable}
                       </p>
                     ) : null}
                   </div>
@@ -589,10 +657,12 @@ export function WhatsAppHealthDashboard({ snapshot, entitled }: Props) {
                         </span>
                         <span className="block truncate text-xs text-muted-foreground">
                           {check.status === "unavailable"
-                            ? t("notAvailableOnConnection")
-                            : check.value
-                              ? pretty(check.value)
-                              : t("healthCheckNeedsAttention")}
+                            ? notApplicable
+                            : check.key === "session"
+                              ? heartbeatLabel
+                              : check.value
+                                ? pretty(check.value)
+                                : t("healthCheckNeedsAttention")}
                         </span>
                       </span>
                       <ExternalLink
@@ -656,7 +726,9 @@ export function WhatsAppHealthDashboard({ snapshot, entitled }: Props) {
                               ·{" "}
                               {event.provider === "meta"
                                 ? t("healthProviderMeta")
-                                : t("healthProviderDialog360")}
+                                : event.provider === "linked_device"
+                                  ? t("healthProviderLinkedDevice")
+                                  : t("healthProviderDialog360")}
                             </>
                           ) : null}
                         </p>

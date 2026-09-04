@@ -35,7 +35,30 @@ async function loadActions() {
 
 // Appointment fixture that has no billing data attached
 function uncharged(status: string = "pending") {
-  return { status, paid_at: null, paid_amount: null, total_amount: null };
+  return {
+    id: APPOINTMENT_ID,
+    patient_id: "patient-1",
+    status,
+    paid_at: null,
+    paid_amount: null,
+    total_amount: null,
+  };
+}
+
+function configureEmptyDependents(
+  mocks: ReturnType<typeof createServerActionMocks>,
+) {
+  for (const table of [
+    "appointment_services",
+    "feedback",
+    "follow_ups",
+    "outstanding_settlements",
+  ]) {
+    mocks.state.tableResults[`${table}.select`] = [
+      { data: [], error: null },
+      { data: [], error: null },
+    ];
+  }
 }
 
 describe("softDeleteAppointment — Phase 6 deletion guard", () => {
@@ -49,6 +72,7 @@ describe("softDeleteAppointment — Phase 6 deletion guard", () => {
       data: uncharged("pending"),
       error: null,
     };
+    configureEmptyDependents(mocks);
 
     const result = await softDeleteAppointment(APPOINTMENT_ID);
 
@@ -65,6 +89,7 @@ describe("softDeleteAppointment — Phase 6 deletion guard", () => {
       data: uncharged("confirmed"),
       error: null,
     };
+    configureEmptyDependents(mocks);
 
     const result = await softDeleteAppointment(APPOINTMENT_ID);
 
@@ -179,10 +204,14 @@ describe("permanentDeleteAppointment", () => {
 
   it("hard-deletes a trashed appointment and its dependents", async () => {
     const { permanentDeleteAppointment, mocks } = await loadActions();
-    mocks.state.tableResults["appointments.select"] = {
-      data: { id: APPOINTMENT_ID },
-      error: null,
-    };
+    mocks.state.tableResults["appointments.select"] = [
+      {
+        data: { id: APPOINTMENT_ID, patient_id: "patient-1", status: "pending", deleted_at: "2026-08-13T00:00:00.000Z" },
+        error: null,
+      },
+      { data: [{ id: APPOINTMENT_ID }], error: null },
+    ];
+    configureEmptyDependents(mocks);
 
     const result = await permanentDeleteAppointment(APPOINTMENT_ID);
 
@@ -196,17 +225,55 @@ describe("permanentDeleteAppointment", () => {
   it("propagates errors from dependent table cleanup", async () => {
     const { permanentDeleteAppointment, mocks } = await loadActions();
     mocks.state.tableResults["appointments.select"] = {
-      data: { id: APPOINTMENT_ID },
+      data: { id: APPOINTMENT_ID, patient_id: "patient-1", status: "pending", deleted_at: "2026-08-13T00:00:00.000Z" },
       error: null,
     };
-    mocks.state.tableResults["appointment_services.delete"] = {
-      data: null,
-      error: { message: "cannot delete due to constraint" },
-    };
+    configureEmptyDependents(mocks);
+    mocks.state.tableResults["appointment_services.select"] = [
+      { data: [], error: null },
+      { data: null, error: { message: "cannot delete due to constraint" } },
+    ];
 
     const result = await permanentDeleteAppointment(APPOINTMENT_ID);
 
     expect(result.error).toBe("We could not complete this request. Please try again.");
+    expect(mocks.state.queryLog).not.toContainEqual(
+      expect.objectContaining({ table: "appointments", operation: "delete" }),
+    );
+  });
+
+  it("detects a zero-row dependent delete and restores the deleted snapshot", async () => {
+    const { permanentDeleteAppointment, mocks } = await loadActions();
+    const dependent = {
+      id: "service-row-1",
+      appointment_id: APPOINTMENT_ID,
+      clinic_id: "clinic-1",
+      name: "Consultation",
+      price: 10,
+      quantity: 1,
+      service_id: null,
+      created_at: "2026-08-13T00:00:00.000Z",
+    };
+    mocks.state.tableResults["appointments.select"] = {
+      data: { id: APPOINTMENT_ID, patient_id: "patient-1", status: "pending", deleted_at: "2026-08-13T00:00:00.000Z" },
+      error: null,
+    };
+    configureEmptyDependents(mocks);
+    mocks.state.tableResults["appointment_services.select"] = [
+      { data: [dependent], error: null },
+      { data: [], error: null },
+    ];
+
+    const result = await permanentDeleteAppointment(APPOINTMENT_ID);
+
+    expect(result.error).toBe("We could not complete this request. Please try again.");
+    expect(mocks.state.queryLog).toContainEqual(
+      expect.objectContaining({
+        table: "appointment_services",
+        operation: "insert",
+        args: [[dependent]],
+      }),
+    );
     expect(mocks.state.queryLog).not.toContainEqual(
       expect.objectContaining({ table: "appointments", operation: "delete" }),
     );

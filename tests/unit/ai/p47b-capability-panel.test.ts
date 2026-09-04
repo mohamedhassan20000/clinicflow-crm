@@ -25,6 +25,7 @@ function user(role: Role): MockUser {
 
 const PRO_AI_FEATURES = {
   ai_assistant: true,
+  "ai.read_clinical": true,
   "ai.staff_assistant": true,
   "ai.staff_analytics": true,
   "ai.financial_insights": true,
@@ -203,7 +204,7 @@ describe("P4.7B capability presentation is permission-aware", () => {
     expect(names).not.toContain("get_revenue_summary");
     expect(names).not.toContain("list_outstanding_invoices");
     // But operational capabilities remain.
-    expect(names).toContain("list_appointments");
+    expect(names).toContain("query_resource");
   });
 
   it("never offers financial or clinic-analytics capabilities to a receptionist", async () => {
@@ -211,16 +212,16 @@ describe("P4.7B capability presentation is permission-aware", () => {
     const names = payload.capabilities.map((c) => c.name);
     expect(names).not.toContain("get_revenue_summary");
     expect(names).not.toContain("get_patient_stats");
-    expect(names).toContain("list_appointments");
+    expect(names).toContain("query_resource");
     expect(names).toContain("search_help");
   });
 
-  it("gives a doctor only clinical and guidance capabilities", async () => {
+  it("gives a doctor clinical records plus generic RLS-scoped resource reads", async () => {
     const { payload } = await runTool(user("doctor"));
     const groups = new Set(payload.capabilities.map((c) => c.group));
-    expect(groups).not.toContain("operational");
+    expect(groups).toContain("operational");
     expect(groups).not.toContain("financial");
-    expect(payload.capabilities.map((c) => c.name)).toContain("get_patient_summary");
+    expect(payload.capabilities.map((c) => c.name)).toContain("get_record");
     expect(payload.capabilities.map((c) => c.name)).toContain("list_my_capabilities");
   });
 

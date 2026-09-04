@@ -99,9 +99,17 @@ export default async function OperatorClinicsPage({
                   ? subscription.trial_ends_at
                   : subscription?.current_period_end;
                 return (
-                  <TableRow key={clinic.id}>
+                  // The whole row opens the clinic. The click target is the
+                  // existing name link stretched over the row via ::after, so
+                  // there is still exactly one focusable, screen-reader-visible
+                  // link per row — a row-level onClick would have been invisible
+                  // to the keyboard and to assistive technology.
+                  <TableRow key={clinic.id} className="relative cursor-pointer hover:bg-muted/50 focus-within:bg-muted/50">
                     <TableCell>
-                      <Link href={withReturnTo(`/operator/clinics/${clinic.id}`, currentListUrl)} className="font-medium underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                      <Link
+                        href={withReturnTo(`/operator/clinics/${clinic.id}`, currentListUrl)}
+                        className="font-medium underline-offset-2 after:absolute after:inset-0 after:content-[''] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                      >
                         {clinic.name}
                       </Link>
                     </TableCell>

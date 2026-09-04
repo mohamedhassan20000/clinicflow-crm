@@ -16,14 +16,15 @@ import type {
 const MODEL_ROUTES = {
   "staff-sonnet-bootstrap-v1": {
     alias: "staff-sonnet-bootstrap-v1",
-    transport: "vercel_ai_gateway",
+    transport: "anthropic_direct",
     provider: "anthropic",
     modelId: "anthropic/claude-sonnet-4.5",
     providerModelId: "claude-sonnet-4-5",
     allowedServingProviders: ["anthropic"],
     capabilities: ["streaming", "tool_calling", "arabic", "english"],
     privacy: {
-      zeroDataRetentionRequired: true,
+      gatewayZeroDataRetention: true,
+      directProviderRetention: "contractual_only",
       noTrainingRequired: true,
     },
     pricing: {
@@ -50,14 +51,15 @@ const MODEL_ROUTES = {
    */
   "staff-haiku-bootstrap-v1": {
     alias: "staff-haiku-bootstrap-v1",
-    transport: "vercel_ai_gateway",
+    transport: "anthropic_direct",
     provider: "anthropic",
     modelId: "anthropic/claude-haiku-4.5",
     providerModelId: "claude-haiku-4-5",
     allowedServingProviders: ["anthropic"],
     capabilities: ["streaming", "tool_calling", "arabic", "english"],
     privacy: {
-      zeroDataRetentionRequired: true,
+      gatewayZeroDataRetention: true,
+      directProviderRetention: "contractual_only",
       noTrainingRequired: true,
     },
     pricing: {
@@ -76,14 +78,15 @@ const MODEL_ROUTES = {
   },
   "patient-haiku-bootstrap-v1": {
     alias: "patient-haiku-bootstrap-v1",
-    transport: "vercel_ai_gateway",
+    transport: "anthropic_direct",
     provider: "anthropic",
     modelId: "anthropic/claude-haiku-4.5",
     providerModelId: "claude-haiku-4-5",
     allowedServingProviders: ["anthropic"],
     capabilities: ["streaming", "tool_calling", "arabic", "english"],
     privacy: {
-      zeroDataRetentionRequired: true,
+      gatewayZeroDataRetention: true,
+      directProviderRetention: "contractual_only",
       noTrainingRequired: true,
     },
     pricing: {
@@ -102,6 +105,17 @@ const MODEL_ROUTES = {
   },
 } as const satisfies Record<string, CertifiedModelRoute>;
 
+/**
+ * P12 privacy-policy versions.
+ *
+ * The `-zdr-` names were retired rather than kept, because on the direct
+ * Anthropic transport there is no zero-data-retention request flag to set — the
+ * old name described a Vercel Gateway option as if it were a property of the
+ * turn. The version string is a ledger label, and the posture it labels actually
+ * changed, so it takes a new value. See
+ * `docs/reviews/AI_PROVIDER_DIRECT_ANTHROPIC.md` for what is enforced in code
+ * and what is contractual.
+ */
 const STAFF_POLICY_BASE = {
   version: "p45b-staff-provider-policy-v1",
   primaryModelAlias: "staff-sonnet-bootstrap-v1",
@@ -111,19 +125,38 @@ const STAFF_POLICY_BASE = {
   maxOutputTokens: 1_500,
   maxSteps: 8,
   temperature: 0.2,
-  privacyPolicyVersion: "clinical-zdr-no-training-v1",
+  privacyPolicyVersion: "clinical-direct-anthropic-no-training-v2",
 } as const;
 
 const TASK_POLICIES = {
+  /**
+   * The clinical class was the one certified staff route with no step headroom.
+   * The study measured its representative task (T2: resolve a patient, read
+   * appointments, read prescriptions, optionally read notes, then preview a
+   * follow-up) at 5–6 steps against a budget of 8 — so a single clarification
+   * or one mis-emitted filter exhausted the turn. 12 restores roughly one
+   * recovery cycle of margin and nothing more.
+   *
+   * Raised **here only**. The administrative (20), operational (20), composite
+   * (25) and help (4) classes are unchanged: none of them was measured tight,
+   * and a global raise would buy an unproductive model more budget to spend.
+   * The two loop guards in `lib/ai/staff-loop-guard.ts` bound what the extra
+   * steps can be spent on.
+   */
   staff_clinical_summary: {
     ...STAFF_POLICY_BASE,
+    version: "p7s-staff-clinical-summary-policy-v2",
     task: "staff_clinical_summary",
     allowedPersonas: ["doctor"],
+    maxSteps: 12,
   },
   staff_administrative: {
     ...STAFF_POLICY_BASE,
+    version: "phase4-staff-administrative-policy-v2",
     task: "staff_administrative",
     allowedPersonas: ["administrative_staff"],
+    maxInputTokensPerStep: 192_000,
+    maxSteps: 20,
   },
   /**
    * P4.6A operational query class. Same certified route and privacy policy as
@@ -133,11 +166,12 @@ const TASK_POLICIES = {
    */
   staff_operational_query: {
     ...STAFF_POLICY_BASE,
-    version: "p46a-staff-operational-policy-v1",
+    version: "phase4-staff-operational-policy-v2",
     task: "staff_operational_query",
     allowedPersonas: ["administrative_staff"],
     maxOutputTokens: 1_200,
-    maxSteps: 6,
+    maxInputTokensPerStep: 192_000,
+    maxSteps: 20,
   },
   /**
    * P4.7A help/guidance class.
@@ -165,19 +199,16 @@ const TASK_POLICIES = {
     maxOutputTokens: 700,
     maxSteps: 4,
     temperature: 0.2,
-    privacyPolicyVersion: "clinical-zdr-no-training-v1",
+    privacyPolicyVersion: "clinical-direct-anthropic-no-training-v2",
   },
-  staff_workflow: {
+  staff_composite: {
     ...STAFF_POLICY_BASE,
-    task: "staff_workflow",
-    version: "p411a-staff-workflow-policy-v1",
+    task: "staff_composite",
+    version: "phase4-staff-composite-policy-v2",
     allowedPersonas: ["doctor", "administrative_staff"],
-    // One planning turn, one orchestration-tool call, and one final response.
-    // Nested registry tools execute server-side and do not create extra model
-    // steps or bypass the provider reservation made for this task class.
-    maxInputTokensPerStep: 32_000,
-    maxOutputTokens: 1_200,
-    maxSteps: 3,
+    maxInputTokensPerStep: 192_000,
+    maxOutputTokens: 1_500,
+    maxSteps: 25,
   },
   patient_booking: {
     task: "patient_booking",
@@ -190,7 +221,7 @@ const TASK_POLICIES = {
     maxOutputTokens: 800,
     maxSteps: 6,
     temperature: 0.2,
-    privacyPolicyVersion: "patient-zdr-no-training-v1",
+    privacyPolicyVersion: "patient-direct-anthropic-no-training-v2",
   },
   patient_faq: {
     task: "patient_faq",
@@ -203,7 +234,7 @@ const TASK_POLICIES = {
     maxOutputTokens: 600,
     maxSteps: 4,
     temperature: 0.2,
-    privacyPolicyVersion: "patient-zdr-no-training-v1",
+    privacyPolicyVersion: "patient-direct-anthropic-no-training-v2",
   },
 } as const satisfies Record<AiTaskClass, CertifiedTaskPolicy>;
 
@@ -244,7 +275,7 @@ export function getCertifiedModelRoute(
       : policy.task === "staff_clinical_summary" ||
           policy.task === "staff_administrative" ||
           policy.task === "staff_operational_query" ||
-          policy.task === "staff_workflow"
+          policy.task === "staff_composite"
         ? process.env.AI_MODEL_DOCTOR?.trim()
         : process.env.AI_MODEL_PATIENT?.trim();
   const alias = legacyOverride

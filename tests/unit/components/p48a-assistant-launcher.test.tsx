@@ -104,7 +104,7 @@ describe("P4.8A reusable AssistantLauncher", () => {
       "staff",
       { type: "staff" },
       "Staff assistant",
-      /cannot change staff accounts/,
+      /exact review, current-password reauthentication/,
     ],
     [
       "departments",

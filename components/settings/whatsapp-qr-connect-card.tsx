@@ -71,6 +71,10 @@ const ERROR_KEYS: Record<LinkedDeviceErrorCode, string> = {
   unavailable: "waQrErrorUnavailable",
   pairing_failed: "waQrErrorPairingFailed",
   logged_out: "waQrErrorLoggedOut",
+  // A release-ordering fault, not a retryable one: the Regenerate button below
+  // will keep being offered, but the sentence has to tell the admin that the
+  // service itself is what needs to change.
+  worker_outdated: "waQrErrorWorkerOutdated",
   unknown: "waQrErrorUnknown",
 };
 
@@ -248,6 +252,16 @@ export function WhatsAppQrConnectCard({
               )}
             </ol>
           )}
+
+          {/* H4: said before the code is generated, not after. Linking copies
+              existing conversations off a personal handset, and a clinic has to
+              know exactly which ones before they scan. */}
+          {!connected && !ownedElsewhere ? (
+            <div className="rounded-lg border bg-muted/30 p-4 text-sm">
+              <p className="font-medium">{t("waHistoryPrivacyTitle")}</p>
+              <p className="mt-1 text-muted-foreground">{t("waHistoryPrivacyBody")}</p>
+            </div>
+          ) : null}
 
           <div className="flex flex-wrap items-center gap-3">
             {canAct && (connected || canStart) ? (

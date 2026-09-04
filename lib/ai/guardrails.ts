@@ -29,6 +29,17 @@ const INJECTION_PATTERNS: RegExp[] = [
   /system prompt/i,
   /reveal (your |the )?(system )?(prompt|instructions)/i,
   /developer mode/i,
+  // --- Phase 7: confirmation-bypass phrasing -------------------------------
+  // The preview→confirm pipeline is the control that keeps a compromised model
+  // from writing, so "you already approved this, skip the card" is a distinct
+  // attack shape from a plain instruction override and was previously unflagged.
+  // Telemetry only, as above: the actual control is that the confirm token is
+  // server-minted, single-use, and bound to actor, conversation, action and
+  // arguments — text cannot produce one.
+  /\b(skip|bypass|without|no need for)\b.{0,40}\b(confirmation|confirm (card|button|step)|preview)\b/i,
+  /\bconfirm_token\b/i,
+  /(تخط|تجاوز|بدون|دون)\s+.{0,24}(التأكيد|تأكيد|المعاينة|بطاقة التأكيد)/,
+  /رمز التأكيد/,
   // --- Modern Standard Arabic ---
   /تجاهل (كل )?(التعليمات|الأوامر|القواعد)/,
   /تصرف كأنك/,

@@ -49,18 +49,16 @@ beforeEach(() => {
   mocks.resolveSession.mockResolvedValue({
     context: { type: "dashboard" },
     access: { state: "available", remaining: 19, limit: 20 },
-    conversation: {
-      id: "00000000-0000-4000-8000-000000000010",
-      patientId: null,
-      title: null,
-      messages: [{
-        id: "assistant-1",
-        role: "assistant",
-        parts: [{ type: "text", text: "Recent context" }],
-      }],
-      historyTruncated: true,
+    seededActiveContext: {
+      patient: {
+        entity_type: "patient",
+        entity_id: "00000000-0000-4000-8000-000000000011",
+        display_label: "Seeded Patient",
+        set_at: "2026-08-16T00:00:00.000Z",
+        set_by: "page_context",
+      },
     },
-    capabilities: { toolNames: ["list_appointments"], items: [] },
+    capabilities: { toolNames: ["query_resource"], items: [] },
   });
 });
 
@@ -163,27 +161,46 @@ describe("P4.8 deferred launcher session route", () => {
     });
   });
 
-  it("returns no-store history and capabilities only after authenticated resolution", async () => {
+  // Post-plan completion, change 3: the launcher opens a *new* conversation
+  // seeded with the server-derived context of the record on screen, instead of
+  // silently resuming whatever conversation happened to be most recent. Past
+  // conversations are reached from the shared history panel inside the sheet.
+  it("returns a fresh seeded session and capabilities only after authenticated resolution", async () => {
     const response = await POST(request({ context: { type: "dashboard" } }));
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("private, no-store");
-    await expect(response.json()).resolves.toEqual({
-      initialConversationId: "00000000-0000-4000-8000-000000000010",
-      initialActiveContext: {},
-      initialMessages: [{
-        id: "assistant-1",
-        role: "assistant",
-        parts: [{ type: "text", text: "Recent context" }],
-      }],
-      historyTruncated: true,
+    const payload = (await response.json()) as Record<string, unknown>;
+    expect(payload).toMatchObject({
+      initialMessages: [],
+      historyTruncated: false,
       remaining: 19,
-      capabilities: { toolNames: ["list_appointments"], items: [] },
+      capabilities: { toolNames: ["query_resource"], items: [] },
+      initialActiveContext: {
+        patient: expect.objectContaining({
+          entity_id: "00000000-0000-4000-8000-000000000011",
+          set_by: "page_context",
+        }),
+      },
     });
+    expect(payload.initialConversationId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    );
     expect(mocks.resolveSession).toHaveBeenCalledWith({
       user: USER,
       context: { type: "dashboard" },
       locale: "en",
     });
+  });
+
+  it("mints a distinct conversation id on every launcher open", async () => {
+    const ids = await Promise.all(
+      [0, 1].map(async () =>
+        ((await (await POST(request({ context: { type: "dashboard" } }))).json()) as {
+          initialConversationId: string;
+        }).initialConversationId,
+      ),
+    );
+    expect(new Set(ids).size).toBe(2);
   });
 
   it("fails closed when persistence or the repeated launcher gate is unavailable", async () => {

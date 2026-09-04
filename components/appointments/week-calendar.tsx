@@ -1,10 +1,12 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { ChevronLeft, ChevronRight, CalendarPlus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/appointments/status-badge";
 import { AppointmentActions } from "@/components/appointments/appointment-actions";
 import { softDeleteAppointment, restoreAppointment } from "@/actions/appointments";
@@ -33,6 +35,9 @@ import {
   calendarDayOfWeek,
   toCalendarEventPlacement,
 } from "@/lib/appointments/calendar";
+import { isOverduePending } from "@/lib/appointments/overdue-pending";
+import { CALENDAR_APPOINTMENT_PARAM } from "@/lib/navigation/ai-review-targets";
+import { cn } from "@/lib/utils";
 
 type Appointment = AppointmentForDetail;
 
@@ -366,8 +371,39 @@ export function AppointmentCard({
   const [isDeleting, startDelete] = useTransition();
   const [isRestoring, setIsRestoring] = useState(false);
   const isRestoringRef = useRef(false);
+  const searchParams = useSearchParams();
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  // One auto-open per arrival, for the same reason the intake table latches its
+  // scroll: any later render that touches the search params would otherwise
+  // reopen a dialog the staff member has just closed.
+  const deepLinkedRef = useRef(false);
+
+  /**
+   * P10 — arriving from the dashboard's "AI appointments awaiting confirmation"
+   * card, which links straight to one appointment.
+   *
+   * The card is rendered by the calendar for the day the link pins, so by the
+   * time this runs the target either exists on screen or is not in range at
+   * all — in which case nothing happens, which is the correct outcome for a
+   * stale link to an appointment that has since been moved or confirmed.
+   */
+  useEffect(() => {
+    if (deepLinkedRef.current) return;
+    if (searchParams.get(CALENDAR_APPOINTMENT_PARAM) !== appt.id) return;
+    deepLinkedRef.current = true;
+    // Opened on the next frame rather than inside the effect: the card has to
+    // be scrolled into view first, and a dialog that mounts in the same commit
+    // as the scroll cancels it. The frame boundary also keeps this out of the
+    // render pass that scheduled it.
+    const frame = requestAnimationFrame(() => {
+      cardRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      setDetailOpen(true);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [appt.id, searchParams]);
 
   const time = formatTime(appt.scheduled_at);
+  const overduePending = isOverduePending(appt);
 
   const deptColor = appt.departments?.color ?? "#64748b";
   const deptName = appt.departments?.name ?? t("general");
@@ -410,6 +446,7 @@ export function AppointmentCard({
   return (
     <>
       <div
+        ref={cardRef}
         role="button"
         tabIndex={0}
         aria-pressed={detailOpen}
@@ -417,7 +454,11 @@ export function AppointmentCard({
         data-appointment-id={appt.id}
         onClick={() => setDetailOpen(true)}
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setDetailOpen(true); }}
-        className="group relative h-full w-full cursor-pointer overflow-hidden rounded-md border text-xs transition-[filter,box-shadow] hover:brightness-[1.04] hover:ring-1 hover:ring-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary aria-pressed:ring-2 aria-pressed:ring-primary"
+        data-overdue-pending={overduePending ? "true" : undefined}
+        className={cn(
+          "group relative h-full w-full cursor-pointer overflow-hidden rounded-md border text-xs transition-[filter,box-shadow] hover:brightness-[1.04] hover:ring-1 hover:ring-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary aria-pressed:ring-2 aria-pressed:ring-primary",
+          overduePending && "ring-1 ring-amber-500/70",
+        )}
         style={{
           borderColor: `color-mix(in oklab, ${deptColor} 35%, transparent)`,
           backgroundColor: `color-mix(in oklab, ${deptColor} 8%, var(--card))`,
@@ -470,7 +511,13 @@ export function AppointmentCard({
 
           {compact && (
             <div className="flex flex-col gap-0.5 min-w-0">
-              <StatusBadge status={appt.status} />
+              {overduePending ? (
+                <Badge variant="outline" className="self-start border-amber-500/50 bg-amber-500/10 text-[10px] text-amber-800 dark:text-amber-200">
+                  {t("overduePending")}
+                </Badge>
+              ) : (
+                <StatusBadge status={appt.status} />
+              )}
               <span className="truncate text-[10px] text-foreground/70">{time}</span>
               {appt.profiles?.full_name && (
                 <span className="truncate text-[10px] text-foreground/70">
@@ -491,7 +538,15 @@ export function AppointmentCard({
             </div>
           )}
 
-          {!compact && <StatusBadge status={appt.status} />}
+          {!compact && (
+            overduePending ? (
+              <Badge variant="outline" className="border-amber-500/50 bg-amber-500/10 text-amber-800 dark:text-amber-200">
+                {t("overduePending")}
+              </Badge>
+            ) : (
+              <StatusBadge status={appt.status} />
+            )
+          )}
 
           {(canEdit || currentUserRole === "doctor") && !compact && (
             <div className="pt-0.5" onClick={(e) => e.stopPropagation()}>
@@ -505,6 +560,7 @@ export function AppointmentCard({
                 currentUserId={currentUserId}
                 currentUserRole={currentUserRole}
                 hasInsurance={Boolean(appt.insurance_provider_id)}
+                overduePending={overduePending}
               />
             </div>
           )}

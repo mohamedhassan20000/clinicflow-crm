@@ -11,6 +11,11 @@ import {
   type PageSlug,
 } from "@/lib/page-permissions";
 import type { Database } from "@/types/database";
+import { domainFailureToActionResult } from "@/actions/_domain";
+import {
+  savePagePermissionsMutation,
+  setPagePermissionMutation,
+} from "@/lib/settings/mutations";
 
 type UserRole = Database["public"]["Enums"]["user_role"];
 
@@ -219,55 +224,12 @@ export async function updateUserPageVisibility(
   isVisible: boolean,
 ): Promise<PagePermissionResult> {
   const user = await requireMutationRole("admin");
-  if (
-    user.role === "admin" &&
-    !(await isPrimaryClinicAdmin(user.id, user.clinicId))
-  ) {
-    return { error: await actionError("page-permissions.onlyThePrimaryClinicAdminCanCustomizePageVisibility") };
-  }
-  if (pageSlug === "dashboard") return { error: await actionError("page-permissions.dashboardCannotBeHidden") };
-
-  const adminClient = createClinicScopedAdminClient(user.clinicId);
-  const { data: target, error: targetError } = await adminClient
-    .from("profiles")
-    .select("id, role, clinic_id")
-    .eq("id", targetUserId)
-    .eq("clinic_id", user.clinicId)
-    .single();
-
-  if (targetError || !target) return { error: await actionError("page-permissions.staffMemberNotFound") };
-  if (user.role === "manager" && target.role === "admin") {
-    return { error: await actionError("page-permissions.onlyAdminsCanCustomizeAdminUsers") };
-  }
-  if (target.id === await getPrimaryClinicAdminId(user.clinicId)) {
-    return { error: await actionError("page-permissions.thePrimaryClinicAdminCannotBeCustomized") };
-  }
-  if (!getRolePageSlugs(target.role).includes(pageSlug)) {
-    return { error: await actionError("page-permissions.thisPageIsNotAvailableForThatUserSRole") };
-  }
-
-  const { error } = await adminClient.from("user_page_permissions").upsert(
-    {
-      user_id: target.id,
-      clinic_id: target.clinic_id,
-      page_slug: pageSlug,
-      is_visible: isVisible,
-    },
-    { onConflict: "user_id,page_slug" },
-  );
-
-  if (isMissingPermissionsTable(error)) {
-    return updateUserPageVisibilityFallback(
-      target.id,
-      target.clinic_id,
-      pageSlug,
-      isVisible,
-    );
-  }
-  if (error) return { error: await actionError("page-permissions.weCouldNotCompleteThisRequestPleaseTryAgain") };
-
-  revalidatePath("/settings/customize");
-  return { success: true };
+  const result = await setPagePermissionMutation(user, {
+    target_user_id: targetUserId,
+    page_slug: pageSlug,
+    is_visible: isVisible,
+  });
+  return result.ok ? { success: true } : domainFailureToActionResult(result);
 }
 
 export async function saveUserPageVisibilityChanges(
@@ -275,60 +237,17 @@ export async function saveUserPageVisibilityChanges(
   changes: PendingPageVisibilityChange[],
 ): Promise<PagePermissionResult> {
   const user = await requireMutationRole("admin");
-  if (
-    user.role === "admin" &&
-    !(await isPrimaryClinicAdmin(user.id, user.clinicId))
-  ) {
-    return { error: await actionError("page-permissions.onlyThePrimaryClinicAdminCanCustomizePageVisibility") };
-  }
-  const primaryAdminId = await getPrimaryClinicAdminId(user.clinicId);
-  if (targetUserId === primaryAdminId) {
-    return { error: await actionError("page-permissions.thePrimaryClinicAdminCannotBeCustomized") };
-  }
-
-  const adminClient = createClinicScopedAdminClient(user.clinicId);
-  const { data: target, error: targetError } = await adminClient
-    .from("profiles")
-    .select("id, role, clinic_id")
-    .eq("id", targetUserId)
-    .eq("clinic_id", user.clinicId)
-    .single();
-
-  if (targetError || !target) return { error: await actionError("page-permissions.staffMemberNotFound") };
-  if (user.role === "manager" && target.role === "admin") {
-    return { error: await actionError("page-permissions.onlyAdminsCanCustomizeAdminUsers") };
-  }
-
-  const roleSlugs = new Set(getRolePageSlugs(target.role));
-  const rows = changes
-    .filter((change) => change.slug !== "dashboard" && roleSlugs.has(change.slug))
-    .map((change) => ({
-      user_id: target.id,
-      clinic_id: target.clinic_id,
+  // Batch core, not a loop over the per-item core: the per-item core refuses
+  // `dashboard` and role-invalid slugs, which this saver has always dropped
+  // silently. Looping it wrote a prefix of the list and then reported failure.
+  const result = await savePagePermissionsMutation(user, {
+    target_user_id: targetUserId,
+    changes: changes.map((change) => ({
       page_slug: change.slug,
       is_visible: change.isVisible,
-    }));
-
-  if (rows.length === 0) return { success: true };
-
-  const { error } = await adminClient
-    .from("user_page_permissions")
-    .upsert(rows, { onConflict: "user_id,page_slug" });
-
-  if (isMissingPermissionsTable(error)) {
-    return saveUserPageVisibilityChangesFallback(
-      target.id,
-      target.clinic_id,
-      rows.map((row) => ({
-        slug: row.page_slug,
-        isVisible: row.is_visible,
-      })),
-    );
-  }
-  if (error) return { error: await actionError("page-permissions.weCouldNotCompleteThisRequestPleaseTryAgain") };
-
-  revalidatePath("/settings/customize");
-  return { success: true };
+    })),
+  });
+  return result.ok ? { success: true } : domainFailureToActionResult(result);
 }
 
 export async function resetUserPageVisibilityToRoleDefaults(
@@ -382,44 +301,6 @@ export async function resetUserPageVisibilityToRoleDefaults(
   if (ensured.error) return ensured;
 
   revalidatePath("/settings/staff");
-  revalidatePath("/settings/customize");
-  return { success: true };
-}
-
-async function updateUserPageVisibilityFallback(
-  userId: string,
-  clinicId: string,
-  pageSlug: PageSlug,
-  isVisible: boolean,
-): Promise<PagePermissionResult> {
-  return saveUserPageVisibilityChangesFallback(userId, clinicId, [
-    { slug: pageSlug, isVisible },
-  ]);
-}
-
-async function saveUserPageVisibilityChangesFallback(
-  userId: string,
-  clinicId: string,
-  changes: PendingPageVisibilityChange[],
-): Promise<PagePermissionResult> {
-  const adminClient = createClinicScopedAdminClient(clinicId);
-
-  for (const change of changes) {
-    const { error: upsertError } = await adminClient
-      .from("user_customizations")
-      .upsert(
-        {
-          profile_id: userId,
-          clinic_id: clinicId,
-          feature: "_visible",
-          page: change.slug,
-          access: change.isVisible ? "read_edit" : "hidden",
-        },
-        { onConflict: "profile_id,page,feature" },
-      );
-    if (upsertError) return { error: await actionError("page-permissions.weCouldNotCompleteThisRequestPleaseTryAgain") };
-  }
-
   revalidatePath("/settings/customize");
   return { success: true };
 }

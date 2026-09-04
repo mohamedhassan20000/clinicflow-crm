@@ -10,7 +10,8 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("server-only", () => ({}));
-vi.mock("@/lib/documents/assets", () => ({
+vi.mock("@/lib/documents/assets", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/documents/assets")>(),
   inlineClinicLogo: mocks.inlineClinicLogo,
 }));
 vi.mock("@/lib/supabase/server", () => ({
@@ -89,7 +90,7 @@ describe("Patient File profile photo resolution", () => {
     const params = { documentType: "PATIENT_FILE" as const, patientId: PATIENT_ID };
 
     const preview = await resolveRosterProfileDocumentSnapshot(user, params);
-    const issuance = await resolveRosterProfileDocumentSnapshot(user, params, { inlineAssets: true });
+    const issuance = await resolveRosterProfileDocumentSnapshot(user, params);
 
     expect(preview.data).toMatchObject({
       kind: "patient-file", imageSrc,

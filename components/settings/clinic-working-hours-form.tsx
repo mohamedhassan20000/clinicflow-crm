@@ -88,7 +88,7 @@ export function ClinicWorkingHoursForm({ defaultValues, readOnly = false }: Prop
     <div className="rounded-xl border border-border/50 bg-card p-6">
       <h3 className="mb-1 text-sm font-semibold">{t("workingHours")}</h3>
       <p className="mb-5 text-xs text-muted-foreground">
-        {t("setWhichDaysTheClinicIs")}
+        {t("clinicWorkingHoursDescription")}
       </p>
 
       {state?.error && (
@@ -129,9 +129,6 @@ export function ClinicWorkingHoursForm({ defaultValues, readOnly = false }: Prop
                 <div className="mt-3 space-y-2 ps-7">
                   {day.shifts.map((shift, idx) => (
                     <div key={idx} className="flex items-center gap-2">
-                      <span className="w-5 text-center text-xs text-muted-foreground">
-                        {idx + 1}.
-                      </span>
                       <TimePicker
                         value={shift.shift_start}
                         disabled={readOnly || isPending}
@@ -155,7 +152,7 @@ export function ClinicWorkingHoursForm({ defaultValues, readOnly = false }: Prop
                           onClick={() => removeShift(dow, idx)}
                           disabled={isPending}
                           className="text-muted-foreground/40 hover:text-destructive transition-colors disabled:opacity-50"
-                          aria-label={t("removeShift")}
+                          aria-label={t("removeOpeningInterval")}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
@@ -171,7 +168,7 @@ export function ClinicWorkingHoursForm({ defaultValues, readOnly = false }: Prop
                       className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
                     >
                       <Plus className="h-3 w-3" />
-                      {t("addShift")}
+                      {t("addOpeningInterval")}
                     </button>
                   )}
                 </div>

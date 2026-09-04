@@ -41,14 +41,16 @@ describe("P7-6 clinical document contract", () => {
 
   it("derives idempotency from the persisted record, snapshots credential assets, and blocks controlled medicine", () => {
     const action = readFileSync(join(process.cwd(), "actions/clinical-documents.ts"), "utf8");
+    const core = readFileSync(join(process.cwd(), "lib/documents/mutations.ts"), "utf8");
     const resolver = readFileSync(join(process.cwd(), "lib/documents/resolvers/clinical-document.ts"), "utf8");
-    expect(action).toContain("clinical:${parsed.data.documentType.toLowerCase()}:${parsed.data.recordId}:${parsed.data.locale}");
-    expect(action).toContain("item.isControlled");
+    expect(core).toContain("clinical:${code.toLowerCase()}:${parsed.data.recordId}:${input.locale}");
+    expect(core).toContain("item.isControlled");
+    expect(core).toContain('controlledMedicineBlocked');
     expect(action).toContain('controlledMedicineBlocked');
     expect(resolver).toContain('options.allowDraft ? ["draft", "finalized"] : ["finalized"]');
     expect(action).toContain("ensureClinicalRecordFinalizedForIssue");
-    expect(action).toContain("allowDraft: true");
-    expect(action).toContain("render: getDocumentPdfRenderer(parsed.data.documentType)");
+    expect(core).toContain("allowDraft: true");
+    expect(core).toContain("render: getDocumentPdfRenderer(code)");
     expect(resolver).toContain("inlineClinicianSignature");
     expect(resolver).not.toContain("medical_notes");
   });

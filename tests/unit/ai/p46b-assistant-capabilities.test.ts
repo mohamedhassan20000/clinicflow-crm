@@ -34,6 +34,7 @@ function user(role: Role) {
 
 const PRO_AI_FEATURES = {
   ai_assistant: true,
+  "ai.read_clinical": true,
   "ai.staff_assistant": true,
   "ai.staff_analytics": true,
   "ai.financial_insights": true,
@@ -210,7 +211,7 @@ describe("P4.6B capability resolution", () => {
     const { capabilities } = await loadCapabilities(user("receptionist"));
 
     expect(capabilities.operational).toBe(true);
-    expect(capabilities.toolNames).toContain("list_appointments");
+    expect(capabilities.toolNames).toContain("query_resource");
     expect(capabilities.toolNames).toContain("list_pending_followups");
     // The clinic-wide attribute distributions are a different privacy class and
     // are not mounted for receptionists (P4.6A matrix deviation 3).
@@ -231,9 +232,9 @@ describe("P4.6B capability resolution", () => {
     const { capabilities } = await loadCapabilities(user("doctor"));
 
     expect(capabilities.clinicAnalytics).toBe(false);
-    expect(capabilities.operational).toBe(false);
+    expect(capabilities.operational).toBe(true);
     expect(capabilities.financial).toBe("not_applicable");
-    expect(capabilities.toolNames).toContain("get_patient_summary");
+    expect(capabilities.toolNames).toContain("get_record");
   });
 
   it("drops the whole analytics surface when the clinic has no ai.staff_analytics", async () => {
@@ -242,7 +243,7 @@ describe("P4.6B capability resolution", () => {
     });
 
     expect(capabilities.clinicAnalytics).toBe(false);
-    expect(capabilities.operational).toBe(false);
+    expect(capabilities.operational).toBe(true);
     expect(capabilities.financial).toBe("not_entitled");
     // The P4 tools survive: losing analytics is not losing the assistant.
     expect(capabilities.toolNames).toContain("search_authorized_patients");

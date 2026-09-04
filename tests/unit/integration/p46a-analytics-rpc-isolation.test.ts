@@ -96,12 +96,15 @@ let adminBasic: Client;
 let adminSkew: Client;
 let adminAId = "";
 let adminBId = "";
+let adminBasicId = "";
 let managerAId = "";
 
 const ALL_CLINICS = [clinicA, clinicB, clinicBasic, clinicSkew];
 
 async function cleanup() {
   await service.from("user_ai_permissions").delete().in("clinic_id", ALL_CLINICS);
+  await service.from("ai_commercial_terms").delete().in("clinic_id", ALL_CLINICS);
+  await service.from("clinic_feature_overrides").delete().in("clinic_id", ALL_CLINICS);
   await service.from("subscriptions").delete().in("clinic_id", ALL_CLINICS);
   await service.from("patients").delete().in("clinic_id", ALL_CLINICS);
   await service.from("profiles").delete().in("clinic_id", ALL_CLINICS);
@@ -128,6 +131,7 @@ beforeAll(async () => {
   adminSkew = skew.client;
   adminAId = a.id;
   adminBId = b.id;
+  adminBasicId = basic.id;
   managerAId = m.id;
 
   await cleanup();
@@ -174,6 +178,13 @@ beforeAll(async () => {
     { id: skew.id, clinic_id: clinicSkew, full_name: "P46A Admin Skew", role: "admin" },
   ]);
   if (profiles.error) throw profiles.error;
+
+  const terms = await service.from("ai_commercial_terms").insert([
+    { clinic_id: clinicA, change_reason: "pilot", updated_by: a.id, accepted_at: new Date().toISOString() },
+    { clinic_id: clinicB, change_reason: "pilot", updated_by: b.id, accepted_at: new Date().toISOString() },
+    { clinic_id: clinicSkew, change_reason: "pilot", updated_by: skew.id, accepted_at: new Date().toISOString() },
+  ]);
+  if (terms.error) throw terms.error;
 
   // Clinic A: 6 O+ patients (above the floor) and 2 A+ (below it).
   // Clinic B: 3 patients, which must never appear in clinic A's aggregates.
@@ -769,7 +780,7 @@ describe("M1 — the per-user financial grant exists at the database boundary", 
   });
 });
 
-describe("M2 — the pro_ai entitlement exists at the database boundary", () => {
+describe("M2 — feature and terms entitlement exists at the database boundary", () => {
   const RANGE_ARGS = { p_start: RANGE.p_start, p_end: RANGE.p_end };
 
   it("refuses a basic-plan admin the clinic summary", async () => {
@@ -800,9 +811,42 @@ describe("M2 — the pro_ai entitlement exists at the database boundary", () => 
     expect(result.error?.code).toBe("42501");
   });
 
-  it("still allows a pro_ai admin everything the matrix permits", async () => {
+  it("allows an entitled admin everything the matrix permits", async () => {
     const result = await adminA.rpc("ai_get_clinic_summary", RANGE_ARGS);
     expect(result.error).toBeNull();
+  });
+
+  it("allows a Basic admin after umbrella and analytics overrides plus accepted terms", async () => {
+    const overrides = await service.from("clinic_feature_overrides").insert([
+      {
+        clinic_id: clinicBasic,
+        feature_key: "ai_assistant",
+        enabled: true,
+        updated_by: adminBasicId,
+      },
+      {
+        clinic_id: clinicBasic,
+        feature_key: "ai.staff_analytics",
+        enabled: true,
+        updated_by: adminBasicId,
+      },
+    ]);
+    if (overrides.error) throw overrides.error;
+    const terms = await service.from("ai_commercial_terms").insert({
+      clinic_id: clinicBasic,
+      change_reason: "pilot",
+      updated_by: adminBasicId,
+      accepted_at: new Date().toISOString(),
+    });
+    if (terms.error) throw terms.error;
+
+    try {
+      const result = await adminBasic.rpc("ai_get_clinic_summary", RANGE_ARGS);
+      expect(result.error).toBeNull();
+    } finally {
+      await service.from("ai_commercial_terms").delete().eq("clinic_id", clinicBasic);
+      await service.from("clinic_feature_overrides").delete().eq("clinic_id", clinicBasic);
+    }
   });
 });
 

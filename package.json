@@ -15,6 +15,7 @@
     "rtl:codemod": "node scripts/rtl-codemod.mjs",
     "marketing:capture": "node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/capture-marketing-screenshots.ts",
     "marketing:seed": "node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/seed-marketing-demo.ts",
+    "dev:seed-clinic": "node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/seed-dev-clinic.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --exclude \"tests/unit/integration/**\"",
     "test:watch": "vitest",
@@ -26,8 +27,10 @@
     "whatsapp:worker:dev": "cd services/whatsapp-worker && npm run dev",
     "whatsapp:worker:build": "cd services/whatsapp-worker && npm run build",
     "whatsapp:worker:typecheck": "cd services/whatsapp-worker && npm run typecheck",
+    "whatsapp:worker:test": "cd services/whatsapp-worker && npm test",
     "test:integration": "vitest run tests/unit/integration --no-file-parallelism",
     "test:ai-adversarial": "vitest run tests/unit/ai/p6a-injection-suite.test.ts tests/unit/ai/p6a-eval-set.test.ts",
+    "test:ai-staff-gate": "vitest run tests/unit/ai/staff-eval-gate.test.ts tests/unit/ai/staff-tool-memory.test.ts tests/unit/ai/staff-tool-call-repair.test.ts",
     "test:ops": "vitest run tests/unit/lib/p6b-messaging-cost.test.ts tests/unit/lib/p6b-ops-alerts.test.ts tests/unit/lib/p6b-alert-scan.test.ts",
     "load:test": "node scripts/load-test.mjs",
     "test:all": "vitest run"

@@ -36,9 +36,9 @@ const snapshots: Record<P76ClinicalDocumentCode, ClinicalDocumentSnapshot> = {
     returnDate: "2026-08-07" } },
 };
 const orders: Record<P76ClinicalDocumentCode, string[]> = {
-  PRESCRIPTION: ["field-grid", "section-header", "data-table", "notes-callout", "verification-block", "signature-block"],
-  LAB_REQUEST: ["field-grid", "section-header", "field-grid", "checklist-panel", "notes-callout", "notes-callout", "verification-block", "signature-block"],
-  SICK_LEAVE_CERTIFICATE: ["field-grid", "section-header", "field-grid", "certifying-prose", "notes-callout", "verification-block", "signature-block"],
+  PRESCRIPTION: ["identity-hero", "field-grid", "section-header", "data-table", "notes-callout", "verification-block", "signature-block"],
+  LAB_REQUEST: ["identity-hero", "field-grid", "section-header", "field-grid", "checklist-panel", "notes-callout", "notes-callout", "verification-block", "signature-block"],
+  SICK_LEAVE_CERTIFICATE: ["identity-hero", "field-grid", "section-header", "field-grid", "certifying-prose", "notes-callout", "verification-block", "signature-block"],
 };
 
 describe("P7-6 clinical documents", () => {
@@ -50,6 +50,10 @@ describe("P7-6 clinical documents", () => {
       .map((node) => node.getAttribute("data-testid"))).toEqual(orders[type]);
     expect(container.querySelector(".cf-doc-logo")).toHaveAttribute("src", snapshots[type].branding.logoSrc);
     expect(container.querySelector(".cf-doc-qr")).toHaveAttribute("src", "data:image/png;base64,iVBORw0KGgo=");
+    // The clinic logo stays; no person photo appears on a clinical document.
+    expect(container.querySelector(".cf-doc-avatar-foreground")).toBeNull();
+    expect(container.querySelector(".cf-doc-avatar-background")).toBeNull();
+    expect(container.querySelectorAll(".cf-doc-list-avatar")).toHaveLength(0);
     expect(container).toHaveTextContent("Blank area for manual signature");
   });
 

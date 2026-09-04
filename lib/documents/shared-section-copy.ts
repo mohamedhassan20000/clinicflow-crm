@@ -3,12 +3,16 @@ import type { Locale } from "@/lib/i18n/config";
 /**
  * Locale-owned copy for the document chrome shared by every template.
  *
- * Keeping approval, signature, stamp, verification, and legal notice labels in
- * one registry prevents individual templates from assembling bilingual blocks
- * or silently falling back to the other locale.
+ * Keeping header identifier, approval, signature, stamp, verification, and
+ * legal notice labels in one registry prevents individual templates from
+ * assembling bilingual blocks or silently falling back to the other locale.
  */
 const SHARED_DOCUMENT_SECTION_COPY = {
   en: {
+    header: {
+      taxRegistrationNumber: "Tax registration number",
+      registrationNumber: "Registration / license number",
+    },
     verification: {
       genericTitle: "Verification",
       recordTitle: "Record verification",
@@ -51,6 +55,10 @@ const SHARED_DOCUMENT_SECTION_COPY = {
     },
   },
   ar: {
+    header: {
+      taxRegistrationNumber: "الرقم الضريبي",
+      registrationNumber: "رقم الترخيص / التسجيل",
+    },
     verification: {
       genericTitle: "التحقق",
       recordTitle: "التحقق من السجل",

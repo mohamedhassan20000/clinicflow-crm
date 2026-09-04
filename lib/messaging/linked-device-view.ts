@@ -34,6 +34,12 @@ export type LinkedDeviceErrorCode =
   | "pairing_failed"
   /** The number was unlinked from the phone's Linked Devices screen. */
   | "logged_out"
+  /**
+   * The pairing service is reachable but older than this application. Only ever
+   * produced by the pre-pairing handshake, never stored on a session row: it
+   * describes the deployment, not the clinic.
+   */
+  | "worker_outdated"
   | "unknown";
 
 export type LinkedDeviceView = {
@@ -75,6 +81,7 @@ const ERROR_CODES = new Set<LinkedDeviceErrorCode>([
   "unavailable",
   "pairing_failed",
   "logged_out",
+  "worker_outdated",
   "unknown",
 ]);
 

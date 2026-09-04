@@ -9,6 +9,7 @@ import { processMessagingWebhookEvents } from "@/lib/messaging/webhooks";
 import {
   linkedDeviceWhatsAppProvider,
   parseLinkedDeviceCallback,
+  readLinkedDeviceCallbackAccountId,
   readLinkedDeviceCallbackClinicId,
 } from "@/lib/messaging/whatsapp-linked-device";
 import { createClinicScopedAdminClient } from "@/lib/supabase/admin";
@@ -41,34 +42,55 @@ export async function POST(request: Request) {
 
   const body = await request.text();
   const clinicId = readLinkedDeviceCallbackClinicId(body);
-  if (!clinicId) return unauthorizedWebhookResponse();
+  const callbackAccountId = readLinkedDeviceCallbackAccountId(body);
+  if (!clinicId || !callbackAccountId) return unauthorizedWebhookResponse();
 
-  const channel = await createClinicScopedAdminClient(clinicId)
-    .from("clinic_channels")
-    .select("sender_identity, status")
-    .eq("channel", "whatsapp")
-    .eq("provider", "linked_device")
-    .maybeSingle();
-  if (channel.error) {
-    Sentry.captureException(channel.error, {
+  const client = createClinicScopedAdminClient(clinicId);
+  const [channel, session] = await Promise.all([
+    client
+      .from("clinic_channels")
+      .select("sender_identity, status")
+      .eq("channel", "whatsapp")
+      .eq("provider", "linked_device")
+      .maybeSingle(),
+    client
+      .from("whatsapp_linked_device_sessions")
+      .select("authenticated_account_id")
+      .eq("clinic_id", clinicId)
+      .maybeSingle(),
+  ]);
+  if (channel.error || session.error) {
+    Sentry.captureException(channel.error ?? session.error, {
       tags: { scope: "webhook-routing", provider: "linked_device" },
     });
     // Ask the worker to retry rather than discarding a signed event we merely
     // failed to route.
     return unavailableWebhookResponse();
   }
-  if (!channel.data || channel.data.status !== "active") {
+  if (
+    !channel.data ||
+    channel.data.status !== "active" ||
+    channel.data.sender_identity !== callbackAccountId ||
+    session.data?.authenticated_account_id !== callbackAccountId
+  ) {
     // A pairing that is not (or no longer) the clinic's active channel carries
     // no traffic. Acknowledged so the worker stops retrying.
     return NextResponse.json({ ok: true, ignored: true }, { headers: { "Cache-Control": "no-store" } });
   }
 
   try {
-    const events = parseLinkedDeviceCallback(body, channel.data.sender_identity);
+    const events = parseLinkedDeviceCallback(body, callbackAccountId);
     const summary = await processMessagingWebhookEvents({
       provider: "linked_device",
       clinicId,
-      senderIdentity: channel.data.sender_identity,
+      // The signed account, not the channel column — even though the guard
+      // above has just proved the two are equal. The equality is what makes it
+      // safe to proceed; the *identity that was signed for* is what the rest of
+      // the pipeline should be scoped by. Reading the column back here would
+      // reintroduce a second source of truth for account ownership, and the
+      // next person to relax one of those three comparisons would silently be
+      // choosing which of them wins.
+      senderIdentity: callbackAccountId,
       events,
     });
     return NextResponse.json({ ok: true, ...summary }, { headers: { "Cache-Control": "no-store" } });

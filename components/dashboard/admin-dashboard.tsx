@@ -32,6 +32,13 @@ interface AdminDashboardProps {
   upcomingAppointments: Appointment[];
   revenue: RevenueWidgetProps;
   analytics: AnalyticsSectionProps;
+  /**
+   * The AI review queues, rendered as a slot rather than imported here: they are
+   * an async server component and this dashboard is a client component. Placed
+   * directly under the schedule/confirmation row because both queues are staff
+   * actions on the same working day.
+   */
+  aiReviewQueues?: React.ReactNode;
 }
 
 function formatDate(iso: string) {
@@ -50,6 +57,7 @@ export function AdminDashboard({
   upcomingAppointments,
   revenue,
   analytics,
+  aiReviewQueues,
 }: AdminDashboardProps) {
   const t = useTranslations("dashboard");
   const { formatTime } = useClinicSettings();
@@ -203,6 +211,8 @@ export function AdminDashboard({
           </div>
         </div>
       </div>
+
+      {aiReviewQueues}
 
       {/* Analytics section */}
       <div>

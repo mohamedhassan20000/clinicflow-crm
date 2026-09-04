@@ -23,13 +23,11 @@ import { AI_FINANCIAL_INSIGHTS_PERMISSION } from "@/lib/ai/permission-keys";
 import type { PromptLocale } from "@/lib/ai/prompts/doctor";
 import {
   getStaffAssistantSurfaceAccess,
-  loadAssistantConversationForSurface,
   type StaffAssistantSurfaceAccess,
 } from "@/lib/ai/surface";
-import {
-  assertDoctorPatientContextAccess,
-  type LoadedDoctorConversation,
-} from "@/lib/ai/conversations";
+import { assertDoctorPatientContextAccess } from "@/lib/ai/conversations";
+import { applyProposals, type ActiveContext } from "@/lib/ai/conversation-context";
+import { resolvePageContextSeed } from "@/lib/ai/page-context-seed";
 import type { PageSlug } from "@/lib/page-permissions";
 import type { AuthedUser, UserRole } from "@/lib/rbac";
 import { getPageVisibilityState } from "@/lib/server-page-permissions";
@@ -182,7 +180,13 @@ export type AssistantLauncherResolution = {
 };
 
 export type AssistantLauncherSessionResolution = AssistantLauncherResolution & {
-  conversation: LoadedDoctorConversation | null;
+  /**
+   * Server-derived active context for the *new* conversation the launcher
+   * starts. Post-plan completion: a launcher no longer resumes the caller's
+   * latest conversation, so the record on screen is carried into the fresh one
+   * as ordinary `page_context` slots (see `lib/ai/page-context-seed.ts`).
+   */
+  seededActiveContext: ActiveContext;
   capabilities: AssistantCapabilities | null;
 };
 
@@ -290,6 +294,14 @@ export async function resolveAssistantLauncher(input: {
  * Sheet. The lightweight launcher gate is repeated here because the browser
  * request is a new authorization boundary and permissions may have changed
  * since the page rendered.
+ *
+ * Post-plan completion: this used to return the caller's *latest* conversation,
+ * which meant a contextual launcher silently continued whatever chat happened to
+ * be most recent — including, for every non-patient area, the very same
+ * conversation `/assistant` was showing. It now starts a fresh conversation
+ * seeded with the server-derived context of the record on screen, and the
+ * shortcut UI reaches past conversations through the shared history actions
+ * rather than by being implicitly pointed at one.
  */
 export async function resolveAssistantLauncherSession(input: {
   user: AuthedUser;
@@ -300,26 +312,32 @@ export async function resolveAssistantLauncherSession(input: {
   if (!launcher) return null;
 
   try {
+    const supabase = await createClient();
     const patientId = patientIdFromAssistantPageContext(launcher.context);
     if (patientId) {
       await assertDoctorPatientContextAccess({
-        supabase: await createClient(),
+        supabase,
         user: input.user,
         patientId,
       });
     }
 
-    const [loaded, capabilities] = await Promise.all([
-      loadAssistantConversationForSurface({ user: input.user, patientId }),
+    const locale = input.locale ?? "en";
+    const [seed, capabilities] = await Promise.all([
+      resolvePageContextSeed({
+        supabase,
+        user: input.user,
+        context: launcher.context,
+        locale,
+      }),
       launcher.context.type === "patient"
         ? Promise.resolve(null)
-        : resolveAssistantCapabilities(input.user, input.locale ?? "en"),
+        : resolveAssistantCapabilities(input.user, locale),
     ]);
-    if (!loaded.persistenceAvailable) return null;
 
     return {
       ...launcher,
-      conversation: loaded.conversation,
+      seededActiveContext: applyProposals({}, seed),
       capabilities,
     };
   } catch (error) {

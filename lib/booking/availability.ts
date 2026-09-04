@@ -87,6 +87,23 @@ function intersectWindows(
     .filter((window) => window.end > window.start);
 }
 
+/** Collapse overlapping or touching windows into a minimal disjoint set. */
+function mergeMinuteWindows(windows: MinuteWindow[]): MinuteWindow[] {
+  const ordered = windows
+    .filter((window) => window.end > window.start)
+    .sort((left, right) => left.start - right.start);
+  const merged: MinuteWindow[] = [];
+  for (const window of ordered) {
+    const last = merged.at(-1);
+    if (last && window.start <= last.end) {
+      last.end = Math.max(last.end, window.end);
+      continue;
+    }
+    merged.push({ ...window });
+  }
+  return merged;
+}
+
 function toWorkingWindows(windows: MinuteWindow[]): WorkingWindow[] {
   return windows.map((window) => ({
     start: minutesToTime(window.start),
@@ -231,8 +248,11 @@ export async function computeAvailability(params: {
     );
   }
 
-  const schedule = schedules.find((row) => row.day_of_week === dayOfWeek);
-  if (!schedule) {
+  // A staff weekday may hold several intervals (P14 shift templates). They are
+  // stored disjoint and merged again here, so overlapping template picks are one
+  // continuous window while a real gap between shifts stays closed.
+  const dayRows = schedules.filter((row) => row.day_of_week === dayOfWeek);
+  if (dayRows.length === 0) {
     return unavailable(
       "doctor_off_weekday",
       dateIso,
@@ -240,7 +260,8 @@ export async function computeAvailability(params: {
       doctor.full_name,
     );
   }
-  if (!schedule.is_enabled) {
+  const enabledRows = dayRows.filter((row) => row.is_enabled);
+  if (enabledRows.length === 0) {
     return unavailable(
       "schedule_disabled",
       dateIso,
@@ -248,10 +269,12 @@ export async function computeAvailability(params: {
       doctor.full_name,
     );
   }
-  if (
-    (schedule.valid_from && dateIso < schedule.valid_from) ||
-    (schedule.valid_until && dateIso > schedule.valid_until)
-  ) {
+  const inRangeRows = enabledRows.filter(
+    (row) =>
+      !(row.valid_from && dateIso < row.valid_from) &&
+      !(row.valid_until && dateIso > row.valid_until),
+  );
+  if (inRangeRows.length === 0) {
     return unavailable(
       "outside_schedule_range",
       dateIso,
@@ -276,11 +299,25 @@ export async function computeAvailability(params: {
     );
   }
 
-  const doctorWindow = {
-    start: timeStrToMinutes(schedule.start_time),
-    end: timeStrToMinutes(schedule.end_time),
-  };
-  const windows = intersectWindows(doctorWindow, clinicDayHours);
+  const doctorWindows = mergeMinuteWindows(
+    inRangeRows.map((row) => ({
+      start: timeStrToMinutes(row.start_time),
+      end: timeStrToMinutes(row.end_time),
+    })),
+  );
+  if (doctorWindows.length === 0) {
+    return unavailable(
+      "outside_schedule_range",
+      dateIso,
+      dayOfWeek,
+      doctor.full_name,
+    );
+  }
+  const doctorDayStart = doctorWindows[0]!.start;
+  const doctorDayEnd = doctorWindows.at(-1)!.end;
+  const windows = mergeMinuteWindows(
+    doctorWindows.flatMap((window) => intersectWindows(window, clinicDayHours)),
+  );
   const workingHours = toWorkingWindows(windows);
   if (windows.length === 0) {
     return unavailable(
@@ -339,15 +376,17 @@ export async function computeAvailability(params: {
   const nowMinutes = timeStrToMinutes(formatInTimeZone(now, timeZone, "HH:mm"));
   const slots: SlotInfo[] = [];
 
-  for (let time = doctorWindow.start; time < doctorWindow.end; time += STEP) {
+  for (let time = doctorDayStart; time < doctorDayEnd; time += STEP) {
     const stepEnd = time + STEP;
     const timeLabel = minutesToTime(time);
     const inWorkingStep = windows.some(
       (window) => time >= window.start && stepEnd <= window.end,
     );
     if (!inWorkingStep) {
-      const withinDoctorDay =
-        time >= doctorWindow.start && stepEnd <= doctorWindow.end;
+      // Steps inside the staff member's overall day span but outside a bookable
+      // window are a break: either the clinic is closed, or the gap sits
+      // between two of the staff member's own shifts.
+      const withinDoctorDay = time >= doctorDayStart && stepEnd <= doctorDayEnd;
       if (withinDoctorDay) {
         slots.push({
           time: timeLabel,

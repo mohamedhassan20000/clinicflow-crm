@@ -51,6 +51,7 @@ export default async function PatientAiSettingsPage() {
         <PatientAiSettingsPanel
           replyMode={settings.replyMode}
           autoEntitled={settings.autoEntitled}
+          communicationStyle={settings.communicationStyle}
           faqs={settings.faqs}
         />
       )}

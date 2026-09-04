@@ -31,13 +31,13 @@ export type { AiToolDefinition } from "@/lib/ai/tools/registry";
  * permission checks.
  */
 export const STAFF_TASK_CLASSES_BY_ROLE = {
-  admin: ["staff_administrative", "staff_operational_query", "staff_help"],
-  manager: ["staff_administrative", "staff_operational_query", "staff_help"],
-  receptionist: ["staff_administrative", "staff_operational_query", "staff_help"],
-  doctor: ["staff_clinical_summary", "staff_help"],
+  admin: ["staff_administrative", "staff_operational_query", "staff_composite", "staff_help"],
+  manager: ["staff_administrative", "staff_operational_query", "staff_composite", "staff_help"],
+  receptionist: ["staff_administrative", "staff_operational_query", "staff_composite", "staff_help"],
+  doctor: ["staff_clinical_summary", "staff_composite", "staff_help"],
   // Assistant mirrors the doctor's clinical scope; RLS + auth_supervised_doctor_ids
   // restrict every tool to the assigned doctors' data (never clinic-wide).
-  assistant: ["staff_clinical_summary", "staff_help"],
+  assistant: ["staff_clinical_summary", "staff_composite", "staff_help"],
 } as const satisfies Record<UserRole, readonly AiTaskClass[]>;
 
 export function staffTaskClassesForRole(role: UserRole): readonly AiTaskClass[] {
@@ -64,14 +64,11 @@ export async function resolveToolMount(
   definitions: AiToolDefinition[];
   tools: Record<string, Tool>;
   grantedPermissions: ReadonlySet<AiUserPermissionKey>;
-  workflowStepDefinitions: AiToolDefinition[];
-  workflowStepTools: Record<string, Tool>;
 }> {
   const entitlements = await getEntitlements(ctx.user.clinicId);
   const supportedTaskClasses = staffTaskClassesForRole(ctx.user.role);
   const activeTaskClasses: readonly AiTaskClass[] = ctx.taskClass
-    ? ctx.taskClass === "staff_workflow" ||
-      supportedTaskClasses.includes(ctx.taskClass)
+    ? supportedTaskClasses.includes(ctx.taskClass)
       ? [ctx.taskClass]
       : []
     : supportedTaskClasses;
@@ -85,39 +82,20 @@ export async function resolveToolMount(
   const candidates = AI_TOOL_REGISTRY.filter(
     (definition) =>
       featureAndRoleAllowed(definition) &&
-      // Task-class gate. `taskClasses` was previously declared on every entry
-      // and read by nothing, so the documented contract that a task class
-      // constrains the tool surface was not actually enforced anywhere — the
-      // mount happened to look right only because roles aligned. Metadata that
-      // has never executed is wrong by the time P4.7's capability panel and
-      // P4.11's workflow steps depend on it, so it is enforced now.
-      definition.taskClasses.some((taskClass) =>
-        activeTaskClasses.includes(taskClass),
-      ) &&
-      // A workflow turn exposes only the orchestrator. Action/read step tools
-      // exist solely in the hidden server mount below.
-      (ctx.taskClass !== "staff_workflow" ||
-        definition.workflow.kind === "orchestrator"),
+      // Routing selects only policy/budget. The explicit help route is the
+      // sole containment boundary; every other turn sees the caller's full
+      // role/feature/permission-authorized union.
+      //
+      // **Do not "tighten" this into `definition.taskClasses.includes(active)`.**
+      // No tool in `AI_TOOL_REGISTRY` declares `staff_composite`, so a strict
+      // gate would mount *zero* tools for every composite turn — a silent,
+      // total capability loss. The permissiveness is the design (see the note at
+      // `staff-agent.ts`), and it is pinned by the composite-mount invariant in
+      // `tests/unit/ai/action-routing.test.ts` so the mistake fails loudly.
+      (ctx.taskClass === "staff_help"
+        ? definition.taskClasses.includes("staff_help")
+        : activeTaskClasses.length > 0),
   );
-
-  // A workflow-class turn exposes only the orchestrator to the model. Its
-  // nested read-tool union is resolved with the same registry gates and held in
-  // a server closure, so the model cannot bypass plan validation or the ledger
-  // by calling those tools as peers.
-  const workflowStepCandidates =
-    ctx.taskClass === "staff_workflow"
-      ? AI_TOOL_REGISTRY.filter(
-          (definition) =>
-            featureAndRoleAllowed(definition) &&
-            (definition.workflow.kind === "read" ||
-              definition.workflow.kind === "action") &&
-            (definition.workflow.kind === "action"
-              ? definition.taskClasses.includes("staff_workflow")
-              : definition.taskClasses.some((taskClass) =>
-                  supportedTaskClasses.includes(taskClass),
-                )),
-        )
-      : [];
 
   // Permission lookups hit the database, so resolve each distinct key once.
   //
@@ -127,7 +105,7 @@ export async function resolveToolMount(
   // the tool is not. Declared rather than "resolve every key always", so a
   // doctor's mount issues no financial-permission read at all.
   const permissionKeys = new Set<AiUserPermissionKey>();
-  for (const definition of [...candidates, ...workflowStepCandidates]) {
+  for (const definition of candidates) {
     if (definition.requiredUserPermission) {
       permissionKeys.add(definition.requiredUserPermission);
     }
@@ -147,39 +125,14 @@ export async function resolveToolMount(
       !definition.requiredUserPermission ||
       permissions.get(definition.requiredUserPermission) === true,
   );
-  const workflowStepDefinitions = workflowStepCandidates.filter(
-    (definition) =>
-      !definition.requiredUserPermission ||
-      permissions.get(definition.requiredUserPermission) === true,
-  );
 
   const grantedPermissions: ReadonlySet<AiUserPermissionKey> = new Set(
     [...permissionKeys].filter((key) => permissions.get(key) === true),
   );
   const tools: Record<string, Tool> = {};
-  const workflowStepTools: Record<string, Tool> = {};
-  const stepBuildContext: DoctorToolContext = {
-    ...ctx,
-    grantedPermissions,
-    workflowStepMount: null,
-  };
-  for (const definition of workflowStepDefinitions) {
-    workflowStepTools[definition.name] = harden(
-      definition.name,
-      stepBuildContext,
-      definition.build(stepBuildContext),
-    );
-  }
   const buildContext: DoctorToolContext = {
     ...ctx,
     grantedPermissions,
-    workflowStepMount:
-      ctx.taskClass === "staff_workflow"
-        ? () => ({
-            definitions: workflowStepDefinitions,
-            tools: workflowStepTools,
-          })
-        : ctx.workflowStepMount,
   };
   for (const definition of definitions) {
     tools[definition.name] = harden(definition.name, buildContext, definition.build(buildContext));
@@ -188,16 +141,6 @@ export async function resolveToolMount(
     definitions,
     tools,
     grantedPermissions,
-    workflowStepDefinitions,
-    workflowStepTools,
-  };
-}
-
-export async function resolveWorkflowStepMount(ctx: DoctorToolContext) {
-  const mount = await resolveToolMount({ ...ctx, taskClass: "staff_workflow" });
-  return {
-    definitions: mount.workflowStepDefinitions,
-    tools: mount.workflowStepTools,
   };
 }
 
@@ -298,6 +241,8 @@ const DENIAL_GUIDANCE: Record<AiToolDenialReason, string> = {
     "The session could not be verified. Ask the user to reload the page and sign in again. Do not retry.",
   lookup_failed:
     "The permission check itself could not be completed, so access was refused to be safe. Tell the user this is temporary and ask them to try again shortly. Do not infer any figure you could not read.",
+  unauthorized_scope:
+    "That record is not in the data this user is authorized to see. Do not distinguish between a missing record and one outside scope, do not retry, and do not infer any field.",
 };
 
 /**

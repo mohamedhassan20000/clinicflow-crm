@@ -22,6 +22,7 @@ function user(role: Role): MockUser {
 
 const PRO_AI_FEATURES = {
   ai_assistant: true,
+  "ai.read_clinical": true,
   "ai.staff_assistant": true,
   "ai.staff_analytics": true,
   "ai.financial_insights": true,
@@ -111,8 +112,16 @@ describe("P4.7A the staff_help task class is genuinely narrower", () => {
     // P4.7B's list_my_capabilities joins the two P4.7A help tools in this class;
     // it too reads no clinic-data table, so the containment property the class
     // exists to guarantee — no tool that touches patient/appointment/financial
-    // data — is unchanged.
+    // data — is unchanged. Phase 1 discovery is metadata-only, so it belongs.
+    //
+    // `describe_action` joined them as the action-routing mount backstop (that
+    // review's §7.2a). It is permission-filtered registry metadata and reads no
+    // clinic table either, so the containment property still holds exactly.
+    // `execute_action` is deliberately still absent: the router, not the mount,
+    // is what keeps a real write request out of this class.
     expect(Object.keys(tools).sort()).toEqual([
+      "describe_action",
+      "describe_capabilities",
       "get_navigation_target",
       "list_my_capabilities",
       "search_help",
@@ -122,13 +131,13 @@ describe("P4.7A the staff_help task class is genuinely narrower", () => {
   it("still mounts help tools on a clinical turn (help is additive everywhere)", async () => {
     const { tools } = await load(user("doctor"), { taskClass: "staff_clinical_summary" });
     expect(Object.keys(tools)).toContain("search_help");
-    expect(Object.keys(tools)).toContain("get_patient_summary");
+    expect(Object.keys(tools)).toContain("query_resource");
   });
 
   it("still mounts help tools on an operational turn", async () => {
     const { tools } = await load(user("admin"), { taskClass: "staff_operational_query" });
     expect(Object.keys(tools)).toContain("get_navigation_target");
-    expect(Object.keys(tools)).toContain("list_appointments");
+    expect(Object.keys(tools)).toContain("query_resource");
   });
 });
 

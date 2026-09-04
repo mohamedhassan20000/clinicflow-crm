@@ -1,8 +1,16 @@
 import "server-only";
 
-import sharp from "sharp";
 import { z } from "zod";
-import { inlineClinicLogo } from "@/lib/documents/assets";
+import {
+  inlineClinicLogo,
+  inlineDocumentProfileImage,
+  patientProfileImageRef,
+  staffProfileImageRef,
+} from "@/lib/documents/assets";
+import {
+  DocumentSubjectNotFoundError,
+  isNoRowsError,
+} from "@/lib/documents/resolvers/errors";
 import { getDocumentCatalogEntry } from "@/lib/documents/catalog";
 import type { AuthedUser } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
@@ -37,7 +45,6 @@ export const MERGEABLE_ATTACHMENT_MIME_TYPES = [
   "application/pdf", "image/jpeg", "image/png", "image/webp",
 ] as const;
 const mergeableMimeSchema = z.enum(MERGEABLE_ATTACHMENT_MIME_TYPES);
-const MAX_PROFILE_IMAGE_BYTES = 6 * 1024 * 1024;
 
 const brandingSchema = z.object({
   name: z.string(), logoSrc: z.string().nullable(), address: z.string().nullable(),
@@ -58,23 +65,24 @@ export type RosterProfileAttachment = z.infer<typeof rosterProfileAttachmentSche
 const patientRowSchema = z.object({
   id: z.string(), fileNumber: z.string(), fullName: z.string(), nationalId: z.string(),
   doctorName: z.string(), phone: z.string(), bloodType: z.string(),
-  departmentId: z.string().nullable(), departmentName: z.string(), imageSrc: z.string().nullable().optional(),
+  departmentId: z.string().nullable(), departmentName: z.string(),
 });
 const memberRowSchema = z.object({
   id: z.string(), fullName: z.string(), initials: z.string(), departmentId: z.string().nullable(),
   departmentName: z.string(), role: z.string(), isActive: z.boolean(), joinedAt: z.string(),
-  imageSrc: z.string().nullable().optional(),
 });
 const patientFileSchema = z.object({
   kind: z.literal("patient-file"), id: z.string(), fullName: z.string(), initials: z.string(),
   imageSrc: z.string().nullable(), imageBackgroundSrc: z.string().nullable().optional(),
   fileNumber: z.string(), nationalId: z.string(), phone: z.string(),
   email: z.string(), dateOfBirth: z.string(), bloodType: z.string(), createdAt: z.string(),
-  departmentName: z.string(), doctorName: z.string(), insuranceName: z.string(), isActive: z.boolean(),
+  departmentName: z.string(), doctorName: z.string(),
+  insuranceName: z.string(), isActive: z.boolean(),
 });
 const staffFileSchema = z.object({
   kind: z.literal("staff-file"), id: z.string(), fullName: z.string(), initials: z.string(),
-  imageSrc: z.string().nullable(), phone: z.string(), role: z.string(), departmentName: z.string(),
+  imageSrc: z.string().nullable(), imageBackgroundSrc: z.string().nullable().optional(),
+  phone: z.string(), role: z.string(), departmentName: z.string(),
   joinedAt: z.string(), isActive: z.boolean(), schedule: z.array(z.object({
     dayOfWeek: z.number().int().min(0).max(6), enabled: z.boolean(), startTime: z.string(), endTime: z.string(),
   })),
@@ -113,94 +121,11 @@ function mimeFromName(name: string): RosterProfileAttachment["mimeType"] | null 
   return null;
 }
 
-type ProfileImageBucket = "patient-assets" | "clinic-assets" | "avatars";
-type ProfileImageRef = { bucket: ProfileImageBucket; path: string };
-
-async function inlineStorageImage(
-  bucket: ProfileImageBucket,
-  path: string | null,
-  variant: "full" | "list-thumbnail" = "full",
-) {
-  if (!path) return null;
-  const supabase = await createClient();
-  const { data, error } = await supabase.storage.from(bucket).download(path);
-  if (error || !data || data.size > MAX_PROFILE_IMAGE_BYTES) return null;
-  let mime = data.type || mimeFromName(path);
-  if (!mime || !mime.startsWith("image/")) return null;
-  let bytes: Uint8Array = new Uint8Array(await data.arrayBuffer());
-  if (variant === "list-thumbnail") {
-    try {
-      bytes = await sharp(bytes).rotate().resize(48, 48, {
-        fit: "cover", position: "centre", withoutEnlargement: true,
-      }).webp({ quality: 86 }).toBuffer();
-      mime = "image/webp";
-    } catch {
-      return null;
-    }
-  }
-  return `data:${mime};base64,${Buffer.from(bytes).toString("base64")}`;
-}
-
-function staffImageRef(avatarUrl: string | null, clinicId: string, staffId: string): ProfileImageRef | null {
-  if (!avatarUrl) return null;
-  try {
-    const pathname = decodeURIComponent(new URL(avatarUrl).pathname);
-    for (const access of ["public", "sign", "authenticated"] as const) {
-      const avatarsMarker = `/storage/v1/object/${access}/avatars/`;
-      const avatarsIndex = pathname.indexOf(avatarsMarker);
-      if (avatarsIndex >= 0) {
-        const path = pathname.slice(avatarsIndex + avatarsMarker.length);
-        if (path.startsWith(`${staffId}/`)) return { bucket: "avatars", path };
-      }
-      const clinicMarker = `/storage/v1/object/${access}/clinic-assets/`;
-      const clinicIndex = pathname.indexOf(clinicMarker);
-      if (clinicIndex >= 0) {
-        const path = pathname.slice(clinicIndex + clinicMarker.length);
-        if (path.startsWith(`staff/${clinicId}/${staffId}/photo.`)) {
-          return { bucket: "clinic-assets", path };
-        }
-      }
-    }
-  } catch {
-    return null;
-  }
-  return null;
-}
-
-async function inlineImageRefs(refs: readonly (ProfileImageRef | null)[]) {
-  const resolved: (string | null)[] = [];
-  for (let start = 0; start < refs.length; start += 8) {
-    const batch = refs.slice(start, start + 8);
-    resolved.push(...await Promise.all(batch.map((ref) => ref
-      ? inlineStorageImage(ref.bucket, ref.path, "list-thumbnail")
-      : Promise.resolve(null))));
-  }
-  return resolved;
-}
-
-async function inlineLayeredStorageImage(bucket: ProfileImageBucket, path: string | null) {
-  const imageSrc = await inlineStorageImage(bucket, path);
-  if (!imageSrc) return { imageSrc: null, imageBackgroundSrc: null };
-  try {
-    const separator = imageSrc.indexOf(",");
-    if (separator < 0) return { imageSrc, imageBackgroundSrc: imageSrc };
-    const source = Buffer.from(imageSrc.slice(separator + 1), "base64");
-    const background = await sharp(source).rotate().resize(72, 72, {
-      fit: "cover", position: "centre",
-    }).blur(8).webp({ quality: 78 }).toBuffer();
-    return {
-      imageSrc,
-      imageBackgroundSrc: `data:image/webp;base64,${background.toString("base64")}`,
-    };
-  } catch {
-    return { imageSrc, imageBackgroundSrc: imageSrc };
-  }
-}
-
 async function loadPatientList(user: AuthedUser, params: RosterProfileDocumentParams) {
   const supabase = await createClient();
+  // A roster listing shows names only, so no patient or doctor photo is read.
   let query = supabase.from("patients").select(
-    "id, file_number, full_name, national_id, phone, blood_type, department_id, avatar_path, departments(name), assigned_doctor:profiles!assigned_doctor_id(full_name)",
+    "id, file_number, full_name, national_id, phone, blood_type, department_id, departments(name), assigned_doctor:profiles!assigned_doctor_id(full_name)",
   ).eq("clinic_id", user.clinicId).eq("is_deleted", false).eq("is_archived", false).order("full_name").limit(1000);
   if (user.role === "doctor" && user.departmentId) query = query.eq("department_id", user.departmentId);
   else if (params.departmentId) query = query.eq("department_id", params.departmentId);
@@ -214,14 +139,11 @@ async function loadPatientList(user: AuthedUser, params: RosterProfileDocumentPa
   const { data, error } = await query;
   if (error) throw new Error(error.message);
   const sourceRows = data ?? [];
-  const imageSources = await inlineImageRefs(sourceRows.map((row) => row.avatar_path
-    ? { bucket: "patient-assets" as const, path: row.avatar_path }
-    : null));
-  return { kind: "patient-list" as const, rows: sourceRows.map((row, index) => ({
+  return { kind: "patient-list" as const, rows: sourceRows.map((row) => ({
     id: row.id, fileNumber: text(row.file_number), fullName: text(row.full_name),
     nationalId: text(row.national_id), doctorName: text(row.assigned_doctor?.full_name),
     phone: text(row.phone), bloodType: text(row.blood_type), departmentId: row.department_id,
-    departmentName: text(row.departments?.name, "Unassigned"), imageSrc: imageSources[index] ?? null,
+    departmentName: text(row.departments?.name, "Unassigned"),
   })) };
 }
 
@@ -230,23 +152,31 @@ async function loadPatientFile(user: AuthedUser, params: RosterProfileDocumentPa
   const { data: row, error } = await supabase.from("patients").select(
     "id, full_name, file_number, national_id, phone, email, date_of_birth, blood_type, created_at, avatar_path, is_deleted, departments(name), assigned_doctor:profiles!assigned_doctor_id(full_name), insurance_providers(name)",
   ).eq("clinic_id", user.clinicId).eq("id", params.patientId!).eq("is_deleted", false).single();
-  if (error || !row) throw new Error(error?.message ?? "Patient not found");
-  const photo = await inlineLayeredStorageImage("patient-assets", row.avatar_path);
+  // P6-12: an absent patient and one this caller's RLS scope excludes both land
+  // here with no row, and are reported identically. Any *other* PostgREST error
+  // is an infrastructure failure and keeps its own, retryable, shape.
+  if (error && !isNoRowsError(error)) throw new Error(error.message);
+  if (!row) throw new DocumentSubjectNotFoundError("patient");
+  // The patient file is one of the two documents that keeps a person photo, and
+  // only for its own subject — never for the assigned doctor.
+  const photo = await inlineDocumentProfileImage(patientProfileImageRef(row.avatar_path));
   return patientFileSchema.parse({
     kind: "patient-file", id: row.id, fullName: row.full_name, initials: initials(row.full_name),
     imageSrc: photo.imageSrc, imageBackgroundSrc: photo.imageBackgroundSrc,
     fileNumber: text(row.file_number), nationalId: text(row.national_id), phone: text(row.phone),
     email: text(row.email), dateOfBirth: row.date_of_birth, bloodType: text(row.blood_type),
     createdAt: row.created_at, departmentName: text(row.departments?.name),
-    doctorName: text(row.assigned_doctor?.full_name), insuranceName: text(row.insurance_providers?.name),
+    doctorName: text(row.assigned_doctor?.full_name),
+    insuranceName: text(row.insurance_providers?.name),
     isActive: !row.is_deleted,
   });
 }
 
 async function loadSystemMembers(user: AuthedUser, params: RosterProfileDocumentParams) {
   const supabase = await createClient();
+  // The members roster shows names only, so no staff photo is read.
   let query = supabase.from("profiles").select(
-    "id, full_name, department_id, role, is_active, created_at, avatar_url, departments(name)",
+    "id, full_name, department_id, role, is_active, created_at, departments(name)",
   ).eq("clinic_id", user.clinicId).eq("is_deleted", false).order("full_name").limit(1000);
   if (params.departmentId) query = query.eq("department_id", params.departmentId);
   if (params.role) query = query.eq("role", params.role);
@@ -254,13 +184,10 @@ async function loadSystemMembers(user: AuthedUser, params: RosterProfileDocument
   const { data, error } = await query;
   if (error) throw new Error(error.message);
   const sourceRows = data ?? [];
-  const imageSources = await inlineImageRefs(sourceRows.map((row) =>
-    staffImageRef(row.avatar_url, user.clinicId, row.id)));
-  return { kind: "system-members" as const, rows: sourceRows.map((row, index) => ({
+  return { kind: "system-members" as const, rows: sourceRows.map((row) => ({
     id: row.id, fullName: text(row.full_name), initials: initials(row.full_name),
     departmentId: row.department_id, departmentName: text(row.departments?.name, "Management"),
     role: row.role, isActive: row.is_active, joinedAt: row.created_at,
-    imageSrc: imageSources[index] ?? null,
   })) };
 }
 
@@ -273,12 +200,15 @@ async function loadStaffFile(user: AuthedUser, params: RosterProfileDocumentPara
     supabase.from("doctor_schedules").select("day_of_week, is_enabled, start_time, end_time")
       .eq("clinic_id", user.clinicId).eq("doctor_id", params.staffId!).order("day_of_week"),
   ]);
-  if (error || !row) throw new Error(error?.message ?? "Staff member not found");
+  if (error && !isNoRowsError(error)) throw new Error(error.message);
+  if (!row) throw new DocumentSubjectNotFoundError("staff");
   if (scheduleError) throw new Error(scheduleError.message);
-  const photoRef = staffImageRef(row.avatar_url, user.clinicId, row.id);
+  const photo = await inlineDocumentProfileImage(
+    staffProfileImageRef(row.avatar_url, user.clinicId, row.id),
+  );
   return staffFileSchema.parse({
     kind: "staff-file", id: row.id, fullName: row.full_name, initials: initials(row.full_name),
-    imageSrc: photoRef ? await inlineStorageImage(photoRef.bucket, photoRef.path) : null,
+    imageSrc: photo.imageSrc, imageBackgroundSrc: photo.imageBackgroundSrc,
     phone: text(row.phone), role: row.role, departmentName: text(row.departments?.name, "Management"),
     joinedAt: row.created_at, isActive: row.is_active,
     schedule: (schedule ?? []).map((item) => ({ dayOfWeek: item.day_of_week,
@@ -341,7 +271,7 @@ function selectAttachments(options: RosterProfileAttachment[], selectedKeys: rea
 
 export async function resolveRosterProfileDocumentSnapshot(
   user: AuthedUser, rawParams: RosterProfileDocumentParams,
-  options: { inlineAssets?: boolean; attachmentKeys?: readonly string[] } = {},
+  options: { attachmentKeys?: readonly string[] } = {},
 ): Promise<RosterProfileDocumentSnapshot> {
   const params = rosterProfileDocumentParamsSchema.parse(rawParams);
   const supabase = await createClient();
@@ -369,7 +299,7 @@ export async function resolveRosterProfileDocumentSnapshot(
       departmentId: params.departmentId ?? null, doctorId: params.doctorId ?? null,
       role: params.role ?? null, search: params.search ?? null },
     branding: { name: clinic.name,
-      logoSrc: options.inlineAssets ? await inlineClinicLogo(clinic.logo_url, user.clinicId) : clinic.logo_url,
+      logoSrc: await inlineClinicLogo(clinic.logo_url, user.clinicId),
       address: clinic.address, phone: clinic.phone, email: clinic.email, website: clinic.website,
       licenseNo: clinic.license_no, taxId: clinic.tax_id, footerText: clinic.document_footer },
     format: { timeZone: clinic.timezone, timeFormat: clinic.time_format === "12h" ? "12h" : "24h" },

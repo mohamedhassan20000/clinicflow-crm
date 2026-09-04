@@ -1,6 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import {
+  AI_CAPABILITY_FEATURES,
+  LEGACY_AI_ASSISTANT_FEATURE,
+  NAMESPACED_AI_FEATURES,
+  resolveEffectiveAiFeature,
+} from "@/lib/ai/commercial-policy";
 import type { Database, Json } from "@/types/database";
 
 const url = process.env.LOCAL_SUPABASE_URL ?? "http://127.0.0.1:54321";
@@ -27,6 +33,8 @@ const clinicIds = {
   hardCap: randomUUID(),
   concurrency: randomUUID(),
   correction: randomUUID(),
+  unsigned: randomUUID(),
+  matrix: randomUUID(),
 };
 const actorIds = {
   basic: randomUUID(),
@@ -35,6 +43,8 @@ const actorIds = {
   hardCap: randomUUID(),
   concurrency: randomUUID(),
   correction: randomUUID(),
+  unsigned: randomUUID(),
+  matrix: randomUUID(),
 };
 
 type ClinicKey = keyof typeof clinicIds;
@@ -128,6 +138,8 @@ beforeAll(async () => {
     hardCap: "pro_ai",
     concurrency: "pro_ai",
     correction: "pro_ai",
+    unsigned: "pro_ai",
+    matrix: "basic",
   };
   const subscriptions = await service.from("subscriptions").insert(
     (Object.keys(clinicIds) as ClinicKey[]).map((key) => ({
@@ -168,6 +180,16 @@ beforeAll(async () => {
   );
   if (overrides.error) throw overrides.error;
 
+  const unsignedOverrides = await service.from("clinic_feature_overrides").insert(
+    [LEGACY_AI_ASSISTANT_FEATURE, ...NAMESPACED_AI_FEATURES].map((featureKey) => ({
+      clinic_id: clinicIds.unsigned,
+      feature_key: featureKey,
+      enabled: true,
+      updated_by: actorIds.unsigned,
+    })),
+  );
+  if (unsignedOverrides.error) throw unsignedOverrides.error;
+
   const terms = await service.from("ai_commercial_terms").insert([
     {
       clinic_id: clinicIds.commercial,
@@ -177,6 +199,7 @@ beforeAll(async () => {
       overage_budget_micros: 1_000,
       change_reason: "contracted_overage",
       updated_by: actorIds.commercial,
+      accepted_at: new Date().toISOString(),
     },
     {
       clinic_id: clinicIds.hardCap,
@@ -186,6 +209,7 @@ beforeAll(async () => {
       overage_budget_micros: 0,
       change_reason: "prepaid_addon",
       updated_by: actorIds.hardCap,
+      accepted_at: new Date().toISOString(),
     },
     {
       clinic_id: clinicIds.concurrency,
@@ -195,6 +219,7 @@ beforeAll(async () => {
       overage_budget_micros: 0,
       change_reason: "pilot",
       updated_by: actorIds.concurrency,
+      accepted_at: new Date().toISOString(),
     },
     {
       // Included 1,000; add-on 2,000. Two 800-micros reservations both fit the
@@ -208,6 +233,7 @@ beforeAll(async () => {
       overage_budget_micros: 0,
       change_reason: "prepaid_addon",
       updated_by: actorIds.correction,
+      accepted_at: new Date().toISOString(),
     },
   ]);
   if (terms.error) throw terms.error;
@@ -222,7 +248,21 @@ beforeAll(async () => {
 afterAll(cleanup);
 
 describe("P4.5C commercial AI entitlements and limits", () => {
-  it("keeps stable slugs while exposing the namespaced Pro + AI catalog", async () => {
+  it("seeds every Phase 0 AI capability key as enabled on Pro + AI", async () => {
+    const plan = await service
+      .from("plans")
+      .select("features")
+      .eq("slug", "pro_ai")
+      .single();
+    if (plan.error) throw plan.error;
+
+    expect(AI_CAPABILITY_FEATURES).toHaveLength(9);
+    expect(plan.data.features).toMatchObject(
+      Object.fromEntries(AI_CAPABILITY_FEATURES.map((feature) => [feature, true])),
+    );
+  });
+
+  it("keeps stable slugs while preserving today's AI feature seed", async () => {
     const plans = await service.from("plans").select("slug, name_en, features, limits").in("slug", ["basic", "pro", "pro_ai"]);
     if (plans.error) throw plans.error;
     const bySlug = Object.fromEntries(plans.data.map((plan) => [plan.slug, plan]));
@@ -231,23 +271,397 @@ describe("P4.5C commercial AI entitlements and limits", () => {
     expect(bySlug.pro_ai.name_en).toBe("Pro + AI");
     expect((bySlug.basic.features as Record<string, boolean>)["ai.staff_assistant"]).toBe(false);
     expect((bySlug.pro.features as Record<string, boolean>)["ai.staff_assistant"]).toBe(false);
+    // Pro + AI is the superset plan: it carries the umbrella, the superset
+    // marker, and every capability it sells — hybrid fallback included, which
+    // this row used to withhold from the tier that had paid for BYOK.
     expect((bySlug.pro_ai.features as Record<string, boolean>)).toMatchObject({
       ai_assistant: true,
+      "ai.superset": true,
       "ai.staff_assistant": true,
       "ai.managed": true,
       "ai.byok": true,
-      "ai.hybrid_fallback": false,
+      "ai.hybrid_fallback": true,
     });
+    // The superset marker is what makes Pro + AI a superset; it must not leak
+    // onto a plan that sells AI capabilities piecemeal.
+    expect((bySlug.basic.features as Record<string, boolean>)["ai.superset"]).toBeUndefined();
+    expect((bySlug.pro.features as Record<string, boolean>)["ai.superset"]).toBeUndefined();
     expect((bySlug.pro_ai.limits as Record<string, number>)).toMatchObject({
       ai_requests_month: 1_000,
       ai_concurrent_requests: 4,
     });
   });
 
-  it("denies AI on Basic and Professional even when legacy and namespaced overrides are present", async () => {
+  it("denies unsigned clinics on every AI key regardless of plan or overrides", async () => {
     const [basic, pro] = await Promise.all([reserve("basic"), reserve("pro")]);
     expect(basic.error?.message).toContain("NOT_ENTITLED");
     expect(pro.error?.message).toContain("NOT_ENTITLED");
+
+    for (const featureKey of [LEGACY_AI_ASSISTANT_FEATURE, ...NAMESPACED_AI_FEATURES]) {
+      const result = await service.rpc("effective_ai_feature", {
+        p_clinic_id: clinicIds.unsigned,
+        p_feature_key: featureKey,
+      });
+      expect(result.error, featureKey).toBeNull();
+      expect(result.data, featureKey).toBe(false);
+    }
+  });
+
+  it("does not accept stale Basic overrides through an unrelated terms insert", async () => {
+    const specificOverride = await service.from("clinic_feature_overrides").insert({
+      clinic_id: clinicIds.basic,
+      feature_key: "ai.read_operational",
+      enabled: true,
+      updated_by: actorIds.basic,
+    });
+    if (specificOverride.error) throw specificOverride.error;
+    try {
+      const terms = await service.from("ai_commercial_terms").insert({
+        clinic_id: clinicIds.basic,
+        change_reason: "pilot",
+        updated_by: actorIds.basic,
+      }).select("accepted_at").single();
+      if (terms.error) throw terms.error;
+      expect(terms.data.accepted_at).toBeNull();
+
+      const effective = await service.rpc("effective_ai_feature", {
+        p_clinic_id: clinicIds.basic,
+        p_feature_key: "ai.read_operational",
+      });
+      expect(effective.error).toBeNull();
+      expect(effective.data).toBe(false);
+    } finally {
+      await service.from("ai_commercial_terms").delete().eq("clinic_id", clinicIds.basic);
+      await service.from("clinic_feature_overrides").delete()
+        .eq("clinic_id", clinicIds.basic)
+        .eq("feature_key", "ai.read_operational");
+    }
+  });
+
+  it("grants ai.read_operational from a Basic plan row with no code change", async () => {
+    const plan = await service
+      .from("plans")
+      .select("features, limits")
+      .eq("slug", "basic")
+      .single();
+    if (plan.error) throw plan.error;
+    const originalFeatures = plan.data.features;
+    const originalLimits = plan.data.limits;
+
+    try {
+      const configured = await service
+        .from("plans")
+        .update({
+          features: {
+            ...(originalFeatures as Record<string, unknown>),
+            ai_assistant: true,
+            "ai.read_operational": true,
+          },
+          limits: {
+            ...(originalLimits as Record<string, unknown>),
+            ai_credits_month: 10_000,
+            ai_requests_month: 10,
+            ai_messages_month: 10,
+            ai_concurrent_requests: 1,
+          },
+        })
+        .eq("slug", "basic");
+      if (configured.error) throw configured.error;
+      const terms = await service.from("ai_commercial_terms").insert({
+        clinic_id: clinicIds.basic,
+        change_reason: "pilot",
+        updated_by: actorIds.basic,
+        accepted_at: new Date().toISOString(),
+      });
+      if (terms.error) throw terms.error;
+
+      const effective = await service.rpc("effective_ai_feature", {
+        p_clinic_id: clinicIds.basic,
+        p_feature_key: "ai.read_operational",
+      });
+      expect(effective.error).toBeNull();
+      expect(effective.data).toBe(true);
+      expect((await reserve("basic")).error).toBeNull();
+    } finally {
+      await service.from("ai_commercial_terms").delete().eq("clinic_id", clinicIds.basic);
+      const restored = await service
+        .from("plans")
+        .update({ features: originalFeatures, limits: originalLimits })
+        .eq("slug", "basic");
+      if (restored.error) throw restored.error;
+    }
+  });
+
+  it("keeps clinic overrides effective on a non-AI-seeded plan", async () => {
+    const terms = await service.from("ai_commercial_terms").insert({
+      clinic_id: clinicIds.pro,
+      change_reason: "pilot",
+      updated_by: actorIds.pro,
+      accepted_at: new Date().toISOString(),
+    });
+    if (terms.error) throw terms.error;
+    try {
+      const grant = await service.from("clinic_feature_overrides").upsert({
+        clinic_id: clinicIds.pro,
+        feature_key: "ai.read_operational",
+        enabled: true,
+        updated_by: actorIds.pro,
+      });
+      if (grant.error) throw grant.error;
+      expect((await service.rpc("effective_ai_feature", {
+        p_clinic_id: clinicIds.pro,
+        p_feature_key: "ai.read_operational",
+      })).data).toBe(true);
+
+      const revoke = await service.from("clinic_feature_overrides").update({ enabled: false })
+        .eq("clinic_id", clinicIds.pro)
+        .eq("feature_key", "ai.read_operational");
+      if (revoke.error) throw revoke.error;
+      expect((await service.rpc("effective_ai_feature", {
+        p_clinic_id: clinicIds.pro,
+        p_feature_key: "ai.read_operational",
+      })).data).toBe(false);
+    } finally {
+      await service.from("ai_commercial_terms").delete().eq("clinic_id", clinicIds.pro);
+      await service.from("clinic_feature_overrides").delete()
+        .eq("clinic_id", clinicIds.pro)
+        .eq("feature_key", "ai.read_operational");
+    }
+  });
+
+  it("revokes every AI feature without changing the plan or overrides", async () => {
+    const terms = await service.from("ai_commercial_terms").insert({
+      clinic_id: clinicIds.pro,
+      change_reason: "pilot",
+      updated_by: actorIds.pro,
+      accepted_at: new Date().toISOString(),
+    });
+    if (terms.error) throw terms.error;
+    const specificOverride = await service.from("clinic_feature_overrides").insert({
+      clinic_id: clinicIds.pro,
+      feature_key: "ai.read_operational",
+      enabled: true,
+      updated_by: actorIds.pro,
+    });
+    if (specificOverride.error) throw specificOverride.error;
+    try {
+      const subscriptionBefore = await service.from("subscriptions")
+        .select("plan_id")
+        .eq("clinic_id", clinicIds.pro)
+        .single();
+      if (subscriptionBefore.error) throw subscriptionBefore.error;
+      const overridesBefore = await service.from("clinic_feature_overrides")
+        .select("feature_key, enabled")
+        .eq("clinic_id", clinicIds.pro)
+        .order("feature_key");
+      if (overridesBefore.error) throw overridesBefore.error;
+
+      const revoked = await service.from("ai_commercial_terms")
+        .update({ accepted_at: null, updated_by: actorIds.pro })
+        .eq("clinic_id", clinicIds.pro);
+      if (revoked.error) throw revoked.error;
+
+      for (const featureKey of [LEGACY_AI_ASSISTANT_FEATURE, ...NAMESPACED_AI_FEATURES]) {
+        const effective = await service.rpc("effective_ai_feature", {
+          p_clinic_id: clinicIds.pro,
+          p_feature_key: featureKey,
+        });
+        expect(effective.error, featureKey).toBeNull();
+        expect(effective.data, featureKey).toBe(false);
+      }
+
+      const subscriptionAfter = await service.from("subscriptions")
+        .select("plan_id")
+        .eq("clinic_id", clinicIds.pro)
+        .single();
+      const overridesAfter = await service.from("clinic_feature_overrides")
+        .select("feature_key, enabled")
+        .eq("clinic_id", clinicIds.pro)
+        .order("feature_key");
+      expect(subscriptionAfter.data).toEqual(subscriptionBefore.data);
+      expect(overridesAfter.data).toEqual(overridesBefore.data);
+    } finally {
+      await service.from("ai_commercial_terms").delete().eq("clinic_id", clinicIds.pro);
+      await service.from("clinic_feature_overrides").delete()
+        .eq("clinic_id", clinicIds.pro)
+        .eq("feature_key", "ai.read_operational");
+    }
+  });
+
+  it("keeps TS and SQL aligned across plan, override, terms, and subscription states", async () => {
+    const plans = await service.from("plans").select("id, slug, features")
+      .in("slug", ["basic", "pro_ai"]);
+    if (plans.error) throw plans.error;
+    const planBySlug = Object.fromEntries(plans.data.map((plan) => [plan.slug, plan]));
+
+    for (const planSlug of ["basic", "pro_ai"] as const) {
+      for (const overrideState of ["inherit", "grant", "revoke"] as const) {
+        for (const termsAccepted of [false, true]) {
+          for (const subscriptionAllowed of [false, true]) {
+            const subscription = await service.from("subscriptions").update({
+              plan_id: planBySlug[planSlug].id,
+              status: subscriptionAllowed ? "active" : "cancelled",
+              trial_ends_at: null,
+              current_period_end: null,
+            }).eq("clinic_id", clinicIds.matrix);
+            if (subscription.error) throw subscription.error;
+
+            const clearedOverrides = await service.from("clinic_feature_overrides").delete()
+              .eq("clinic_id", clinicIds.matrix);
+            if (clearedOverrides.error) throw clearedOverrides.error;
+            if (overrideState !== "inherit") {
+              const override = await service.from("clinic_feature_overrides").insert(
+                ["ai_assistant", "ai.read_operational"].map((featureKey) => ({
+                  clinic_id: clinicIds.matrix,
+                  feature_key: featureKey,
+                  enabled: overrideState === "grant",
+                  updated_by: actorIds.matrix,
+                })),
+              );
+              if (override.error) throw override.error;
+            }
+
+            const clearedTerms = await service.from("ai_commercial_terms").delete()
+              .eq("clinic_id", clinicIds.matrix);
+            if (clearedTerms.error) throw clearedTerms.error;
+            if (termsAccepted) {
+              const terms = await service.from("ai_commercial_terms").insert({
+                clinic_id: clinicIds.matrix,
+                change_reason: "pilot",
+                updated_by: actorIds.matrix,
+                accepted_at: new Date().toISOString(),
+              });
+              if (terms.error) throw terms.error;
+            }
+
+            const planFeatures = planBySlug[planSlug].features as Record<string, boolean>;
+            const overrideValue = overrideState === "inherit"
+              ? undefined
+              : overrideState === "grant";
+            const features = {
+              ...planFeatures,
+              ...(overrideValue === undefined
+                ? {}
+                : {
+                    ai_assistant: overrideValue,
+                    "ai.read_operational": overrideValue,
+                  }),
+            };
+            const expected = resolveEffectiveAiFeature({
+              subscriptionAllowed,
+              termsAccepted,
+              features,
+              featureKey: "ai.read_operational",
+            });
+            const actual = await service.rpc("effective_ai_feature", {
+              p_clinic_id: clinicIds.matrix,
+              p_feature_key: "ai.read_operational",
+            });
+            expect(actual.error).toBeNull();
+            expect(
+              actual.data,
+              `${planSlug}/${overrideState}/terms:${termsAccepted}/active:${subscriptionAllowed}`,
+            ).toBe(expected);
+          }
+        }
+      }
+    }
+  });
+
+  it("fails closed without errors for non-boolean plan feature JSON", async () => {
+    const plan = await service.from("plans").select("id, features")
+      .eq("slug", "basic").single();
+    if (plan.error) throw plan.error;
+    const originalFeatures = plan.data.features;
+    const cases = [
+      { label: "string true umbrella", umbrella: "true", feature: true },
+      { label: "yes umbrella", umbrella: "yes", feature: true },
+      { label: "maybe umbrella", umbrella: "maybe", feature: true },
+      { label: "string true feature", umbrella: true, feature: "true" },
+      { label: "yes feature", umbrella: true, feature: "yes" },
+      { label: "maybe feature", umbrella: true, feature: "maybe" },
+    ] as const;
+    try {
+      const subscription = await service.from("subscriptions").update({
+        plan_id: plan.data.id,
+        status: "active",
+        trial_ends_at: null,
+        current_period_end: null,
+      }).eq("clinic_id", clinicIds.matrix);
+      if (subscription.error) throw subscription.error;
+      const clearedOverrides = await service.from("clinic_feature_overrides").delete()
+        .eq("clinic_id", clinicIds.matrix);
+      if (clearedOverrides.error) throw clearedOverrides.error;
+      const terms = await service.from("ai_commercial_terms").upsert({
+        clinic_id: clinicIds.matrix,
+        change_reason: "pilot",
+        updated_by: actorIds.matrix,
+        accepted_at: new Date().toISOString(),
+      });
+      if (terms.error) throw terms.error;
+
+      for (const testCase of cases) {
+        const malformedFeatures = {
+          ...(originalFeatures as Record<string, unknown>),
+          ai_assistant: testCase.umbrella,
+          "ai.read_operational": testCase.feature,
+        };
+        const configured = await service.from("plans")
+          .update({ features: malformedFeatures as Json })
+          .eq("id", plan.data.id);
+        if (configured.error) throw configured.error;
+
+        const expected = resolveEffectiveAiFeature({
+          subscriptionAllowed: true,
+          termsAccepted: true,
+          features: malformedFeatures as Record<string, boolean>,
+          featureKey: "ai.read_operational",
+        });
+        const actual = await service.rpc("effective_ai_feature", {
+          p_clinic_id: clinicIds.matrix,
+          p_feature_key: "ai.read_operational",
+        });
+        expect(actual.error, testCase.label).toBeNull();
+        expect(actual.data, testCase.label).toBe(expected);
+        expect(actual.data, testCase.label).toBe(false);
+      }
+    } finally {
+      await service.from("ai_commercial_terms").delete().eq("clinic_id", clinicIds.matrix);
+      const restored = await service.from("plans")
+        .update({ features: originalFeatures })
+        .eq("id", plan.data.id);
+      if (restored.error) throw restored.error;
+    }
+  });
+
+  it("fails closed when an AI-granting plan has no monthly AI credit limit", async () => {
+    const plan = await service.from("plans").select("limits").eq("slug", "pro").single();
+    if (plan.error) throw plan.error;
+    const originalLimits = plan.data.limits;
+    const withoutCredits = { ...(originalLimits as Record<string, unknown>) };
+    delete withoutCredits.ai_credits_month;
+    try {
+      const configured = await service.from("plans")
+        .update({ limits: withoutCredits as Json })
+        .eq("slug", "pro");
+      if (configured.error) throw configured.error;
+      const terms = await service.from("ai_commercial_terms").insert({
+        clinic_id: clinicIds.pro,
+        change_reason: "pilot",
+        updated_by: actorIds.pro,
+        accepted_at: new Date().toISOString(),
+      });
+      if (terms.error) throw terms.error;
+
+      const result = await reserve("pro");
+      expect(result.error?.message).toContain("AI_FEATURE_NOT_ENTITLED");
+    } finally {
+      await service.from("ai_commercial_terms").delete().eq("clinic_id", clinicIds.pro);
+      const restored = await service.from("plans")
+        .update({ limits: originalLimits })
+        .eq("slug", "pro");
+      if (restored.error) throw restored.error;
+    }
   });
 
   it("classifies included, prepaid add-on, and contracted overage spend and enforces the ceiling", async () => {

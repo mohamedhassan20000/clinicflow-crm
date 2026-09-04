@@ -10,6 +10,7 @@ import { getSharedDocumentSectionCopy } from "@/lib/documents/shared-section-cop
 import en from "../../../messages/en.json";
 import ar from "../../../messages/ar.json";
 
+
 const reportKey = {
   FOLLOW_UP_PAGE_REPORT: "followUpPage",
   CANCELLATION_REPORT: "cancellation",
@@ -267,6 +268,8 @@ describe("P7-4 analytical document templates", () => {
       expect(container).toHaveTextContent("DRAFT");
       expect(container).toHaveTextContent("PREVIEW");
       expect(container.querySelector("[data-testid='verification-block']")).toBeNull();
+      // Analytical reports list people by name only — never by photo.
+      expect(container.querySelectorAll(".cf-doc-list-avatar")).toHaveLength(0);
     },
   );
 

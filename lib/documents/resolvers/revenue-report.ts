@@ -169,7 +169,6 @@ async function loadRevenueTransactions(
 export async function resolveRevenueDocumentSnapshot(
   user: AuthedUser,
   rawParams: RevenueDocumentParams,
-  options: { inlineLogo?: boolean } = {},
 ): Promise<RevenueDocumentSnapshot> {
   const params = revenueDocumentParamsSchema.parse(rawParams);
   const range = resolveDateRange({
@@ -216,9 +215,9 @@ export async function resolveRevenueDocumentSnapshot(
   const watermark = watermarkEnabled
     ? effectiveSettings?.watermark_text?.trim() || clinic.name
     : null;
-  const logoSrc = options.inlineLogo
-    ? await inlineClinicLogo(clinic.logo_url, user.clinicId)
-    : clinic.logo_url;
+  // Always inlined: the canonical PDF renderer blocks remote requests, so a
+  // snapshot holding an `https:` logo URL prints with no logo at all.
+  const logoSrc = await inlineClinicLogo(clinic.logo_url, user.clinicId);
 
   return revenueDocumentSnapshotSchema.parse({
     version: 1,

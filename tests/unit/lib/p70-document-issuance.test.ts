@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import {
+  describeDocumentIssueFailure,
   issueDocumentWithGuard,
   type DocumentIssueReservation,
 } from "@/lib/documents/issuance";
@@ -95,9 +96,61 @@ describe("P7-0 idempotent issuance guard", () => {
       complete: async () => { throw new Error("response lost after commit"); },
       fail,
       cleanup,
-    })).rejects.toMatchObject({ stage: "complete" });
+    })).rejects.toMatchObject({ stage: "issuance-rpc" });
 
     expect(fail).toHaveBeenCalled();
     expect(cleanup).not.toHaveBeenCalled();
+  });
+
+  it("preserves plain Supabase reservation fields instead of reporting unknown", async () => {
+    const postgresError = {
+      message: "DOCUMENT_IDEMPOTENCY_CONFLICT",
+      code: "23505",
+      details: "Existing invoice differs by actor or locale",
+      hint: "Reuse the completed canonical invoice",
+    };
+
+    let thrown: unknown;
+    try {
+      await issueDocumentWithGuard({
+        reserve: async () => { throw postgresError; },
+        render: vi.fn(),
+        store: vi.fn(),
+        complete: vi.fn(),
+        fail: vi.fn(),
+      });
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(describeDocumentIssueFailure(thrown)).toEqual({
+      stage: "reservation",
+      message: "DOCUMENT_IDEMPOTENCY_CONFLICT",
+      code: "23505",
+      details: "Existing invoice differs by actor or locale",
+      hint: "Reuse the completed canonical invoice",
+    });
+  });
+
+  it("does not let a failed recovery RPC hide the original render failure", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      await expect(issueDocumentWithGuard({
+        reserve: async () => reservation(),
+        render: async () => { throw new Error("Chromium executable is unavailable"); },
+        store: vi.fn(),
+        complete: vi.fn(),
+        fail: async () => { throw { message: "fail_document_issue unavailable", code: "PGRST202" }; },
+      })).rejects.toMatchObject({
+        stage: "render",
+        message: expect.stringContaining("Chromium executable is unavailable"),
+      });
+      expect(consoleError).toHaveBeenCalledWith(
+        "document_issue_failure_record_failed",
+        expect.objectContaining({ stage: "issuance-rpc", code: "PGRST202" }),
+      );
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 });

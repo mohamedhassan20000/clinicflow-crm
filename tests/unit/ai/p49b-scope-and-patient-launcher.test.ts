@@ -44,13 +44,17 @@ describe("P4.9B patient-details Ask Assistant regression", () => {
     expect(page).toContain('type: "patient", patientId: patient.id');
     expect(page).toContain("contextLabel={patient.full_name}");
 
+    // The re-authorization must still come first. What it now gates is the
+    // server-derived context seed for the new conversation the launcher opens,
+    // rather than the read of an existing conversation's history.
     const reauthorization = launchers.indexOf(
       "await assertDoctorPatientContextAccess",
     );
     expect(reauthorization).toBeGreaterThan(-1);
-    expect(reauthorization).toBeLessThan(
-      launchers.indexOf("loadAssistantConversationForSurface({", reauthorization),
-    );
+    const seed = launchers.indexOf("resolvePageContextSeed({", reauthorization);
+    expect(seed).toBeGreaterThan(reauthorization);
+    // The launcher must not resume the caller's latest conversation any more.
+    expect(launchers).not.toContain("loadAssistantConversationForSurface");
   });
 });
 

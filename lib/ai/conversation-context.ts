@@ -17,8 +17,9 @@ import type { PromptLocale } from "@/lib/ai/prompts/doctor";
  *      (by internal id only — never a name, mirroring the reviewed page-context
  *      pattern in lib/ai/page-context.ts), and
  *   2. as a **server-side default parameter** for an entity-scoped tool when the
- *      model omits the id (e.g. get_patient_summary with no patient_id resolves
- *      to the active patient).
+ *      model omits the id (`check_availability` and the retained report tools;
+ *      the generic resource reads instead take the advisory id from the prompt
+ *      line above as an ordinary registered filter).
  *
  * **Trust boundary.** An id in the active context is only ever a server-derived
  * one: it comes from a high-confidence entity resolution, an explicit user
@@ -83,7 +84,21 @@ const activeEntitySchema = z
 export type ActiveEntityContext = z.infer<typeof activeEntitySchema>;
 
 /** One optional slot per entity type. */
+export type PendingActionConfirmation = {
+  action_id: string;
+  expires_at: string;
+};
+
 export type ActiveContext = Partial<Record<ActiveContextEntityType, ActiveEntityContext>>;
+type PersistedActiveContext = ActiveContext & {
+  /** Metadata only; the opaque token stays in the persisted UI tool part. */
+  pending_confirmations?: PendingActionConfirmation[];
+};
+
+const pendingConfirmationSchema = z.object({
+  action_id: z.string().regex(/^[a-z][a-z0-9_.]{0,99}$/),
+  expires_at: z.string().datetime(),
+}).strict();
 
 /**
  * Parses the persisted `active_context` jsonb into a validated map.
@@ -97,7 +112,7 @@ export type ActiveContext = Partial<Record<ActiveContextEntityType, ActiveEntity
  */
 export function parseActiveContext(value: unknown): ActiveContext {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  const result: ActiveContext = {};
+  const result: PersistedActiveContext = {};
   for (const entityType of ACTIVE_CONTEXT_ENTITY_TYPES) {
     const slot = (value as Record<string, unknown>)[entityType];
     const parsed = activeEntitySchema.safeParse(slot);
@@ -107,7 +122,42 @@ export function parseActiveContext(value: unknown): ActiveContext {
       result[entityType] = parsed.data;
     }
   }
+  const pending = z.array(pendingConfirmationSchema).max(10).safeParse(
+    (value as Record<string, unknown>).pending_confirmations,
+  );
+  if (pending.success && pending.data.length > 0) {
+    result.pending_confirmations = pending.data.filter((item) => Date.parse(item.expires_at) > Date.now());
+  }
   return result;
+}
+
+export function pendingActionConfirmations(context: ActiveContext | null | undefined): PendingActionConfirmation[] {
+  return (context as PersistedActiveContext | null | undefined)?.pending_confirmations ?? [];
+}
+
+export function withPendingActionConfirmations(
+  current: ActiveContext,
+  pending: readonly PendingActionConfirmation[],
+): ActiveContext {
+  const next = pending
+    .filter((item) => pendingConfirmationSchema.safeParse(item).success && Date.parse(item.expires_at) > Date.now())
+    .slice(-10);
+  const { pending_confirmations: _previous, ...entities } = current as PersistedActiveContext;
+  return (next.length > 0 ? { ...entities, pending_confirmations: next } : entities) as ActiveContext;
+}
+
+export function withoutPendingActionConfirmation(
+  current: ActiveContext,
+  completed: PendingActionConfirmation,
+): ActiveContext {
+  return withPendingActionConfirmations(
+    current,
+    pendingActionConfirmations(current).filter(
+      (item) =>
+        item.action_id !== completed.action_id ||
+        item.expires_at !== completed.expires_at,
+    ),
+  );
 }
 
 export function readActiveEntityContext(
@@ -120,6 +170,20 @@ export function readActiveEntityContext(
 /** The active patient's id, or null. The only entity-scoped default in P4.10A. */
 export function activePatientId(context: ActiveContext | null | undefined): string | null {
   return readActiveEntityContext(context, "patient")?.entity_id ?? null;
+}
+
+/**
+ * Whether any entity slot is occupied.
+ *
+ * Read by the task-class router as an *operand* signal only: it is what lets
+ * "how do I book him for that slot?" be recognized as the final turn of a
+ * booking rather than a documentation question. It reports presence, never an
+ * id, never a label, and grants nothing — every tool and every action still
+ * re-authorizes independently. `pending_confirmations` is metadata, not an
+ * entity, so it is excluded by construction.
+ */
+export function hasActiveEntitySlot(context: ActiveContext | null | undefined): boolean {
+  return ACTIVE_CONTEXT_ENTITY_TYPES.some((entityType) => Boolean(context?.[entityType]));
 }
 
 export function activeEntityId(
@@ -255,7 +319,8 @@ export function buildActiveContextPrompt(
     const slot = readActiveEntityContext(context, entityType);
     return slot ? [{ entityType, entityId: slot.entity_id }] : [];
   });
-  if (slots.length === 0) return "";
+  const pending = pendingActionConfirmations(context);
+  if (slots.length === 0 && pending.length === 0) return "";
 
   const argumentNames: Record<ActiveContextEntityType, string> = {
     patient: "patient_id",
@@ -287,7 +352,7 @@ export function buildActiveContextPrompt(
     .join("\n");
 
   if (locale === "ar") {
-    return `\n\nسياق المحادثة النشط:\n${arabic}\nاستخدم القيمة النشطة فقط عندما يشير المستخدم إلى الكيان نفسه أو يستخدم ضميرًا دون تسمية كيان جديد. في أدوات القوائم، فعّل وسيط use_active الخاص بنوع الكيان المقصود فقط؛ لا تفعّله للاستعلامات العامة أو التجميعية، ولا تنسخ المعرّف النشط إلى وسيط المعرّف الصريح. إذا سمّى المستخدم كيانًا جديدًا، فحلّه عبر أداة مصرح بها أولًا ولا تفترض استمرار السابق. هذا السياق لا يمنح أي صلاحية؛ يعاد التحقق من كل أداة على حِدة، ولا تعرض أي معرّف داخلي في الإجابة.`;
+    return `\n\nسياق المحادثة النشط:\n${arabic}${pending.length ? `\nيوجد ${pending.length} إجراء/إجراءات بانتظار تأكيد المستخدم على الشاشة. لا تنفذها ولا تطلب رمز تأكيد.` : ""}\nاستخدم القيمة النشطة فقط عندما يشير المستخدم إلى الكيان نفسه أو يستخدم ضميرًا دون تسمية كيان جديد. في أدوات القوائم، فعّل وسيط use_active الخاص بنوع الكيان المقصود فقط؛ لا تفعّله للاستعلامات العامة أو التجميعية، ولا تنسخ المعرّف النشط إلى وسيط المعرّف الصريح. إذا سمّى المستخدم كيانًا جديدًا، فحلّه عبر أداة مصرح بها أولًا ولا تفترض استمرار السابق. هذا السياق لا يمنح أي صلاحية؛ يعاد التحقق من كل أداة على حِدة، ولا تعرض أي معرّف داخلي في الإجابة.`;
   }
-  return `\n\nActive conversation context:\n${english}\nUse an active value only when the user refers to that same entity or uses a pronoun without naming a new one. For list tools, set only the use_active flag for the entity type the user explicitly means; leave every use_active flag false or omitted for broad or aggregate requests, and do not copy an active id into an explicit id argument. If the user names a new entity, resolve it through an authorized tool first and do not assume the previous one still applies. This context grants no access; every tool re-authorizes independently, and never display an internal id in the answer.`;
+  return `\n\nActive conversation context:\n${english}${pending.length ? `\n${pending.length} action preview(s) await the user's on-screen confirmation. Do not execute them, request a token, or claim they completed.` : ""}\nUse an active value only when the user refers to that same entity or uses a pronoun without naming a new one. For list tools, set only the use_active flag for the entity type the user explicitly means; leave every use_active flag false or omitted for broad or aggregate requests, and do not copy an active id into an explicit id argument. If the user names a new entity, resolve it through an authorized tool first and do not assume the previous one still applies. This context grants no access; every tool re-authorizes independently, and never display an internal id in the answer.`;
 }

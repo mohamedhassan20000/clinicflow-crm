@@ -182,7 +182,7 @@ describe("P4.10B explicit clarification choices", () => {
           field: "doctor",
           candidates: [{ id: "doctor-1", name: "Dr Ahmed" }],
         },
-        "list_appointments",
+        "query_resource",
       ),
     ).toEqual([
       {

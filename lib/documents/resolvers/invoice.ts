@@ -1,6 +1,7 @@
 import "server-only";
 
 import { z } from "zod";
+import { DocumentSubjectNotFoundError } from "@/lib/documents/resolvers/errors";
 import { getDocumentCatalogEntry } from "@/lib/documents/catalog";
 import { inlineClinicLogo } from "@/lib/documents/assets";
 import { createClient } from "@/lib/supabase/server";
@@ -164,7 +165,6 @@ function buildPaymentBreakdown(
 export async function resolveInvoiceDocumentSnapshot(
   clinicId: string,
   rawParams: InvoiceDocumentParams,
-  options: { inlineLogo?: boolean } = {},
 ): Promise<InvoiceDocumentSnapshot> {
   const params = invoiceDocumentParamsSchema.parse(rawParams);
   const supabase = await createClient();
@@ -186,7 +186,7 @@ export async function resolveInvoiceDocumentSnapshot(
     .maybeSingle();
 
   if (appointmentResult.error) throw new Error(appointmentResult.error.message);
-  if (!appointmentResult.data) throw new Error("Appointment was not found");
+  if (!appointmentResult.data) throw new DocumentSubjectNotFoundError("appointment");
   const appointment = appointmentResult.data as unknown as AppointmentBillingRow & {
     patient: { full_name?: string | null; file_number?: string | null } | null;
   };
@@ -233,9 +233,9 @@ export async function resolveInvoiceDocumentSnapshot(
   const watermark = watermarkEnabled
     ? effectiveSettings?.watermark_text?.trim() || clinic.name
     : null;
-  const logoSrc = options.inlineLogo
-    ? await inlineClinicLogo(clinic.logo_url, clinicId)
-    : clinic.logo_url;
+  // Always inlined: the canonical PDF renderer blocks remote requests, so a
+  // snapshot holding an `https:` logo URL prints with no logo at all.
+  const logoSrc = await inlineClinicLogo(clinic.logo_url, clinicId);
 
   const lineItems = (servicesResult.data ?? []).map((row) => {
     const unitPrice = round2(Number(row.price ?? 0));

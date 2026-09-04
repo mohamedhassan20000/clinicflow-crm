@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   incrementClinicUsage: vi.fn(),
   finalizeOutboundMessage: vi.fn(),
   whatsappSend: vi.fn(),
+  linkedDeviceSend: vi.fn(),
   captureMessage: vi.fn(),
   captureException: vi.fn(),
   state: {
@@ -24,6 +25,8 @@ const mocks = vi.hoisted(() => ({
     } as { data: Record<string, unknown> | null; error: unknown },
     inserts: [] as Record<string, unknown>[],
     updates: [] as Array<{ table: string; payload: Record<string, unknown> }>,
+    provider: "dialog360" as "dialog360" | "linked_device",
+    authenticatedAccount: null as string | null,
   },
 }));
 
@@ -48,6 +51,16 @@ vi.mock("@/lib/messaging/whatsapp-dialog360", () => ({
   },
 }));
 
+vi.mock("@/lib/messaging/whatsapp-linked-device", () => ({
+  linkedDeviceWhatsAppProvider: {
+    id: "linked_device",
+    channel: "whatsapp",
+    send: mocks.linkedDeviceSend,
+    verifySignature: vi.fn(),
+    parseWebhook: vi.fn(),
+  },
+}));
+
 vi.mock("@/lib/supabase/admin", () => ({
   incrementClinicUsage: mocks.incrementClinicUsage,
   finalizeOutboundMessage: mocks.finalizeOutboundMessage,
@@ -61,7 +74,7 @@ vi.mock("@/lib/supabase/admin", () => ({
                 id: "channel-1",
                 clinic_id: "clinic-1",
                 channel: "whatsapp",
-                provider: "dialog360",
+                provider: mocks.state.provider,
                 credentials_encrypted: null,
                 sender_identity: "phone-id-1",
                 status: "active",
@@ -102,6 +115,21 @@ vi.mock("@/lib/supabase/admin", () => ({
           }),
         };
       }
+      if (table === "whatsapp_linked_device_sessions") {
+        // The send path proves the conversation belongs to the account that is
+        // authenticated right now, so this row is part of every linked-device
+        // reply.
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: () => Promise.resolve({
+                data: { authenticated_account_id: mocks.state.authenticatedAccount },
+                error: null,
+              }),
+            }),
+          }),
+        };
+      }
       throw new Error(`Unexpected table: ${table}`);
     },
   }),
@@ -118,6 +146,21 @@ const baseInput = {
   channelPreference: ["whatsapp" as const],
 };
 
+/**
+ * Puts the clinic on a linked device whose authenticated account owns the
+ * conversation under test. All three have to agree — channel sender identity,
+ * session account and conversation account — or the send is refused, which is
+ * the whole point of account isolation on the outbound path too.
+ */
+function linkedDeviceAccount(accountId = "phone-id-1") {
+  mocks.state.provider = "linked_device";
+  mocks.state.authenticatedAccount = accountId;
+  mocks.state.conversation.data = {
+    ...mocks.state.conversation.data,
+    whatsapp_account_id: accountId,
+  };
+}
+
 beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-07-17T10:00:00.000Z"));
@@ -127,12 +170,16 @@ beforeEach(() => {
       channel: "whatsapp",
       status: "open",
       window_expires_at: "2026-07-17T09:59:00.000Z",
+      // Cloud API traffic is not linked-device traffic and carries no account.
+      whatsapp_account_id: null,
     },
     error: null,
   };
   mocks.state.template = { data: null, error: null };
   mocks.state.inserts = [];
   mocks.state.updates = [];
+  mocks.state.provider = "dialog360";
+  mocks.state.authenticatedAccount = null;
   mocks.getEntitlements.mockResolvedValue({
     clinicId: "clinic-1",
     planSlug: "pro",
@@ -146,6 +193,11 @@ beforeEach(() => {
   mocks.whatsappSend.mockResolvedValue({
     ok: true,
     providerMessageId: "wamid.out-1",
+    costMicro: null,
+  });
+  mocks.linkedDeviceSend.mockResolvedValue({
+    ok: true,
+    providerMessageId: "linked.out-1",
     costMicro: null,
   });
 });
@@ -173,6 +225,53 @@ describe("P3C WhatsApp service-window enforcement", () => {
     await expect(sendMessage(baseInput)).resolves.toMatchObject({ ok: true, channel: "whatsapp" });
     expect(mocks.whatsappSend).toHaveBeenCalledWith(
       expect.objectContaining({ body: "Hello", template: undefined }),
+      {},
+    );
+  });
+
+  it("allows a linked-device freeform reply with no service window", async () => {
+    linkedDeviceAccount();
+    mocks.state.conversation.data = {
+      ...mocks.state.conversation.data,
+      window_expires_at: null,
+    };
+    await expect(sendMessage(baseInput)).resolves.toMatchObject({
+      ok: true,
+      provider: "linked_device",
+    });
+    expect(mocks.linkedDeviceSend).toHaveBeenCalledWith(
+      expect.objectContaining({ body: "Hello", template: undefined }),
+      {},
+    );
+  });
+
+  it("uses an unreviewed linked-device template as reusable text outside the window", async () => {
+    linkedDeviceAccount();
+    mocks.state.template = {
+      data: {
+        id: "template-1",
+        clinic_id: "clinic-1",
+        channel: "whatsapp",
+        name: "follow_up",
+        language: "en",
+        body: "Hello {{1}}",
+        variables: ["name"],
+        provider_template_id: null,
+        approval_status: "draft",
+        created_at: "2026-07-17T00:00:00.000Z",
+        updated_at: "2026-07-17T00:00:00.000Z",
+      },
+      error: null,
+    };
+
+    await expect(sendMessage({
+      ...baseInput,
+      body: "",
+      templateId: "template-1",
+      templateParameters: ["Mona"],
+    })).resolves.toMatchObject({ ok: true, provider: "linked_device" });
+    expect(mocks.linkedDeviceSend).toHaveBeenCalledWith(
+      expect.objectContaining({ body: "Hello Mona" }),
       {},
     );
   });

@@ -7,6 +7,7 @@ import {
 import { getRevenueReportCopy } from "@/lib/documents/revenue-copy";
 import type { RevenueDocumentSnapshot } from "@/lib/documents/resolvers/revenue-report";
 
+
 const copy: RevenueReportCopy = {
   title: "Revenue Report",
   labels: { documentNumber: "Number", issueDate: "Date", issueTime: "Time", period: "Period" },
@@ -154,6 +155,8 @@ describe("P7-3 Revenue Report document", () => {
     expect(container).toHaveTextContent("Report context");
     expect(container).toHaveTextContent("TRY 1,250");
     expect(container).not.toHaveTextContent("1,250.00");
+    // A revenue report carries no person photos, only names.
+    expect(container.querySelectorAll(".cf-doc-list-avatar")).toHaveLength(0);
   });
 
   it("renders fully localized Arabic system copy with canonical number and QR", async () => {
@@ -208,5 +211,19 @@ describe("P7-3 Revenue Report document", () => {
       expect(container).not.toHaveTextContent(english);
     }
     expect(container.textContent).not.toMatch(/[٠-٩۰-۹]/);
+  });
+
+  it("keeps long fixed-layout report rows free of person photos", () => {
+    const transactions = Array.from({ length: 100 }, (_, index) => ({
+      ...snapshot.transactions[0],
+      id: `row-${index}`,
+    }));
+    const { container } = render(
+      <RevenueReportDocument locale="en" lifecycle="preview"
+        snapshot={{ ...snapshot, transactions }} copy={copy} />,
+    );
+    expect(container.querySelectorAll(".cf-doc-table tbody tr")).toHaveLength(100);
+    expect(container.querySelectorAll(".cf-doc-list-avatar")).toHaveLength(0);
+    expect(container.querySelector(".cf-doc-table")).toHaveClass("cf-doc-table");
   });
 });

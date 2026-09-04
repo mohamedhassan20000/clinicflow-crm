@@ -27,6 +27,21 @@ export type MessageAttachment = {
   contentType?: string;
 };
 
+/**
+ * A server-authorized object reference for a linked-device WhatsApp send.
+ * Bytes never cross the application's 64 KB worker request boundary.
+ */
+export type OutboundMediaReference = {
+  mediaId: string;
+  kind: "image" | "document" | "audio";
+  mimeType: string;
+  bucket: "whatsapp-outbound" | "patient-assets" | "clinic-documents";
+  storagePath: string;
+  fileName: string | null;
+  /** Voice notes are always transcoded to OGG/Opus by the worker. */
+  voiceNote: boolean;
+};
+
 /** What a caller asks the messaging layer to deliver. */
 export type OutboundMessageInput = {
   clinicId: string;
@@ -45,6 +60,19 @@ export type OutboundMessageInput = {
   channelPreference?: readonly MessageChannel[];
   /** Email-only binary attachments (e.g. the canonical invoice PDF). */
   attachments?: readonly MessageAttachment[];
+  /** Linked-device WhatsApp only; always a storage reference, never bytes. */
+  media?: OutboundMediaReference;
+  /**
+   * P11T — the conversation episode this message belongs to, written into the
+   * row in the same statement that creates it.
+   *
+   * Set by the Patient Assistant so that an inbound turn and the assistant's
+   * reply to it carry the same `episode_id` and an audit never has to replay
+   * timestamp arithmetic to pair them. Omitted by every other caller: a
+   * reminder, an invoice follow-up or a staff member's own message is not part
+   * of an assistant episode, and a null here is the truthful record of that.
+   */
+  episodeId?: string | null;
 };
 
 /** What an adapter receives — channel-level, provider-agnostic. */
@@ -65,6 +93,8 @@ export type ProviderMessage = {
   };
   /** Email-only binary attachments (e.g. the canonical invoice PDF). */
   attachments?: readonly MessageAttachment[];
+  /** Linked-device WhatsApp only; the worker downloads this private object. */
+  media?: Omit<OutboundMediaReference, "mediaId">;
 };
 
 export type ProviderSendResult =
@@ -72,6 +102,8 @@ export type ProviderSendResult =
   | {
       ok: false;
       error: string;
+      /** Safe, provider-neutral media failure stage; never raw provider text. */
+      failureCode?: ProviderMediaFailureCode;
       /**
        * True when the provider may have accepted the message anyway (timeout,
        * network interruption, unparseable 2xx). Callers must not fall back to
@@ -80,6 +112,12 @@ export type ProviderSendResult =
        */
       ambiguous?: boolean;
     };
+
+export type ProviderMediaFailureCode =
+  | "MEDIA_REQUEST_REJECTED"
+  | "MEDIA_STORAGE_FETCH_FAILED"
+  | "MEDIA_TRANSCODE_FAILED"
+  | "MEDIA_BAILEYS_SEND_FAILED";
 
 export type TemplateApprovalStatus =
   Database["public"]["Enums"]["template_approval_status"];
@@ -100,6 +138,30 @@ export type ProviderTemplateResult =
   | { ok: false; error: string };
 
 /** Normalized provider webhook event (routes consume these in P3B). */
+/**
+ * P8, linked-device only: a file a patient sent, already downloaded, sniffed and
+ * stored by the pairing worker.
+ *
+ * `mimeType` is what the bytes are, not what the sending client claimed;
+ * `originalFilename` is a label and never a path component. A refused or failed
+ * file still arrives as one of these so the clinic sees that something came
+ * through that ClinicFlow could not open.
+ */
+export type InboundAttachment = {
+  mediaKind: "image" | "document" | "audio" | "video" | "unsupported";
+  /** `audioMessage.ptt`, kept separately from the coarse audio media kind. */
+  voiceNote: boolean;
+  /** Whole seconds reported by WhatsApp, when available. */
+  durationSeconds: number | null;
+  mimeType: string;
+  originalFilename: string | null;
+  byteSize: number;
+  sha256: string | null;
+  storagePath: string | null;
+  status: "stored" | "rejected" | "failed";
+  failureReason: string | null;
+};
+
 export type WebhookEvent =
   | {
       kind: "inbound";
@@ -108,6 +170,64 @@ export type WebhookEvent =
       providerMessageId: string;
       body: string;
       receivedAt: string | null;
+      /**
+       * P8: the contact/push name WhatsApp reports for this sender. Display
+       * metadata only — it never resolves, matches or verifies a patient.
+       */
+      displayName?: string | null;
+      /**
+       * P8: this message came from the linked device's history sync, not from
+       * live traffic. Historical messages are persisted but produce no service
+       * window, no staff notification, and no agent turn.
+       */
+      historical?: boolean;
+      attachments?: InboundAttachment[];
+    }
+  | {
+      /**
+       * P8: a one-to-one chat the history sync listed. Opens the inbox thread so
+       * a conversation the clinic only ever sent into still appears, and carries
+       * the WhatsApp display name for it.
+       */
+      kind: "history_chat";
+      participant: string;
+      displayName: string | null;
+      lastMessageAt: string | null;
+    }
+  | {
+      /** P8: how far this clinic's history import has got. */
+      kind: "history_progress";
+      status: "importing" | "complete" | "unavailable";
+      chats: number;
+      messages: number;
+    }
+  | {
+      kind: "history_identity";
+      lid: string;
+      participant: string;
+    }
+  | {
+      kind: "history_pending_chat";
+      lid: string;
+      displayName: string | null;
+      lastMessageAt: string | null;
+    }
+  | {
+      kind: "history_pending_message";
+      lid: string;
+      providerMessageId: string;
+      direction: "inbound" | "outbound";
+      body: string;
+      occurredAt: string;
+      displayName?: string | null;
+      attachments?: InboundAttachment[];
+    }
+  | {
+      kind: "history_metrics";
+      chatsReceived: number;
+      messagesReceived: number;
+      unsupportedMessages: number;
+      unresolvedChats: number;
     }
   | {
       /**
@@ -123,6 +243,8 @@ export type WebhookEvent =
       providerMessageId: string;
       body: string;
       occurredAt: string | null;
+      displayName?: string | null;
+      historical?: boolean;
     }
   | {
       kind: "status";
@@ -177,6 +299,9 @@ export type SendErrorCode =
   | "SERVICE_WINDOW_CLOSED"
   | "TEMPLATE_NOT_APPROVED"
   | "TEMPLATE_PARAMETERS_INVALID"
+  | "MEDIA_UNSUPPORTED"
+  | "MEDIA_UNAVAILABLE"
+  | ProviderMediaFailureCode
   | "RECORD_FAILED"
   | "PROVIDER_SEND_FAILED"
   /** Timeout/network loss after the provider may have accepted; the row stays queued for callback repair or a later retry. */

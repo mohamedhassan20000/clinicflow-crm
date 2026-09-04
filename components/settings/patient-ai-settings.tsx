@@ -8,8 +8,16 @@ import { toast } from "sonner";
 import {
   deletePatientFaq,
   savePatientFaq,
+  setPatientAiCommunicationStyle,
   setPatientAiReplyMode,
 } from "@/actions/patient-ai";
+import {
+  MAX_STYLE_INSTRUCTION_LENGTH,
+  type AiArabicStyle,
+  type AiLanguageMode,
+  type AiTone,
+  type CommunicationStyle,
+} from "@/lib/ai/communication-style";
 import type { PatientFaqItem } from "@/lib/ai/patient-faq-settings";
 import type { ClinicAiReplyMode } from "@/lib/ai/patient-reply-mode";
 import { Badge } from "@/components/ui/badge";
@@ -52,10 +60,12 @@ const EMPTY_DRAFT: FaqDraft = {
 export function PatientAiSettingsPanel({
   replyMode,
   autoEntitled,
+  communicationStyle,
   faqs,
 }: {
   replyMode: ClinicAiReplyMode;
   autoEntitled: boolean;
+  communicationStyle: CommunicationStyle;
   faqs: PatientFaqItem[];
 }) {
   const t = useTranslations("settings");
@@ -64,6 +74,38 @@ export function PatientAiSettingsPanel({
   const [mode, setMode] = useState<ClinicAiReplyMode>(replyMode);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [draft, setDraft] = useState<FaqDraft>(EMPTY_DRAFT);
+  const [style, setStyle] = useState<CommunicationStyle>(communicationStyle);
+  const [instructionDraft, setInstructionDraft] = useState(
+    communicationStyle.styleInstruction ?? "",
+  );
+
+  /**
+   * The dropdowns save immediately; the free-text line saves on its own button.
+   *
+   * Not an inconsistency — a select has a discrete, complete value the moment it
+   * changes, and a text box does not. Autosaving the instruction on every
+   * keystroke would write a dozen half-sentences to the clinic's prompt, one of
+   * which is live for whatever patient messages in between.
+   */
+  function saveStyle(next: CommunicationStyle) {
+    const previous = style;
+    setStyle(next);
+    startTransition(async () => {
+      const result = await setPatientAiCommunicationStyle({
+        language: next.language,
+        arabicStyle: next.arabicStyle,
+        tone: next.tone,
+        styleInstruction: next.styleInstruction,
+      });
+      if (result.error) {
+        setStyle(previous);
+        toast.error(result.error);
+        return;
+      }
+      toast.success(t("patientAiStyleSaved"));
+      router.refresh();
+    });
+  }
 
   function changeMode(next: ClinicAiReplyMode) {
     const previous = mode;
@@ -163,6 +205,120 @@ export function PatientAiSettingsPanel({
                 ? t("patientAiModeSuggestHint")
                 : t("patientAiModeAutoHint")}
           </p>
+        </div>
+      </section>
+
+      <section className="space-y-4 rounded-xl border bg-card p-4" data-testid="patient-ai-style">
+        <div>
+          <h3 className="font-medium">{t("patientAiStyleTitle")}</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {t("patientAiStyleDescription")}
+          </p>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="patient-ai-language">{t("patientAiStyleLanguage")}</Label>
+            <Select
+              value={style.language}
+              onValueChange={(value) =>
+                saveStyle({ ...style, language: value as AiLanguageMode })
+              }
+              disabled={pending}
+            >
+              <SelectTrigger id="patient-ai-language">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="auto">{t("patientAiStyleLanguageAuto")}</SelectItem>
+                <SelectItem value="ar">{t("patientAiStyleLanguageAr")}</SelectItem>
+                <SelectItem value="en">{t("patientAiStyleLanguageEn")}</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              {style.language === "auto"
+                ? t("patientAiStyleLanguageAutoHint")
+                : t("patientAiStyleLanguageFixedHint")}
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="patient-ai-dialect">{t("patientAiStyleDialect")}</Label>
+            <Select
+              value={style.arabicStyle}
+              onValueChange={(value) =>
+                saveStyle({ ...style, arabicStyle: value as AiArabicStyle })
+              }
+              disabled={pending || style.language === "en"}
+            >
+              <SelectTrigger id="patient-ai-dialect">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="auto">{t("patientAiStyleDialectAuto")}</SelectItem>
+                <SelectItem value="msa">{t("patientAiStyleDialectMsa")}</SelectItem>
+                <SelectItem value="egyptian">{t("patientAiStyleDialectEgyptian")}</SelectItem>
+                <SelectItem value="gulf">{t("patientAiStyleDialectGulf")}</SelectItem>
+                <SelectItem value="saudi">{t("patientAiStyleDialectSaudi")}</SelectItem>
+                <SelectItem value="levantine">{t("patientAiStyleDialectLevantine")}</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              {t("patientAiStyleDialectHint")}
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="patient-ai-tone">{t("patientAiStyleTone")}</Label>
+            <Select
+              value={style.tone}
+              onValueChange={(value) => saveStyle({ ...style, tone: value as AiTone })}
+              disabled={pending}
+            >
+              <SelectTrigger id="patient-ai-tone">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="friendly">{t("patientAiStyleToneFriendly")}</SelectItem>
+                <SelectItem value="neutral">{t("patientAiStyleToneNeutral")}</SelectItem>
+                <SelectItem value="formal">{t("patientAiStyleToneFormal")}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="patient-ai-instruction">{t("patientAiStyleInstruction")}</Label>
+          <Textarea
+            id="patient-ai-instruction"
+            value={instructionDraft}
+            maxLength={MAX_STYLE_INSTRUCTION_LENGTH}
+            placeholder={t("patientAiStyleInstructionPlaceholder")}
+            className="min-h-20"
+            onChange={(event) => setInstructionDraft(event.target.value)}
+          />
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-muted-foreground">
+              {t("patientAiStyleInstructionHint")}
+            </p>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={
+                pending ||
+                instructionDraft.trim() === (style.styleInstruction ?? "").trim()
+              }
+              onClick={() =>
+                saveStyle({
+                  ...style,
+                  styleInstruction: instructionDraft.trim() || null,
+                })
+              }
+            >
+              {pending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
+              {t("patientAiStyleInstructionSave")}
+            </Button>
+          </div>
         </div>
       </section>
 

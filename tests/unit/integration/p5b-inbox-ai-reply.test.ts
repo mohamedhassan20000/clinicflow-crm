@@ -60,6 +60,7 @@ async function cleanup() {
   await service.from("audit_logs").delete().in("clinic_id", [clinicA, clinicB]);
   await service.from("conversations").delete().in("clinic_id", [clinicA, clinicB]);
   await service.from("patients").delete().in("id", [patientA]);
+  await service.from("ai_commercial_terms").delete().in("clinic_id", [clinicA, clinicB]);
   await service.from("subscriptions").delete().in("clinic_id", [clinicA, clinicB]);
   await service.from("profiles").delete().in("id", userIds);
   await service.from("clinics").delete().in("id", [clinicA, clinicB]);
@@ -101,6 +102,12 @@ beforeAll(async () => {
     { id: adminBId, clinic_id: clinicB, full_name: "Admin B", role: "admin" },
   ]);
   if (profiles.error) throw profiles.error;
+
+  const terms = await service.from("ai_commercial_terms").insert([
+    { clinic_id: clinicA, change_reason: "pilot", updated_by: adminAId, accepted_at: new Date().toISOString() },
+    { clinic_id: clinicB, change_reason: "pilot", updated_by: adminBId, accepted_at: new Date().toISOString() },
+  ]);
+  if (terms.error) throw terms.error;
 
   const patients = await service.from("patients").insert([
     {

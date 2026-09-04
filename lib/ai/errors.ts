@@ -13,7 +13,9 @@ export type AiToolDenialReason =
   | "permission_not_granted"
   | "usage_limit_reached"
   | "lookup_failed"
-  | "subscription_inactive";
+  | "subscription_inactive"
+  /** Record is absent or outside RLS scope; those cases are intentionally identical. */
+  | "unauthorized_scope";
 
 /**
  * Every code the assistant surface can send to the client, over any of its
@@ -49,6 +51,7 @@ export type AssistantErrorCode =
   | AiToolDenialReason
   | "rate_limited"
   | "invalid_request"
+  | "input_limit_reached"
   | "temporarily_unavailable";
 
 export class AiToolAuthorizationError extends Error {

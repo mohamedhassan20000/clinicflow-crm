@@ -42,6 +42,12 @@ export type AiProviderSettings = {
   mode: AiCredentialMode;
   hybridDisclosureVersion: string | null;
   hybridAcceptedAt: string | null;
+  /**
+   * Whether an exhausted ClinicFlow allowance may continue on the clinic's own
+   * Anthropic key instead of denying the turn (P12/G1). Only ever moves work
+   * away from ClinicFlow-funded spend, never toward it.
+   */
+  autoByokFallbackEnabled: boolean;
   connection: AiProviderConnectionMetadata | null;
 };
 
@@ -89,13 +95,16 @@ async function loadPolicyAndConnection(clinicId: string): Promise<{
   mode: AiCredentialMode;
   hybridDisclosureVersion: string | null;
   hybridAcceptedAt: string | null;
+  autoByokFallbackEnabled: boolean;
   connection: ActiveCredentialRow | null;
 }> {
   const client = createClinicScopedAdminClient(clinicId);
   const [policyResult, connectionResult] = await Promise.all([
     client
       .from("ai_clinic_provider_policies")
-      .select("credential_mode, hybrid_disclosure_version, hybrid_accepted_at")
+      .select(
+        "credential_mode, hybrid_disclosure_version, hybrid_accepted_at, auto_byok_fallback_enabled",
+      )
       .eq("clinic_id", clinicId)
       .maybeSingle(),
     client
@@ -119,6 +128,9 @@ async function loadPolicyAndConnection(clinicId: string): Promise<{
     mode: rawMode,
     hybridDisclosureVersion: policyResult.data?.hybrid_disclosure_version ?? null,
     hybridAcceptedAt: policyResult.data?.hybrid_accepted_at ?? null,
+    // Absent policy row = managed defaults, and the default is to keep the
+    // clinic working on its own key rather than stopping AI dead.
+    autoByokFallbackEnabled: policyResult.data?.auto_byok_fallback_enabled ?? true,
     connection,
   };
 }
@@ -130,8 +142,60 @@ export async function getAiProviderSettings(clinicId: string): Promise<AiProvide
     mode: result.mode,
     hybridDisclosureVersion: result.hybridDisclosureVersion,
     hybridAcceptedAt: result.hybridAcceptedAt,
+    autoByokFallbackEnabled: result.autoByokFallbackEnabled,
     connection: result.connection ? metadata(result.connection) : null,
   };
+}
+
+/**
+ * The clinic's own credential, resolved for the ORDERED-RESOLUTION fallback
+ * (P12/G1) rather than because policy selected it.
+ *
+ * Separate from `resolveAiProviderCredential` on purpose. That function answers
+ * "what did this clinic configure"; this one answers "if ClinicFlow refuses to
+ * fund this turn, is there a healthy clinic key that can carry it". It returns
+ * `null` — never throws — for every reason a fallback should simply not happen
+ * (no connection, unhealthy connection, undecryptable envelope, fallback
+ * disabled by policy), because a missing fallback is an ordinary, expected state
+ * that must degrade into a clean denial rather than an error page.
+ *
+ * It performs no entitlement or allowance check of its own. Both are re-asserted
+ * authoritatively inside `reserve_ai_budget`, which is the only place a BYOK
+ * turn can actually be admitted.
+ */
+export async function resolveByokFallbackCredential(clinicId: string): Promise<
+  | null
+  | {
+      provider: AiCredentialProvider;
+      connectionId: string;
+      secret: string;
+    }
+> {
+  let result: Awaited<ReturnType<typeof loadPolicyAndConnection>>;
+  try {
+    result = await loadPolicyAndConnection(clinicId);
+  } catch {
+    return null;
+  }
+  if (!result.autoByokFallbackEnabled) return null;
+  if (!result.connection) return null;
+  if (result.connection.health_status !== "valid") return null;
+  try {
+    return {
+      provider: result.connection.provider,
+      connectionId: result.connection.id,
+      secret: decryptAiCredential(
+        {
+          clinicId,
+          provider: result.connection.provider,
+          credentialId: result.connection.id,
+        },
+        result.connection.credential_encrypted,
+      ),
+    };
+  } catch {
+    return null;
+  }
 }
 
 /** Runtime-only resolution. The plaintext exists only in this returned request scope. */

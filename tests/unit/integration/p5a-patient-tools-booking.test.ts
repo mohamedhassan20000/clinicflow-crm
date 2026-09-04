@@ -64,11 +64,13 @@ async function createAuthUser(id: string, label: string) {
 async function cleanup() {
   await service.from("audit_logs").delete().in("clinic_id", [clinicA, clinicB]);
   await service.from("appointments").delete().in("clinic_id", [clinicA, clinicB]);
+  await service.from("doctor_schedules").delete().in("clinic_id", [clinicA, clinicB]);
   await service.from("conversations").delete().in("clinic_id", [clinicA, clinicB]);
   await service
     .from("patients")
     .delete()
     .in("id", [patientA1, patientA2, patientA3, patientB]);
+  await service.from("ai_commercial_terms").delete().in("clinic_id", [clinicA, clinicB]);
   await service.from("subscriptions").delete().in("clinic_id", [clinicA, clinicB]);
   await service.from("profiles").delete().in("id", userIds);
   await service.from("clinics").delete().in("id", [clinicA, clinicB]);
@@ -153,6 +155,12 @@ beforeAll(async () => {
     { id: doctorBId, clinic_id: clinicB, full_name: "Doctor B", role: "doctor" },
   ]);
   if (profiles.error) throw profiles.error;
+
+  const terms = await service.from("ai_commercial_terms").insert([
+    { clinic_id: clinicA, change_reason: "pilot", updated_by: adminAId, accepted_at: new Date().toISOString() },
+    { clinic_id: clinicB, change_reason: "pilot", updated_by: adminBId, accepted_at: new Date().toISOString() },
+  ]);
+  if (terms.error) throw terms.error;
 
   const patients = await service.from("patients").insert([
     {
@@ -295,15 +303,41 @@ describe("P5A service-only identity boundary and RLS", () => {
       "2030-08-01T09:00:00Z",
     );
     expect(created.error).toBeNull();
+    const createdId = created.data![0].appointment_id;
+    const dashboardVisible = await adminA
+      .from("appointments")
+      .select("id, status")
+      .eq("id", createdId)
+      .eq("status", "pending")
+      .not("ai_patient_conversation_id", "is", null)
+      .gt("expires_at", new Date().toISOString())
+      .maybeSingle();
+    expect(dashboardVisible.error).toBeNull();
+    expect(dashboardVisible.data).toMatchObject({ id: createdId, status: "pending" });
+
+    const notification = await adminA
+      .from("notifications")
+      .select("recipient_id, type, link, data")
+      .eq("clinic_id", clinicA)
+      .eq("type", "ai_booking_request")
+      .contains("data", { recordId: createdId })
+      .maybeSingle();
+    expect(notification.error).toBeNull();
+    expect(notification.data).toMatchObject({
+      recipient_id: adminAId,
+      type: "ai_booking_request",
+      data: { source: "appointment", recordId: createdId },
+    });
+    expect(notification.data?.link).toContain(`/appointments?status=pending&ai=1&appointment=${createdId}`);
     const forgedExpiry = await adminA
       .from("appointments")
       .update({ expires_at: "2035-01-01T00:00:00Z" })
-      .eq("id", created.data![0].appointment_id);
+      .eq("id", createdId);
     expect(forgedExpiry.error?.code).toBe("42501");
     await service
       .from("appointments")
       .delete()
-      .eq("id", created.data![0].appointment_id);
+      .eq("id", createdId);
   });
 
   it("requires DOB verification for details, locks repeated failures, and returns only the bound patient's rows", async () => {
@@ -399,6 +433,103 @@ describe("P5A service-only identity boundary and RLS", () => {
 });
 
 describe("P5A atomic pending caps, staff displacement compatibility, and TTL", () => {
+  it("atomically replaces only the verified patient's own pending request", async () => {
+    await service
+      .from("conversations")
+      .update({ identity_verified_at: new Date().toISOString(), ai_paused_at: null })
+      .eq("id", conversationA3);
+    const schedules = await service.from("doctor_schedules").upsert(
+      Array.from({ length: 7 }, (_, day) => ({
+        clinic_id: clinicA,
+        doctor_id: doctorAId,
+        day_of_week: day,
+        start_time: "08:00",
+        end_time: "18:00",
+        is_enabled: true,
+      })),
+      { onConflict: "doctor_id,day_of_week" },
+    );
+    expect(schedules.error).toBeNull();
+
+    const originalId = randomUUID();
+    const otherPatientId = randomUUID();
+    const inserted = await service.from("appointments").insert([
+      {
+        id: originalId,
+        clinic_id: clinicA,
+        patient_id: patientA3,
+        doctor_id: doctorAId,
+        scheduled_at: "2030-10-01T09:00:00Z",
+        duration_minutes: 30,
+        status: "pending",
+        created_by: null,
+        ai_patient_conversation_id: conversationA3,
+      },
+      {
+        id: otherPatientId,
+        clinic_id: clinicA,
+        patient_id: patientA2,
+        doctor_id: doctorAId,
+        scheduled_at: "2030-10-01T10:00:00Z",
+        duration_minutes: 30,
+        status: "pending",
+        created_by: adminAId,
+      },
+    ]);
+    expect(inserted.error).toBeNull();
+
+    const crossed = await service.rpc("prepare_patient_ai_reschedule", {
+      p_clinic_id: clinicA,
+      p_conversation_id: conversationA3,
+      p_appointment_id: otherPatientId,
+    });
+    expect(crossed.error).toBeNull();
+    expect(crossed.data).toEqual([]);
+
+    const changed = await service.rpc("reschedule_patient_ai_appointment", {
+      p_clinic_id: clinicA,
+      p_conversation_id: conversationA3,
+      p_appointment_id: originalId,
+      p_scheduled_at: "2030-10-02T09:00:00Z",
+    });
+    expect(changed.error).toBeNull();
+    expect(changed.data?.[0]).toMatchObject({
+      rescheduled: true,
+      reason: "rescheduled",
+      scheduled_at: "2030-10-02T09:00:00+00:00",
+    });
+    const newId = changed.data?.[0].new_appointment_id;
+    expect(newId).toBeTruthy();
+
+    const chain = await service
+      .from("appointments")
+      .select("id, status, replaces_appointment_id, replaced_by_appointment_id")
+      .in("id", [originalId, newId!]);
+    expect(chain.error).toBeNull();
+    expect(chain.data).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: originalId, status: "replaced", replaced_by_appointment_id: newId }),
+      expect.objectContaining({ id: newId, status: "pending", replaces_appointment_id: originalId }),
+    ]));
+    expect(chain.data?.filter((row) => row.status === "pending")).toHaveLength(1);
+
+    const repeated = await service.rpc("reschedule_patient_ai_appointment", {
+      p_clinic_id: clinicA,
+      p_conversation_id: conversationA3,
+      p_appointment_id: originalId,
+      p_scheduled_at: "2030-10-03T09:00:00Z",
+    });
+    expect(repeated.data?.[0]).toMatchObject({
+      rescheduled: false,
+      reason: "pending_required",
+    });
+    const release = await service.rpc("cancel_patient_ai_appointment", {
+      p_clinic_id: clinicA,
+      p_conversation_id: conversationA3,
+      p_appointment_id: newId!,
+    });
+    expect(release.data?.[0]).toMatchObject({ cancelled: true });
+  });
+
   it("serializes concurrent bookings so one patient can hold only one active AI pending", async () => {
     const slot = "2030-09-01T09:00:00Z";
     const results = await Promise.all([

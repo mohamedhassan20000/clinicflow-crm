@@ -1,10 +1,8 @@
 import "server-only";
 
 import { AI_TOOL_REGISTRY } from "@/lib/ai/tools/registry";
-import { STAFF_TASK_CLASSES_BY_ROLE } from "@/lib/ai/tools";
 import { PATIENT_TOOL_NAMES } from "@/lib/ai/patient-tools";
 import type { UserRole } from "@/lib/rbac";
-import type { AiTaskClass } from "@/lib/ai/platform/types";
 
 /**
  * P6A authorization oracle.
@@ -41,9 +39,8 @@ export const ALL_STAFF_ROLES: readonly UserRole[] = [
  *
  * Mirrors the three mount gates in `resolveToolMount` — role membership,
  * required plan features, and the per-user permission — but deliberately drops
- * the task-class narrowing, because *some* certified selection (clinical, help,
- * operational, or an explicit `staff_workflow` turn) makes each of a tool's
- * declared classes reachable for a role that supports it. The result is the
+ * the task-class narrowing, because every non-help route mounts the caller's
+ * full authorized union. The result is the
  * conservative upper bound: everything the role could ever invoke.
  *
  * `financial` models the admin-granted `ai.financial_insights` permission
@@ -68,23 +65,16 @@ export function maximalStaffTools(
 }
 
 /**
- * The unscoped mount union for a role — the tools reachable *without* selecting
- * the `staff_workflow` task, i.e. what the capability panel and a default turn
- * expose. Adds the task-class gate against the role's supported classes, which
- * excludes the workflow orchestrator/action tools (no role lists
- * `staff_workflow` among its supported classes).
+ * The unscoped mount union for a role — the capability panel's full authorized
+ * union. Help containment is an active-turn exception, not a panel restriction.
  */
 export function unscopedStaffTools(
   role: UserRole,
   options: { financial?: boolean } = {},
 ): ReadonlySet<string> {
-  const supported: readonly AiTaskClass[] = STAFF_TASK_CLASSES_BY_ROLE[role];
   const financial = options.financial ?? true;
   const names = AI_TOOL_REGISTRY.filter((definition) => {
     if (!definition.roles.includes(role)) return false;
-    if (!definition.taskClasses.some((taskClass) => supported.includes(taskClass))) {
-      return false;
-    }
     if (definition.requiredUserPermission === "ai.financial_insights") {
       return financial;
     }

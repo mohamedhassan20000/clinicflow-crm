@@ -1,11 +1,14 @@
 import "server-only";
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import type { MessagingProvider } from "@/lib/messaging/provider";
+import { logOutboundMediaDiagnostic } from "@/lib/messaging/outbound-media-diagnostics";
 import { sanitizeProviderError } from "@/lib/messaging/scrub";
 import type {
   ChannelCredentials,
+  InboundAttachment,
   OutboundMessageStatus,
   ProviderMessage,
+  ProviderMediaFailureCode,
   ProviderSendResult,
   WebhookEvent,
 } from "@/lib/messaging/types";
@@ -68,6 +71,32 @@ export function signLinkedDeviceCallback(
 
 type WorkerSendResponse = { ok?: boolean; providerMessageId?: string | null; error?: string };
 
+const WORKER_MEDIA_FAILURE_CODES = new Set<ProviderMediaFailureCode>([
+  "MEDIA_REQUEST_REJECTED",
+  "MEDIA_STORAGE_FETCH_FAILED",
+  "MEDIA_TRANSCODE_FAILED",
+  "MEDIA_BAILEYS_SEND_FAILED",
+]);
+
+function mediaFailureCode(
+  message: ProviderMessage,
+  status: number,
+  workerCode: unknown,
+): ProviderMediaFailureCode | undefined {
+  if (!message.media) return undefined;
+  if (
+    typeof workerCode === "string" &&
+    WORKER_MEDIA_FAILURE_CODES.has(workerCode as ProviderMediaFailureCode)
+  ) {
+    return workerCode as ProviderMediaFailureCode;
+  }
+  // Backward compatibility makes an old worker visible instead of collapsing
+  // its text-only parser's 400 into the generic provider failure.
+  if (status === 400 || workerCode === "invalid_message") return "MEDIA_REQUEST_REJECTED";
+  if (workerCode === "MEDIA_UNAVAILABLE") return "MEDIA_STORAGE_FETCH_FAILED";
+  return undefined;
+}
+
 /**
  * The payload the worker posts to /api/webhooks/whatsapp/linked-device. It is
  * ours, not a third party's, so the shape is exact and anything unexpected is
@@ -90,13 +119,208 @@ function asIsoString(value: unknown): string | null {
   return Number.isNaN(parsed.valueOf()) ? null : parsed.toISOString();
 }
 
+function asLid(value: unknown): string | null {
+  const raw = asString(value);
+  return raw && /^\d{3,30}@lid$/.test(raw) ? raw : null;
+}
+
+function asCount(value: unknown): number {
+  const count = Number(value);
+  return Number.isInteger(count) && count >= 0 ? count : 0;
+}
+
+/** Namespaces Baileys ids by authenticated account without storing its phone. */
+export function scopedLinkedDeviceMessageId(accountId: string, providerMessageId: string): string {
+  const scope = createHash("sha256").update(accountId, "utf8").digest("hex").slice(0, 16);
+  return `ld_${scope}_${providerMessageId}`.slice(0, 255);
+}
+
 const CALLBACK_STATUSES = new Set<OutboundMessageStatus>(["sent", "delivered", "read", "failed"]);
+
+const MEDIA_KINDS = new Set<InboundAttachment["mediaKind"]>([
+  "image",
+  "document",
+  "audio",
+  "video",
+  "unsupported",
+]);
+const ATTACHMENT_STATUSES = new Set<InboundAttachment["status"]>(["stored", "rejected", "failed"]);
+/** More files than this on one message is not a patient sending documents. */
+const MAX_ATTACHMENTS_PER_MESSAGE = 10;
+
+/**
+ * A display name off the wire, reduced to something safe to render.
+ *
+ * It is chosen by whoever is typing, so it is treated exactly like message
+ * content: bidirectional-override and other invisible control characters are
+ * stripped (they can make a name render as a completely different string), the
+ * length is bounded to the column, and nothing about it is trusted beyond being
+ * a label.
+ */
+function asDisplayName(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const cleaned = value
+    .replace(/[\u0000-\u001F\u007F\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned.length === 0 ? null : cleaned.slice(0, 120);
+}
+
+/**
+ * One attachment record, rebuilt field by field.
+ *
+ * Nothing is passed through: the kind and status must be members of the two
+ * known sets, the size must be a non-negative integer, the digest must look like
+ * a SHA-256, and the storage path must be a plain relative path with no traversal
+ * in it. The path's *tenant* is checked separately by the caller, which is the
+ * only place that knows which clinic the callback was proved to speak for.
+ */
+function parseAttachment(raw: unknown): InboundAttachment | null {
+  if (!raw || typeof raw !== "object") return null;
+  const value = raw as Record<string, unknown>;
+  const mediaKind = asString(value.mediaKind) as InboundAttachment["mediaKind"] | null;
+  const status = asString(value.status) as InboundAttachment["status"] | null;
+  const mimeType = asString(value.mimeType);
+  if (!mediaKind || !MEDIA_KINDS.has(mediaKind)) return null;
+  if (!status || !ATTACHMENT_STATUSES.has(status)) return null;
+  if (
+    !mimeType ||
+    mimeType.length > 128 ||
+    !/^[a-z0-9][a-z0-9!#$&^_.+-]*\/[a-z0-9][a-z0-9!#$&^_.+-]*(?:\s*;\s*codecs\s*=\s*"?[a-z0-9!#$&^_.+-]+"?)?$/i.test(mimeType)
+  ) {
+    return null;
+  }
+  const voiceNote = value.voiceNote === true;
+  if (voiceNote && mediaKind !== "audio") return null;
+  const rawDuration = value.durationSeconds;
+  const durationSeconds = rawDuration === null || rawDuration === undefined
+    ? null
+    : Number(rawDuration);
+  if (
+    durationSeconds !== null &&
+    (!Number.isInteger(durationSeconds) || durationSeconds < 0 || durationSeconds > 7 * 24 * 60 * 60)
+  ) {
+    return null;
+  }
+  const byteSize = Number(value.byteSize);
+  if (!Number.isInteger(byteSize) || byteSize < 0) return null;
+  const sha256 = asString(value.sha256);
+  if (sha256 !== null && !/^[0-9a-f]{64}$/.test(sha256)) return null;
+  const storagePath = asString(value.storagePath);
+  if (storagePath !== null && !/^[A-Za-z0-9][A-Za-z0-9/_.-]{0,255}$/.test(storagePath)) return null;
+  if (storagePath !== null && storagePath.includes("..")) return null;
+  // A stored attachment without bytes, or a refused one that claims to have
+  // them, is incoherent — refuse it rather than persist the contradiction.
+  if ((status === "stored") !== (storagePath !== null)) return null;
+  const originalFilename = asString(value.originalFilename);
+  const failureReason = asString(value.failureReason);
+  return {
+    mediaKind,
+    voiceNote,
+    durationSeconds,
+    mimeType: mimeType.toLowerCase(),
+    originalFilename: originalFilename ? originalFilename.slice(0, 255) : null,
+    byteSize,
+    sha256,
+    storagePath,
+    status,
+    failureReason: failureReason ? failureReason.slice(0, 80) : null,
+  };
+}
+
+function parseAttachments(raw: unknown): InboundAttachment[] {
+  if (!Array.isArray(raw)) return [];
+  const parsed: InboundAttachment[] = [];
+  for (const item of raw.slice(0, MAX_ATTACHMENTS_PER_MESSAGE)) {
+    const attachment = parseAttachment(item);
+    if (attachment) parsed.push(attachment);
+  }
+  return parsed;
+}
 
 function parseEvent(raw: unknown, sessionPhone: string | null): WebhookEvent | null {
   if (!raw || typeof raw !== "object") return null;
   const event = raw as Record<string, unknown>;
-  const providerMessageId = asString(event.providerMessageId);
-  if (!providerMessageId) return null;
+
+  // The two history events carry no message id — they describe a thread and the
+  // progress of the import, not a message — so they are matched before the id is
+  // required.
+  if (event.kind === "history_chat") {
+    const participant = asString(event.participant);
+    if (!participant) return null;
+    return {
+      kind: "history_chat",
+      participant,
+      displayName: asDisplayName(event.displayName),
+      lastMessageAt: asIsoString(event.lastMessageAt),
+    };
+  }
+
+  if (event.kind === "history_progress") {
+    const status = asString(event.status);
+    if (status !== "importing" && status !== "complete" && status !== "unavailable") return null;
+    const chats = Number(event.chats);
+    const messages = Number(event.messages);
+    return {
+      kind: "history_progress",
+      status,
+      chats: Number.isInteger(chats) && chats >= 0 ? chats : 0,
+      messages: Number.isInteger(messages) && messages >= 0 ? messages : 0,
+    };
+  }
+
+  if (event.kind === "history_identity") {
+    const lid = asLid(event.lid);
+    const participant = asString(event.participant);
+    if (!lid || !participant) return null;
+    return { kind: "history_identity", lid, participant };
+  }
+
+  if (event.kind === "history_pending_chat") {
+    const lid = asLid(event.lid);
+    if (!lid) return null;
+    return {
+      kind: "history_pending_chat",
+      lid,
+      displayName: asDisplayName(event.displayName),
+      lastMessageAt: asIsoString(event.lastMessageAt),
+    };
+  }
+
+  if (event.kind === "history_metrics") {
+    return {
+      kind: "history_metrics",
+      chatsReceived: asCount(event.chatsReceived),
+      messagesReceived: asCount(event.messagesReceived),
+      unsupportedMessages: asCount(event.unsupportedMessages),
+      unresolvedChats: asCount(event.unresolvedChats),
+    };
+  }
+
+  const rawProviderMessageId = asString(event.providerMessageId);
+  if (!rawProviderMessageId) return null;
+  const providerMessageId = sessionPhone
+    ? scopedLinkedDeviceMessageId(sessionPhone, rawProviderMessageId)
+    : rawProviderMessageId;
+
+  if (event.kind === "history_pending_message") {
+    const lid = asLid(event.lid);
+    const occurredAt = asIsoString(event.occurredAt);
+    const direction = event.direction;
+    if (!lid || !occurredAt || (direction !== "inbound" && direction !== "outbound")) {
+      return null;
+    }
+    return {
+      kind: "history_pending_message",
+      lid,
+      providerMessageId,
+      direction,
+      body: typeof event.body === "string" ? event.body.slice(0, 8192) : "",
+      occurredAt,
+      displayName: asDisplayName(event.displayName),
+      attachments: direction === "inbound" ? parseAttachments(event.attachments) : [],
+    };
+  }
 
   if (event.kind === "inbound") {
     const sender = asString(event.sender);
@@ -110,6 +334,9 @@ function parseEvent(raw: unknown, sessionPhone: string | null): WebhookEvent | n
       providerMessageId,
       body: typeof event.body === "string" ? event.body : "",
       receivedAt: asIsoString(event.receivedAt),
+      displayName: asDisplayName(event.displayName),
+      historical: event.historical === true,
+      attachments: parseAttachments(event.attachments),
     };
   }
 
@@ -122,6 +349,8 @@ function parseEvent(raw: unknown, sessionPhone: string | null): WebhookEvent | n
       providerMessageId,
       body: typeof event.body === "string" ? event.body : "",
       occurredAt: asIsoString(event.occurredAt),
+      displayName: asDisplayName(event.displayName),
+      historical: event.historical === true,
     };
   }
 
@@ -151,11 +380,21 @@ export function readLinkedDeviceCallbackClinicId(body: string): string | null {
   }
 }
 
+/** The worker-observed authenticated PN identity, used to reject stale spools. */
+export function readLinkedDeviceCallbackAccountId(body: string): string | null {
+  try {
+    const payload = JSON.parse(body) as WorkerCallbackPayload;
+    const value = asString(payload.sessionPhone);
+    return value && /^\+[1-9][0-9]{5,19}$/.test(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Parses a *verified* worker callback into normalized events. `sessionPhone` is
- * the sender identity of the clinic's stored channel — supplied by the route,
- * never by the payload — so an inbound event can only ever be attributed to the
- * pairing that actually holds that number.
+ * the worker-observed authenticated PN identity after the route has proved it
+ * equals both the active channel and the current session binding.
  */
 export function parseLinkedDeviceCallback(
   body: string,
@@ -200,6 +439,16 @@ export const linkedDeviceWhatsAppProvider: MessagingProvider = {
       return { ok: false, error: "Linked device transport is not configured" };
     }
 
+    if (message.media) {
+      logOutboundMediaDiagnostic({
+        stage: "provider_request_started",
+        clinicId,
+        mediaKind: message.media.kind,
+        bucket: message.media.bucket,
+        outcome: "started",
+      });
+    }
+
     let response: Response;
     try {
       response = await fetch(
@@ -214,6 +463,10 @@ export const linkedDeviceWhatsAppProvider: MessagingProvider = {
             recipient: message.recipient,
             body: message.body,
             clientReference: message.clientReference ?? null,
+            // A private object reference only. The worker downloads with its
+            // service role after independently checking bucket + tenant path;
+            // media bytes never enter this 64 KB HTTP body.
+            ...(message.media ? { media: message.media } : {}),
           }),
           cache: "no-store",
           signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
@@ -225,11 +478,20 @@ export const linkedDeviceWhatsAppProvider: MessagingProvider = {
 
     if (!response.ok) {
       // 5xx means the worker never got far enough to be sure; 4xx is a refusal
-      // it is certain about (unknown session, invalid recipient).
-      const ambiguous = response.status >= 500;
+      // it is certain about (unknown session, invalid recipient). A missing
+      // storage object is also deterministic and happens before Baileys sends;
+      // do not leave its row queued as an ambiguous provider acceptance.
+      const payload = await response.json().catch(() => null) as { error?: unknown } | null;
+      const failureCode = mediaFailureCode(message, response.status, payload?.error);
+      const deterministicMediaFailure =
+        failureCode === "MEDIA_REQUEST_REJECTED" ||
+        failureCode === "MEDIA_STORAGE_FETCH_FAILED" ||
+        failureCode === "MEDIA_TRANSCODE_FAILED";
+      const ambiguous = response.status >= 500 && !deterministicMediaFailure;
       return {
         ok: false,
         error: `Linked device send failed (${response.status})`,
+        ...(failureCode ? { failureCode } : {}),
         ...(ambiguous ? { ambiguous: true } : {}),
       };
     }
@@ -243,9 +505,16 @@ export const linkedDeviceWhatsAppProvider: MessagingProvider = {
     if (!payload.ok) {
       return { ok: false, error: "Linked device send failed" };
     }
+    const authenticatedAccountId = asString(credentials.displayPhoneNumber);
+    if (!authenticatedAccountId || !/^\+[1-9][0-9]{5,19}$/.test(authenticatedAccountId)) {
+      return { ok: false, error: "Linked device account identity is unavailable" };
+    }
+    const rawProviderMessageId = asString(payload.providerMessageId);
     return {
       ok: true,
-      providerMessageId: asString(payload.providerMessageId),
+      providerMessageId: rawProviderMessageId
+        ? scopedLinkedDeviceMessageId(authenticatedAccountId, rawProviderMessageId)
+        : null,
       // A linked device is the clinic's own WhatsApp account: there is no
       // per-message price to report.
       costMicro: null,

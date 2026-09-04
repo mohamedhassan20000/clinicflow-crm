@@ -5,7 +5,8 @@ import { requireRole } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
 import { ClinicForm } from "@/components/settings/clinic-form";
 import { ClinicWorkingHoursForm } from "@/components/settings/clinic-working-hours-form";
-import { getClinicWorkingHours } from "@/actions/settings";
+import { StaffShiftTemplatesForm } from "@/components/settings/staff-shift-templates-form";
+import { getClinicWorkingHours, getStaffShiftTemplates } from "@/actions/settings";
 import { getTranslations } from "next-intl/server";
 import {
   ensureClinicLogoCleaned,
@@ -22,7 +23,7 @@ export default async function ClinicSettingsPage() {
   const user = await requireRole(["admin", "manager"]);
   const supabase = await createClient();
 
-  const [{ data: clinic }, workingHours] = await Promise.all([
+  const [{ data: clinic }, workingHours, shiftTemplates] = await Promise.all([
     supabase
       .from("clinics")
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -30,6 +31,7 @@ export default async function ClinicSettingsPage() {
       .eq("id", user.clinicId)
       .single(),
     getClinicWorkingHours(),
+    getStaffShiftTemplates(),
   ]);
 
   const isReadOnly = user.role !== "admin";
@@ -80,7 +82,10 @@ export default async function ClinicSettingsPage() {
           readOnly={isReadOnly}
         />
 
-        <ClinicWorkingHoursForm defaultValues={workingHours} readOnly={isReadOnly} />
+        <div className="space-y-6">
+          <ClinicWorkingHoursForm defaultValues={workingHours} readOnly={isReadOnly} />
+          <StaffShiftTemplatesForm defaultValues={shiftTemplates} readOnly={isReadOnly} />
+        </div>
       </div>
     </div>
   );

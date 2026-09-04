@@ -1,6 +1,6 @@
 import { DocumentPage, type DocumentLifecycle, type DocumentRenderContextBoundary } from "@/components/documents/engine";
-import { CertifyingProse, ChecklistPanel, DataTable, FieldGrid, NotesCallout,
-  SectionHeader, SignatureBlock, VerificationBlock } from "@/components/documents/primitives";
+import { CertifyingProse, ChecklistPanel, DataTable, FieldGrid, IdentityHero,
+  NotesCallout, SectionHeader, SignatureBlock, VerificationBlock } from "@/components/documents/primitives";
 import type { ClinicalDocumentCopy } from "@/lib/documents/clinical-copy";
 import { formatDocDate, formatDocNumber, formatDocTime } from "@/lib/documents/format";
 import type { ClinicalDocumentSnapshot } from "@/lib/documents/resolvers/clinical-document";
@@ -33,6 +33,11 @@ export function ClinicalDocument({ locale, lifecycle, snapshot, copy, documentNu
     footer={{ attribution: snapshot.branding.footerText || copy.footerAttribution, copyright: copy.copyright }}
     pageLabels={{ page: copy.page, of: copy.of }}
     renderContextBoundary={renderContextBoundary}>
+    {/* Clinical documents are not a patient file: the identity block stays on
+        the initials avatar and never carries the patient photo. */}
+    <IdentityHero name={snapshot.subject.fullName}
+      identifier={snapshot.subject.fileNumber}
+      initials={snapshot.subject.fullName.slice(0, 1).toUpperCase() || "—"} />
     <FieldGrid columns={2} items={identityFields(snapshot, copy, date)} />
     {snapshot.data.kind === "prescription" && <PrescriptionBody data={snapshot.data} copy={copy} verification={verification} signature={signature} />}
     {snapshot.data.kind === "lab-request" && <LabBody data={snapshot.data} copy={copy} verification={verification} signature={signature} />}

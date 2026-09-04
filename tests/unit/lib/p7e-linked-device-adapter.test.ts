@@ -4,6 +4,7 @@ import {
   linkedDeviceWhatsAppProvider,
   parseLinkedDeviceCallback,
   readLinkedDeviceCallbackClinicId,
+  scopedLinkedDeviceMessageId,
   signLinkedDeviceCallback,
 } from "@/lib/messaging/whatsapp-linked-device";
 
@@ -125,9 +126,14 @@ describe("callback parsing", () => {
         kind: "inbound",
         phoneNumberId: "+201111111111",
         sender: "+201000000000",
-        providerMessageId: "WA1",
+        providerMessageId: scopedLinkedDeviceMessageId("+201111111111", "WA1"),
         body: "hello",
         receivedAt: "2026-08-17T10:00:00.000Z",
+        // P8 additions: absent on this payload, and reported as absent rather
+        // than left undefined for the persistence layer to interpret.
+        displayName: null,
+        historical: false,
+        attachments: [],
       },
     ]);
   });
@@ -200,15 +206,34 @@ describe("sending", () => {
     senderIdentity: "+201111111111",
     clientReference: "11111111-1111-4111-8111-111111111111",
   };
+  const mediaMessage = {
+    ...message,
+    body: "caption",
+    media: {
+      kind: "image" as const,
+      mimeType: "image/jpeg",
+      bucket: "whatsapp-outbound" as const,
+      storagePath: "clinic-a/2026-08/photo.jpg",
+      fileName: "photo.jpg",
+      voiceNote: false,
+    },
+  };
 
   it("routes the send to the clinic's own session and returns the message id", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValue(Response.json({ ok: true, providerMessageId: "WA9" }));
 
-    const result = await linkedDeviceWhatsAppProvider.send(message, { clinicId: "clinic-a" });
+    const result = await linkedDeviceWhatsAppProvider.send(message, {
+      clinicId: "clinic-a",
+      displayPhoneNumber: "+201111111111",
+    });
 
-    expect(result).toEqual({ ok: true, providerMessageId: "WA9", costMicro: null });
+    expect(result).toEqual({
+      ok: true,
+      providerMessageId: scopedLinkedDeviceMessageId("+201111111111", "WA9"),
+      costMicro: null,
+    });
     const [url, init] = fetchMock.mock.calls[0] as [URL, RequestInit];
     // The clinic id comes from the channel's own envelope, so a send can never
     // be routed onto another clinic's session.
@@ -221,11 +246,63 @@ describe("sending", () => {
     });
   });
 
+  it("routes a send to the local worker when local development points at one", async () => {
+    // P11K. Local testing runs a worker on the developer's own machine against
+    // the real database, so `WHATSAPP_WORKER_URL` is the only thing deciding
+    // which process gets the send. A reply typed into the localhost Inbox must
+    // reach the socket the local worker is holding — never the deployed origin,
+    // which is holding a different socket for the same clinic and would send the
+    // message from production while the developer waited on their own logs.
+    const deployed = "https://whatsapp-worker.example";
+    process.env.WHATSAPP_WORKER_URL = "http://127.0.0.1:8787";
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(Response.json({ ok: true, providerMessageId: "WA-LOCAL" }));
+
+    await expect(
+      linkedDeviceWhatsAppProvider.send(message, {
+        clinicId: "clinic-a",
+        displayPhoneNumber: "+201111111111",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      providerMessageId: scopedLinkedDeviceMessageId("+201111111111", "WA-LOCAL"),
+    });
+
+    const [url] = fetchMock.mock.calls[0] as [URL, RequestInit];
+    expect(url.toString()).toBe("http://127.0.0.1:8787/v1/sessions/clinic-a/messages");
+    expect(url.toString().startsWith(deployed)).toBe(false);
+  });
+
   it("refuses to send without a clinic id in the envelope", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch");
     const result = await linkedDeviceWhatsAppProvider.send(message, {});
     expect(result.ok).toBe(false);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("sends the complete typed media reference without bytes or a storage URL", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(Response.json({ ok: true, providerMessageId: "WA10" }));
+
+    await expect(
+      linkedDeviceWhatsAppProvider.send(mediaMessage, {
+        clinicId: "clinic-a",
+        displayPhoneNumber: "+201111111111",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      providerMessageId: scopedLinkedDeviceMessageId("+201111111111", "WA10"),
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as [URL, RequestInit];
+    expect(JSON.parse(String(init.body))).toEqual({
+      recipient: mediaMessage.recipient,
+      body: "caption",
+      clientReference: mediaMessage.clientReference,
+      media: mediaMessage.media,
+    });
   });
 
   it("refuses to send when the worker is not configured", async () => {
@@ -249,6 +326,30 @@ describe("sending", () => {
     );
     const faulted = await linkedDeviceWhatsAppProvider.send(message, { clinicId: "clinic-a" });
     expect(faulted).toMatchObject({ ok: false, ambiguous: true });
+  });
+
+  it("treats unavailable storage media as a deterministic pre-send refusal", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      Response.json({ ok: false, error: "MEDIA_UNAVAILABLE" }, { status: 502 }),
+    );
+    const refused = await linkedDeviceWhatsAppProvider.send(mediaMessage, { clinicId: "clinic-a" });
+    expect(refused).toMatchObject({
+      ok: false,
+      failureCode: "MEDIA_STORAGE_FETCH_FAILED",
+    });
+    expect((refused as { ambiguous?: boolean }).ambiguous).toBeUndefined();
+  });
+
+  it("identifies an old text-only worker rejection as a retryable request-stage failure", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      Response.json({ error: "invalid_message" }, { status: 400 }),
+    );
+    await expect(
+      linkedDeviceWhatsAppProvider.send(mediaMessage, { clinicId: "clinic-a" }),
+    ).resolves.toMatchObject({
+      ok: false,
+      failureCode: "MEDIA_REQUEST_REJECTED",
+    });
   });
 
   it("treats a network loss as ambiguous rather than failed", async () => {

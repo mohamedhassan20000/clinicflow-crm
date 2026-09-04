@@ -174,7 +174,7 @@ describe("P4B assistant UI", () => {
   it.each([
     {
       pageContext: { type: "appointments", dateRange: { from: "2026-07-01", to: "2026-07-07" } },
-      toolNames: ["list_appointments"],
+      toolNames: ["query_resource"],
       suggestion: "List appointments from 2026-07-01 to 2026-07-07",
     },
     {
@@ -223,6 +223,8 @@ describe("P4B assistant UI", () => {
           financial: "available",
           allowedReportIds:
             pageContext.type === "reports" ? ["no_shows"] : [],
+          resources: [],
+          actions: [],
         }}
       />,
     );
@@ -245,6 +247,8 @@ describe("P4B assistant UI", () => {
           operational: false,
           financial: "not_granted",
           allowedReportIds: [],
+          resources: [],
+          actions: [],
         }}
       />,
     );
@@ -280,6 +284,8 @@ describe("P4B assistant UI", () => {
             operational: true,
             financial: "not_applicable",
             allowedReportIds: [...allowedReportIds],
+            resources: [],
+            actions: [],
           }}
         />,
       );
@@ -307,12 +313,14 @@ describe("P4B assistant UI", () => {
         remaining={25}
         role="admin"
         capabilities={{
-          toolNames: ["search_help", "list_appointments", "check_availability"],
+          toolNames: ["search_help", "query_resource", "check_availability"],
           items: [],
           clinicAnalytics: false,
           operational: true,
           financial: "not_applicable",
           allowedReportIds: [],
+          resources: [],
+          actions: [],
         }}
       />,
     );

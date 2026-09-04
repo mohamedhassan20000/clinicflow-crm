@@ -123,6 +123,7 @@ export function DocumentPage({
                       <DocumentHeader
                         branding={normalizedBranding}
                         identity={normalizedIdentity}
+                        locale={locale}
                         previewNumber={locale === "ar" ? "معاينة" : "PREVIEW" /* i18n-allow: paired engine-owned lifecycle labels */}
                       />
                     </div>

@@ -18,7 +18,6 @@ vi.mock("next-intl/server", () => ({ getLocale: async () => "en" }));
 vi.mock("@/lib/ai/authorization", () => ({
   authorizeStaffAssistant: async () => USER,
   AI_STAFF_ANALYTICS_FEATURE: "ai.staff_analytics",
-  AI_WORKFLOWS_FEATURE: "ai.workflows",
 }));
 vi.mock("@/lib/rate-limit", () => ({
   checkRateLimit: async () => ({

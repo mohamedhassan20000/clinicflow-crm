@@ -5,11 +5,19 @@ import { createServerActionMocks } from "../helpers/server-action-mocks";
 // tool execute():
 //   * search_authorized_patients proposes the active patient only on a single
 //     high-confidence match (never on medium/low/ambiguous).
-//   * get_patient_summary / search_patient_visits fall back to the active
-//     patient when the model omits patient_id, re-authorize the effective id
-//     (so a stale context returns found:false, never data), and ask for
-//     clarification when there is no patient in context.
 // The model itself is never run — each execute() is driven directly.
+//
+// Phase 7. The `get_patient_summary` / `search_patient_visits` blocks that stood
+// here went with their tools when the resource layer superseded them
+// (`lib/ai/tools/superseded.ts`). Their server-side default-parameter fallback
+// has no generic equivalent by design: the active-context entity id is already
+// placed in the model's prompt (`conversation-context.ts` puts entity_type +
+// entity_id there), so the model supplies it as a registered `id` filter and the
+// compiler re-authorizes it exactly as those tools re-authorized theirs — a
+// stale or forged id yields `unauthorized_scope`, asserted in
+// phase1-resource-registry. The proposal half of P4.10A is unchanged for
+// `search_authorized_patients` below, and is extended to the generic read path
+// in `tests/unit/ai/phase7-context-parity.test.ts`.
 
 const DOCTOR = {
   id: "11111111-1111-4111-8111-111111111111",
@@ -61,7 +69,7 @@ async function loadContextTools(overrides: ContextOverrides = {}) {
     getEntitlements: vi.fn(async () => ({
       clinicId: DOCTOR.clinicId,
       planSlug: "pro_ai",
-      features: { ai_assistant: true },
+      features: { ai_assistant: true, "ai.read_clinical": true },
       limits: {},
       subscriptionAllowed: true,
     })),
@@ -75,12 +83,9 @@ async function loadContextTools(overrides: ContextOverrides = {}) {
   }));
 
   const { ConversationContextRecorder } = await import("@/lib/ai/conversation-context");
-  const [{ getPatientSummaryTool }, { searchPatientVisitsTool }, { searchAuthorizedPatientsTool }] =
-    await Promise.all([
-      import("@/lib/ai/tools/get-patient-summary"),
-      import("@/lib/ai/tools/search-patient-visits"),
-      import("@/lib/ai/tools/search-authorized-patients"),
-    ]);
+  const { searchAuthorizedPatientsTool } = await import(
+    "@/lib/ai/tools/search-authorized-patients"
+  );
 
   const recorder = overrides.withRecorder ? new ConversationContextRecorder() : null;
   const context = {
@@ -94,8 +99,6 @@ async function loadContextTools(overrides: ContextOverrides = {}) {
     mocks,
     logAgentToolCall,
     recorder,
-    get_patient_summary: getPatientSummaryTool(context),
-    search_patient_visits: searchPatientVisitsTool(context),
     search_authorized_patients: searchAuthorizedPatientsTool(context),
   };
 }
@@ -153,110 +156,5 @@ describe("search_authorized_patients active-context proposal", () => {
 
     await search_authorized_patients.execute!({ query: "Mohamed" }, opts);
     expect(recorder!.take()).toBeNull();
-  });
-});
-
-describe("get_patient_summary default parameter + re-authorization", () => {
-  function seedSummary(mocks: Awaited<ReturnType<typeof loadContextTools>>["mocks"], patientRow: unknown) {
-    mocks.state.tableResults["patients"] = { data: patientRow, error: null };
-    mocks.state.tableResults["appointments"] = { data: [], error: null };
-    mocks.state.tableResults["medical_notes"] = { data: [], error: null };
-    mocks.state.tableResults["follow_ups"] = { data: [], error: null };
-    mocks.state.tableResults["patient_packages"] = { data: [], error: null };
-  }
-
-  it("uses the active patient when the id is omitted and re-scopes the read to it", async () => {
-    const tools = await loadContextTools({ activePatientId: ACTIVE_PATIENT });
-    seedSummary(tools.mocks, {
-      id: ACTIVE_PATIENT, full_name: "Mohamed Hassan", date_of_birth: "1990-01-01",
-      blood_type: "O+", clinic_id: DOCTOR.clinicId,
-    });
-
-    const result = (await tools.get_patient_summary.execute!({}, opts)) as { found: boolean };
-    expect(result.found).toBe(true);
-    // The id-scoped read used the active patient id.
-    const idFilter = tools.mocks.state.queryLog.find(
-      (q) => q.args[0] === "eq" && q.args[1] === "id",
-    );
-    expect(idFilter?.args[2]).toBe(ACTIVE_PATIENT);
-    // Audited as an active-context resolution.
-    expect(tools.logAgentToolCall.mock.calls[0][0]).toMatchObject({
-      tool: "get_patient_summary",
-      summary: expect.objectContaining({ from_active_context: true }),
-    });
-  });
-
-  it("prefers an explicit id over the active patient and marks it not-from-context", async () => {
-    const tools = await loadContextTools({ activePatientId: ACTIVE_PATIENT });
-    seedSummary(tools.mocks, {
-      id: OTHER_PATIENT, full_name: "Sara", date_of_birth: "1990-01-01",
-      blood_type: "A+", clinic_id: DOCTOR.clinicId,
-    });
-
-    await tools.get_patient_summary.execute!({ patient_id: OTHER_PATIENT }, opts);
-    const idFilter = tools.mocks.state.queryLog.find((q) => q.args[0] === "eq" && q.args[1] === "id");
-    expect(idFilter?.args[2]).toBe(OTHER_PATIENT);
-    expect(tools.logAgentToolCall.mock.calls[0][0]).toMatchObject({
-      summary: expect.objectContaining({ from_active_context: false }),
-    });
-  });
-
-  it("returns found:false when the active patient is no longer in RLS scope (revocation)", async () => {
-    // A stale/forged context id: RLS returns no row, so the tool leaks nothing.
-    const tools = await loadContextTools({ activePatientId: ACTIVE_PATIENT });
-    seedSummary(tools.mocks, null);
-
-    const result = (await tools.get_patient_summary.execute!({}, opts)) as { found: boolean };
-    expect(result.found).toBe(false);
-    expect(result).not.toHaveProperty("patient");
-  });
-
-  it("asks for clarification when no id is given and no patient is in context", async () => {
-    const tools = await loadContextTools({ activePatientId: null });
-    const result = (await tools.get_patient_summary.execute!({}, opts)) as {
-      needs_clarification: boolean; field: string;
-    };
-    expect(result).toMatchObject({ needs_clarification: true, field: "patient_id" });
-    // No patient read was attempted.
-    expect(tools.mocks.state.queryLog.some((q) => q.table === "patients")).toBe(false);
-    expect(tools.logAgentToolCall).not.toHaveBeenCalled();
-  });
-});
-
-describe("search_patient_visits default parameter + re-authorization", () => {
-  it("uses the active patient when the id is omitted", async () => {
-    const tools = await loadContextTools({ activePatientId: ACTIVE_PATIENT });
-    tools.mocks.state.tableResults["patients"] = { data: { id: ACTIVE_PATIENT }, error: null };
-    tools.mocks.state.tableResults["medical_notes"] = { data: [], error: null };
-    tools.mocks.state.tableResults["appointments"] = { data: [], error: null };
-
-    const result = (await tools.search_patient_visits.execute!({ query: "fever" }, opts)) as {
-      found: boolean;
-    };
-    expect(result.found).toBe(true);
-    const idFilter = tools.mocks.state.queryLog.find((q) => q.args[0] === "eq" && q.args[1] === "id");
-    expect(idFilter?.args[2]).toBe(ACTIVE_PATIENT);
-    expect(tools.logAgentToolCall.mock.calls[0][0]).toMatchObject({
-      summary: expect.objectContaining({ from_active_context: true }),
-    });
-  });
-
-  it("returns found:false for a stale context patient outside RLS scope", async () => {
-    const tools = await loadContextTools({ activePatientId: ACTIVE_PATIENT });
-    tools.mocks.state.tableResults["patients"] = { data: null, error: null };
-
-    const result = (await tools.search_patient_visits.execute!({ query: "fever" }, opts)) as {
-      found: boolean; notes: unknown[]; appointments: unknown[];
-    };
-    expect(result).toMatchObject({ found: false, notes: [], appointments: [] });
-  });
-
-  it("asks for clarification with no id and no active patient", async () => {
-    const tools = await loadContextTools({ activePatientId: null });
-    const result = (await tools.search_patient_visits.execute!({ query: "fever" }, opts)) as {
-      needs_clarification: boolean; field: string;
-    };
-    expect(result).toMatchObject({ needs_clarification: true, field: "patient_id" });
-    expect(tools.mocks.state.queryLog.some((q) => q.table === "patients")).toBe(false);
   });
 });

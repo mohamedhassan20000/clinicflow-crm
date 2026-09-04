@@ -543,10 +543,10 @@ describe("P4.9A launcher placement RLS and tenant isolation", () => {
 });
 
 describe("P4.9A plan entitlement seed", () => {
-  it("enables customization only on the stable pro_ai catalog row", async () => {
+  it("keeps today's customization seed while allowing another plan row to carry it", async () => {
     const result = await service
       .from("plans")
-      .select("slug, features")
+      .select("id, slug, features")
       .in("slug", ["basic", "pro", "pro_ai"])
       .order("slug");
     expect(result.error).toBeNull();
@@ -562,5 +562,67 @@ describe("P4.9A plan entitlement seed", () => {
       pro: false,
       pro_ai: true,
     });
+
+    const basic = (result.data ?? []).find((plan) => plan.slug === "basic");
+    if (!basic) throw new Error("Basic plan fixture is missing");
+    const originalFeatures = basic.features;
+    const enabledFeatures = {
+      ...(originalFeatures as Record<string, unknown>),
+      ai_assistant: true,
+      "ai.assistant_customization": true,
+    };
+    try {
+      const enabled = await service
+        .from("plans")
+        .update({ features: enabledFeatures })
+        .eq("slug", "basic")
+        .select("features")
+        .single();
+      expect(enabled.error).toBeNull();
+      expect(
+        (enabled.data?.features as Record<string, unknown>)["ai.assistant_customization"],
+      ).toBe(true);
+
+      const subscription = await service.from("subscriptions").insert({
+        clinic_id: clinicA,
+        plan_id: basic.id,
+        status: "active",
+        current_period_end: null,
+      });
+      if (subscription.error) throw subscription.error;
+      const terms = await service.from("ai_commercial_terms").insert({
+        clinic_id: clinicA,
+        change_reason: "pilot",
+        updated_by: primaryAId,
+        accepted_at: new Date().toISOString(),
+      });
+      if (terms.error) throw terms.error;
+
+      const entitled = await service.rpc("effective_ai_feature", {
+        p_clinic_id: clinicA,
+        p_feature_key: "ai.assistant_customization",
+      });
+      expect(entitled.error).toBeNull();
+      expect(entitled.data).toBe(true);
+
+      const removedTerms = await service.from("ai_commercial_terms")
+        .delete()
+        .eq("clinic_id", clinicA);
+      if (removedTerms.error) throw removedTerms.error;
+      const unsigned = await service.rpc("effective_ai_feature", {
+        p_clinic_id: clinicA,
+        p_feature_key: "ai.assistant_customization",
+      });
+      expect(unsigned.error).toBeNull();
+      expect(unsigned.data).toBe(false);
+    } finally {
+      await service.from("ai_commercial_terms").delete().eq("clinic_id", clinicA);
+      await service.from("subscriptions").delete().eq("clinic_id", clinicA);
+      const restored = await service
+        .from("plans")
+        .update({ features: originalFeatures })
+        .eq("slug", "basic");
+      if (restored.error) throw restored.error;
+    }
   });
 });

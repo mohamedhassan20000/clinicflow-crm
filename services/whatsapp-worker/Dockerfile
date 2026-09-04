@@ -39,6 +39,14 @@ FROM node:22-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 
+# Voice notes recorded by Chrome (WebM/Opus) and Safari (commonly MP4/AAC)
+# are normalized to WhatsApp's OGG/Opus PTT format. Debian's signed package is
+# installed before dropping privileges; no compiler or package manager runs as
+# the service user.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ffmpeg ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
 # Never run the worker as root: it holds the Supabase service role and every
 # clinic's device identity.
 USER node

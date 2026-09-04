@@ -1,8 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
-  ageFromDateOfBirth,
   redactText,
-  redactPatientIdentity,
   toolAuditSummary,
 } from "@/lib/ai/redact";
 import {
@@ -29,19 +27,6 @@ describe("P4A redaction (§9.3)", () => {
     expect(out).not.toContain("87654321");
     expect(out).toContain("[redacted-number]");
     expect(out).toContain("[redacted-email]");
-  });
-
-  it("computes age without exposing the raw date of birth", () => {
-    expect(ageFromDateOfBirth("2000-01-01", new Date("2026-07-18T00:00:00Z"))).toBe(26);
-    expect(ageFromDateOfBirth(null)).toBeNull();
-    expect(ageFromDateOfBirth("not-a-date")).toBeNull();
-    const identity = redactPatientIdentity({
-      full_name: "Jane Roe",
-      date_of_birth: "1990-06-15",
-      blood_type: "O+",
-    });
-    expect(identity).not.toHaveProperty("date_of_birth");
-    expect(identity.age).toBeGreaterThan(30);
   });
 
   it("builds an audit summary that drops objects and truncates strings", () => {

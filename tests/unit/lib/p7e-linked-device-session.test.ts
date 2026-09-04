@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
   toDataURL: vi.fn(),
 }));
 
-vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
+vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn(), addBreadcrumb: vi.fn() }));
 vi.mock("@/lib/supabase/admin", () => ({ createClinicScopedAdminClient: mocks.scopedClient }));
 vi.mock("qrcode", () => ({ default: { toDataURL: mocks.toDataURL } }));
 
@@ -211,7 +211,16 @@ describe("starting a pairing", () => {
   });
 
   it("asks the worker for this clinic's session and returns the fresh view", async () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json({ ok: true }));
+    // The pairing path now begins with a compatibility probe: a worker that
+    // predates account isolation must not be paired against, so `/healthz` has
+    // to answer with the protocol advertisement before `/start` is reached.
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation((input) =>
+      Promise.resolve(
+        String(input).endsWith("/healthz")
+          ? Response.json({ ok: true, workerProtocolVersion: 2, linkedAccountIsolation: true })
+          : Response.json({ ok: true }),
+      ),
+    );
     mocks.scopedClient.mockReturnValue(
       fakeClient({
         clinic_channels: { data: null, error: null },
@@ -230,9 +239,10 @@ describe("starting a pairing", () => {
     );
     const started = await startLinkedDeviceSession("clinic-a");
     expect(started).toMatchObject({ ok: true });
-    expect(String((fetchMock.mock.calls[0] as [URL])[0])).toBe(
+    expect(fetchMock.mock.calls.map((call) => String(call[0] as URL))).toEqual([
+      `${WORKER}/healthz`,
       `${WORKER}/v1/sessions/clinic-a/start`,
-    );
+    ]);
   });
 
   it("reports an unreachable worker as unavailable, not as a clinic error", async () => {

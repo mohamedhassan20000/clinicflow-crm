@@ -20,9 +20,13 @@ describe("P7-3 Revenue Report vertical-slice contract", () => {
   });
 
   it("routes issuance through the existing idempotent P7-0 foundation", () => {
-    const source = readFileSync(join(process.cwd(), "actions/documents.ts"), "utf8");
+    // Phase 6 moved the issuance body into the shared session-free core so the
+    // Assistant issues through identical code; the server action is an adapter.
+    const source = readFileSync(join(process.cwd(), "lib/documents/mutations.ts"), "utf8");
+    const action = readFileSync(join(process.cwd(), "actions/documents.ts"), "utf8");
+    expect(action).toContain("issueRevenueDocumentCore(user, {");
     expect(source).toContain("issueDocumentFoundation({");
-    expect(source).toContain("idempotencyKey: `revenue:${parsed.data.idempotencyKey}`");
+    expect(source).toContain("idempotencyKey: `revenue:${input.idempotencyKey}`");
     expect(source).toContain("render: getDocumentPdfRenderer(catalog.code)");
     const renderer = readFileSync(
       join(process.cwd(), "lib/documents/renderers/revenue-report.tsx"),
@@ -33,5 +37,6 @@ describe("P7-3 Revenue Report vertical-slice contract", () => {
     expect(renderer).not.toContain("StaticDocumentRenderBoundary");
     expect(source).toContain("snapshot: snapshot as unknown as Json");
     expect(source).not.toContain("allocate_document_number");
+    expect(action).not.toContain("allocate_document_number");
   });
 });

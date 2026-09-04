@@ -3,24 +3,40 @@ import { AiToolAuthorizationError } from "@/lib/ai/errors";
 
 const mocks = vi.hoisted(() => ({
   gateway: vi.fn((modelId: string) => ({ modelId, provider: "gateway" })),
+  anthropicModel: vi.fn((modelId: string) => ({ modelId, provider: "anthropic" })),
+  createAnthropic: vi.fn(),
+  notifyThresholds: vi.fn(),
+  byokFallback: vi.fn(),
   assertAllowed: vi.fn(),
   reserve: vi.fn(),
   reconcile: vi.fn(),
   resolveCredential: vi.fn(),
   captureException: vi.fn(),
   hasFeature: vi.fn(),
+  getEntitlements: vi.fn(),
 }));
 
-vi.mock("ai", () => ({ gateway: mocks.gateway }));
+vi.mock("ai", () => ({
+  gateway: mocks.gateway,
+  // The direct transport wraps its model in the platform resilience middleware.
+  // Identity here: this suite asserts accounting, not concurrency behaviour.
+  wrapLanguageModel: vi.fn(({ model }: { model: unknown }) => model),
+  APICallError: { isInstance: () => false },
+}));
+vi.mock("@ai-sdk/anthropic", () => ({ createAnthropic: mocks.createAnthropic }));
+vi.mock("@/lib/ai/usage-notifications", () => ({
+  notifyAiUsageThresholds: mocks.notifyThresholds,
+}));
 vi.mock("@sentry/nextjs", () => ({ captureException: mocks.captureException }));
 vi.mock("@/lib/ai/usage", () => ({ assertAiTurnAllowed: mocks.assertAllowed }));
 vi.mock("@/lib/entitlements", () => ({
-  getEntitlements: vi.fn().mockResolvedValue({}),
+  getEntitlements: mocks.getEntitlements,
   hasFeature: mocks.hasFeature,
   hasAiProviderMode: vi.fn().mockReturnValue(true),
 }));
 vi.mock("@/lib/ai/platform/provider-connections", () => ({
   resolveAiProviderCredential: mocks.resolveCredential,
+  resolveByokFallbackCredential: mocks.byokFallback,
 }));
 vi.mock("@/lib/supabase/admin", () => ({
   reserveAiBudget: mocks.reserve,
@@ -33,6 +49,7 @@ import {
   calculateWorstCaseCostMicros,
 } from "@/lib/ai/platform/cost";
 import { managedGatewayProvider } from "@/lib/ai/platform/managed-gateway";
+import { MANAGED_ANTHROPIC_KEY_ENV } from "@/lib/ai/platform/managed-anthropic";
 import {
   AiPolicyRegistryError,
   getCertifiedModelRoute,
@@ -64,6 +81,11 @@ beforeEach(() => {
   delete process.env.AI_MODEL_DOCTOR;
   delete process.env.AI_MODEL_PATIENT;
   delete process.env.AI_TRACKING_HMAC_KEY;
+  delete process.env.AI_MANAGED_TRANSPORT;
+  process.env[MANAGED_ANTHROPIC_KEY_ENV] = "sk-ant-managed-test-key";
+  mocks.createAnthropic.mockImplementation(() => mocks.anthropicModel);
+  mocks.notifyThresholds.mockResolvedValue({ notified: [] });
+  mocks.byokFallback.mockResolvedValue(null);
   mocks.assertAllowed.mockResolvedValue({
     allowed: true,
     reason: "allowed",
@@ -72,6 +94,7 @@ beforeEach(() => {
     remaining: 10,
   });
   mocks.resolveCredential.mockResolvedValue({ mode: "managed" });
+  mocks.getEntitlements.mockResolvedValue({ limits: {} });
   mocks.hasFeature.mockReturnValue(true);
   mocks.reserve.mockResolvedValue({
     data: [{
@@ -94,7 +117,7 @@ describe("P4.5A certified policy registry", () => {
   it("allows only the role-appropriate task/persona combinations", () => {
     expect(getTaskPolicy("staff_clinical_summary", "doctor").primaryModelAlias)
       .toBe("staff-sonnet-bootstrap-v1");
-    expect(getTaskPolicy("staff_administrative", "administrative_staff").maxSteps).toBe(8);
+    expect(getTaskPolicy("staff_administrative", "administrative_staff").maxSteps).toBe(20);
     expect(() => getTaskPolicy("staff_clinical_summary", "administrative_staff"))
       .toThrow(new AiPolicyRegistryError("task_not_allowed"));
     expect(staffTaskForRole("receptionist")).toEqual({
@@ -103,15 +126,24 @@ describe("P4.5A certified policy registry", () => {
     });
   });
 
-  it("contains only certified Gateway routes with explicit privacy requirements", () => {
+  it("contains only certified DIRECT Anthropic routes with explicit privacy posture", () => {
     // Three since P4.7A added the cheap `staff-haiku-bootstrap-v1` help route.
     expect(listCertifiedModelRoutes()).toHaveLength(3);
     for (const route of listCertifiedModelRoutes()) {
-      expect(route.transport).toBe("vercel_ai_gateway");
+      // P12: the certified managed transport is a direct Anthropic call.
+      expect(route.transport).toBe("anthropic_direct");
+      // The ZDR flag is scoped to the gateway transport by name, and the direct
+      // transport's retention posture is recorded as contractual rather than
+      // claimed as an enforced per-request control.
       expect(route.privacy).toEqual({
-        zeroDataRetentionRequired: true,
+        gatewayZeroDataRetention: true,
+        directProviderRetention: "contractual_only",
         noTrainingRequired: true,
       });
+      // A native Anthropic model id is required for the direct call, and the
+      // gateway-qualified id must stay separate rather than being reused.
+      expect(route.providerModelId).not.toContain("/");
+      expect(route.modelId).toContain("/");
       // P4.7A's help route carries its own bootstrap version (`p47a-…`); all
       // remain bootstrap-approved, which is what this assertion guards.
       expect(route.certification.status).toBe("bootstrap_approved");
@@ -237,22 +269,6 @@ describe("P4.5A cost and atomic execution accounting", () => {
     expect(mocks.reserve).not.toHaveBeenCalled();
   });
 
-  it("fails before reservation when a workflow task loses ai.workflows", async () => {
-    mocks.hasFeature.mockImplementation(
-      (_entitlements: unknown, feature: string) => feature !== "ai.workflows",
-    );
-    await expect(
-      prepareAiExecution({
-        user: USER,
-        requestId: REQUEST_ID,
-        task: "staff_workflow",
-        persona: "doctor",
-        surface: "staff_assistant",
-      }),
-    ).rejects.toMatchObject({ reason: "feature_not_entitled" });
-    expect(mocks.reserve).not.toHaveBeenCalled();
-  });
-
   it("uses cache-aware actual cost and cache-free worst-case reservations", () => {
     const policy = getTaskPolicy("staff_clinical_summary", "doctor");
     const route = getCertifiedModelRoute(policy);
@@ -268,7 +284,11 @@ describe("P4.5A cost and atomic execution accounting", () => {
       outputTokenDetails: { textTokens: 90, reasoningTokens: 10 },
       raw: undefined,
     })).toBe(4_035);
-    expect(calculateWorstCaseCostMicros(policy, route)).toBe(1_620_000);
+    // maxSteps × (maxInputTokensPerStep × input price + maxOutputTokens × output
+    // price). Raising `staff_clinical_summary.maxSteps` from 8 to 12 raises the
+    // *reservation* by the same factor; actual spend is unchanged, because the
+    // reservation is reconciled against real usage when the turn finalizes.
+    expect(calculateWorstCaseCostMicros(policy, route)).toBe(2_430_000);
   });
 
   it("derives an idempotent content-free request id", () => {
@@ -301,6 +321,57 @@ describe("P4.5A cost and atomic execution accounting", () => {
       .toThrow(expect.objectContaining({ name: "AiPolicyInputLimitError" }));
   });
 
+  it("clamps the effective loop and reservation to ai_turn_steps_max", async () => {
+    mocks.getEntitlements.mockResolvedValueOnce({
+      limits: { ai_turn_steps_max: 7 },
+    });
+    const execution = await prepareAiExecution({
+      user: USER,
+      requestId: REQUEST_ID,
+      task: "staff_composite",
+      persona: "doctor",
+      surface: "staff_assistant",
+    });
+    expect(execution.taskPolicy.maxSteps).toBe(7);
+    const certified = getTaskPolicy("staff_composite", "doctor");
+    const route = getCertifiedModelRoute(certified);
+    expect(mocks.reserve).toHaveBeenCalledWith(expect.objectContaining({
+      reservedCostMicros: calculateWorstCaseCostMicros(
+        { ...certified, maxSteps: 7 },
+        route,
+      ),
+    }));
+  });
+
+  it("meters and reconciles every observed step in a 12-step turn", async () => {
+    const execution = await prepareAiExecution({
+      user: USER,
+      requestId: REQUEST_ID,
+      task: "staff_administrative",
+      persona: "administrative_staff",
+      surface: "staff_assistant",
+    });
+    for (let stepNumber = 0; stepNumber < 12; stepNumber += 1) {
+      execution.beginStep();
+      execution.observeStep({
+        stepNumber,
+        model: { provider: "anthropic", modelId: "anthropic/claude-sonnet-4.5" },
+        response: { modelId: "anthropic/claude-sonnet-4.5" },
+        finishReason: stepNumber === 11 ? "stop" : "tool-calls",
+        usage: {
+          inputTokens: 1_000,
+          outputTokens: 20,
+          totalTokens: 1_020,
+          inputTokenDetails: { noCacheTokens: 1_000, cacheReadTokens: 0, cacheWriteTokens: 0 },
+          outputTokenDetails: { textTokens: 20, reasoningTokens: 0 },
+          raw: undefined,
+        },
+      });
+    }
+    await execution.finalize({ outcome: "success" });
+    expect(mocks.reconcile.mock.calls[0][0].attempts).toHaveLength(12);
+  });
+
   it("reserves before provider construction and reconciles content-free usage", async () => {
     const execution = await prepareAiExecution({
       user: USER,
@@ -316,8 +387,10 @@ describe("P4.5A cost and atomic execution accounting", () => {
       periodStart: "2026-07-01",
       expectedModel: "anthropic/claude-sonnet-4.5",
       modelAlias: "staff-sonnet-bootstrap-v1",
-      reservedCostMicros: 1_620_000,
-      budgetLimitMicros: 16_200_000,
+      reservedCostMicros: 2_430_000,
+      // legacy turn limit × worst-case reservation, so it tracks the same
+      // maxSteps change; the number of turns a clinic may take is unchanged.
+      budgetLimitMicros: 24_300_000,
       credentialMode: "managed",
     }));
     execution.observeStep({

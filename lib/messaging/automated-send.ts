@@ -18,6 +18,7 @@ import type {
   SendErrorCode,
 } from "@/lib/messaging/types";
 import type { Database } from "@/types/database";
+import { isTemplateUsableForWhatsAppProvider } from "@/lib/messaging/provider-policy";
 
 /**
  * Independent-channel, idempotent patient dispatch (2026-07-19 flow revision).
@@ -121,9 +122,7 @@ export function pickAutomatedTemplate(
   const usable = templates.filter(
     (template) =>
       template.channel === "whatsapp" &&
-      (provider === "linked_device"
-        ? template.approval_status !== "rejected"
-        : template.approval_status === "approved"),
+      isTemplateUsableForWhatsAppProvider(provider, template.approval_status),
   );
   return (
     usable.find((template) => template.language === locale) ?? usable[0] ?? null

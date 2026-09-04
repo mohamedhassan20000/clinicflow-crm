@@ -39,6 +39,13 @@ interface ReceptionistDashboardProps {
   pendingAppointments: Appointment[];
   nextTwoHoursAppointments: Appointment[];
   inSessionGroups: ReceptionInSessionGroup[];
+  /**
+   * The AI review queues, rendered as a slot rather than imported here: they are
+   * an async server component and this dashboard is a client component. The
+   * caller decides whether the role may see them at all, so an assistant is
+   * simply handed nothing.
+   */
+  aiReviewQueues?: React.ReactNode;
   // Widget visibility
   showKpiToday?: boolean;
   showKpiPendingConfirmations?: boolean;
@@ -50,6 +57,7 @@ interface ReceptionistDashboardProps {
 
 export function ReceptionistDashboard({
   assistantLauncher,
+  aiReviewQueues,
   fullName,
   currentUserRole,
   canCreatePatients,
@@ -250,6 +258,8 @@ export function ReceptionistDashboard({
           </div>
         </div>}
       </div>}
+
+      {aiReviewQueues}
     </div>
   );
 }

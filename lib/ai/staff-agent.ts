@@ -17,6 +17,17 @@ import {
   type ActiveContext,
   type ConversationContextRecorder,
 } from "@/lib/ai/conversation-context";
+import {
+  buildToolMemory,
+  renderToolMemory,
+  staffToolMemoryEnabled,
+  withToolMemory,
+} from "@/lib/ai/staff-tool-memory";
+import {
+  createStaffToolCallRepair,
+  staffToolCallRepairEnabled,
+} from "@/lib/ai/staff-tool-call-repair";
+import { evaluateStaffLoopGuard } from "@/lib/ai/staff-loop-guard";
 
 type StaffAgentContext = {
   user: AuthedUser;
@@ -30,6 +41,16 @@ type StaffAgentContext = {
   activeContext?: ActiveContext | null;
   /** Collects an active-context proposal produced during the turn (P4.10A). */
   contextRecorder?: ConversationContextRecorder | null;
+  /**
+   * The turn's full UI history, including persisted tool parts.
+   *
+   * Optional and advisory: it is the source for the bounded cross-turn tool
+   * memory only (`lib/ai/staff-tool-memory.ts`). It is read here rather than in
+   * the route because the projection is gated on the *live* tool mount, which
+   * is resolved below — a tool the caller can no longer mount cannot contribute
+   * a memory.
+   */
+  history?: readonly UIMessage[] | null;
 };
 
 /**
@@ -52,8 +73,8 @@ export async function createStaffAgent(ctx: StaffAgentContext) {
     user: ctx.user,
     locale: ctx.locale,
     patientId,
-    // The registry filters the mount by task class, so the certified policy the
-    // turn resolved to also decides which tools exist in it (P4.6A).
+    // Task policy selects cost/model behavior only. Except for the explicit
+    // help containment route, the registry mounts the full authorized union.
     taskClass: ctx.execution.taskPolicy.task,
     conversationId: ctx.conversationId ?? null,
     activePatientId,
@@ -61,6 +82,14 @@ export async function createStaffAgent(ctx: StaffAgentContext) {
     contextRecorder: ctx.contextRecorder ?? null,
     aiRequestId: ctx.execution.requestId,
   });
+
+  // Cross-turn tool memory (study §12.1). Projected once per turn against the
+  // mount resolved above, then injected per step — `prepareStep`'s messages
+  // apply to that step only, so a single injection would vanish after step 0.
+  const toolMemoryBlock =
+    staffToolMemoryEnabled() && ctx.history?.length
+      ? renderToolMemory(buildToolMemory(ctx.history, new Set(Object.keys(tools))))
+      : null;
 
   return new ToolLoopAgent({
     id: `clinicflow-${ctx.user.role}-assistant`,
@@ -76,13 +105,33 @@ export async function createStaffAgent(ctx: StaffAgentContext) {
       buildAssistantPageContextPrompt(ctx.pageContext ?? null, ctx.locale) +
       buildActiveContextPrompt(ctx.activeContext ?? null, ctx.locale),
     tools,
-    stopWhen: stepCountIs(ctx.execution.taskPolicy.maxSteps),
+    // Two recoverable stops beside the step cap: a model repeating one identical
+    // call, and one that has failed too many calls to be converging. Both end
+    // the loop so the final message is still produced from what was gathered.
+    stopWhen: [
+      stepCountIs(ctx.execution.taskPolicy.maxSteps),
+      ({ steps }) => evaluateStaffLoopGuard(steps).stop,
+    ],
     temperature: ctx.execution.taskPolicy.temperature,
     maxOutputTokens: ctx.execution.taskPolicy.maxOutputTokens,
+    // Malformed staff tool calls are repaired into a valid call on a *mounted*
+    // tool, or abandoned. The repair only ever subtracts; see the invariants in
+    // lib/ai/staff-tool-call-repair.ts.
+    ...(staffToolCallRepairEnabled()
+      ? {
+          experimental_repairToolCall: createStaffToolCallRepair({
+            clinicId: ctx.user.clinicId,
+            actorId: ctx.user.id,
+          }),
+        }
+      : {}),
     prepareStep: ({ messages }) => {
       ctx.execution.beginStep();
-      assertAiInputWithinPolicy(messages, ctx.execution.taskPolicy.maxInputTokensPerStep);
-      return {};
+      const withMemory = withToolMemory(messages, toolMemoryBlock);
+      // Asserted against the messages actually sent, so recall counts against
+      // the same certified per-step input budget as everything else.
+      assertAiInputWithinPolicy(withMemory, ctx.execution.taskPolicy.maxInputTokensPerStep);
+      return toolMemoryBlock ? { messages: withMemory } : {};
     },
     onStepFinish: ctx.execution.observeStep,
   });

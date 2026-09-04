@@ -21,6 +21,7 @@ import { softDeleteAppointment, restoreAppointment } from "@/actions/appointment
 import { formatDoctorName } from "@/lib/format-doctor";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
 import { useTranslations } from "next-intl";
+import { isOverduePending } from "@/lib/appointments/overdue-pending";
 
 // ── Single appointment row inside the popup ───────────────────────────────────
 
@@ -43,6 +44,7 @@ function PopupAppointmentRow({
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [isDeleting, startDelete] = useTransition();
 
+  const overduePending = isOverduePending(appt);
   const time = formatTime(appt.scheduled_at);
   const deptColor = appt.departments?.color ?? "#64748b";
   const deptName = appt.departments?.name ?? t("general");
@@ -130,6 +132,7 @@ function PopupAppointmentRow({
                 currentUserId={currentUserId}
                 currentUserRole={currentUserRole}
                 hasInsurance={Boolean(appt.insurance_provider_id)}
+                overduePending={overduePending}
               />
             </div>
           )}

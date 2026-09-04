@@ -26,7 +26,12 @@ export type NotificationType =
   // P5B — patient AI (§6.2): a drafted reply awaits staff approval, or the
   // agent handed a conversation to a human.
   | "ai_suggestion"
-  | "ai_escalation";
+  | "ai_escalation"
+  | "ai_patient_intake"
+  | "ai_booking_request"
+  | "ai_privileged_change"
+  // P12 — included AI usage crossed a notification threshold (75/90/100).
+  | "ai_usage_threshold";
 
 export type NotificationRole = "admin" | "receptionist" | "manager" | "doctor";
 

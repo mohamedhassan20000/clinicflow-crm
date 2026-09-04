@@ -63,6 +63,35 @@ jobs:
       - name: AI adversarial & evaluation suites (P6A)
         run: pnpm test:ai-adversarial
 
+      # Scored Staff Assistant eval gate. Twelve dimensions of answer /
+      # tool-selection quality — tool, action and resource selection, forbidden-
+      # capability containment, hallucinated capability, unnecessary refusal and
+      # escalation, multi-step completion, clinical/privacy policy adherence, and
+      # role-specific authorization — scored against a committed baseline in
+      # docs/reviews/artifacts/staff-eval-baseline.json and failed on regression.
+      #
+      # Required because it is deterministic: every number comes from the real
+      # registries, router, task policies and system prompt, with no model, no
+      # network and no database. The live-graded half of the same scorer is
+      # opt-in and stays out of CI by design — a required job that needs model
+      # credentials and spend is a job that gets disabled.
+      - name: Scored staff eval gate
+        run: pnpm test:ai-staff-gate
+
+      # P7E: the pairing worker is a separate deployable with its own dependency
+      # tree, so it is installed and checked on its own. Its suite covers the
+      # start path — a caller answered before the socket is up, one socket per
+      # clinic, and failures on the asynchronous half — which nothing in the
+      # application's own tests can reach.
+      - name: WhatsApp worker install
+        run: pnpm whatsapp:worker:install
+
+      - name: WhatsApp worker typecheck
+        run: pnpm whatsapp:worker:typecheck
+
+      - name: WhatsApp worker tests
+        run: pnpm whatsapp:worker:test
+
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v1
         with:

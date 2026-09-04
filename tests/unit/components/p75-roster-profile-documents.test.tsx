@@ -161,28 +161,25 @@ describe("P7-5 roster/profile documents", () => {
   });
 
   it.each(["PATIENT_LIST_REPORT", "SYSTEM_MEMBERS_REPORT"] as const)(
-    "shows compact circular photos in %s across preview, issued, and PDF output",
+    "shows no person photo in %s across preview, issued, and PDF output",
     async (documentType) => {
-      const imageSrc = "data:image/webp;base64,UklGRg==";
+      // Roster listings are not the patient/employee file: they carry names
+      // only, with no avatar element and no initials placeholder left behind.
       const source = snapshots[documentType];
       if (!("rows" in source.data)) throw new Error("List snapshot expected");
-      const snapshot: RosterProfileDocumentSnapshot = {
-        ...source,
-        data: { ...source.data, rows: source.data.rows.map((row) => ({ ...row, imageSrc })) },
-      } as RosterProfileDocumentSnapshot;
+      const snapshot = source as RosterProfileDocumentSnapshot;
       const copy = getRosterProfileCopy("en", documentType);
 
-      const preview = render(<RosterProfileDocument locale="en" lifecycle="preview"
-        snapshot={snapshot} copy={copy} />);
-      expect(preview.container.querySelector(".cf-doc-list-avatar"))
-        .toHaveAttribute("src", imageSrc);
-      preview.unmount();
-
-      const issued = render(<RosterProfileDocument locale="en" lifecycle="issued"
-        snapshot={snapshot} copy={copy} documentNumber="DOC-2026-0001" />);
-      expect(issued.container.querySelector(".cf-doc-list-avatar"))
-        .toHaveClass("cf-doc-list-avatar");
-      issued.unmount();
+      for (const lifecycle of ["preview", "issued"] as const) {
+        const { container, unmount } = render(<RosterProfileDocument locale="en"
+          lifecycle={lifecycle} snapshot={snapshot} copy={copy}
+          documentNumber={lifecycle === "issued" ? "DOC-2026-0001" : undefined} />);
+        expect(container.querySelectorAll(".cf-doc-list-avatar")).toHaveLength(0);
+        expect(container.querySelectorAll(".cf-doc-avatar-name")).toHaveLength(0);
+        // The clinic logo slot is untouched by the person-photo removal.
+        expect(container.querySelector("[data-testid='document-header']")).toBeInTheDocument();
+        unmount();
+      }
 
       const html = await buildDocumentHtml({
         locale: "en", title: `${documentType} avatar parity`,
@@ -191,8 +188,10 @@ describe("P7-5 roster/profile documents", () => {
             documentNumber="DOC-2026-0001" renderContextBoundary={renderContextBoundary} />
         ),
       });
-      expect(html).toContain('class="cf-doc-list-avatar"');
-      expect(html).toContain(`src="${imageSrc}"`);
+      // Markup only — the engine stylesheet still ships the avatar rules the
+      // patient/employee file uses.
+      expect(html).not.toContain('class="cf-doc-list-avatar');
+      expect(html).not.toContain('class="cf-doc-avatar-name"');
     },
   );
 
@@ -230,13 +229,11 @@ describe("P7-5 roster/profile documents", () => {
   });
 
   it.each(["PATIENT_LIST_REPORT", "SYSTEM_MEMBERS_REPORT"] as const)(
-    "uses a compact initials fallback in %s when no photo exists",
+    "leaves no initials placeholder in %s now that person photos are gone",
     (documentType) => {
       const { container } = render(<RosterProfileDocument locale="ar" lifecycle="preview"
         snapshot={snapshots[documentType]} copy={getRosterProfileCopy("ar", documentType)} />);
-      const fallback = container.querySelector(".cf-doc-list-avatar-fallback");
-      expect(fallback).toBeInTheDocument();
-      expect(fallback).toHaveClass("cf-doc-list-avatar");
+      expect(container.querySelector(".cf-doc-list-avatar-fallback")).toBeNull();
       expect(container.querySelector("[data-testid='document-page']")).toHaveAttribute("dir", "rtl");
     },
   );

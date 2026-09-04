@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -11,6 +12,12 @@ interface KpiCardProps {
     label: string;
   };
   variant?: "default" | "primary" | "warning" | "success" | "destructive";
+  /**
+   * Optional slot under the value, for a card that needs to say more than one
+   * number — the owner AI-usage card puts "$0.00 / $10.00" and a compact meter
+   * here so a bare "0%" is never the whole story.
+   */
+  footer?: ReactNode;
 }
 
 const variantStyles = {
@@ -36,6 +43,7 @@ export function KpiCard({
   icon: Icon,
   trend,
   variant = "default",
+  footer,
 }: KpiCardProps) {
   return (
     <div
@@ -57,6 +65,8 @@ export function KpiCard({
           <p className="mt-0.5 text-xs text-muted-foreground">{sub}</p>
         )}
       </div>
+
+      {footer ? <div>{footer}</div> : null}
 
       {trend !== undefined && (
         <p className={cn("text-xs font-medium", trend.value >= 0 ? "text-emerald-600" : "text-destructive")}>

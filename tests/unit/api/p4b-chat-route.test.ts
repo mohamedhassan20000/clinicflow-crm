@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
   createAgent: vi.fn(),
   stream: vi.fn(),
   captureException: vi.fn(),
+  tableRow: vi.fn(),
 }));
 
 vi.mock("@sentry/nextjs", () => ({ captureException: mocks.captureException }));
@@ -30,7 +31,6 @@ vi.mock("next-intl/server", () => ({ getLocale: async () => "en" }));
 vi.mock("@/lib/ai/authorization", () => ({
   authorizeStaffAssistant: mocks.authorize,
   AI_STAFF_ANALYTICS_FEATURE: "ai.staff_analytics",
-  AI_WORKFLOWS_FEATURE: "ai.workflows",
 }));
 // P4.6A: the route reads entitlements to pick the certified task class.
 vi.mock("@/lib/entitlements", () => ({
@@ -51,6 +51,12 @@ vi.mock("@/lib/entitlements", () => ({
   ) => ents.subscriptionAllowed && ents.features[key] === true,
 }));
 vi.mock("@/lib/ai/client", () => ({
+  AiPolicyInputLimitError: class AiPolicyInputLimitError extends Error {
+    constructor() {
+      super("AI input exceeds the certified task policy.");
+      this.name = "AiPolicyInputLimitError";
+    }
+  },
   createAiRequestId: () => "00000000-0000-4000-8000-000000000099",
   staffTaskForRole: (
     role: string,
@@ -77,19 +83,27 @@ vi.mock("@/lib/ai/conversations", async (importOriginal) => {
 vi.mock("@/lib/ai/staff-agent", () => ({
   createStaffAgent: mocks.createAgent,
 }));
+// The route reads two tables through the caller's RLS client: the clinic name,
+// and — since the post-plan launcher change — the record a page context points
+// at, so a conversation opened from a shortcut is seeded with server-derived
+// active context. A chainable stub keeps both readable without pinning the exact
+// order of the filter calls.
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
-    from: () => ({
-      select: () => ({
-        eq: () => ({
-          maybeSingle: async () => ({ data: { name: "Test Clinic" }, error: null }),
-        }),
-      }),
-    }),
+    from: (table: string) => {
+      const chain: Record<string, unknown> = {
+        maybeSingle: async () => ({ data: mocks.tableRow(table), error: null }),
+      };
+      for (const method of ["select", "eq", "is", "in", "order", "limit"]) {
+        chain[method] = () => chain;
+      }
+      return chain;
+    },
   }),
 }));
 
 import { POST } from "@/app/api/agent/chat/route";
+import { AiPolicyInputLimitError } from "@/lib/ai/client";
 
 const conversationId = "00000000-0000-4000-8000-000000000010";
 const patientId = "00000000-0000-4000-8000-000000000011";
@@ -116,6 +130,11 @@ function validBody() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.tableRow.mockImplementation((table: string) =>
+    table === "patients"
+      ? { id: patientId, full_name: "Seeded Patient" }
+      : { name: "Test Clinic" },
+  );
   mocks.authorize.mockResolvedValue(USER);
   mocks.finalizeExecution.mockResolvedValue(undefined);
   mocks.prepareExecution.mockResolvedValue({
@@ -135,6 +154,7 @@ beforeEach(() => {
     id: conversationId,
     patientId: input.patientId ?? null,
     messages: [],
+    activeContext: {},
   }));
   mocks.persistTurn.mockResolvedValue(undefined);
   mocks.createAgent.mockResolvedValue({ stream: mocks.stream });
@@ -189,6 +209,20 @@ describe("P4B staff assistant streaming route", () => {
     const response = await POST(request(validBody()));
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toEqual({ error: "invalid_request" });
+    // The conversation is now loaded *before* the task class is resolved, so
+    // that the router can see the conversation's live active-context slots (the
+    // action-routing fix). A conversation that fails its patient binding
+    // therefore never reaches the budget reservation at all — the same 400 for
+    // the caller, and one fewer reserve/reconcile pair in the ledger.
+    expect(mocks.prepareExecution).not.toHaveBeenCalled();
+    expect(mocks.finalizeExecution).not.toHaveBeenCalled();
+    expect(mocks.stream).not.toHaveBeenCalled();
+  });
+
+  it("still reserves and reconciles the budget when the failure happens after routing", async () => {
+    mocks.createAgent.mockRejectedValueOnce(new Error("agent unavailable"));
+    const response = await POST(request(validBody()));
+    expect(response.status).toBe(503);
     expect(mocks.prepareExecution).toHaveBeenCalledWith(expect.objectContaining({
       user: USER,
       task: "staff_clinical_summary",
@@ -275,6 +309,62 @@ describe("P4B staff assistant streaming route", () => {
     expect(mocks.finalizeExecution).toHaveBeenCalledWith({ outcome: "success", errorClass: undefined });
   });
 
+  // Post-plan completion, change 3. A launcher now opens an *empty* conversation
+  // carrying a page context, so the record the shortcut was opened from has to
+  // reach both the running turn and the persisted row. The label is read
+  // server-side through the caller's RLS client; the browser sends only the id.
+  it("seeds server-derived active context into the first turn of a page-context conversation", async () => {
+    expect((await POST(request(validBody()))).status).toBe(200);
+
+    const seededSlot = {
+      entity_type: "patient",
+      entity_id: patientId,
+      display_label: "Seeded Patient",
+      set_by: "page_context",
+    };
+    expect(mocks.createAgent).toHaveBeenCalledWith(expect.objectContaining({
+      activeContext: { patient: expect.objectContaining(seededSlot) },
+    }));
+    await vi.waitFor(() => {
+      expect(mocks.persistTurn).toHaveBeenCalledWith(expect.objectContaining({
+        contextProposals: [expect.objectContaining({
+          entityType: "patient",
+          entityId: patientId,
+          displayLabel: "Seeded Patient",
+          setBy: "page_context",
+        })],
+      }));
+    });
+  });
+
+  it("does not re-seed a conversation that already has history", async () => {
+    mocks.ensureConversation.mockResolvedValueOnce({
+      id: conversationId,
+      patientId,
+      messages: [{ id: "m0", role: "user", parts: [{ type: "text", text: "earlier" }] }],
+      activeContext: {},
+    });
+    expect((await POST(request(validBody()))).status).toBe(200);
+    expect(mocks.createAgent).toHaveBeenCalledWith(expect.objectContaining({
+      activeContext: {},
+    }));
+    await vi.waitFor(() => {
+      expect(mocks.persistTurn).toHaveBeenCalledWith(expect.objectContaining({
+        contextProposals: [],
+      }));
+    });
+  });
+
+  it("seeds nothing when the page-context record is not readable by this caller", async () => {
+    mocks.tableRow.mockImplementation((table: string) =>
+      table === "patients" ? null : { name: "Test Clinic" },
+    );
+    expect((await POST(request(validBody()))).status).toBe(200);
+    expect(mocks.createAgent).toHaveBeenCalledWith(expect.objectContaining({
+      activeContext: {},
+    }));
+  });
+
   it("releases the reservation and persists nothing when the stream is aborted", async () => {
     mocks.stream.mockResolvedValueOnce({
       toUIMessageStreamResponse: vi.fn((options) => {
@@ -331,6 +421,126 @@ describe("P4B staff assistant streaming route", () => {
       modelError,
       expect.objectContaining({ tags: { area: "staff-assistant-stream" } }),
     );
+  });
+
+  it("persists a preview-only confirmation turn", async () => {
+    const previewPart = {
+      type: "tool-execute_action",
+      toolCallId: "action-preview",
+      state: "output-available",
+      input: { action: "appointments.send_reminders", input: {} },
+      output: {
+        action_id: "appointments.send_reminders",
+        phase: "preview",
+        confirmation_required: true,
+        confirm_token: "opaque-confirm-token",
+        expires_at: "2026-08-13T12:10:00.000Z",
+      },
+    };
+    mocks.stream.mockResolvedValueOnce({
+      toUIMessageStreamResponse: vi.fn((options) => {
+        void options.onFinish({
+          messages: [],
+          isContinuation: false,
+          isAborted: false,
+          responseMessage: {
+            id: "assistant-preview",
+            role: "assistant",
+            parts: [previewPart],
+          },
+          finishReason: "tool-calls",
+        });
+        return new Response("stream", { status: 200 });
+      }),
+    });
+
+    expect((await POST(request(validBody()))).status).toBe(200);
+    await vi.waitFor(() => {
+      expect(mocks.persistTurn).toHaveBeenCalledWith(expect.objectContaining({
+        assistantText: "",
+        assistantParts: [previewPart],
+        pendingConfirmations: [{
+          action_id: "appointments.send_reminders",
+          expires_at: "2026-08-13T12:10:00.000Z",
+        }],
+      }));
+    });
+    expect(mocks.finalizeExecution).toHaveBeenCalledWith({
+      outcome: "success",
+      errorClass: undefined,
+    });
+  });
+
+  it("does not persist ghost confirmation metadata when a card exceeds the cap", async () => {
+    mocks.stream.mockResolvedValueOnce({
+      toUIMessageStreamResponse: vi.fn((options) => {
+        void options.onFinish({
+          messages: [],
+          isContinuation: false,
+          isAborted: false,
+          responseMessage: {
+            id: "assistant-oversized-preview",
+            role: "assistant",
+            parts: [{
+              type: "tool-execute_action",
+              toolCallId: "action-preview",
+              state: "output-available",
+              input: { action: "appointments.send_reminders", input: {} },
+              output: {
+                action_id: "appointments.send_reminders",
+                phase: "preview",
+                confirmation_required: true,
+                confirm_token: "opaque-confirm-token",
+                expires_at: "2026-08-13T12:10:00.000Z",
+                preview: "x".repeat(64_000),
+              },
+            }],
+          },
+          finishReason: "tool-calls",
+        });
+        return new Response("stream", { status: 200 });
+      }),
+    });
+
+    expect((await POST(request(validBody()))).status).toBe(200);
+    await vi.waitFor(() => {
+      expect(mocks.finalizeExecution).toHaveBeenCalledWith({
+        outcome: "failed",
+        errorClass: "stream_failed",
+      });
+    });
+    expect(mocks.persistTurn).not.toHaveBeenCalled();
+  });
+
+  it("classifies an accumulated-input overflow and persists the user turn", async () => {
+    let emitted: unknown;
+    mocks.stream.mockResolvedValueOnce({
+      toUIMessageStreamResponse: vi.fn((options) => {
+        emitted = options.onError(new AiPolicyInputLimitError());
+        void options.onFinish({
+          messages: [],
+          isContinuation: false,
+          isAborted: false,
+          responseMessage: { id: "assistant-input-limit", role: "assistant", parts: [] },
+          finishReason: "error",
+        });
+        return new Response("stream", { status: 200 });
+      }),
+    });
+
+    expect((await POST(request(validBody()))).status).toBe(200);
+    expect(emitted).toBe("input_limit_reached");
+    await vi.waitFor(() => {
+      expect(mocks.persistTurn).toHaveBeenCalledWith(expect.objectContaining({
+        userText: "Summarize this patient",
+        assistantText: "",
+        assistantParts: [],
+      }));
+    });
+    expect(mocks.finalizeExecution).toHaveBeenCalledWith({
+      outcome: "failed",
+      errorClass: "input_limit_reached",
+    });
   });
 
   /**
@@ -398,7 +608,7 @@ describe("P4B staff assistant streaming route", () => {
             role: "assistant",
             parts: [
               {
-                type: "tool-get_patient_summary",
+                type: "tool-get_record",
                 toolCallId: "tool-1",
                 state: "output-error",
                 input: { patient_id: patientId },
@@ -443,7 +653,7 @@ describe("P4B staff assistant streaming route", () => {
             id: "assistant-tool-error",
             role: "assistant",
             parts: [{
-              type: "tool-get_patient_summary",
+              type: "tool-get_record",
               toolCallId: "tool-1",
               state: "output-error",
               input: { patient_id: patientId },

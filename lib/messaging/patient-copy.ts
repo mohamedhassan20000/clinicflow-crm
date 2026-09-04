@@ -301,3 +301,25 @@ export function templateParameterValues(
   }
   return parameters;
 }
+
+/**
+ * P15 (§2F) — the one safe thing to say when the assistant technically broke.
+ *
+ * Sent exactly once per failure, at the moment the failure is latched, and
+ * never again for the same episode: the latch RPC returns whether *this* call
+ * is the one that recorded the fault, and only that call sends this message.
+ * A webhook retry, a duplicate provider delivery and two workers racing the
+ * same turn therefore all produce one apology.
+ *
+ * What it deliberately does not contain: a provider name, an error code, a
+ * stack, a tool name, a request id, or any hint that there is an AI involved
+ * at all beyond what the patient already knows. A patient reading "temporary
+ * technical issue" can act on it; a patient reading "orchestration_failure"
+ * cannot, and neither can the receptionist they forward it to.
+ */
+export function patientTechnicalFallbackCopy(locale: "ar" | "en"): string {
+  if (locale === "ar") {
+    return "حصلت مشكلة تقنية مؤقتة. حد من فريق العيادة هيتواصل معاك في أقرب وقت.";
+  }
+  return "We hit a temporary technical issue. Someone from the clinic team will get back to you as soon as possible.";
+}

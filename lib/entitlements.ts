@@ -1,12 +1,13 @@
 import "server-only";
 import { unstable_cache } from "next/cache";
+import * as Sentry from "@sentry/nextjs";
 import { createClinicScopedAdminClient } from "@/lib/supabase/admin";
 import { resolveSubscriptionAccess } from "@/lib/billing/access";
 import {
   AI_LIMIT_KEYS,
-  LEGACY_AI_ASSISTANT_FEATURE,
   aiModeFeatures,
   isAiFeatureKey,
+  resolveEffectiveAiFeature,
 } from "@/lib/ai/commercial-policy";
 import type { AiCredentialMode } from "@/lib/ai/platform/types";
 import type { Database, Json } from "@/types/database";
@@ -22,6 +23,7 @@ export type Entitlements = {
   features: FeatureMap;
   limits: LimitMap;
   subscriptionAllowed: boolean;
+  aiTermsAccepted: boolean;
 };
 
 export type UsageLimitResolution = {
@@ -68,6 +70,7 @@ export function resolveEntitlements(input: {
   planLimits?: Json;
   overrides?: Array<{ feature_key: string; enabled: boolean }>;
   subscriptionAllowed: boolean;
+  aiTermsAccepted: boolean;
 }): Entitlements {
   const features = normalizeFeatures(input.planFeatures);
   for (const override of input.overrides ?? []) {
@@ -79,7 +82,36 @@ export function resolveEntitlements(input: {
     features,
     limits: normalizeLimits(input.planLimits),
     subscriptionAllowed: input.subscriptionAllowed,
+    aiTermsAccepted: input.aiTermsAccepted,
   };
+}
+
+/**
+ * Surface a fail-closed entitlement lookup. The resolver deliberately treats an
+ * unreadable row as "not entitled", which is the right security posture and the
+ * wrong debugging story: a stale schema, a wrong SUPABASE_URL or an unreachable
+ * database all present to the operator as an upgrade prompt on a clinic that is
+ * fully paid up. Reporting the failure changes no entitlement outcome.
+ */
+function reportEntitlementLookupFailure(
+  clinicId: string,
+  errors: Record<string, string | undefined>,
+) {
+  const failed = Object.entries(errors).filter(([, message]) => message);
+  if (failed.length === 0) return;
+  const detail = failed.map(([table, message]) => `${table}: ${message}`).join("; ");
+  Sentry.captureMessage("Entitlement lookup failed; falling back to no entitlements", {
+    level: "error",
+    tags: { area: "entitlements" },
+    extra: { clinicId, detail },
+  });
+  if (process.env.NODE_ENV !== "production") {
+    console.warn(
+      `[entitlements] Lookup failed for clinic ${clinicId}; every feature will ` +
+        `resolve false and gated UI will render its upgrade notice. ` +
+        `Supabase: ${process.env.NEXT_PUBLIC_SUPABASE_URL ?? "<unset>"}. ${detail}`,
+    );
+  }
 }
 
 async function loadEntitlements(clinicId: string): Promise<Entitlements> {
@@ -87,10 +119,11 @@ async function loadEntitlements(clinicId: string): Promise<Entitlements> {
     clinicId,
     planSlug: null,
     subscriptionAllowed: false,
+    aiTermsAccepted: false,
   });
   try {
     const client = createClinicScopedAdminClient(clinicId);
-    const [subscriptionResult, overridesResult] = await Promise.all([
+    const [subscriptionResult, overridesResult, termsResult] = await Promise.all([
       client
         .from("subscriptions")
         .select("status, trial_ends_at, current_period_end, plans(slug, features, limits)")
@@ -100,8 +133,25 @@ async function loadEntitlements(clinicId: string): Promise<Entitlements> {
         .from("clinic_feature_overrides")
         .select("feature_key, enabled")
         .eq("clinic_id", clinicId),
+      client
+        .from("ai_commercial_terms")
+        .select("accepted_at")
+        .eq("clinic_id", clinicId)
+        .maybeSingle(),
     ]);
-    if (subscriptionResult.error || overridesResult.error) return failClosed;
+    if (subscriptionResult.error || overridesResult.error || termsResult.error) {
+      // Fail closed, but never silently. A query error here is indistinguishable
+      // in the UI from a legitimately unentitled clinic: every gate renders its
+      // "available on Pro + AI" upgrade notice, so a database that is merely
+      // unreachable or behind on migrations reads as a downgraded plan. The
+      // read is unchanged; only the diagnosis is.
+      reportEntitlementLookupFailure(clinicId, {
+        subscriptions: subscriptionResult.error?.message,
+        clinic_feature_overrides: overridesResult.error?.message,
+        ai_commercial_terms: termsResult.error?.message,
+      });
+      return failClosed;
+    }
 
     const plan = subscriptionResult.data?.plans;
     const access = resolveSubscriptionAccess(subscriptionResult.data);
@@ -112,8 +162,12 @@ async function loadEntitlements(clinicId: string): Promise<Entitlements> {
       planLimits: plan?.limits,
       overrides: overridesResult.data ?? [],
       subscriptionAllowed: access.allowed,
+      aiTermsAccepted: termsResult.data?.accepted_at != null,
     });
-  } catch {
+  } catch (error) {
+    reportEntitlementLookupFailure(clinicId, {
+      entitlements: error instanceof Error ? error.message : String(error),
+    });
     return failClosed;
   }
 }
@@ -129,18 +183,12 @@ export async function getEntitlements(clinicId: string): Promise<Entitlements> {
 export function hasFeature(entitlements: Entitlements, featureKey: string): boolean {
   if (!entitlements.subscriptionAllowed) return false;
   if (!isAiFeatureKey(featureKey)) return entitlements.features[featureKey] === true;
-
-  // AI is the exclusive differentiator of the stable pro_ai catalog row.
-  // Operator feature overrides may disable AI capabilities within that tier,
-  // but must never turn Basic or Professional into an unsigned AI plan.
-  if (entitlements.planSlug !== "pro_ai") return false;
-  if (featureKey !== LEGACY_AI_ASSISTANT_FEATURE) {
-    return (
-      entitlements.features[LEGACY_AI_ASSISTANT_FEATURE] === true &&
-      entitlements.features[featureKey] === true
-    );
-  }
-  return entitlements.features[featureKey] === true;
+  return resolveEffectiveAiFeature({
+    subscriptionAllowed: entitlements.subscriptionAllowed,
+    termsAccepted: entitlements.aiTermsAccepted,
+    features: entitlements.features,
+    featureKey,
+  });
 }
 
 export function hasAiProviderMode(

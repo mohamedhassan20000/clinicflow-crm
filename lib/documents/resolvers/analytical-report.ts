@@ -408,7 +408,6 @@ async function loadAnalyticalData(
 export async function resolveAnalyticalDocumentSnapshot(
   user: AuthedUser,
   rawParams: AnalyticalDocumentParams,
-  options: { inlineLogo?: boolean } = {},
 ): Promise<AnalyticalDocumentSnapshot> {
   const params = analyticalDocumentParamsSchema.parse(rawParams);
   const range = resolveDateRange({ preset: "custom", from: params.from, to: params.to });
@@ -443,9 +442,9 @@ export async function resolveAnalyticalDocumentSnapshot(
   const effectiveSettings = typeSettings ?? globalSettings;
   const catalog = getDocumentCatalogEntry(params.documentType);
   const watermarkEnabled = effectiveSettings?.watermark_enabled ?? true;
-  const logoSrc = options.inlineLogo
-    ? await inlineClinicLogo(clinic.logo_url, user.clinicId)
-    : clinic.logo_url;
+  // Always inlined: the canonical PDF renderer blocks remote requests, so a
+  // snapshot holding an `https:` logo URL prints with no logo at all.
+  const logoSrc = await inlineClinicLogo(clinic.logo_url, user.clinicId);
 
   return analyticalDocumentSnapshotSchema.parse({
     version: 1,

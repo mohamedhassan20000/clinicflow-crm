@@ -26,6 +26,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { toConfiguredStorageOrigin } from "@/lib/storage/storage-url";
 import { clinicSchema, type ClinicValues } from "@/lib/validations/settings";
 import { updateClinic, uploadClinicLogo } from "@/actions/settings";
 import type { ActionResult } from "@/actions/settings";
@@ -47,6 +48,9 @@ export function ClinicForm({ defaultValues, logoUrl: initialLogoUrl, readOnly = 
   const { setTimeFormat } = useClinicSettings();
 
   const [logoUrl, setLogoUrl] = useState(initialLogoUrl);
+  // The stored URL carries the origin of whichever project wrote the row; the
+  // bucket/path is the durable part. See `toConfiguredStorageOrigin`.
+  const logoSrc = toConfiguredStorageOrigin(logoUrl);
   const [logoLoadError, setLogoLoadError] = useState(false);
   const [logoDialogOpen, setLogoDialogOpen] = useState(false);
   const [logoUploading, startLogoTransition] = useTransition();
@@ -104,7 +108,7 @@ export function ClinicForm({ defaultValues, logoUrl: initialLogoUrl, readOnly = 
       <div className="rounded-xl border border-border/50 bg-card p-6">
         <h3 className="mb-4 text-sm font-semibold">{t("clinicLogo")}</h3>
         <div className="flex items-center gap-5">
-          {logoUrl && !logoLoadError ? (
+          {logoSrc && !logoLoadError ? (
             <>
               <button
                 type="button"
@@ -113,7 +117,7 @@ export function ClinicForm({ defaultValues, logoUrl: initialLogoUrl, readOnly = 
                 className="group relative h-20 w-20 shrink-0 overflow-hidden rounded-xl border border-border bg-muted outline-none transition focus-visible:ring-2 focus-visible:ring-ring/50"
               >
                 <Image
-                  src={logoUrl}
+                  src={logoSrc}
                   alt={t("clinicLogo")}
                   fill
                   onError={() => setLogoLoadError(true)}
@@ -131,7 +135,7 @@ export function ClinicForm({ defaultValues, logoUrl: initialLogoUrl, readOnly = 
                     {t("fullSizePreviewOfTheClinic")}
                   </DialogDescription>
                   <Image
-                    src={logoUrl}
+                    src={logoSrc}
                     alt={t("clinicLogoFullSize")}
                     width={800}
                     height={800}

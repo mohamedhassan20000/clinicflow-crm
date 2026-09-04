@@ -1,5 +1,6 @@
 import { MapPin, Phone } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { toConfiguredStorageOrigin } from "@/lib/storage/storage-url";
 
 interface PrintHeaderProps {
   clinicName: string;
@@ -19,16 +20,19 @@ export function PrintHeader({
   generatedAt,
 }: PrintHeaderProps) {
   const t = useTranslations("shared");
+  // The stored URL carries the origin of whichever project wrote the row; the
+  // bucket/path is the durable part. See `toConfiguredStorageOrigin`.
+  const logoSrc = toConfiguredStorageOrigin(logoUrl);
   return (
     <>
       {/* Compact header — fixed, repeats on every printed page (page 2+) */}
       <div className="print-compact-header hidden">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-1.5">
-            {logoUrl && (
+            {logoSrc && (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={logoUrl}
+                src={logoSrc}
                 alt=""
                 aria-hidden
                 style={{ height: "22px", width: "auto", objectFit: "contain", flexShrink: 0 }}
@@ -48,10 +52,10 @@ export function PrintHeader({
       >
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-3">
-            {logoUrl && (
+            {logoSrc && (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={logoUrl}
+                src={logoSrc}
                 alt=""
                 aria-hidden
                 style={{ height: "64px", width: "auto", objectFit: "contain", flexShrink: 0 }}

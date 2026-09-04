@@ -25,6 +25,9 @@ vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn(), captureMessage: vi
 vi.mock("@/lib/supabase/admin", () => ({
   createClinicScopedAdminClient: mocks.scopedClient,
   finalizeOutboundMessage: mocks.finalize,
+  // P15 (§5): a live echo also disarms the assistant's idle close. Stubbed
+  // rather than asserted here — this suite is about what the echo persists.
+  markConversationHumanReply: async () => ({ data: true, error: null }),
   persistWhatsAppInbound: mocks.persistInbound,
   advanceOutboundMessageStatus: mocks.advanceStatus,
   applyMessageTemplateProviderStatus: mocks.applyTemplateStatus,

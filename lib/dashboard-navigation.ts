@@ -19,6 +19,7 @@ export type OperatorIconKey =
   | "clinics"
   | "invitations"
   | "reports"
+  | "ai-allowance"
   | "coupons"
   | "settings";
 
@@ -54,6 +55,7 @@ export const OPERATOR_SHELL_NAVIGATION: readonly OperatorShellNavItem[] = [
   { href: "/operator/clinics", labelKey: "operator.clinics", icon: "clinics" },
   { href: "/operator/invitations", labelKey: "operator.invitations", icon: "invitations" },
   { href: "/operator/reports", labelKey: "operator.reports", icon: "reports" },
+  { href: "/operator/ai-allowance", labelKey: "operator.aiAllowance", icon: "ai-allowance" },
   { href: "/operator/coupons", labelKey: "operator.coupons", icon: "coupons" },
   { href: "/operator/settings", labelKey: "operator.settings", icon: "settings" },
 ];

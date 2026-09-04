@@ -1,6 +1,12 @@
 import "@/lib/validations/error-map";
 import { z } from "zod";
 import { normalizePhone } from "@/lib/phone/registry";
+import {
+  clinicShiftsOverlap,
+  clockMinutes,
+  MAX_ENABLED_SHIFT_TEMPLATES,
+  mergeIntervals,
+} from "@/lib/scheduling/clock";
 
 const optionalPhone = z.string().optional().nullable().refine((value) => !value || normalizePhone(value), "validation.invalidFormat");
 
@@ -157,35 +163,138 @@ export const clinicShiftSchema = z
     shift_start: z.string().regex(timeRegex, "validation.invalidFormat"),
     shift_end: z.string().regex(timeRegex, "validation.invalidFormat"),
   })
-  .refine((d) => d.shift_end > d.shift_start, {
+  .refine((d) => (clockMinutes(d.shift_end) ?? -1) > (clockMinutes(d.shift_start) ?? -1), {
     path: ["shift_end"],
     message: "validation.invalidFormat",
   });
 
-export const clinicDayScheduleSchema = z.object({
-  day_of_week: z.number().int().min(0).max(6),
-  open: z.boolean(),
-  shifts: z.array(clinicShiftSchema).max(2),
-});
+export const clinicDayScheduleSchema = z
+  .object({
+    day_of_week: z.number().int().min(0).max(6),
+    open: z.boolean(),
+    shifts: z.array(clinicShiftSchema).max(2),
+  })
+  .superRefine((day, ctx) => {
+    if (clinicShiftsOverlap(day.shifts)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["shifts"],
+        message: "validation.invalidFormat",
+      });
+    }
+  });
 
 export const clinicWorkingHoursSchema = z.array(clinicDayScheduleSchema);
 export type ClinicWorkingHoursValues = z.infer<typeof clinicWorkingHoursSchema>;
 
-// ── Doctor schedule ───────────────────────────────────────────────────────────
+// ── Staff shift templates ─────────────────────────────────────────────────────
+// Reusable named staff shifts. Deliberately NOT clinic opening intervals:
+// two templates may overlap (Morning 09:00–17:00 with Evening 15:00–22:00),
+// so no overlap refinement is applied here.
 
+export const staffShiftTemplateSchema = z
+  .object({
+    id: z.string().uuid().optional().nullable(),
+    name: z.string().trim().min(1, "validation.required").max(60),
+    start_time: z.string().regex(timeRegex, "validation.invalidFormat"),
+    end_time: z.string().regex(timeRegex, "validation.invalidFormat"),
+    is_enabled: z.boolean(),
+    sort_order: z.number().int().min(0).max(99),
+  })
+  .refine((t) => (clockMinutes(t.end_time) ?? -1) > (clockMinutes(t.start_time) ?? -1), {
+    path: ["end_time"],
+    message: "validation.invalidFormat",
+  });
+
+export const staffShiftTemplatesSchema = z
+  .array(staffShiftTemplateSchema)
+  .max(10)
+  .superRefine((templates, ctx) => {
+    const enabled = templates.filter((t) => t.is_enabled);
+    if (enabled.length > MAX_ENABLED_SHIFT_TEMPLATES) {
+      ctx.addIssue({ code: "custom", message: "validation.invalidFormat" });
+    }
+    const names = new Set<string>();
+    for (const template of templates) {
+      const key = template.name.trim().toLocaleLowerCase();
+      if (names.has(key)) {
+        ctx.addIssue({ code: "custom", path: ["name"], message: "validation.invalidFormat" });
+      }
+      names.add(key);
+    }
+  });
+
+export type StaffShiftTemplateValues = z.infer<typeof staffShiftTemplateSchema>;
+export type StaffShiftTemplatesValues = StaffShiftTemplateValues[];
+
+// ── Doctor schedule ───────────────────────────────────────────────────────────
+// A staff day resolves to one or more concrete intervals. Templates are copied
+// into these intervals at selection time; the scheduling engine never reads a
+// template name, so renaming or re-timing a template cannot move a saved
+// schedule (see docs — persistence model B).
+
+export const doctorShiftIntervalSchema = z
+  .object({
+    start_time: z.string().regex(timeRegex, "validation.invalidFormat"),
+    end_time: z.string().regex(timeRegex, "validation.invalidFormat"),
+  })
+  .refine((d) => (clockMinutes(d.end_time) ?? -1) > (clockMinutes(d.start_time) ?? -1), {
+    path: ["end_time"],
+    message: "validation.invalidFormat",
+  });
+
+export type DoctorShiftInterval = z.infer<typeof doctorShiftIntervalSchema>;
+
+export type DoctorDayScheduleValue = {
+  day_of_week: number;
+  works: boolean;
+  /** Outer bounds, kept so pre-P14 readers keep working. */
+  start_time: string | null;
+  end_time: string | null;
+  /** Authoritative merged, disjoint intervals for the day. */
+  intervals: DoctorShiftInterval[];
+};
+
+export type DoctorScheduleValues = DoctorDayScheduleValue[];
+
+/** Accepts the legacy single-interval payload and the P14 intervals payload. */
 export const doctorDayScheduleSchema = z
   .object({
     day_of_week: z.number().int().min(0).max(6),
     works: z.boolean(),
     start_time: z.string().regex(timeRegex, "validation.invalidFormat").optional().nullable(),
     end_time: z.string().regex(timeRegex, "validation.invalidFormat").optional().nullable(),
+    intervals: z.array(doctorShiftIntervalSchema).max(4).optional(),
   })
-  .refine(
-    (d) =>
-      !d.works ||
-      (!!d.start_time && !!d.end_time && d.end_time > d.start_time),
-    { path: ["end_time"], message: "validation.invalidFormat" },
-  );
+  .superRefine((day, ctx) => {
+    if (!day.works) return;
+    const hasIntervals = (day.intervals?.length ?? 0) > 0;
+    const hasLegacy =
+      !!day.start_time &&
+      !!day.end_time &&
+      (clockMinutes(day.end_time) ?? -1) > (clockMinutes(day.start_time) ?? -1);
+    if (!hasIntervals && !hasLegacy) {
+      ctx.addIssue({ code: "custom", path: ["end_time"], message: "validation.invalidFormat" });
+    }
+  })
+  .transform((day): DoctorDayScheduleValue => {
+    if (!day.works) {
+      return { day_of_week: day.day_of_week, works: false, start_time: null, end_time: null, intervals: [] };
+    }
+    const source =
+      day.intervals && day.intervals.length > 0
+        ? day.intervals
+        : [{ start_time: day.start_time!, end_time: day.end_time! }];
+    const merged = mergeIntervals(
+      source.map((i) => ({ start: i.start_time, end: i.end_time })),
+    ).map((i) => ({ start_time: i.start, end_time: i.end }));
+    return {
+      day_of_week: day.day_of_week,
+      works: merged.length > 0,
+      start_time: merged[0]?.start_time ?? null,
+      end_time: merged.at(-1)?.end_time ?? null,
+      intervals: merged,
+    };
+  });
 
 export const doctorScheduleSchema = z.array(doctorDayScheduleSchema);
-export type DoctorScheduleValues = z.infer<typeof doctorScheduleSchema>;

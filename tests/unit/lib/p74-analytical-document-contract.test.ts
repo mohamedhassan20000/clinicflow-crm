@@ -52,10 +52,13 @@ describe("P7-4 analytical document contract", () => {
 
   it("routes the whole batch through the existing idempotent foundation", () => {
     const actions = readFileSync(join(process.cwd(), "actions/documents.ts"), "utf8");
+    const core = readFileSync(join(process.cwd(), "lib/documents/mutations.ts"), "utf8");
     expect(actions).toContain("issueAnalyticalReportDocument");
-    expect(actions).toContain("issueDocumentFoundation({");
-    expect(actions).toContain("render: getDocumentPdfRenderer(parsed.data.documentType)");
+    expect(actions).toContain("issueAnalyticalDocumentCore(user, {");
+    expect(core).toContain("issueDocumentFoundation({");
+    expect(core).toContain("render: getDocumentPdfRenderer(code)");
     expect(actions).toContain("record_analytical_document_reprint");
     expect(actions).not.toContain("allocate_document_number");
+    expect(core).not.toContain("allocate_document_number");
   });
 });

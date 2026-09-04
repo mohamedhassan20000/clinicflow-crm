@@ -13,6 +13,7 @@ import {
   updateAiProviderPolicy,
   type AiProviderHealth,
 } from "@/lib/ai/platform/provider-connections";
+import { setAiAutoByokFallback } from "@/lib/supabase/admin";
 import { getEntitlements, hasAiProviderMode, hasFeature } from "@/lib/entitlements";
 import { actionError } from "@/lib/i18n/action-errors";
 import { isPrimaryClinicAdmin } from "@/lib/primary-admin";
@@ -30,6 +31,7 @@ const modeSchema = z.object({
   currentPassword: z.string().min(1).max(1_024),
 });
 const passwordSchema = z.string().min(1).max(1_024);
+const autoFallbackSchema = z.object({ enabled: z.boolean() });
 
 export type AiProviderActionResult = {
   success?: boolean;
@@ -207,6 +209,41 @@ export async function revokeAiProviderCredential(
       return { error: await actionError("aiProvider.reauthenticationFailed") };
     }
     await revokeActiveAiProviderConnection({ clinicId: user.clinicId, actorId: user.id });
+    revalidatePath("/settings/ai");
+    return { success: true };
+  } catch {
+    return genericFailure();
+  }
+}
+
+/**
+ * Clinic control over the automatic managed→BYOK handover (P12/G1).
+ *
+ * Not treated as a sensitive credential mutation: it neither reveals nor changes
+ * a credential, and it can only ever be the difference between "AI keeps working
+ * on the key you already connected" and "AI stops". It is still primary-admin
+ * only, still rate limited, and still audited by the RPC, because it does change
+ * who pays for a turn.
+ */
+export async function setAiAutoByokFallbackPreference(
+  _previous: AiProviderActionResult | null,
+  formData: FormData,
+): Promise<AiProviderActionResult> {
+  const parsed = autoFallbackSchema.safeParse({
+    enabled: formData.get("autoByokFallbackEnabled") === "on",
+  });
+  if (!parsed.success) return genericFailure();
+  try {
+    const user = await requirePrimaryAiAdmin();
+    if (!(await operationAllowed(user, "auto-fallback-write"))) {
+      return { error: await actionError("aiProvider.tooManyRequests") };
+    }
+    const result = await setAiAutoByokFallback({
+      clinicId: user.clinicId,
+      actorId: user.id,
+      enabled: parsed.data.enabled,
+    });
+    if (result.error) return genericFailure();
     revalidatePath("/settings/ai");
     return { success: true };
   } catch {

@@ -20,7 +20,7 @@ import {
 export function getAppointmentStatsTool(ctx: DoctorToolContext) {
   return tool({
     description:
-      "Get aggregate appointment statistics for a date range: active totals, completed/cancelled/no-show counts and rates, dedicated replaced appointment count and replacement rate, and a breakdown grouped by status, doctor, or department. Replaced originals are excluded from active totals and the other outcome rates. Aggregates only — use list_appointments when the user needs the individual appointments.",
+      "Get aggregate appointment statistics for a date range: active totals, completed/cancelled/no-show counts and rates, dedicated replaced appointment count and replacement rate, and a breakdown grouped by status, doctor, or department. Replaced originals are excluded from active totals and the other outcome rates. Aggregates only — use query_resource on the appointments resource when the user needs the individual appointments.",
     inputSchema: dateRangeInputSchema.extend({
       group_by: z
         .enum(["status", "doctor", "department"])

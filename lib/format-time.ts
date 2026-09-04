@@ -56,7 +56,10 @@ export function formatSlotTime(
       useGrouping: false,
     }).format(minute)}`;
   }
-  const period = hour >= 12 ? "PM" : "AM";
+  const isArabic = locale?.locale?.toLowerCase().startsWith("ar") === true;
+  const period = isArabic
+    ? hour >= 12 ? "مساءً" : "صباحًا"
+    : hour >= 12 ? "PM" : "AM";
   const h12 = hour % 12 === 0 ? 12 : hour % 12;
   return `${new Intl.NumberFormat(toNumberingLocale(locale), {
     useGrouping: false,

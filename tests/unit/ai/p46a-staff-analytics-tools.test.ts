@@ -34,6 +34,10 @@ function user(role: Role, clinicId = CLINIC): MockUser {
 /** The full pro_ai AI vocabulary. Individual tests turn keys off. */
 const PRO_AI_FEATURES = {
   ai_assistant: true,
+  "ai.read_clinical": true,
+  // Phase 7: the appointment-list cases below run on the resource layer, which
+  // resolves under the operational read key rather than the analytics one.
+  "ai.read_operational": true,
   "ai.staff_assistant": true,
   "ai.staff_analytics": true,
   "ai.financial_insights": true,
@@ -94,11 +98,13 @@ async function load(actor: MockUser, options: LoadOptions = {}) {
 
 const opts = {} as never;
 
+// Phase 7: `list_appointments` left this set with the tool itself; the
+// appointment list is now a `query_resource` read, which mounts for every staff
+// role and so is no longer part of the *analytics* matrix this suite pins.
 const OPERATIONAL_TOOLS = [
   "get_clinic_summary",
   "get_patient_stats",
   "get_appointment_stats",
-  "list_appointments",
   "count_new_patients",
   "list_pending_followups",
   "run_clinic_report",
@@ -124,7 +130,7 @@ describe("P4.6A registration matrix", () => {
     }
     // Operational access is unaffected by the financial grant.
     expect(Object.keys(tools)).toContain("get_clinic_summary");
-    expect(Object.keys(tools)).toContain("list_appointments");
+    expect(Object.keys(tools)).toContain("query_resource");
   });
 
   it("mounts financial tools for a manager once an admin grants the permission", async () => {
@@ -157,7 +163,7 @@ describe("P4.6A registration matrix", () => {
       expect(Object.keys(tools)).not.toContain(name);
     }
     // Receptionists keep the operational list/stat tools they are entitled to.
-    expect(Object.keys(tools)).toContain("list_appointments");
+    expect(Object.keys(tools)).toContain("query_resource");
     expect(Object.keys(tools)).toContain("count_new_patients");
     expect(Object.keys(tools)).toContain("list_pending_followups");
   });
@@ -174,16 +180,23 @@ describe("P4.6A registration matrix", () => {
     expect(Object.keys(tools)).toContain("list_pending_followups");
   });
 
-  it("gives doctors no P4.6 tools at all — only their P4 clinical set", async () => {
+  it("gives doctors no P4.6 analytics or financial tools — only their clinical and action set", async () => {
     const { tools } = await load(user("doctor"), { financialPermission: true });
     for (const name of [...OPERATIONAL_TOOLS, ...FINANCIAL_TOOLS]) {
       expect(Object.keys(tools)).not.toContain(name);
     }
     expect(Object.keys(tools)).toEqual([
+      "query_resource",
+      "get_record",
+      "aggregate_resource",
+      "describe_capabilities",
+      // Final review B-2: the generic action tools mount for any role the
+      // action registry authorizes at least one action for, doctors included.
+      // Which of the 89 actions a doctor may actually run is decided per action
+      // by `assertActionAccess`, not by this mount.
+      "execute_action",
+      "describe_action",
       "search_authorized_patients",
-      "get_patient_summary",
-      "search_patient_visits",
-      "list_doctor_appointments",
       "check_availability",
       // P4.7A help/navigation ride on ai_assistant for every role, doctors
       // included — a doctor may ask how to use the app just like anyone else;
@@ -202,10 +215,13 @@ describe("P4.6A registration matrix", () => {
       expect(Object.keys(tools)).not.toContain(name);
     }
     expect(Object.keys(tools)).toEqual([
+      "query_resource",
+      "get_record",
+      "aggregate_resource",
+      "describe_capabilities",
+      "execute_action",
+      "describe_action",
       "search_authorized_patients",
-      "get_patient_summary",
-      "search_patient_visits",
-      "list_doctor_appointments",
       "check_availability",
       "search_help",
       "get_navigation_target",
@@ -229,6 +245,12 @@ describe("P4.6A registration matrix", () => {
       financialPermission: true,
     });
     expect(Object.keys(tools)).toEqual([
+      "query_resource",
+      "get_record",
+      "aggregate_resource",
+      "describe_capabilities",
+      "execute_action",
+      "describe_action",
       "search_authorized_patients",
       "check_availability",
       // Help/navigation and capability transparency are part of the base
@@ -301,7 +323,7 @@ describe("P4.6A per-invocation re-authorization", () => {
     // Fails closed *and* audibly: the user is told the check could not be
     // completed, instead of getting an anonymous "could not complete" chip.
     await expect(
-      tools.list_appointments!.execute!({ preset: "today" }, opts),
+      tools.query_resource!.execute!({ resource: "appointments" }, opts),
     ).resolves.toMatchObject({ permission_denied: true, reason: "lookup_failed" });
     expect(mocks.state.from).not.toHaveBeenCalledWith("appointments");
   });
@@ -406,86 +428,119 @@ describe("P4.6A aggregate tools", () => {
 });
 
 describe("P4.6A operational list tools", () => {
-  it("caps rows and returns only allow-listed appointment fields", async () => {
+  // Phase 7. These three cases drove `list_appointments`; they are re-pointed at
+  // `query_resource` because the properties are the reason the tool could be
+  // retired at all — a server-owned column allow-list, an honest cap, and a
+  // named doctor that is either resolved deterministically or asked about, never
+  // guessed. Run against the removed tool they proved a hand-written select;
+  // run here they prove the compiler, which is now the only thing standing
+  // between the model and the table.
+  it("returns only registered fields and compiles a select that cannot reach an undeclared column", async () => {
     const { tools, mocks } = await load(user("receptionist"));
     mocks.state.tableResults["appointments"] = {
       data: [
         {
-          id: "appt-1",
+          id: "22222222-2222-4222-8222-222222222222",
+          patient_id: "33333333-3333-4333-8333-333333333333",
+          doctor_id: "44444444-4444-4444-8444-444444444444",
+          department_id: "55555555-5555-4555-8555-555555555555",
           scheduled_at: "2026-07-20T09:00:00.000Z",
-          status: "confirmed",
           duration_minutes: 30,
-          notes: "SECRET CLINICAL NOTE",
-          outstanding_amount: 250,
-          patients: { full_name: "Jane Roe", file_number: "CF-1" },
-          profiles: { full_name: "Dr House" },
-          departments: { name: "Cardiology" },
+          status: "confirmed",
         },
       ],
       error: null,
+      count: 1,
     };
 
-    const result = (await tools.list_appointments!.execute!(
-      { preset: "today" },
+    const result = (await tools.query_resource!.execute!(
+      { resource: "appointments" },
       opts,
-    )) as { row_cap: number; appointments: Record<string, unknown>[] };
+    )) as { rows: Record<string, unknown>[]; row_cap: number };
 
-    expect(result.row_cap).toBe(50);
-    expect(Object.keys(result.appointments[0]!)).toEqual([
+    expect(result.row_cap).toBe(200);
+    // Exactly the resource's declared defaultFields, in declaration order.
+    expect(Object.keys(result.rows[0]!)).toEqual([
       "id",
+      "patient_id",
+      "doctor_id",
+      "department_id",
       "scheduled_at",
-      "status",
       "duration_minutes",
-      "patient_name",
-      "patient_file_number",
-      "doctor_name",
-      "department_name",
+      "status",
     ]);
-    const serialized = JSON.stringify(result);
-    expect(serialized).not.toContain("SECRET CLINICAL NOTE");
-    expect(serialized).not.toContain("250");
 
-    // Cap + 1: the extra row is how "there is more" is told apart from "there
-    // is exactly this much" (phase review L5). The returned list is still 50.
-    const limitCall = mocks.state.queryLog.find((entry) => entry.args[0] === "limit");
-    expect(limitCall?.args[1]).toBe(51);
+    // Where the allow-list is actually enforced. The removed tool wrote its
+    // select by hand; the compiler builds it from the field policy, so the
+    // assertion that matters is that clinical and financial columns the resource
+    // does not declare cannot appear in it — and that it is never a star.
+    const select = String(
+      mocks.state.queryLog.find((entry) => entry.args[0] === "select")?.args[1],
+    );
+    expect(select).not.toContain("*");
+    for (const column of ["notes", "outstanding_amount", "cancellation_reason"]) {
+      expect(select, column).not.toContain(column);
+    }
   });
 
   it("asks the user to choose instead of guessing an ambiguous doctor name", async () => {
     const { tools, mocks } = await load(user("admin"));
     mocks.state.rpcResults.search_staff_ranked = {
       data: [
-        { id: "d1", full_name: "Ahmed Ali", score: 0.82, match_kind: "name_fuzzy" },
-        { id: "d2", full_name: "Ahmed Aly", score: 0.8, match_kind: "name_fuzzy" },
+        {
+          id: "11111111-1111-4111-8111-111111111101",
+          full_name: "Ahmed Ali",
+          score: 0.82,
+          match_kind: "name_fuzzy",
+        },
+        {
+          id: "11111111-1111-4111-8111-111111111102",
+          full_name: "Ahmed Aly",
+          score: 0.8,
+          match_kind: "name_fuzzy",
+        },
       ],
       error: null,
     };
 
-    const result = (await tools.list_appointments!.execute!(
-      { preset: "today", doctor: "Ahmed" },
+    const result = (await tools.query_resource!.execute!(
+      { resource: "appointments", filters: { doctor: "Ahmed" } },
       opts,
     )) as { needs_clarification: boolean; candidates: { id: string }[] };
 
     expect(result.needs_clarification).toBe(true);
     expect(result.candidates).toHaveLength(2);
-    // No appointment read happened — the tool stopped before querying.
-    expect(mocks.state.queryLog.some((entry) => entry.table === "appointments")).toBe(false);
+    // No appointment read happened — the compiler stopped before querying.
+    expect(
+      mocks.state.queryLog.some((entry) => entry.table === "appointments"),
+    ).toBe(false);
   });
 
   it("proceeds on a confident unique doctor match", async () => {
     const { tools, mocks } = await load(user("admin"));
     mocks.state.rpcResults.search_staff_ranked = {
-      data: [{ id: "d1", full_name: "Ahmed Ali", score: 0.95, match_kind: "exact_name" }],
+      data: [
+        {
+          id: "11111111-1111-4111-8111-111111111101",
+          full_name: "Ahmed Ali",
+          score: 0.95,
+          match_kind: "exact_name",
+        },
+      ],
       error: null,
     };
-    mocks.state.tableResults["appointments"] = { data: [], error: null };
+    mocks.state.tableResults["appointments"] = {
+      data: [],
+      error: null,
+      count: 0,
+    };
 
-    const result = (await tools.list_appointments!.execute!(
-      { preset: "today", doctor: "Ahmed Ali" },
+    const result = (await tools.query_resource!.execute!(
+      { resource: "appointments", filters: { doctor: "Ahmed Ali" } },
       opts,
-    )) as { appointments: unknown[] };
+    )) as { rows: unknown[] };
 
-    expect(result.appointments).toEqual([]);
+    expect(result.rows).toEqual([]);
     expect(
       mocks.state.queryLog.some(
         (entry) => entry.args[0] === "eq" && entry.args[1] === "doctor_id",

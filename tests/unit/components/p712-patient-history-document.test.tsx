@@ -95,6 +95,11 @@ describe("P7-12 patient history document rendering", () => {
         expect(page).toHaveAttribute("dir", locale === "ar" ? "rtl" : "ltr");
         expect(container.textContent).toContain(copy.title);
         expect(container.textContent).toContain("Jane Doe");
+        // A history report is not the patient file: it carries no person photo,
+        // only the initials identity avatar.
+        expect(container.querySelector(".cf-doc-avatar-foreground")).toBeNull();
+        expect(container.querySelector(".cf-doc-avatar-background")).toBeNull();
+        expect(container.querySelectorAll(".cf-doc-list-avatar")).toHaveLength(0);
         if (documentType === "APPOINTMENT_HISTORY_REPORT" && locale === "ar") {
           expect(container).toHaveTextContent("مكتمل");
           expect(container).toHaveTextContent("كل شيء بخير");

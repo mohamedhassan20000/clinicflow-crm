@@ -125,11 +125,37 @@ export const inboxReplySchema = z
       )
       .max(20, "validation.tooBig")
       .default([]),
+    mediaId: z.string().uuid("validation.invalidFormat").nullable().optional(),
   })
-  .refine((value) => value.body.length > 0 || Boolean(value.templateId), {
+  .refine(
+    (value) => value.body.length > 0 || Boolean(value.templateId) || Boolean(value.mediaId),
+    {
     message: "validation.tooSmall",
     path: ["body"],
-  });
+    },
+  );
+
+export const newWhatsappConversationSchema = z.object({
+  participant: z
+    .string()
+    .trim()
+    .min(6, "validation.tooSmall")
+    .max(32, "validation.tooBig"),
+  displayName: noBidiControls(z.string().trim().max(120, "validation.tooBig"))
+    .nullable()
+    .optional(),
+});
+
+export const inboxExistingDocumentSchema = z.object({
+  conversationId: z.string().uuid("validation.invalidFormat"),
+  source: z.enum(["patient_document", "clinic_document"]),
+  recordId: z.string().uuid("validation.invalidFormat"),
+});
+
+export const inboxMediaIdSchema = z.object({
+  conversationId: z.string().uuid("validation.invalidFormat"),
+  mediaId: z.string().uuid("validation.invalidFormat"),
+});
 
 export const conversationAssignmentSchema = z.object({
   conversationId: z.string().uuid("validation.invalidFormat"),
@@ -139,6 +165,38 @@ export const conversationAssignmentSchema = z.object({
 export const conversationPatientSchema = z.object({
   conversationId: z.string().uuid("validation.invalidFormat"),
   patientId: z.string().uuid("validation.invalidFormat").nullable(),
+});
+
+/**
+ * P8 — human takeover. The optional note is staff-authored free text shown back
+ * to staff, so it goes through the same bidi-control guard every other
+ * staff-authored string in this file does.
+ */
+export const conversationAiPauseSchema = z.object({
+  conversationId: z.string().uuid("validation.invalidFormat"),
+  paused: z.boolean(),
+  reason: noBidiControls(z.string().trim().max(200, "validation.tooBig"))
+    .nullable()
+    .optional(),
+});
+
+/**
+ * P15 (§3) — the per-conversation exception to the clinic-wide AI setting.
+ *
+ * `override` is deliberately nullable and required rather than optional: the
+ * three states are *follow the clinic* (null), *never here* (false) and
+ * *always here* (true), and an omitted field would be a fourth reading nobody
+ * has decided the meaning of.
+ */
+export const conversationAiOverrideSchema = z.object({
+  conversationId: z.string().uuid("validation.invalidFormat"),
+  override: z.boolean().nullable(),
+});
+
+/** P8/H4: a staff decision on one history chat held for review. */
+export const historyChatDecisionSchema = z.object({
+  pendingId: z.string().uuid("validation.invalidFormat"),
+  accept: z.boolean(),
 });
 
 export const conversationStatusSchema = z.object({

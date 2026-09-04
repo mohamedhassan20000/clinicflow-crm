@@ -32,8 +32,11 @@ describe("P7-7 Invoice document contract", () => {
   it("issues through the shared idempotent foundation with one canonical document per appointment", () => {
     const source = readFileSync(join(process.cwd(), "lib/documents/invoice-issuance.ts"), "utf8");
     expect(source).toContain("issueDocumentFoundation({");
-    expect(source).toContain("idempotencyKey: `invoice:${input.appointmentId}`");
-    expect(source).toContain("render: getDocumentPdfRenderer(catalog.code)");
+    expect(source).toContain("const idempotencyKey = `invoice:${input.appointmentId}`");
+    expect(source).toContain("idempotencyKey,");
+    expect(source).toContain("render = getDocumentPdfRenderer(catalog.code)");
+    expect(source).toContain("render,");
+    expect(source).toContain("findCompletedClinicDocument({");
     expect(source).toContain("snapshot: snapshot as unknown as Json");
     expect(source).not.toContain("allocate_document_number");
   });
@@ -56,5 +59,12 @@ describe("P7-7 Invoice document contract", () => {
     expect(authoring).toContain('.eq("status", "completed")');
     expect(authoring).toContain('.from("appointment_services")');
     expect(page.indexOf("if (sp.documentId)")).toBeLessThan(page.indexOf("if (!appointmentId) notFound()"));
+  });
+
+  it("logs structured invoice issue stages and Postgres fields", () => {
+    const core = readFileSync(join(process.cwd(), "lib/documents/mutations.ts"), "utf8");
+    expect(core).toContain("describeDocumentIssueFailure(error, \"invoice-action\")");
+    expect(core).toContain('console.error("invoice_document_issue_failed"');
+    expect(core).toContain("...failure");
   });
 });

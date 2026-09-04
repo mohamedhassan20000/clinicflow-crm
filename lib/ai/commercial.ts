@@ -1,13 +1,27 @@
 import "server-only";
 
+import { aiUsageThreshold, type AiUsageThreshold } from "@/lib/ai/allowance";
 import { AI_LIMIT_KEYS } from "@/lib/ai/commercial-policy";
 import { getEntitlements, resolveAiRequestLimit } from "@/lib/entitlements";
 import { createClinicScopedAdminClient } from "@/lib/supabase/admin";
 
-export type AiUsageThreshold = "normal" | "seventy" | "ninety" | "exhausted";
+export { aiUsageThreshold };
+export type { AiUsageThreshold };
+
+/**
+ * What the clinic is actually running on right now.
+ *
+ *  * `managed`   — ClinicFlow's own Anthropic key, funded by the plan allowance.
+ *  * `byok`      — the clinic configured its own Anthropic key and chose it.
+ *  * `auto_byok` — the clinic is on a managed plan whose allowance is spent, and
+ *                  its own key is carrying AI so nothing stopped.
+ */
+export type ClinicAiProviderState = "managed" | "byok" | "auto_byok";
 
 export type ClinicAiCommercialUsage = {
   periodStart: string;
+  /** First day of the next billing period: when the included allowance resets. */
+  resetDate: string;
   managedSpentMicros: number;
   reservedMicros: number;
   budgetLimitMicros: number;
@@ -19,6 +33,8 @@ export type ClinicAiCommercialUsage = {
    */
   managedAllowanceConfigured: boolean;
   usedPercent: number;
+  /** Allowance left after committed (spent + in-flight) usage. Never negative. */
+  remainingMicros: number;
   requestUsed: number;
   requestLimit: number;
   requestRemaining: number;
@@ -34,12 +50,16 @@ export type ClinicAiCommercialUsage = {
    */
   byokRequestUsed: number;
   byokEstimatedCostMicros: number;
+  /** Whether a healthy clinic-owned Anthropic credential exists at all. */
+  byokConfigured: boolean;
+  providerState: ClinicAiProviderState;
 };
 
 type PeriodRow = {
   budget_limit_micros: number | null;
   reserved_micros: number | null;
   spent_micros: number | null;
+  byok_spent_micros?: number | null;
 } | null;
 
 type RequestCounterRow = {
@@ -69,13 +89,6 @@ function safeInteger(value: number | null | undefined): number {
   return Number.isSafeInteger(value) && (value ?? -1) >= 0 ? value! : 0;
 }
 
-export function aiUsageThreshold(percent: number): AiUsageThreshold {
-  if (percent >= 100) return "exhausted";
-  if (percent >= 90) return "ninety";
-  if (percent >= 70) return "seventy";
-  return "normal";
-}
-
 /**
  * Pure commercial projection. Separates request-count (fair-use) allowance from
  * the cost-weighted managed allowance, and keeps clinic-owned BYOK usage in its
@@ -85,6 +98,7 @@ export function aiUsageThreshold(percent: number): AiUsageThreshold {
  */
 export function computeClinicAiCommercialUsage(input: {
   periodStart: string;
+  resetDate: string;
   planBudgetMicros: number;
   requestPlanLimit: number;
   period: PeriodRow;
@@ -92,6 +106,8 @@ export function computeClinicAiCommercialUsage(input: {
   terms: CommercialTermsRow;
   byokRequestUsed: number;
   byokEstimatedCostMicros: number;
+  byokConfigured: boolean;
+  credentialMode: "managed" | "byok_strict" | "hybrid";
 }): ClinicAiCommercialUsage {
   const terms = input.terms;
   const planBudget = safeInteger(input.planBudgetMicros);
@@ -118,21 +134,37 @@ export function computeClinicAiCommercialUsage(input: {
     safeInteger(input.requestCounter?.limit_snapshot),
   );
 
+  const remainingMicros = Math.max(0, budgetLimitMicros - committedMicros);
+  const threshold = managedAllowanceConfigured ? aiUsageThreshold(usedPercent) : "normal";
+  // The state the clinic is *actually* in, which is not always the state it
+  // configured: a managed clinic whose allowance is spent and whose own key is
+  // carrying the load must be shown that, not a stale "ClinicFlow Managed AI".
+  const providerState: ClinicAiProviderState =
+    input.credentialMode !== "managed"
+      ? "byok"
+      : managedAllowanceConfigured && threshold === "exhausted" && input.byokConfigured
+        ? "auto_byok"
+        : "managed";
+
   return {
     periodStart: input.periodStart,
+    resetDate: input.resetDate,
     managedSpentMicros,
     reservedMicros,
     budgetLimitMicros,
     managedAllowanceConfigured,
     usedPercent,
+    remainingMicros,
     requestUsed,
     requestLimit,
     requestRemaining: Math.max(0, requestLimit - requestUsed),
-    threshold: managedAllowanceConfigured ? aiUsageThreshold(usedPercent) : "normal",
+    threshold,
     overageMode: terms?.overage_mode === "contracted" ? "contracted" : "hard_cap",
     hasAddon: safeInteger(terms?.addon_budget_micros) > 0,
     byokRequestUsed: safeInteger(input.byokRequestUsed),
     byokEstimatedCostMicros: safeInteger(input.byokEstimatedCostMicros),
+    byokConfigured: input.byokConfigured,
+    providerState,
   };
 }
 
@@ -150,10 +182,11 @@ export async function getClinicAiCommercialUsage(
   const periodEnd = nextMonthStartUtc(now);
   const entitlements = await getEntitlements(clinicId);
   const db = createClinicScopedAdminClient(clinicId);
-  const [periodResult, requestResult, termsResult, byokResult] = await Promise.all([
+  const [periodResult, requestResult, termsResult, byokResult, providerResult, connectionResult] =
+    await Promise.all([
     db
       .from("ai_budget_periods")
-      .select("budget_limit_micros, reserved_micros, spent_micros")
+      .select("budget_limit_micros, reserved_micros, spent_micros, byok_spent_micros")
       .eq("clinic_id", clinicId)
       .eq("period_start", periodStart)
       .maybeSingle(),
@@ -180,8 +213,27 @@ export async function getClinicAiCommercialUsage(
       .eq("billing_disposition", "byok_provider_direct")
       .gte("created_at", periodStart)
       .lt("created_at", periodEnd),
+    db
+      .from("ai_clinic_provider_policies")
+      .select("credential_mode")
+      .eq("clinic_id", clinicId)
+      .maybeSingle(),
+    // Metadata only: never the ciphertext, key version, or fingerprint.
+    db
+      .from("ai_provider_connections")
+      .select("health_status")
+      .eq("clinic_id", clinicId)
+      .eq("lifecycle_status", "active")
+      .maybeSingle(),
   ]);
-  if (periodResult.error || requestResult.error || termsResult.error || byokResult.error) {
+  if (
+    periodResult.error ||
+    requestResult.error ||
+    termsResult.error ||
+    byokResult.error ||
+    providerResult.error ||
+    connectionResult.error
+  ) {
     throw new Error("AI commercial usage is temporarily unavailable.");
   }
 
@@ -194,14 +246,26 @@ export async function getClinicAiCommercialUsage(
     byokRows.map((row) => row.request_id).filter((id): id is string => typeof id === "string"),
   ).size;
 
+  const rawMode = providerResult.data?.credential_mode;
+  const credentialMode =
+    rawMode === "byok_strict" || rawMode === "hybrid" ? rawMode : "managed";
+
   return computeClinicAiCommercialUsage({
     periodStart,
+    resetDate: periodEnd,
     planBudgetMicros: safeInteger(entitlements.limits[AI_LIMIT_KEYS.creditsMonth]),
     requestPlanLimit: resolveAiRequestLimit(entitlements),
     period: periodResult.data,
     requestCounter: requestResult.data,
     terms: termsResult.data,
     byokRequestUsed,
-    byokEstimatedCostMicros,
+    // The period aggregate is authoritative once it exists; the per-event sum
+    // stays as the fallback for periods that predate `byok_spent_micros`.
+    byokEstimatedCostMicros: Math.max(
+      byokEstimatedCostMicros,
+      safeInteger(periodResult.data?.byok_spent_micros),
+    ),
+    byokConfigured: connectionResult.data?.health_status === "valid",
+    credentialMode,
   });
 }

@@ -5,6 +5,15 @@ const migration = readFileSync(
   "supabase/migrations/20260719140000_p45c_ai_commercial_integration.sql",
   "utf8",
 );
+const phase0bMigration = readFileSync(
+  "supabase/migrations/20260813130000_ai_entitlement_plan_decoupling.sql",
+  "utf8",
+);
+const phase0bRuntimeResolvers = phase0bMigration.slice(
+  phase0bMigration.indexOf(
+    "create or replace function public.effective_ai_feature",
+  ),
+);
 
 describe("P4.5C AI commercial integration migration", () => {
   it("keeps stable slugs and makes pro_ai the only AI catalog tier", () => {
@@ -24,11 +33,13 @@ describe("P4.5C AI commercial integration migration", () => {
     expect(migration).not.toMatch(/card_number|payment_method_id|provider_customer_id/i);
   });
 
-  it("enforces subscription, mode, concurrency, and cost pool in SQL", () => {
-    expect(migration).toContain("plan.slug = 'pro_ai'");
+  it("enforces subscription, terms, mode, concurrency, and cost pool in SQL", () => {
+    expect(phase0bMigration).toContain("terms.accepted_at is not null");
+    expect(phase0bRuntimeResolvers).not.toMatch(/plan\.slug\s*=\s*'pro_ai'/);
     expect(migration).toContain("AI_PROVIDER_MODE_NOT_ENTITLED");
     expect(migration).toContain("AI_BUDGET_CONCURRENCY_EXCEEDED");
-    expect(migration).toContain("resolve_ai_commercial_limits");
+    expect(phase0bMigration).toContain("resolve_ai_commercial_limits");
+    expect(phase0bMigration).toContain("AI_FEATURE_NOT_ENTITLED");
     expect(migration).toContain("ai.hybrid_fallback");
   });
 

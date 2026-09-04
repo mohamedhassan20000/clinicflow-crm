@@ -7,6 +7,7 @@ import {
   buildDocumentHtml,
   type ServerDocumentRender,
 } from "@/lib/documents/pdf/html";
+import { DocumentIssueError } from "@/lib/documents/issuance";
 
 const LOCAL_CHROME_PATHS = [
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
@@ -79,15 +80,20 @@ export async function renderDocumentPdf({
   title,
   orientation = "portrait",
 }: ChromiumPdfRenderInput): Promise<ChromiumPdfResult> {
-  const [{ default: puppeteer }, { default: chromium }, html, executablePath] = await Promise.all([
-    import("puppeteer-core"),
-    import("@sparticuz/chromium"),
-    buildDocumentHtml({ renderDocument, locale, title }),
-    resolveChromiumExecutablePath(),
-  ]);
+  let html: string;
+  try {
+    html = await buildDocumentHtml({ renderDocument, locale, title });
+  } catch (error) {
+    throw new DocumentIssueError("server-html-render", error);
+  }
 
   let browser: Browser | null = null;
   try {
+    const [{ default: puppeteer }, { default: chromium }, executablePath] = await Promise.all([
+      import("puppeteer-core"),
+      import("@sparticuz/chromium"),
+      resolveChromiumExecutablePath(),
+    ]);
     browser = await puppeteer.launch({
       executablePath,
       args: chromiumLaunchArgs(executablePath, chromium.args),
@@ -110,6 +116,10 @@ export async function renderDocumentPdf({
     const { PDFDocument } = await import("pdf-lib");
     const renderedDocument = await PDFDocument.load(pdfBytes);
     return { pdf: pdfBytes, pageCount: renderedDocument.getPageCount() };
+  } catch (error) {
+    throw error instanceof DocumentIssueError
+      ? error
+      : new DocumentIssueError("chromium-pdf", error);
   } finally {
     await browser?.close();
   }

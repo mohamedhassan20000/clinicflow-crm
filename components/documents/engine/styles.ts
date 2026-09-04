@@ -259,6 +259,15 @@ export const DOCUMENT_ENGINE_CSS = String.raw`
   margin-block-start: 2px;
 }
 
+/* Email and website share the third contact line with a comfortable gap
+   instead of a separator, and mirror with the header in RTL. */
+.cf-doc-contact-pair {
+  column-gap: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  row-gap: 0;
+}
+
 .cf-doc-contact-lines p,
 .cf-doc-title,
 .cf-doc-meta-grid,
@@ -308,6 +317,12 @@ export const DOCUMENT_ENGINE_CSS = String.raw`
 .cf-doc-meta-value {
   color: var(--doc-ink-soft);
   font-weight: 500;
+}
+
+/* Tax and registration identifiers are single atoms: a wrapped identifier reads
+   as two different numbers, so they never break across lines. */
+.cf-doc-meta-value-atomic {
+  white-space: nowrap;
 }
 
 .cf-doc-ltr {

@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { useClinicSettings } from "@/contexts/clinic-settings-context";
 
 type RangeEdge = "from" | "to";
 
@@ -371,6 +372,7 @@ export function TimePicker({
   ...buttonProps
 }: TimePickerProps) {
   const t = useTranslations("calendarPicker");
+  const { formatSlotTime } = useClinicSettings();
   const [open, setOpen] = useState(false);
   const [internalValue, setInternalValue] = useState(defaultValue ?? "");
   const selectedValue = value ?? internalValue;
@@ -396,7 +398,7 @@ export function TimePicker({
           icon={<Clock3 className="size-3.5" aria-hidden="true" />}
           label={label}
           empty={!selectedValue}
-          value={<span dir="ltr">{selectedValue || t("chooseTime")}</span>}
+          value={<span dir="ltr">{selectedValue ? formatSlotTime(selectedValue) : t("chooseTime")}</span>}
         />
       </PopoverTrigger>
       <PopoverContent
@@ -413,7 +415,7 @@ export function TimePicker({
           <div>
             <p className="text-xs font-semibold text-foreground">{label}</p>
             <p className="text-[11px] text-muted-foreground" dir="ltr">
-              {selectedValue || t("chooseTime")}
+              {selectedValue ? formatSlotTime(selectedValue) : t("chooseTime")}
             </p>
           </div>
         </div>
@@ -431,7 +433,9 @@ export function TimePicker({
               </SelectTrigger>
               <SelectContent position="popper" className="z-[80] max-h-64">
                 {Array.from({ length: 24 }, (_, index) => String(index).padStart(2, "0")).map((item) => (
-                  <SelectItem key={item} value={item}>{item}</SelectItem>
+                  <SelectItem key={item} value={item}>
+                    {formatSlotTime(`${item}:00`)}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>

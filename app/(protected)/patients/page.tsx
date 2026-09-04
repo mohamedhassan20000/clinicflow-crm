@@ -9,6 +9,7 @@ import { formatDoctorName } from "@/lib/format-doctor";
 import { Button } from "@/components/ui/button";
 import { getTranslations } from "next-intl/server";
 import { DocumentTriggerLabel } from "@/components/documents/document-trigger-label";
+import { AiIntakeReviewSection } from "@/components/patients/ai-intake-review-section";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("protected");
@@ -38,6 +39,7 @@ export default async function PatientsPage({ searchParams }: PageProps) {
   const isScopedViewer = isDoctor || isAssistant;
   const canManagePatients =
     user.role === "admin" || user.role === "receptionist";
+  const canReviewAiIntakes = canManagePatients || user.role === "manager";
   const canViewPatientBalances = canManagePatients;
 
   const {
@@ -85,7 +87,12 @@ export default async function PatientsPage({ searchParams }: PageProps) {
     if (doctor) query = query.eq("assigned_doctor_id", doctor);
   }
 
-  const [{ data: patients, count }, { data: departments }, { data: doctors }] =
+  const [
+    { data: patients, count },
+    { data: departments },
+    { data: doctors },
+    { data: aiIntakes },
+  ] =
     await Promise.all([
       query,
       supabase
@@ -103,6 +110,17 @@ export default async function PatientsPage({ searchParams }: PageProps) {
             .eq("role", "doctor")
             .eq("is_active", true)
             .order("full_name"),
+      canReviewAiIntakes
+        ? supabase
+            .from("ai_patient_intakes")
+            .select(
+              "id, conversation_id, full_name, date_of_birth, phone, email, national_id, created_at, department:departments!ai_patient_intakes_department_clinic_fkey(name), doctor:profiles!ai_patient_intakes_doctor_clinic_fkey(full_name), ai_appointment_requests(id, status)",
+            )
+            .eq("clinic_id", user.clinicId)
+            .eq("review_status", "pending_review")
+            .order("created_at", { ascending: false })
+            .limit(50)
+        : Promise.resolve({ data: [] }),
     ]);
 
   const activeDept = departments?.find((d) =>
@@ -218,6 +236,26 @@ export default async function PatientsPage({ searchParams }: PageProps) {
         pageSize={PAGE_SIZE}
         canCreate={canManagePatients}
       />
+
+      {canReviewAiIntakes && (
+        <AiIntakeReviewSection
+          intakes={(aiIntakes ?? []).map((intake) => ({
+            id: intake.id,
+            conversationId: intake.conversation_id,
+            fullName: intake.full_name,
+            dateOfBirth: intake.date_of_birth,
+            phone: intake.phone,
+            email: intake.email,
+            nationalId: intake.national_id,
+            departmentName: intake.department?.name ?? "—",
+            doctorName: intake.doctor?.full_name ?? "—",
+            createdAt: intake.created_at,
+            hasAppointmentRequest: intake.ai_appointment_requests.some(
+              (request) => request.status === "pending",
+            ),
+          }))}
+        />
+      )}
     </div>
   );
 }

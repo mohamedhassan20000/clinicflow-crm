@@ -1,9 +1,13 @@
 import "server-only";
 
-import { expireAiPendingBookings } from "@/lib/supabase/admin";
+import {
+  expireAiAppointmentRequests,
+  expireAiPendingBookings,
+} from "@/lib/supabase/admin";
 
 export type PendingBookingExpirySummary = {
   expired: number;
+  expiredRequests: number;
 };
 
 /**
@@ -14,7 +18,14 @@ export type PendingBookingExpirySummary = {
 export async function runAiPendingBookingExpiry(
   now = new Date(),
 ): Promise<PendingBookingExpirySummary> {
-  const { data, error } = await expireAiPendingBookings(now);
-  if (error) throw error;
-  return { expired: data?.[0]?.expired_count ?? 0 };
+  const [bookings, requests] = await Promise.all([
+    expireAiPendingBookings(now),
+    expireAiAppointmentRequests(now),
+  ]);
+  if (bookings.error) throw bookings.error;
+  if (requests.error) throw requests.error;
+  return {
+    expired: bookings.data?.[0]?.expired_count ?? 0,
+    expiredRequests: requests.data?.[0]?.expired_count ?? 0,
+  };
 }

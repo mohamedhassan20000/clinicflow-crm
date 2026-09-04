@@ -2,6 +2,7 @@ import { DocumentPage, type DocumentLifecycle, type DocumentRenderContextBoundar
 import {
   DataTable,
   FieldGrid,
+  IdentityHero,
   NotesCallout,
   SectionHeader,
   SignatureBlock,
@@ -89,6 +90,14 @@ export function PatientHistoryDocument({
       pageLabels={{ page: copy.page, of: copy.of }}
       renderContextBoundary={renderContextBoundary}
     >
+      {/* A history report is not the patient file: the identity block stays on
+          the initials avatar and never carries the patient photo. */}
+      <IdentityHero
+        name={snapshot.patient.fullName}
+        identifier={snapshot.patient.fileNumber}
+        initials={snapshot.patient.fullName.slice(0, 1).toUpperCase() || "—"}
+        detail={snapshot.patient.phone}
+      />
       <FieldGrid
         columns={3}
         items={[

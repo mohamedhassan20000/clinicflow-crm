@@ -10,9 +10,16 @@ export interface ManagerDashboardProps extends AnalyticsSectionProps {
   fullName: string;
   showAnalytics?: boolean;
   showExportCsv?: boolean;
+  /**
+   * The AI review queues, rendered as a slot rather than imported here: they are
+   * an async server component and this dashboard is a client component. Placed
+   * above the analytics so the queues that need staff action come before the
+   * numbers, matching the admin and reception dashboards.
+   */
+  aiReviewQueues?: React.ReactNode;
 }
 
-export function ManagerDashboard({ assistantLauncher, fullName, showAnalytics = true, showExportCsv = true, ...analyticsProps }: ManagerDashboardProps) {
+export function ManagerDashboard({ assistantLauncher, fullName, showAnalytics = true, showExportCsv = true, aiReviewQueues, ...analyticsProps }: ManagerDashboardProps) {
   const t = useTranslations("dashboard");
   return (
     <div className="space-y-6">
@@ -32,6 +39,8 @@ export function ManagerDashboard({ assistantLauncher, fullName, showAnalytics = 
           )}
         </div>
       </div>
+
+      {aiReviewQueues}
 
       {showAnalytics && <AnalyticsSection {...analyticsProps} />}
     </div>

@@ -11,7 +11,54 @@
  * emergency word routes straight to the canned safety response with no model in
  * the loop). Patient text is untrusted; matching a substring never grants any
  * capability — it only selects a canned response and flags the conversation.
+ *
+ * ## P11C — the asymmetry that shapes the medical class
+ *
+ * The sentence above ("getting it wrong is safe in one direction") was true of
+ * emergencies and false of everything else, and the difference cost a real
+ * booking. A patient wrote:
+ *
+ *     بقولك يمعلم نكمل؟ انا عايز احجز لابني علاج طبيعي
+ *     ("shall we continue? I want to book physical therapy for my son")
+ *
+ * `MEDICAL_PATTERNS` contained the bare noun `علاج` — "treatment" — which is
+ * also half of what this clinic calls a department. The thread was handed to a
+ * human before the agent ran, on a message that was a *booking request for a
+ * third party*, which is a fully supported path. The same word had already done
+ * the same thing sixteen hours earlier on the bare message "علاج طبيعي", which
+ * is where that conversation's escalation latch came from in the first place.
+ *
+ * A false escalation is **not** recoverable in the direction the old comment
+ * assumed. `runPatientInboundAiReply` returns `already_escalated` for every
+ * subsequent message until a staff member presses "return to AI" in the inbox.
+ * A *missed* pre-model escalation, by contrast, still meets the agent, whose
+ * prompt refuses clinical advice and whose low-confidence path escalates.
+ * Pre-model detection is fail-fast with an irreversible consequence; the model
+ * layer is fail-safe. So this file fires only on signals that are unambiguous
+ * without knowing anything about the clinic.
+ *
+ * The structural rule that follows, and the invariant the regression rests on:
+ *
+ *   **A clinical noun is a topic. Escalation is about the *ask*.**
+ *
+ * `علاج`, `treatment`, `دواء`, `symptom`, `جرعة` name subjects. Naming a subject
+ * is what a patient does when choosing a department, asking a price, or booking.
+ * Only a request for a *judgment* — "should I take", "what's wrong with me",
+ * "شخص حالتي" — is a medical escalation on its own. A topic escalates solely
+ * when an advice frame is wrapped around it and no logistics frame is, and never
+ * when the word is part of what this clinic calls one of its own departments.
+ *
+ * Nothing here names a department, a specialty, a service or a doctor. The
+ * clinic vocabulary is supplied by the caller from live `departments` rows and
+ * is used only to *withhold* a signal, never to produce one — and never for the
+ * emergency or human-request classes, which are read from the raw text so that
+ * a clinic which happens to name a department "Emergency" cannot blind them.
  */
+
+import {
+  buildClinicVocabulary,
+  maskClinicVocabulary,
+} from "@/lib/ai/entity-resolution";
 
 export type PatientEscalationReason =
   | "emergency"
@@ -42,22 +89,131 @@ const EMERGENCY_PATTERNS: readonly RegExp[] = [
 ];
 
 // Explicit request to reach a human. Handled as a plain handoff, no safety copy.
-const HUMAN_REQUEST_PATTERNS: readonly RegExp[] = [
-  /\b(speak|talk|chat|connect)\s*(to|with)?\s*(a\s*)?(human|person|agent|staff|receptionist|representative|someone|real\s*person)\b/i,
-  /\b(human|real\s*person|live\s*agent|customer\s*service)\b/i,
-  /(أريد|ابغى|أبغى|بدي|عايز|عاوز|ممكن)\s*.{0,20}(موظف|شخص|إنسان|انسان|بشري|أحد|احد|حد)/,
-  /(كلم|أكلم|اكلم|أتحدث|اتحدث|تحويلي|حولني|وصلني)\s*.{0,20}(موظف|شخص|بشري|أحد|احد|استقبال)/,
-  /(موظف\s*(حقيقي|بشري)|خدمة\s*العملاء|مع\s*موظف)/,
+//
+// Unambiguous on its own: a verb of *contact* aimed at a person, or a noun that
+// can only mean clinic staff. Never suppressed by anything.
+/**
+ * F-5 — the Arabic transfer/contact frames, kept apart so the person-noun
+ * alternation is written once.
+ *
+ * The gap the acceptance pass found was one missing spelling: the old list
+ * matched `أحد` and `احد` but not the bare `حد`, which is the *only* way an
+ * Egyptian actually writes it — "وصلني بحد من العيادة", "حولني لحد". The noun
+ * therefore carries its own boundary rather than being dropped into the
+ * alternation raw: `حد` is a substring of `محدد`, `واحد` and `الحدود`, and
+ * "اتحدث عن موعد محدد" must not read as a handoff request. `PERSON_NOUN` allows
+ * only the prepositional prefixes a patient actually types (بـ / لـ / و) and
+ * refuses any Arabic letter on either side.
+ *
+ * `العيادة` and `الاستقبال` are in the noun set for the same reason `the clinic`
+ * is in the English one: "وصلني بالعيادة" is a request to reach the people at
+ * the clinic, and the transfer verb in front of it is what makes that
+ * unambiguous. A bare mention of the clinic is not matched by anything here.
+ */
+const AR_LETTER = "\\u0621-\\u064A\\u0670-\\u06D3";
+const PERSON_NOUN =
+  `(?<![${AR_LETTER}])[بلو]?(?:موظف|موظفة|شخص|بشري|إنسان|انسان|أحد|احد|حد|` +
+  `الاستقبال|استقبال|العيادة|عيادة|فريق|حضرتك)(?![${AR_LETTER}])`;
+const TRANSFER_VERB =
+  "كلم|أكلم|اكلم|اتكلم|أتكلم|أتحدث|اتحدث|تحويلي|حولني|حوّلني|حولوني|وصلني|وصّلني|" +
+  "وصلوني|ربطني|اربطني|ادّيني|اديني|رجعني|سلمني";
+
+const ARABIC_HUMAN_REQUEST_PATTERNS: readonly RegExp[] = [
+  new RegExp(`(?:${TRANSFER_VERB})\\s*.{0,20}${PERSON_NOUN}`, "u"),
+  /(موظف\s*(حقيقي|بشري)|خدمة\s*العملاء|مع\s*موظف|مع\s*انسان|مع\s*إنسان)/,
+  // "someone answer me / put a person on this" — a person as the *subject* of a
+  // contact verb, which no booking sentence ever produces.
+  /(حد|أحد|احد|موظف|شخص|انسان|إنسان)\s*(يرد|يكلمني|يكلمنى|يتواصل|يساعدني|يساعدنى|يتكلم)/,
 ];
 
-// Clinical questions the assistant must not answer — routed to staff. Kept
-// coarse; the prompt is the real refusal layer, this just makes the handoff
-// deterministic when a patient clearly asks for medical judgment.
-const MEDICAL_PATTERNS: readonly RegExp[] = [
-  /\b(diagnos(e|is|ed)|prescrib(e|ption)|dosage|dose|medication|symptom|treatment|is\s*it\s*(serious|dangerous|normal))\b/i,
-  /\b(should\s*i\s*(take|stop|use)|what('?s|\s*is)\s*wrong\s*with\s*me)\b/i,
-  /(تشخيص|شخص\s*حالتي|وصفة|جرعة|دواء|أعراض|اعراض|علاج|هل\s*(هذا|هي)\s*خطير)/,
-  /(هل\s*آخذ|هل\s*أتوقف|ايش\s*فيني|إيش\s*مرضي|ما\s*هو\s*مرضي)/,
+const HUMAN_REQUEST_PATTERNS: readonly RegExp[] = [
+  /\b(speak|talk|chat|connect)\s*(to|with)?\s*(a\s*)?(human|person|agent|staff|receptionist|representative|someone|real\s*person|somebody)\b/i,
+  /\b(human|real\s*person|live\s*agent|customer\s*service)\b/i,
+  // F-5 — "connect me to someone" and its transfer-verb family, in English.
+  // `put me through`, `transfer me`, `get me` all take a person as their object
+  // in exactly the same way `connect me to` does, and a clinic noun ("the
+  // clinic", "reception", "the front desk") is as much a request for a human as
+  // the word "human" is: no booking sentence asks to be *put through* to
+  // anything.
+  /\b(?:put\s*me\s*(?:through|in\s*touch)|transfer\s*me|patch\s*me\s*(?:through|in)|connect\s*me|hand\s*me\s*(?:over|off))\b[^.\n?]{0,30}\b(?:someone|somebody|a\s*person|a\s*human|staff|reception(?:ist)?|front\s*desk|the\s*clinic|clinic\s*team|an?\s*agent)\b/i,
+  /\b(?:i\s*(?:want|need)\s*(?:to\s*)?(?:speak|talk)\s*(?:to|with)|can\s*i\s*(?:speak|talk)\s*(?:to|with))\b[^.\n?]{0,30}\b(?:reception(?:ist)?|front\s*desk|the\s*clinic|clinic\s*team|somebody|someone)\b/i,
+  ...ARABIC_HUMAN_REQUEST_PATTERNS,
+];
+
+/**
+ * P11C — "I want … a person", which is a handoff request in most sentences and
+ * a *third-party booking* in the rest.
+ *
+ * `عايز احجز لشخص تاني` ("I want to book for another person") matched the old
+ * unconditional version of this pattern through the bare noun `شخص`, and
+ * `لشخص تاني` is one of the exact continuation phrases third-party booking is
+ * supposed to accept. `عايز حد يرد عليا` is genuinely a handoff and is caught by
+ * `HUMAN_REQUEST_PATTERNS` above; what is left here is the shape that cannot
+ * tell the two apart from the noun alone, so it defers to the logistics frame
+ * exactly as a bare clinical topic does. Same rule, second application: a
+ * generic noun is not an ask.
+ */
+const HUMAN_REQUEST_WEAK_PATTERNS: readonly RegExp[] = [
+  /(أريد|اريد|ابغى|أبغى|بدي|عايز|عاوز|ممكن)\s*.{0,20}(موظف|شخص|إنسان|انسان|بشري|أحد|احد|حد)/,
+];
+
+// ---------------------------------------------------------------------------
+// The medical class, in three parts (P11C)
+// ---------------------------------------------------------------------------
+
+/**
+ * Requests for a clinical *judgment*. These escalate on their own, in any
+ * context, and are never suppressed by clinic vocabulary or by a booking.
+ *
+ * Every entry here is a patient asking somebody to decide something about their
+ * body — not a patient naming a subject. That is the whole membership test.
+ */
+const CLINICAL_JUDGMENT_PATTERNS: readonly RegExp[] = [
+  /\b(diagnos(e|is|ed)\s*(me|my|this|it)|please\s*diagnos(e|is))\b/i,
+  /\b(should\s*i\s*(take|stop|use|start|continue|keep|switch|double|skip))\b/i,
+  /\b(what('?s|\s*is)\s*wrong\s*with\s*me|what\s*do\s*i\s*have|am\s*i\s*(ok|okay|dying|sick))\b/i,
+  /\bis\s*(it|this|that|he|she|they)\s*(serious|dangerous|normal|contagious|life[-\s]?threatening)\b/i,
+  /\b(what|which|how\s*much|how\s*many)\s+(\w+\s+){0,3}?(dose|dosage|medication|medicine|pills?|tablets?|prescription|antibiotics?)\b/i,
+  /(شخص\s*حالتي|شخصلي|هل\s*(هذا|هي|ده|دي)\s*خطير)/,
+  /(هل\s*آخذ|هل\s*اخذ|هل\s*أتوقف|هل\s*اتوقف|اوقف\s*الدوا|أوقف\s*الدوا)/,
+  /(ايش\s*فيني|إيش\s*فيني|ايه\s*اللي\s*فيا|إيه\s*اللي\s*فيا|ايش\s*مرضي|إيش\s*مرضي|ما\s*هو\s*مرضي|انا\s*مرضي\s*ايه)/,
+];
+
+/**
+ * Clinical *topics*. A topic is a subject a patient may name for any number of
+ * innocent reasons — booking it, pricing it, asking where it is — so a topic on
+ * its own is never an escalation. It is one of two required ingredients.
+ */
+const CLINICAL_TOPIC_PATTERNS: readonly RegExp[] = [
+  /\b(diagnos(e|is|ed)|prescrib(e|ption)|dosage|dose|medication|medicine|symptoms?|treatment|therapy)\b/i,
+  /(تشخيص|وصفة|وصفه|جرعة|جرعه|دواء|الدواء|ادوية|أدوية|أعراض|اعراض|علاج|العلاج)/,
+];
+
+/**
+ * The other required ingredient: the patient is asking for something to be
+ * decided, or reporting their own condition.
+ *
+ * Shape only. There is not one clinical word, department, specialty or service
+ * name in this list, which is what keeps the classifier department-agnostic.
+ */
+const ADVICE_FRAME_PATTERNS: readonly RegExp[] = [
+  /\b(what|which|why|how|should|shall|could|is\s*it|are\s*they|do\s*i|does\s*it|will\s*it)\b/i,
+  /(^|[\s،,.!؟?])(ايه|إيه|أيه|ايش|إيش|شو|هل|ليه|لماذا|ازاي|إزاي|كيف|ماذا|ما\s*هو|ماهو)([\s،,.!؟?]|$)/,
+  /\b(i\s*(have|feel|am|got|took|need)|my\s+\p{L}+\s+(hurts?|aches?))\b/iu,
+  /(^|[\s،,.!؟?])(عندي|عندى|بعاني|باعاني|بعانى|بيوجعني|بيوجعنى|وجعني|حاسس|حاسه|حاسة|تعبان|تعبانة|تعبانه|مريض|مريضة|واخد|باخد|بشرب)([\s،,.!؟?]|$)/,
+];
+
+/**
+ * The disqualifier: this message is about arranging or pricing a visit.
+ *
+ * A logistics frame cannot suppress `CLINICAL_JUDGMENT_PATTERNS` — "I want to
+ * book, and also should I stop my tablets?" still escalates — it only stops a
+ * bare topic word from being read as an ask. Booking, pricing and opening hours
+ * are the three things a patient names a department in order to do.
+ */
+const LOGISTICS_FRAME_PATTERNS: readonly RegExp[] = [
+  /\b(book|booking|appointment|appointments|schedule|rescheduling|reschedule|reserve|reservation|slot|slots|availab(le|ility)|price|prices|cost|costs|fee|fees|how\s*much|open|opening|hours)\b/i,
+  /(احجز|أحجز|اححز|حجز|حجزت|نحجز|يحجز|موعد|مواعيد|ميعاد|معاد|سعر|أسعار|اسعار|تكلفة|بكام|كام|متاح|متاحين|المتاحين|مفتوح|مواعيدكم|نكمل|أكمل|اكمل)/,
 ];
 
 // Dissatisfaction / complaints — routed to a human for a considered response.
@@ -71,12 +227,58 @@ function matchesAny(text: string, patterns: readonly RegExp[]): boolean {
 }
 
 /**
+ * What the caller knows about the clinic that this file must not assume.
+ *
+ * `clinicDepartmentNames` is the live `departments.name` list, exactly as the
+ * clinic stored it — no filtering, no canonicalisation, no allow-list. It is
+ * consumed only through {@link buildClinicVocabulary}, only to *withhold* the
+ * topic-derived medical signal, and never for the emergency or human-request
+ * classes. Omitting it changes nothing except that a department whose name
+ * happens to be a clinical noun loses one layer of protection; the topic/ask
+ * split above still stands on its own.
+ */
+export type PatientEscalationContext = {
+  clinicDepartmentNames?: readonly (string | null | undefined)[];
+};
+
+/**
+ * Is this message asking the assistant to exercise clinical judgment?
+ *
+ * Two independent ways to be true, and the split is the point:
+ *
+ *   1. an explicit judgment request, read from the **raw** text, always;
+ *   2. a clinical topic *plus* an advice frame *minus* a logistics frame, read
+ *      from the text with this clinic's own department vocabulary blanked out.
+ *
+ * (2) is why "عايز احجز لابني علاج طبيعي" is a booking: `علاج` and `طبيعي` are
+ * this clinic's department, so they are not topics here at all — and even at a
+ * clinic with no such department, `احجز` is a logistics frame and there is no
+ * advice frame anywhere in the sentence. Two independent reasons, neither of
+ * which mentions physical therapy.
+ */
+function isClinicalJudgmentRequest(
+  raw: string,
+  vocabulary: ReadonlySet<string>,
+): boolean {
+  if (matchesAny(raw, CLINICAL_JUDGMENT_PATTERNS)) return true;
+  const text = maskClinicVocabulary(raw, vocabulary);
+  if (!matchesAny(text, CLINICAL_TOPIC_PATTERNS)) return false;
+  if (!matchesAny(text, ADVICE_FRAME_PATTERNS)) return false;
+  return !matchesAny(raw, LOGISTICS_FRAME_PATTERNS);
+}
+
+/**
  * Classifies an inbound patient message. Priority order is deliberate:
  * emergency > explicit human request > medical > complaint. Anything else
  * returns `escalate: false` and the ordinary agent handles it.
+ *
+ * Emergency and human-request are matched against the raw message and are
+ * reached before any masking exists, so no clinic-supplied value can weaken
+ * them. That ordering is load-bearing, not incidental.
  */
 export function detectPatientEscalation(
   text: string | null | undefined,
+  context: PatientEscalationContext = {},
 ): PatientEscalationDetection {
   const value = typeof text === "string" ? text : "";
   if (matchesAny(value, EMERGENCY_PATTERNS)) {
@@ -85,7 +287,14 @@ export function detectPatientEscalation(
   if (matchesAny(value, HUMAN_REQUEST_PATTERNS)) {
     return { escalate: true, reason: "human_requested", emergency: false };
   }
-  if (matchesAny(value, MEDICAL_PATTERNS)) {
+  if (
+    matchesAny(value, HUMAN_REQUEST_WEAK_PATTERNS) &&
+    !matchesAny(value, LOGISTICS_FRAME_PATTERNS)
+  ) {
+    return { escalate: true, reason: "human_requested", emergency: false };
+  }
+  const vocabulary = buildClinicVocabulary(context.clinicDepartmentNames ?? []);
+  if (isClinicalJudgmentRequest(value, vocabulary)) {
     return { escalate: true, reason: "medical", emergency: false };
   }
   if (matchesAny(value, COMPLAINT_PATTERNS)) {

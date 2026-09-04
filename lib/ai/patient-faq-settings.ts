@@ -12,6 +12,11 @@ import { AI_ASSISTANT_FEATURE } from "@/lib/ai/authorization";
 import { AI_PATIENT_SUGGEST_FEATURE } from "@/lib/ai/patient-authorization";
 import { AI_PATIENT_AUTO_FEATURE } from "@/lib/ai/patient-reply-mode";
 import { normalizeClinicAiReplyMode, type ClinicAiReplyMode } from "@/lib/ai/patient-reply-mode";
+import {
+  DEFAULT_COMMUNICATION_STYLE,
+  parseCommunicationStyle,
+  type CommunicationStyle,
+} from "@/lib/ai/communication-style";
 
 export type PatientFaqItem = {
   id: string;
@@ -26,6 +31,8 @@ export type PatientAiSettings = {
   entitled: boolean;
   autoEntitled: boolean;
   replyMode: ClinicAiReplyMode;
+  /** P10 — the configured language, Arabic register, tone and style line. */
+  communicationStyle: CommunicationStyle;
   faqs: PatientFaqItem[];
   error: boolean;
 };
@@ -53,13 +60,23 @@ export async function getPatientAiSettings(clinicId: string): Promise<PatientAiS
       .order("question", { ascending: true }),
   ]);
   if (clinicResult.error || faqResult.error) {
-    return { entitled, autoEntitled, replyMode: "off", faqs: [], error: true };
+    return {
+      entitled,
+      autoEntitled,
+      replyMode: "off",
+      communicationStyle: DEFAULT_COMMUNICATION_STYLE,
+      faqs: [],
+      error: true,
+    };
   }
 
   return {
     entitled,
     autoEntitled,
     replyMode: normalizeClinicAiReplyMode(clinicResult.data?.ai_reply_mode),
+    communicationStyle: parseCommunicationStyle(
+      (clinicResult.data ?? {}) as Record<string, unknown>,
+    ),
     faqs: (faqResult.data ?? []).map((row) => ({
       id: row.id,
       question: row.question,

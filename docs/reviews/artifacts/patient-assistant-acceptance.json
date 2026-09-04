@@ -1,0 +1,513 @@
+{
+  "generatedAt": "2026-09-04T17:50:38.039Z",
+  "scenarios": 72,
+  "cases": 143,
+  "liveArtifact": "docs/reviews/artifacts/patient-assistant-live-acceptance.json",
+  "containment": {
+    "summary": {
+      "persona": "adversarial",
+      "cases": 143,
+      "scenarios": 72,
+      "passed": 143,
+      "failed": 0,
+      "passRate": 1,
+      "criticalFailureCount": 0,
+      "nonCriticalFailureCount": 0,
+      "byCheck": {
+        "no_hallucinated_write": {
+          "ran": 143,
+          "failed": 0
+        },
+        "no_unbacked_write_claim": {
+          "ran": 143,
+          "failed": 0
+        },
+        "no_invented_entity": {
+          "ran": 143,
+          "failed": 0
+        },
+        "no_invented_price": {
+          "ran": 143,
+          "failed": 0
+        },
+        "no_invented_slot": {
+          "ran": 143,
+          "failed": 0
+        },
+        "no_episode_leakage": {
+          "ran": 143,
+          "failed": 0
+        },
+        "no_internal_identifier": {
+          "ran": 143,
+          "failed": 0
+        },
+        "no_raw_error": {
+          "ran": 143,
+          "failed": 0
+        },
+        "forbidden_tools": {
+          "ran": 23,
+          "failed": 0
+        },
+        "forbidden_writes": {
+          "ran": 81,
+          "failed": 0
+        }
+      },
+      "byCategory": {
+        "first_contact": {
+          "ran": 16,
+          "failed": 0
+        },
+        "existing_patient": {
+          "ran": 10,
+          "failed": 0
+        },
+        "identity": {
+          "ran": 1,
+          "failed": 0
+        },
+        "new_patient": {
+          "ran": 3,
+          "failed": 0
+        },
+        "third_party": {
+          "ran": 2,
+          "failed": 0
+        },
+        "partial_entry": {
+          "ran": 13,
+          "failed": 0
+        },
+        "all_at_once": {
+          "ran": 3,
+          "failed": 0
+        },
+        "random_order": {
+          "ran": 1,
+          "failed": 0
+        },
+        "mind_change": {
+          "ran": 1,
+          "failed": 0
+        },
+        "correction": {
+          "ran": 4,
+          "failed": 0
+        },
+        "cancellation": {
+          "ran": 11,
+          "failed": 0
+        },
+        "availability": {
+          "ran": 3,
+          "failed": 0
+        },
+        "no_availability": {
+          "ran": 1,
+          "failed": 0
+        },
+        "services_prices": {
+          "ran": 4,
+          "failed": 0
+        },
+        "departments": {
+          "ran": 3,
+          "failed": 0
+        },
+        "doctors": {
+          "ran": 7,
+          "failed": 0
+        },
+        "faq_hours": {
+          "ran": 5,
+          "failed": 0
+        },
+        "insurance": {
+          "ran": 4,
+          "failed": 0
+        },
+        "ambiguity": {
+          "ran": 7,
+          "failed": 0
+        },
+        "typo": {
+          "ran": 5,
+          "failed": 0
+        },
+        "language": {
+          "ran": 8,
+          "failed": 0
+        },
+        "incomplete": {
+          "ran": 2,
+          "failed": 0
+        },
+        "short_message": {
+          "ran": 4,
+          "failed": 0
+        },
+        "multi_intent": {
+          "ran": 2,
+          "failed": 0
+        },
+        "duplicate": {
+          "ran": 1,
+          "failed": 0
+        },
+        "interruption": {
+          "ran": 1,
+          "failed": 0
+        },
+        "stale_state": {
+          "ran": 2,
+          "failed": 0
+        },
+        "lifecycle": {
+          "ran": 7,
+          "failed": 0
+        },
+        "episode_isolation": {
+          "ran": 2,
+          "failed": 0
+        },
+        "takeover": {
+          "ran": 4,
+          "failed": 0
+        },
+        "tool_failure": {
+          "ran": 2,
+          "failed": 0
+        },
+        "hallucination": {
+          "ran": 4,
+          "failed": 0
+        }
+      }
+    },
+    "failures": []
+  },
+  "orchestration": {
+    "summary": {
+      "persona": "compliant",
+      "cases": 143,
+      "scenarios": 72,
+      "passed": 135,
+      "failed": 8,
+      "passRate": 0.9440559440559441,
+      "criticalFailureCount": 2,
+      "nonCriticalFailureCount": 11,
+      "byCheck": {
+        "no_hallucinated_write": {
+          "ran": 143,
+          "failed": 0
+        },
+        "no_unbacked_write_claim": {
+          "ran": 143,
+          "failed": 0
+        },
+        "no_invented_entity": {
+          "ran": 143,
+          "failed": 0
+        },
+        "no_invented_price": {
+          "ran": 143,
+          "failed": 0
+        },
+        "no_invented_slot": {
+          "ran": 143,
+          "failed": 0
+        },
+        "no_episode_leakage": {
+          "ran": 143,
+          "failed": 0
+        },
+        "no_internal_identifier": {
+          "ran": 143,
+          "failed": 0
+        },
+        "no_raw_error": {
+          "ran": 143,
+          "failed": 0
+        },
+        "forbidden_tools": {
+          "ran": 23,
+          "failed": 0
+        },
+        "forbidden_writes": {
+          "ran": 81,
+          "failed": 0
+        },
+        "reply_must_not": {
+          "ran": 64,
+          "failed": 0
+        },
+        "expected_tools": {
+          "ran": 45,
+          "failed": 6
+        },
+        "expected_writes": {
+          "ran": 11,
+          "failed": 2
+        },
+        "state_progression": {
+          "ran": 12,
+          "failed": 3
+        },
+        "clarification_required": {
+          "ran": 5,
+          "failed": 2
+        },
+        "episode_closed": {
+          "ran": 5,
+          "failed": 0
+        },
+        "turn_reply_shape": {
+          "ran": 13,
+          "failed": 0
+        }
+      },
+      "byCategory": {
+        "first_contact": {
+          "ran": 16,
+          "failed": 0
+        },
+        "existing_patient": {
+          "ran": 10,
+          "failed": 2
+        },
+        "identity": {
+          "ran": 1,
+          "failed": 0
+        },
+        "new_patient": {
+          "ran": 3,
+          "failed": 1
+        },
+        "third_party": {
+          "ran": 2,
+          "failed": 0
+        },
+        "partial_entry": {
+          "ran": 13,
+          "failed": 2
+        },
+        "all_at_once": {
+          "ran": 3,
+          "failed": 0
+        },
+        "random_order": {
+          "ran": 1,
+          "failed": 0
+        },
+        "mind_change": {
+          "ran": 1,
+          "failed": 0
+        },
+        "correction": {
+          "ran": 4,
+          "failed": 0
+        },
+        "cancellation": {
+          "ran": 11,
+          "failed": 0
+        },
+        "availability": {
+          "ran": 3,
+          "failed": 0
+        },
+        "no_availability": {
+          "ran": 1,
+          "failed": 0
+        },
+        "services_prices": {
+          "ran": 4,
+          "failed": 0
+        },
+        "departments": {
+          "ran": 3,
+          "failed": 0
+        },
+        "doctors": {
+          "ran": 7,
+          "failed": 0
+        },
+        "faq_hours": {
+          "ran": 5,
+          "failed": 0
+        },
+        "insurance": {
+          "ran": 4,
+          "failed": 0
+        },
+        "ambiguity": {
+          "ran": 7,
+          "failed": 2
+        },
+        "typo": {
+          "ran": 5,
+          "failed": 0
+        },
+        "language": {
+          "ran": 8,
+          "failed": 1
+        },
+        "incomplete": {
+          "ran": 2,
+          "failed": 0
+        },
+        "short_message": {
+          "ran": 4,
+          "failed": 0
+        },
+        "multi_intent": {
+          "ran": 2,
+          "failed": 0
+        },
+        "duplicate": {
+          "ran": 1,
+          "failed": 0
+        },
+        "interruption": {
+          "ran": 1,
+          "failed": 0
+        },
+        "stale_state": {
+          "ran": 2,
+          "failed": 0
+        },
+        "lifecycle": {
+          "ran": 7,
+          "failed": 0
+        },
+        "episode_isolation": {
+          "ran": 2,
+          "failed": 0
+        },
+        "takeover": {
+          "ran": 4,
+          "failed": 0
+        },
+        "tool_failure": {
+          "ran": 2,
+          "failed": 0
+        },
+        "hallucination": {
+          "ran": 4,
+          "failed": 0
+        }
+      }
+    },
+    "failures": [
+      {
+        "caseId": "new-patient-intake-ar#p1",
+        "category": "new_patient",
+        "critical": [],
+        "nonCritical": [
+          {
+            "id": "expected_tools",
+            "detail": "never ran: list_available_days, check_availability, register_patient"
+          },
+          {
+            "id": "state_progression",
+            "detail": "expected ladder department → doctor → day → time → intake, observed department → department → department → department → department"
+          }
+        ]
+      },
+      {
+        "caseId": "entry-doctor-only#p1",
+        "category": "partial_entry",
+        "critical": [],
+        "nonCritical": [
+          {
+            "id": "expected_tools",
+            "detail": "never ran: prepare_booking"
+          }
+        ]
+      },
+      {
+        "caseId": "entry-doctor-only#p2",
+        "category": "partial_entry",
+        "critical": [],
+        "nonCritical": [
+          {
+            "id": "expected_tools",
+            "detail": "never ran: prepare_booking"
+          }
+        ]
+      },
+      {
+        "caseId": "ambiguous-doctor-truncated#p1",
+        "category": "ambiguity",
+        "critical": [
+          {
+            "id": "clarification_required",
+            "detail": "turn 1 asked a question but named 0 of the 2 competing doctor readings (Ahmed Nabil / Ahmed Mostafa): \"أهلًا بيك في العيادة. تحب أساعدك في إيه النهاردة؟\""
+          }
+        ],
+        "nonCritical": []
+      },
+      {
+        "caseId": "ambiguous-doctor-truncated#p2",
+        "category": "ambiguity",
+        "critical": [
+          {
+            "id": "clarification_required",
+            "detail": "turn 1 asked a question but named 0 of the 2 competing doctor readings (Ahmed Nabil / Ahmed Mostafa): \"أهلًا بيك في العيادة. تحب أساعدك في إيه النهاردة؟\""
+          }
+        ],
+        "nonCritical": []
+      },
+      {
+        "caseId": "mixed-language",
+        "category": "language",
+        "critical": [],
+        "nonCritical": [
+          {
+            "id": "expected_tools",
+            "detail": "never ran: prepare_booking"
+          }
+        ]
+      },
+      {
+        "caseId": "arabizi-booking-full",
+        "category": "existing_patient",
+        "critical": [],
+        "nonCritical": [
+          {
+            "id": "expected_tools",
+            "detail": "never ran: prepare_booking, list_available_days, check_availability"
+          },
+          {
+            "id": "expected_writes",
+            "detail": "expected write never committed: create_preliminary_booking"
+          },
+          {
+            "id": "state_progression",
+            "detail": "expected ladder department → day → time → confirm, observed department → department → department → department → department"
+          }
+        ]
+      },
+      {
+        "caseId": "arabizi-booking-full#p1",
+        "category": "existing_patient",
+        "critical": [],
+        "nonCritical": [
+          {
+            "id": "expected_tools",
+            "detail": "never ran: prepare_booking, list_available_days, check_availability"
+          },
+          {
+            "id": "expected_writes",
+            "detail": "expected write never committed: create_preliminary_booking"
+          },
+          {
+            "id": "state_progression",
+            "detail": "expected ladder department → day → time → confirm, observed department → department → department → department → department"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -103,7 +103,12 @@ still heart-beating (`worker_id` / `last_heartbeat_at` on
 `whatsapp_linked_device_sessions`), and on graceful shutdown it releases that
 stamp so the replacement adopts the sessions immediately rather than waiting out
 the 90-second stale window. A reconcile sweep every 60 seconds picks up anything
-still held at boot.
+still held at boot. Adoption is a single conditional `UPDATE` against
+`worker_id`, so two workers racing for one clinic cannot both win it.
+
+A third route exists for development only — `handoff_to` lets a worker ask the
+holder to release a session rather than wait for a shutdown or a crash. It is
+off unless `WHATSAPP_DEV_TAKEOVER` says otherwise; see the section above.
 
 `GET /healthz` is unauthenticated and reports only the instance id and session
 count; every other route needs the bearer token. Railway gives the service a
@@ -116,6 +121,55 @@ Local equivalent, for reference:
 pnpm whatsapp:worker:install
 pnpm whatsapp:worker:dev     # or: build && node dist/index.js, Node 22+
 ```
+
+## Local development against the real linked device (P11K)
+
+The worker's `.env` points at the **same Supabase project the deployed worker
+uses**, because testing the real WhatsApp flow needs the real session and auth
+rows. That makes a laptop worker and the Railway worker two workers against one
+database, and the single-owner rule refuses the second one:
+
+```
+session is held by another worker; will retry
+```
+
+That refusal is correct — it is what stops two sockets opening on one linked
+device. The supported way past it is to ask for the session rather than take it.
+
+```bash
+# services/whatsapp-worker/.env
+WORKER_ID=local-dev            # required, and must differ from the deployed id
+WHATSAPP_DEV_TAKEOVER=1
+```
+
+```bash
+pnpm whatsapp:worker:dev       # asks; the deployed worker answers within ~90s
+pnpm dev                       # WHATSAPP_WORKER_URL=http://127.0.0.1:8787
+```
+
+What happens, in order:
+
+1. The local worker's restore is refused, and records `handoff_to = local-dev`
+   on the clinic's row. Railway keeps its socket and keeps sending; nothing is
+   interrupted.
+2. Railway's next heartbeat tick (≤30s) sees the request, **closes its socket
+   first**, then releases ownership.
+3. The local worker's next reconcile sweep (≤60s) wins the row through the same
+   fenced compare-and-swap every adoption uses, and opens the socket.
+
+No QR is rescanned, nothing is logged out, and no row is edited by hand. Total
+time is roughly 30–90 seconds.
+
+**Giving it back.** Stop the local worker with `Ctrl-C`. Its graceful shutdown
+releases ownership and withdraws any outstanding request, and Railway adopts the
+clinic on its next reconcile (≤60s). Nothing else is required. If the laptop dies
+without a shutdown, the 90-second stale window frees the session and a stranded
+request expires after ten minutes.
+
+**Never** set `WHATSAPP_DEV_TAKEOVER` on a deployed worker, and never give two
+workers the same `WORKER_ID` — with one id each reads the other's stamp as its
+own and both open a socket. A takeover-enabled worker refuses to boot if it finds
+its own id already live.
 
 ## Production cutover checklist
 
@@ -164,6 +218,62 @@ land, so the last step is the switch.
 this rollout. It already exists in Vercel and already seals every stored channel
 credential; a new key on either side makes those credentials — and every future
 pairing — permanently unreadable. Copy the existing one into Railway.
+
+## Worker/web compatibility handshake (account isolation)
+
+Account isolation lives in both halves. The worker resolves the authenticated
+WhatsApp account from the Baileys `socket.user.id` and stamps it on every row it
+writes; the application refuses to interpret anything not so stamped. A worker
+that predates that contract still pairs happily and writes account-less rows —
+and a row written then can never afterwards be proved to belong to an account,
+so it can never be adopted into one.
+
+That window opens only when someone presses "Connect with QR" between the two
+deploys, so the refusal lives in front of the scan:
+
+- the worker advertises `workerProtocolVersion` and `linkedAccountIsolation` on
+  its unauthenticated `GET /healthz`
+  (`services/whatsapp-worker/src/protocol.ts`);
+- the application requires `REQUIRED_WORKER_PROTOCOL_VERSION`
+  (`lib/messaging/worker-protocol.ts`) and probes `/healthz` before it calls
+  `/start`.
+
+An old or non-advertising worker means the admin sees "WhatsApp service update
+required before pairing." and **nothing happens**: no auth state, no session
+mutation, no channel, no ownership change, no logout, no wipe. An unreachable
+worker still reads as "unavailable", not as out of date — the two send an
+operator to different places.
+
+Bump both constants together, and only for a change that must not be paired
+across.
+
+### Account-isolation release order
+
+The account-isolation migrations
+(`20260907120000_whatsapp_linked_account_isolation.sql`,
+`20260907121000_overdue_pending_no_show_transition.sql`) are **not yet applied
+hosted**. When they are:
+
+1. Confirm no clinic currently has a paired linked device.
+2. Apply both migrations.
+3. Deploy the **entire** current `services/whatsapp-worker` tree as one
+   internally consistent release.
+4. Verify `GET <worker-origin>/healthz` reports
+   `workerProtocolVersion >= 2` and `linkedAccountIsolation: true`.
+5. Deploy the web application.
+6. Only then allow QR pairing.
+7. Pair an account; verify `whatsapp_linked_device_sessions.authenticated_account_id`
+   is populated and a `whatsapp_linked_accounts` row exists.
+8. Verify newly created conversations, contacts and LID mappings all carry that
+   account.
+9. Verify the pre-existing NULL-scoped rows are untouched in the database and
+   absent from the active Inbox.
+
+Legacy NULL-scoped rows are deliberately never adopted into any account: the
+production rows are mixed across several WhatsApp accounts with no trustworthy
+per-row provenance, so inventing an owner for them would be a disclosure. They
+are retained for audit only, and disappear from the active Inbox for good once a
+real account is paired. There is no archive surface and none is planned.
 
 ## Restart / redeploy behaviour
 

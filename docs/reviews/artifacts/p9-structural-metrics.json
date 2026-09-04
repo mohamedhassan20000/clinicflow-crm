@@ -1,0 +1,68 @@
+{
+  "generatedAt": "2026-09-04T17:51:03.616Z",
+  "method": "Deterministic. A scripted non-compliant model runs every booking scenario against the flat mount and the stage-scoped mount. Model behaviour is identical in both columns, so every difference is the orchestration.",
+  "scenarios": 8,
+  "toolReachability": {
+    "create_preliminary_booking": {
+      "attempted": 32,
+      "blockedFlat": 0,
+      "blockedStaged": 32
+    },
+    "list_available_days": {
+      "attempted": 8,
+      "blockedFlat": 0,
+      "blockedStaged": 8
+    },
+    "check_availability": {
+      "attempted": 8,
+      "blockedFlat": 0,
+      "blockedStaged": 8
+    }
+  },
+  "metrics": {
+    "flat": {
+      "variantId": "haiku-6-flat",
+      "label": "Haiku 4.5 · maxSteps 6 · flat mount (production baseline)",
+      "scenarios": 8,
+      "repeatedQuestionRate": 0.5882352941176471,
+      "flowRestartRate": 1.375,
+      "otherDoctorsSuccess": 0,
+      "bookingCompletionRate": 0,
+      "medianTurnsToBooking": null,
+      "technicalFallbackRate": 0,
+      "unnecessaryEscalationRate": 0,
+      "neverOfferedAttempts": 16,
+      "illegalTransitions": 0,
+      "turnFailureRate": 0,
+      "p50LatencyMs": 1,
+      "p95LatencyMs": 14,
+      "totalInputTokens": 290,
+      "totalOutputTokens": 292,
+      "tokensPerConversation": 72.75,
+      "costMicros": 1750,
+      "costPerCompletedBookingMicros": null
+    },
+    "staged": {
+      "variantId": "haiku-6-staged",
+      "label": "Haiku 4.5 · maxSteps 6 · stage-scoped",
+      "scenarios": 8,
+      "repeatedQuestionRate": 0.5882352941176471,
+      "flowRestartRate": 1.375,
+      "otherDoctorsSuccess": 0,
+      "bookingCompletionRate": 0,
+      "medianTurnsToBooking": null,
+      "technicalFallbackRate": 0,
+      "unnecessaryEscalationRate": 0,
+      "neverOfferedAttempts": 0,
+      "illegalTransitions": 0,
+      "turnFailureRate": 0,
+      "p50LatencyMs": 0,
+      "p95LatencyMs": 1,
+      "totalInputTokens": 290,
+      "totalOutputTokens": 348,
+      "tokensPerConversation": 79.75,
+      "costMicros": 2030,
+      "costPerCompletedBookingMicros": null
+    }
+  }
+}

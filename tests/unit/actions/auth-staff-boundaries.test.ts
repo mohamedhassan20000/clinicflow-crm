@@ -101,7 +101,8 @@ async function loadSettingsActions() {
   }));
 
   const settings = await import("@/actions/settings");
-  return { ...settings, mocks };
+  const mutations = await import("@/lib/settings/mutations");
+  return { ...settings, ...mutations, mocks };
 }
 
 describe("auth and RBAC boundaries", () => {
@@ -323,6 +324,187 @@ describe("staff permission boundaries", () => {
     expect(mocks.state.adminCreateUser).not.toHaveBeenCalled();
   });
 
+  it("returns a localized top-level error for invalid invoice follow-up settings", async () => {
+    const { updateInvoiceFollowupSettings, mocks } = await loadSettingsActions();
+    mocks.state.authedUser.role = "admin";
+    const result = await updateInvoiceFollowupSettings({
+      enabled: true,
+      firstDays: 10,
+      secondDays: 5,
+      emailSubject: null,
+      emailBody: null,
+    });
+
+    expect(result.error).toBe(
+      "The second reminder must be scheduled after the first.",
+    );
+    expect(result.fieldErrors?.second_days).toEqual([
+      "The second reminder must be scheduled after the first.",
+    ]);
+    expect(JSON.stringify(result)).not.toMatch(
+      /settings\.invoiceFollowupSecondAfterFirst/,
+    );
+  });
+
+  it("keeps Assistant staff creation password-free and excludes manager/admin roles", async () => {
+    const { staffCreateNonPrivilegedActionSchema } = await loadSettingsActions();
+    const base = {
+      full_name: "Staff User",
+      email: "staff@example.com",
+      department_id: null,
+      phone: null,
+      supervising_doctor_ids: [],
+    };
+    expect(staffCreateNonPrivilegedActionSchema.safeParse({
+      ...base,
+      role: "receptionist",
+    }).success).toBe(true);
+    expect(staffCreateNonPrivilegedActionSchema.safeParse({
+      ...base,
+      role: "manager",
+    }).success).toBe(false);
+    expect(staffCreateNonPrivilegedActionSchema.safeParse({
+      ...base,
+      role: "admin",
+    }).success).toBe(false);
+    expect(staffCreateNonPrivilegedActionSchema.safeParse({
+      ...base,
+      role: "receptionist",
+      temporary_password: "ModelInvented1",
+    }).success).toBe(false);
+  });
+
+  it("generates an Assistant-created staff password only on the server and returns it once", async () => {
+    const { createStaffMutation, mocks } = await loadSettingsActions();
+    mocks.state.authedUser.role = "admin";
+    const result = await createStaffMutation(
+      mocks.state.authedUser as never,
+      {
+        full_name: "Staff User",
+        email: "staff@example.com",
+        role: "receptionist",
+        department_id: null,
+        phone: null,
+        supervising_doctor_ids: [],
+      },
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("Expected staff creation to succeed");
+    expect(result.data.one_time_temporary_password).toMatch(/^[A-Z].*[0-9]/);
+    expect(mocks.state.adminCreateUser).toHaveBeenCalledWith({
+      email: "staff@example.com",
+      password: result.data.one_time_temporary_password,
+      email_confirm: true,
+    });
+    expect(JSON.stringify(result.audit)).not.toContain(
+      result.data.one_time_temporary_password,
+    );
+  });
+
+  it("rolls back both profile and auth principal when permission seeding fails", async () => {
+    const { createStaffMutation, mocks } = await loadSettingsActions();
+    mocks.state.authedUser.role = "admin";
+    mocks.state.tableResults["user_page_permissions.insert"] = {
+      data: null,
+      error: { code: "42501", message: "permission seeding denied" },
+    };
+
+    const result = await createStaffMutation(
+      mocks.state.authedUser as never,
+      {
+        full_name: "Staff User",
+        email: "staff@example.com",
+        temporary_password: "TempPass123",
+        role: "receptionist",
+        department_id: null,
+        phone: null,
+        supervising_doctor_ids: [],
+      },
+    );
+
+    expect(result.ok).toBe(false);
+    expect(mocks.state.queryLog).toContainEqual(
+      expect.objectContaining({
+        table: "profiles",
+        operation: "delete",
+        args: ["eq", "clinic_id", "clinic-1"],
+      }),
+    );
+    expect(mocks.state.adminDeleteUser).toHaveBeenCalledWith("created-user-1");
+  });
+
+  it("uses the legacy customization fallback when the page-permissions table is absent", async () => {
+    const { createStaffMutation, mocks } = await loadSettingsActions();
+    mocks.state.authedUser.role = "admin";
+    mocks.state.tableResults["user_page_permissions.insert"] = {
+      data: null,
+      error: { code: "42P01", message: "user_page_permissions missing" },
+    };
+
+    const result = await createStaffMutation(
+      mocks.state.authedUser as never,
+      {
+        full_name: "Staff User",
+        email: "staff@example.com",
+        temporary_password: "TempPass123",
+        role: "receptionist",
+        department_id: null,
+        phone: null,
+        supervising_doctor_ids: [],
+      },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(mocks.state.queryLog).toContainEqual(
+      expect.objectContaining({
+        table: "user_customizations",
+        operation: "insert",
+      }),
+    );
+  });
+
+  it("rejects missing departments and invalid assistant supervisors before auth creation", async () => {
+    const { createStaffMutation, mocks } = await loadSettingsActions();
+    mocks.state.authedUser.role = "admin";
+    const departmentId = "77777777-7777-4777-8777-777777777777";
+    const doctorId = "88888888-8888-4888-8888-888888888888";
+    mocks.state.tableResults["departments.select"] = { data: null, error: null };
+    const missingDepartment = await createStaffMutation(
+      mocks.state.authedUser as never,
+      {
+        full_name: "Doctor User",
+        email: "doctor@example.com",
+        temporary_password: "TempPass123",
+        role: "doctor",
+        department_id: departmentId,
+        phone: null,
+        supervising_doctor_ids: [],
+      },
+    );
+    expect(missingDepartment.ok).toBe(false);
+
+    mocks.state.tableResults["departments.select"] = {
+      data: { id: departmentId },
+      error: null,
+    };
+    mocks.state.tableResults["profiles.select"] = { data: [], error: null };
+    const invalidSupervisor = await createStaffMutation(
+      mocks.state.authedUser as never,
+      {
+        full_name: "Assistant User",
+        email: "assistant@example.com",
+        temporary_password: "TempPass123",
+        role: "assistant",
+        department_id: departmentId,
+        phone: null,
+        supervising_doctor_ids: [doctorId],
+      },
+    );
+    expect(invalidSupervisor.ok).toBe(false);
+    expect(mocks.state.adminCreateUser).not.toHaveBeenCalled();
+  });
+
   it("prevents managers from changing staff roles", async () => {
     const { updateStaff, mocks } = await loadSettingsActions();
     mocks.state.authedUser.role = "manager";
@@ -339,6 +521,60 @@ describe("staff permission boundaries", () => {
 
     expect(result).toEqual({ error: "Only admins can change staff roles." });
     expect(mocks.state.tableResults["profiles.update"]).toBeUndefined();
+  });
+
+  it("rolls back the role and assistant assignments when role-page seeding fails", async () => {
+    const { changeStaffRoleMutation, mocks } = await loadSettingsActions();
+    mocks.state.authedUser.role = "admin";
+    const doctorId = "88888888-8888-4888-8888-888888888888";
+    mocks.state.tableResults["profiles.select"] = {
+      data: profile({ id: STAFF_ID, role: "assistant" }),
+      error: null,
+    };
+    mocks.state.tableResults["assistant_doctor_assignments.select"] = {
+      data: [{ doctor_id: doctorId }],
+      error: null,
+    };
+    mocks.state.tableResults["profiles.update"] = [
+      { data: null, error: null, count: 1 },
+      { data: null, error: null, count: 1 },
+    ];
+    mocks.state.rpcResults.replace_assistant_doctor_assignments = {
+      data: true,
+      error: null,
+    };
+    mocks.state.tableResults["user_page_permissions.insert"] = {
+      data: null,
+      error: { code: "42501", message: "permission seeding denied" },
+    };
+
+    const result = await changeStaffRoleMutation(
+      mocks.state.authedUser as never,
+      {
+        staff_id: STAFF_ID,
+        role: "doctor",
+        department_id: null,
+        supervising_doctor_ids: [],
+      },
+    );
+
+    expect(result.ok).toBe(false);
+    const profileUpdates = mocks.state.queryLog.filter(
+      (entry) =>
+        entry.table === "profiles" &&
+        entry.operation === "update" &&
+        typeof entry.args[0] === "object",
+    );
+    expect(profileUpdates[0]?.args[0]).toMatchObject({ role: "doctor" });
+    expect(profileUpdates[1]?.args[0]).toMatchObject({ role: "assistant" });
+    expect(mocks.state.rpc).toHaveBeenNthCalledWith(
+      2,
+      "replace_assistant_doctor_assignments",
+      {
+        p_assistant_id: STAFF_ID,
+        p_doctor_ids: [doctorId],
+      },
+    );
   });
 
   it("prevents managers from managing admin users", async () => {

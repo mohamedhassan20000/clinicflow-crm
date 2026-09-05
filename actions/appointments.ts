@@ -1,35 +1,45 @@
 "use server";
 
-import { actionAppointmentStatus, actionError, actionWeekday } from "@/lib/i18n/action-errors";
-import { localizeZodFieldErrors } from "@/lib/validations/server";
-import { revalidatePath } from "next/cache";
+import {
+  domainFailureToActionResult,
+  domainFailureToActionResultWithFirstFieldError,
+} from "@/actions/_domain";
+import {
+  completeAppointmentBillingMutation,
+  sendInvoiceToPatientMutation,
+  undoAppointmentBillingMutation,
+} from "@/lib/billing/mutations";
+import {
+  arriveAppointmentMutation,
+  confirmAndDisplaceAppointmentsMutation,
+  createAppointmentMutation,
+  dismissDisplacedAppointmentMutation,
+  permanentDeleteAppointmentMutation,
+  replaceAppointmentMutation,
+  restoreAppointmentMutation,
+  softDeleteAppointmentMutation,
+  startAppointmentSessionMutation,
+  undoAppointmentStatusMutation,
+  updateAppointmentStatusMutation,
+} from "@/lib/appointments/mutations";
+import { requireMutationRole } from "@/lib/rbac";
 import { redirect } from "next/navigation";
-import { formatInTimeZone, fromZonedTime, toZonedTime } from "date-fns-tz";
-import { createClinicScopedAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
-import { requireMutationRole, requireRole, requireUser } from "@/lib/rbac";
+import type { Database } from "@/types/database";
+import type { BillingValues } from "@/lib/validations/appointment";
 import {
-  appointmentSchema,
-  billingSchema,
-  replaceAppointmentSchema,
-  STATUS_TRANSITIONS,
-  type AppointmentFormValues,
-  type BillingValues,
-  type LineItemValues,
-} from "@/lib/validations/appointment";
-import type { Database, TablesUpdate } from "@/types/database";
-import { getPatientAccountBalance } from "@/actions/patients";
-import { ensureInvoiceFollowupSequence } from "@/lib/messaging/followups";
-import { notifyAppointmentEvent } from "@/lib/messaging/appointment-notifications";
-import { deliverIssuedInvoice } from "@/lib/messaging/invoice-delivery";
-import { getClinicWorkingHours } from "@/actions/settings";
-import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
-import { computeAvailability, type AvailabilityResult } from "@/lib/booking/availability";
-import {
-  computeBillingUndoEligibility,
-  type BillingUndoActivityEvent,
-  type BillingUndoEligibility,
-} from "@/lib/appointments/billing-undo";
+  checkSameDayPatient as legacyCheckSameDayPatient,
+  emptyAppointmentsTrash as legacyEmptyAppointmentsTrash,
+  getAppointmentReplacementChain as legacyGetAppointmentReplacementChain,
+  getBillingContext as legacyGetBillingContext,
+  getConflictingPendingAppointments as legacyGetConflictingPendingAppointments,
+  getInvoiceUndoEligibility as legacyGetInvoiceUndoEligibility,
+  getReplacementAvailability as legacyGetReplacementAvailability,
+  getReplacementDoctorOptions as legacyGetReplacementDoctorOptions,
+} from "@/actions/appointments-legacy";
+import type {
+  SendInvoiceResult as LegacySendInvoiceResult,
+  UndoInvoiceCompletionResult as LegacyUndoInvoiceCompletionResult,
+} from "@/actions/appointments-legacy";
 
 export type ActionResult = {
   error?: string;
@@ -37,446 +47,59 @@ export type ActionResult = {
   success?: boolean;
 };
 type AppointmentStatus = Database["public"]["Enums"]["appointment_status"];
-export type InvoiceUndoStatus = Extract<AppointmentStatus, "pending" | "confirmed" | "arrived" | "in_session">;
+export type InvoiceUndoStatus = Extract<
+  AppointmentStatus,
+  "pending" | "confirmed" | "arrived" | "in_session"
+>;
 export type StartAppointmentSessionResult = ActionResult & {
   redirectTo?: string;
   patientId?: string;
 };
-type AppointmentValues = AppointmentFormValues;
-type ValidatedAppointmentPackage = {
-  packageId: string | null;
-  packageSessionNumber: number | null;
-};
+export type BillingInput = BillingValues;
+export type {
+  BillingContext,
+  ConflictingAppointment,
+  InvoiceChannelState,
+  ReplacementChainItem,
+  ReplacementDoctorOption,
+  SendInvoiceResult,
+  UndoInvoiceCompletionResult,
+} from "@/actions/appointments-legacy";
 
-type BillingRpcError = {
-  code?: string | null;
-  message: string;
-  details?: string | null;
-  hint?: string | null;
-};
-
-function logBillingRpcError({
-  appointmentId,
-  clinicId,
-  rpc,
-  error,
-  financialContext,
-}: {
-  appointmentId: string;
-  clinicId: string;
-  rpc: string;
-  error: BillingRpcError;
-  financialContext: Record<string, unknown>;
-}) {
-  const failure = new Error(
-    `Appointment billing transaction failed: ${error.message}`,
-    { cause: error },
-  );
-  console.error("appointment_billing_transaction_failed", {
-    appointmentId,
-    clinicId,
-    rpc,
-    code: error.code ?? null,
-    message: error.message,
-    details: error.details ?? null,
-    hint: error.hint ?? null,
-    financialContext,
-    stack: failure.stack,
-  });
-}
-
-function logBillingUndoRpcError({
-  appointmentId,
-  clinicId,
-  rpc,
-  error,
-  eligibility,
-}: {
-  appointmentId: string;
-  clinicId: string;
-  rpc: string;
-  error: BillingRpcError;
-  eligibility: BillingUndoEligibility;
-}) {
-  console.error("appointment_billing_undo_failed", {
-    appointmentId,
-    clinicId,
-    rpc,
-    code: error.code ?? null,
-    message: error.message,
-    details: error.details ?? null,
-    hint: error.hint ?? null,
-    eligibility,
-  });
-}
-
-function isPastScheduledAt(scheduledAt: string): boolean {
-  const scheduledTime = new Date(scheduledAt).getTime();
-  return Number.isFinite(scheduledTime) && scheduledTime <= Date.now();
-}
-
-async function validateAppointmentReferences(
-  values: AppointmentValues,
-  clinicId: string,
-): Promise<ActionResult> {
-  const supabase = await createClient();
-  const [patientResult, doctorResult, departmentResult, insuranceResult] =
-    await Promise.all([
-      supabase
-        .from("patients")
-        .select("id")
-        .eq("id", values.patient_id)
-        .eq("clinic_id", clinicId)
-        .eq("is_deleted", false)
-        .maybeSingle(),
-      supabase
-        .from("profiles")
-        .select("id, department_id")
-        .eq("id", values.doctor_id)
-        .eq("clinic_id", clinicId)
-        .eq("role", "doctor")
-        .eq("is_active", true)
-        .eq("is_deleted", false)
-        .is("deleted_at", null)
-        .maybeSingle(),
-      values.department_id
-        ? supabase
-            .from("departments")
-            .select("id")
-            .eq("id", values.department_id)
-            .eq("clinic_id", clinicId)
-            .eq("is_active", true)
-            .is("deleted_at", null)
-            .maybeSingle()
-        : Promise.resolve({ data: null, error: null }),
-      values.insurance_provider_id
-        ? supabase
-            .from("insurance_providers")
-            .select("id")
-            .eq("id", values.insurance_provider_id)
-            .eq("clinic_id", clinicId)
-            .eq("is_active", true)
-            .is("deleted_at", null)
-            .maybeSingle()
-        : Promise.resolve({ data: null, error: null }),
-    ]);
-
-  if (patientResult.error) return { error: await actionError("appointments.failedToValidatePatient") };
-  if (doctorResult.error) return { error: await actionError("appointments.failedToValidateDoctor") };
-  if (departmentResult.error) return { error: await actionError("appointments.failedToValidateDepartment") };
-  if (insuranceResult.error) return { error: await actionError("appointments.failedToValidateInsuranceProvider") };
-  if (!patientResult.data) return { error: await actionError("appointments.selectAnActivePatientInThisClinic") };
-  if (!doctorResult.data) return { error: await actionError("appointments.selectAnActiveDoctorInThisClinic") };
-  if (values.department_id && !departmentResult.data) {
-    return { error: await actionError("appointments.selectAnActiveDepartmentInThisClinic") };
-  }
-  if (values.insurance_provider_id && !insuranceResult.data) {
-    return { error: await actionError("appointments.selectAnActiveInsuranceProviderInThisClinic") };
-  }
-  if (
-    values.department_id &&
-    doctorResult.data.department_id &&
-    doctorResult.data.department_id !== values.department_id
-  ) {
-    return { error: await actionError("appointments.selectedDoctorDoesNotBelongToTheSelectedDepartment") };
-  }
-
-  return {};
-}
-
-async function getClinicTimeZone(clinicId: string): Promise<string> {
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("clinics")
-    .select("timezone")
-    .eq("id", clinicId)
-    .maybeSingle();
-
-  return typeof data?.timezone === "string" && data.timezone
-    ? data.timezone
-    : DEFAULT_TIME_ZONE;
-}
-
-async function validateAppointmentPackage(
-  values: AppointmentValues,
-  clinicId: string,
-): Promise<
-  ActionResult & { data?: ValidatedAppointmentPackage }
-> {
-  if (!values.package_id) {
-    return { data: { packageId: null, packageSessionNumber: null } };
-  }
-
-  const supabase = await createClient();
-  const { data: pkg, error } = await supabase
-    .from("patient_packages")
-    .select("id, patient_id, clinic_id, is_active, total_sessions, used_sessions")
-    .eq("id", values.package_id)
-    .eq("clinic_id", clinicId)
-    .eq("patient_id", values.patient_id)
-    .maybeSingle();
-
-  if (error) {
-    return {
-      error: await actionError("appointments.failedToValidatePackage"),
-      fieldErrors: { package_id: [await actionError("appointments.failedToValidatePackage")] },
-    };
-  }
-
-  if (!pkg) {
-    return {
-      error: await actionError("appointments.selectAnActivePackageForThisPatient"),
-      fieldErrors: { package_id: [await actionError("appointments.selectAnActivePackageForThisPatient")] },
-    };
-  }
-
-  if (!pkg.is_active || Number(pkg.used_sessions) >= Number(pkg.total_sessions)) {
-    return {
-      error: await actionError("appointments.selectedPackageHasNoRemainingSessions"),
-      fieldErrors: { package_id: [await actionError("appointments.selectedPackageHasNoRemainingSessions")] },
-    };
-  }
-
-  return {
-    data: {
-      packageId: pkg.id,
-      packageSessionNumber: Number(pkg.used_sessions) + 1,
-    },
-  };
-}
-
-async function validateAppointmentSlot(
-  values: AppointmentValues,
-  clinicId: string,
-  timeZone: string,
-  excludeAppointmentId?: string,
-): Promise<ActionResult> {
-  const supabase = await createClient();
-  const startTime = new Date(values.scheduled_at);
-  const endTime = new Date(startTime.getTime() + values.duration_minutes * 60_000);
-  const clinicDate = formatInTimeZone(startTime, timeZone, "yyyy-MM-dd");
-  const clinicTime = formatInTimeZone(startTime, timeZone, "HH:mm");
-  const availability = await computeAvailability({
-    supabase,
-    clinicId,
-    doctorId: values.doctor_id,
-    dateIso: clinicDate,
-    timeZone,
-    durationMinutes: values.duration_minutes,
-    excludeAppointmentId,
-  });
-  const selectedSlot = availability.slots.find(
-    (candidate) => candidate.time === clinicTime,
-  );
-
-  const zonedStart = toZonedTime(startTime, timeZone);
-  const dayStart = fromZonedTime(
-    new Date(
-      zonedStart.getFullYear(),
-      zonedStart.getMonth(),
-      zonedStart.getDate(),
-      0,
-      0,
-      0,
-      0,
-    ),
-    timeZone,
-  );
-  const dayEnd = fromZonedTime(
-    new Date(
-      zonedStart.getFullYear(),
-      zonedStart.getMonth(),
-      zonedStart.getDate(),
-      23,
-      59,
-      59,
-      999,
-    ),
-    timeZone,
-  );
-
-  let sameDayQuery = supabase
-    .from("appointments")
-    .select("id, scheduled_at, duration_minutes")
-    .eq("doctor_id", values.doctor_id)
-    .eq("clinic_id", clinicId)
-    .is("deleted_at", null)
-    .in("status", ["confirmed", "arrived", "in_session"])
-    .gte("scheduled_at", dayStart.toISOString())
-    .lte("scheduled_at", dayEnd.toISOString());
-  if (excludeAppointmentId) {
-    sameDayQuery = sameDayQuery.neq("id", excludeAppointmentId);
-  }
-  const { data: sameDay, error } = await sameDayQuery;
-
-  if (error) {
-    return {
-      error:
-        await actionError("appointments.couldNotVerifyTheDoctorSAvailabilityPleaseTryAgain"),
-    };
-  }
-
-  const BUFFER_MS = 15 * 60_000;
-  for (const appt of sameDay ?? []) {
-    const exStart = new Date(appt.scheduled_at);
-    const exEnd = new Date(exStart.getTime() + appt.duration_minutes * 60_000);
-    const overlapsSession = startTime < exEnd && endTime > exStart;
-    if (overlapsSession) {
-      return {
-        error:
-          await actionError("appointments.thisDoctorIsAlreadyBookedDuringTheSelectedSessionTime"),
-      };
-    }
-    if (
-      startTime < new Date(exEnd.getTime() + BUFFER_MS) &&
-      endTime > new Date(exStart.getTime() - BUFFER_MS)
-    ) {
-      return {
-        error:
-          await actionError("appointments.thisDoctorNeedsA15MinuteRecoveryBufferWindowBetween"),
-      };
-    }
-  }
-
-  if (!selectedSlot || selectedSlot.disabled) {
-    const messageKey = {
-      no_schedule_configured: "appointments.doctorHasNoWorkingSchedule",
-      doctor_off_weekday: "appointments.doctorDoesNotWorkOnSelectedWeekday",
-      schedule_disabled: "appointments.doctorScheduleDisabled",
-      outside_schedule_range: "appointments.dateOutsideDoctorSchedule",
-      clinic_closed: "appointments.clinicClosedOnSelectedDate",
-      on_leave: "appointments.doctorOnLeave",
-      working_hours_passed: "appointments.doctorWorkingHoursPassed",
-      all_slots_booked: "appointments.allDoctorSlotsBooked",
-      all_slots_blocked: "appointments.allDoctorSlotsBlocked",
-      duration_unavailable: "appointments.durationDoesNotFitWorkingHours",
-      doctor_not_found: "appointments.failedToValidateDoctor",
-      doctor_required: "appointments.failedToValidateDoctor",
-      unable_to_calculate:
-        "appointments.couldNotVerifyTheDoctorSAvailabilityPleaseTryAgain",
-      available: "appointments.selectedTimeIsNotAvailable",
-    } as const;
-    return { error: await actionError(messageKey[availability.reason]) };
-  }
-
-  return {};
+function nullableFormValue(formData: FormData, key: string) {
+  const value = formData.get(key);
+  return value && value !== "none" ? value : null;
 }
 
 export async function createAppointment(
   _prev: ActionResult | null,
   formData: FormData,
 ): Promise<ActionResult> {
-  const user = await requireMutationRole(["admin", "receptionist", "manager", "assistant"]);
-
-  const durationRaw = formData.get("duration_minutes");
-  const raw = {
+  const user = await requireMutationRole([
+    "admin",
+    "receptionist",
+    "manager",
+    "assistant",
+  ]);
+  const duration = formData.get("duration_minutes");
+  const result = await createAppointmentMutation(user, {
     patient_id: formData.get("patient_id"),
     doctor_id: formData.get("doctor_id"),
-    department_id: formData.get("department_id") || null,
+    department_id: nullableFormValue(formData, "department_id"),
     scheduled_at: formData.get("scheduled_at"),
-    duration_minutes: durationRaw ? Number(durationRaw) : 30,
-    insurance_provider_id: formData.get("insurance_provider_id") || null,
-    package_id: formData.get("package_id") || null,
+    duration_minutes: duration ? Number(duration) : 30,
+    insurance_provider_id: nullableFormValue(
+      formData,
+      "insurance_provider_id",
+    ),
+    package_id: nullableFormValue(formData, "package_id"),
     notes: formData.get("notes") || null,
-  };
-
-  const parsed = appointmentSchema.safeParse(raw);
-  if (!parsed.success) {
-    const flat = await localizeZodFieldErrors(parsed.error);
-    const first = Object.values(flat).flat()[0];
-    return { error: first ?? await actionError("appointments.pleaseFillEveryRequiredField"), fieldErrors: flat };
-  }
-
-  if (isPastScheduledAt(parsed.data.scheduled_at)) {
-    return { error: await actionError("appointments.chooseAFutureDateAndTimeForTheAppointment") };
-  }
-
-  const clinicTimeZone = await getClinicTimeZone(user.clinicId);
-
-  // Validate appointment is not on a clinic-closed day
-  const clinicHours = await getClinicWorkingHours();
-  if (clinicHours.some((d) => d.open)) {
-    const apptDate = toZonedTime(parsed.data.scheduled_at, clinicTimeZone);
-    const dow = apptDate.getDay();
-    const clinicDay = clinicHours.find((d) => d.day_of_week === dow);
-    if (!clinicDay?.open) {
-      return { error: await actionError("appointments.clinicClosedOnDay", { day: await actionWeekday(dow) }) };
-    }
-  }
-
-  const references = await validateAppointmentReferences(
-    parsed.data,
-    user.clinicId,
-  );
-  if (references.error) return references;
-
-  const selectedPackage = await validateAppointmentPackage(parsed.data, user.clinicId);
-  if (selectedPackage.error) return selectedPackage;
-
-  const slot = await validateAppointmentSlot(
-    parsed.data,
-    user.clinicId,
-    clinicTimeZone,
-  );
-  if (slot.error) return slot;
-
-  const supabase = await createClient();
-  const { data: inserted, error } = await supabase
-    .from("appointments")
-    .insert({
-      ...parsed.data,
-      package_id: selectedPackage.data?.packageId ?? null,
-      package_session_number: selectedPackage.data?.packageSessionNumber ?? null,
-      clinic_id: user.clinicId,
-      created_by: user.id,
-    })
-    .select("id")
-    .single();
-
-  if (error) {
-    if (error.code === "23505") {
-      const msg = error.message ?? "";
-      if (msg.includes("appointments_patient_active_slot_key")) {
-        return {
-          error:
-            await actionError("appointments.thisPatientAlreadyHasAnotherAppointmentAtTheSameTime"),
-        };
-      }
-      return {
-        error:
-          await actionError("appointments.thisDoctorAlreadyHasAnAppointmentAtThatTimePlease"),
-      };
-    }
-    return { error: await actionError("appointments.failedToCreateAppointmentPleaseTryAgain") };
-  }
-
-  // §7.2a: a newly created appointment is pending — notify the patient
-  // immediately (WhatsApp + Email). Best-effort; never blocks the booking.
-  if (inserted?.id) {
-    await notifyAppointmentEvent({
-      clinicId: user.clinicId,
-      appointmentId: inserted.id,
-      event: "created",
-    });
-  }
-
-  revalidatePath("/appointments");
-  const appointmentDate = formatInTimeZone(
-    parsed.data.scheduled_at,
-    clinicTimeZone,
-    "yyyy-MM-dd",
-  );
-  redirect(`/appointments?view=day&date=${appointmentDate}`);
+  });
+  if (!result.ok) return domainFailureToActionResult(result);
+  if (result.data.redirect_to) redirect(result.data.redirect_to);
+  return { success: true };
 }
 
-/**
- * Dedicated Replace workflow: creates a linked replacement appointment at a new
- * time (and optionally a new doctor), marks the original `replaced`, and keeps
- * the original intact in history. The narrowly scoped, atomic
- * `replace_appointment` RPC re-derives the caller's clinic, role, and doctor
- * scope from auth state; no caller may point the replacement at an out-of-scope
- * doctor.
- */
 export async function replaceAppointment(
   input: unknown,
 ): Promise<ActionResult & { appointmentId?: string }> {
@@ -487,321 +110,9 @@ export async function replaceAppointment(
     "doctor",
     "assistant",
   ]);
-
-  const parsed = replaceAppointmentSchema.safeParse(input);
-  if (!parsed.success) {
-    return { error: await actionError("appointments.validationError") };
-  }
-
-  // Business rule: only a FUTURE appointment may be replaced. The RPC re-checks
-  // this against the stored row too (defense in depth).
-  if (new Date(parsed.data.scheduled_at) <= new Date()) {
-    return {
-      error: await actionError(
-        "appointments.replacementTimeMustBeInTheFuture",
-      ),
-    };
-  }
-
-  const supabase = await createClient();
-  const { data: original, error: originalError } = await supabase
-    .from("appointments")
-    .select("id, doctor_id, status, scheduled_at")
-    .eq("id", parsed.data.original_id)
-    .eq("clinic_id", user.clinicId)
-    .is("deleted_at", null)
-    .maybeSingle();
-
-  if (originalError || !original) {
-    return { error: await actionError("appointments.appointmentNotFound") };
-  }
-  if (
-    (original.status !== "pending" && original.status !== "confirmed") ||
-    new Date(original.scheduled_at) <= new Date()
-  ) {
-    return {
-      error: await actionError(
-        "appointments.onlyFutureOpenAppointmentsCanBeReplaced",
-      ),
-    };
-  }
-
-  const clinicTimeZone = await getClinicTimeZone(user.clinicId);
-  const clinicHours = await getClinicWorkingHours();
-  if (clinicHours.some((day) => day.open)) {
-    const appointmentDate = toZonedTime(
-      parsed.data.scheduled_at,
-      clinicTimeZone,
-    );
-    const dayOfWeek = appointmentDate.getDay();
-    if (!clinicHours.find((day) => day.day_of_week === dayOfWeek)?.open) {
-      return {
-        error: await actionError("appointments.clinicClosedOnDay", {
-          day: await actionWeekday(dayOfWeek),
-        }),
-      };
-    }
-  }
-
-  const slot = await validateAppointmentSlot(
-    {
-      patient_id: "00000000-0000-0000-0000-000000000000",
-      doctor_id: parsed.data.doctor_id,
-      scheduled_at: parsed.data.scheduled_at,
-      duration_minutes: parsed.data.duration_minutes,
-      department_id: parsed.data.department_id ?? null,
-    } as AppointmentValues,
-    user.clinicId,
-    clinicTimeZone,
-    parsed.data.original_id,
-  );
-  if (slot.error) return slot;
-
-  const { data: newId, error } = await supabase.rpc("replace_appointment", {
-    p_original_id: parsed.data.original_id,
-    p_scheduled_at: parsed.data.scheduled_at,
-    p_doctor_id: parsed.data.doctor_id,
-    p_duration_minutes: parsed.data.duration_minutes,
-    p_department_id: parsed.data.department_id ?? undefined,
-    p_notes: parsed.data.notes ?? undefined,
-  });
-
-  if (error) {
-    if (error.code === "23505") {
-      return {
-        error: await actionError(
-          "appointments.thisDoctorAlreadyHasAnAppointmentAtThatTimePlease",
-        ),
-      };
-    }
-    if (error.message?.toLowerCase().includes("future")) {
-      return {
-        error: await actionError(
-          "appointments.replacementTimeMustBeInTheFuture",
-        ),
-      };
-    }
-    if (error.message?.toLowerCase().includes("pending or confirmed")) {
-      return {
-        error: await actionError("appointments.onlyFutureOpenAppointmentsCanBeReplaced"),
-      };
-    }
-    return { error: await actionError("appointments.failedToCreateAppointmentPleaseTryAgain") };
-  }
-
-  // Notify the patient of the new (confirmed) appointment. The original is now
-  // `replaced`, so the reminder pipeline (confirmed-only) drops it automatically
-  // — no double notification.
-  if (typeof newId === "string") {
-    await notifyAppointmentEvent({
-      clinicId: user.clinicId,
-      appointmentId: newId,
-      event: "created",
-    });
-  }
-
-  revalidatePath("/appointments");
-  return { success: true, appointmentId: typeof newId === "string" ? newId : undefined };
-}
-
-export type ReplacementDoctorOption = {
-  id: string;
-  fullName: string;
-};
-
-export type ReplacementChainItem = {
-  id: string;
-  status: AppointmentStatus;
-  scheduledAt: string;
-  doctorId: string;
-  doctorName: string | null;
-  replacesAppointmentId: string | null;
-  replacedByAppointmentId: string | null;
-  chainPosition: number;
-};
-
-/**
- * Doctor choices for the Replace dialog. This is presentation data only; the
- * replace_appointment RPC independently re-derives and enforces the same scope.
- */
-export async function getReplacementDoctorOptions(
-  appointmentId: string,
-): Promise<ActionResult & { data?: ReplacementDoctorOption[] }> {
-  const user = await requireRole([
-    "admin",
-    "receptionist",
-    "manager",
-    "doctor",
-    "assistant",
-  ]);
-  const parsedId = replaceAppointmentSchema.shape.original_id.safeParse(
-    appointmentId,
-  );
-  if (!parsedId.success) {
-    return { error: await actionError("appointments.validationError") };
-  }
-
-  const supabase = await createClient();
-  const { data: original, error: originalError } = await supabase
-    .from("appointments")
-    .select("doctor_id")
-    .eq("id", parsedId.data)
-    .eq("clinic_id", user.clinicId)
-    .is("deleted_at", null)
-    .maybeSingle();
-  if (originalError || !original) {
-    return { error: await actionError("appointments.appointmentNotFound") };
-  }
-
-  let allowedDoctorIds: string[] | null = null;
-  if (user.role === "doctor") {
-    allowedDoctorIds = original.doctor_id === user.id ? [user.id] : [];
-  } else if (user.role === "assistant") {
-    const { data, error } = await supabase.rpc(
-      "auth_supervised_doctor_ids",
-    );
-    if (error) {
-      return { error: await actionError("appointments.failedToValidateDoctor") };
-    }
-    allowedDoctorIds = (data as string[] | null) ?? [];
-  }
-
-  if (allowedDoctorIds?.length === 0) {
-    return { data: [] };
-  }
-
-  let doctorQuery = supabase
-    .from("profiles")
-    .select("id, full_name")
-    .eq("clinic_id", user.clinicId)
-    .eq("role", "doctor")
-    .eq("is_active", true)
-    .eq("is_deleted", false)
-    .is("deleted_at", null)
-    .order("full_name");
-  if (allowedDoctorIds) {
-    doctorQuery = doctorQuery.in("id", allowedDoctorIds);
-  }
-  const { data: doctors, error } = await doctorQuery;
-  if (error) {
-    return { error: await actionError("appointments.failedToValidateDoctor") };
-  }
-
-  return {
-    data: (doctors ?? []).map((doctor) => ({
-      id: doctor.id,
-      fullName: doctor.full_name,
-    })),
-  };
-}
-
-/**
- * Presentation data for the Replace dialog's slot grid. The result comes from
- * the same calculator and uses the same original-appointment exclusion as the
- * final replace validation; the mutation remains the source of truth.
- */
-export async function getReplacementAvailability(
-  appointmentId: string,
-  doctorId: string,
-  dateIso: string,
-  durationMinutes: number,
-): Promise<ActionResult & { data?: AvailabilityResult }> {
-  const user = await requireRole([
-    "admin",
-    "receptionist",
-    "manager",
-    "doctor",
-    "assistant",
-  ]);
-  const parsedAppointmentId = replaceAppointmentSchema.shape.original_id.safeParse(appointmentId);
-  const parsedDoctorId = replaceAppointmentSchema.shape.doctor_id.safeParse(doctorId);
-  if (
-    !parsedAppointmentId.success ||
-    !parsedDoctorId.success ||
-    !/^\d{4}-\d{2}-\d{2}$/.test(dateIso) ||
-    !Number.isInteger(durationMinutes) ||
-    durationMinutes <= 0
-  ) {
-    return { error: await actionError("appointments.validationError") };
-  }
-
-  const doctorResult = await getReplacementDoctorOptions(parsedAppointmentId.data);
-  if (
-    doctorResult.error ||
-    !doctorResult.data?.some((doctor) => doctor.id === parsedDoctorId.data)
-  ) {
-    return {
-      error: doctorResult.error ?? await actionError("appointments.failedToValidateDoctor"),
-    };
-  }
-
-  const supabase = await createClient();
-  const timeZone = await getClinicTimeZone(user.clinicId);
-  const data = await computeAvailability({
-    supabase,
-    clinicId: user.clinicId,
-    doctorId: parsedDoctorId.data,
-    dateIso,
-    timeZone,
-    durationMinutes,
-    excludeAppointmentId: parsedAppointmentId.data,
-  });
-  return { data };
-}
-
-/** Ordered original -> ... -> active replacement history, still RLS-scoped. */
-export async function getAppointmentReplacementChain(
-  appointmentId: string,
-): Promise<ActionResult & { data?: ReplacementChainItem[] }> {
-  await requireRole([
-    "admin",
-    "receptionist",
-    "manager",
-    "doctor",
-    "assistant",
-  ]);
-  const parsedId = replaceAppointmentSchema.shape.original_id.safeParse(
-    appointmentId,
-  );
-  if (!parsedId.success) {
-    return { error: await actionError("appointments.validationError") };
-  }
-
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc(
-    "get_appointment_replacement_chain",
-    { p_appointment_id: parsedId.data },
-  );
-  if (error) {
-    return {
-      error: await actionError(
-        "appointments.failedToLoadReplacementHistory",
-      ),
-    };
-  }
-
-  return {
-    data: (data ?? []).map((item) => ({
-      id: item.id,
-      status: item.status,
-      scheduledAt: item.scheduled_at,
-      doctorId: item.doctor_id,
-      doctorName: item.doctor_name,
-      replacesAppointmentId: item.replaces_appointment_id,
-      replacedByAppointmentId: item.replaced_by_appointment_id,
-      chainPosition: item.chain_position,
-    })),
-  };
-}
-
-export type BillingInput = BillingValues;
-
-function lineItemTotal(items: LineItemValues[]): number {
-  return Number(
-    items
-      .reduce((s, li) => s + Number(li.price) * Number(li.quantity), 0)
-      .toFixed(2),
-  );
+  const result = await replaceAppointmentMutation(user, input);
+  if (!result.ok) return domainFailureToActionResult(result);
+  return { success: true, appointmentId: result.data.appointment_id };
 }
 
 export async function updateAppointmentStatus(
@@ -811,821 +122,108 @@ export async function updateAppointmentStatus(
   cancellationReason?: string | null,
   noShowReason?: string | null,
 ): Promise<ActionResult> {
-  const user = await requireMutationRole(["admin", "receptionist", "manager", "assistant"]);
-
-  const supabase = await createClient();
-
-  const { data: appt } = await supabase
-    .from("appointments")
-    .select("status, patient_id")
-    .eq("id", id)
-    .eq("clinic_id", user.clinicId)
-    .single();
-
-  if (!appt) return { error: await actionError("appointments.appointmentNotFound") };
-
-  const allowed = STATUS_TRANSITIONS[appt.status] ?? [];
-  const completingWithInvoice = newStatus === "completed" && !!billingPayload;
-  if (!completingWithInvoice && !allowed.includes(newStatus)) {
-    return { error: await actionError("appointments.cannotTransitionStatus", {
-      from: await actionAppointmentStatus(appt.status),
-      to: await actionAppointmentStatus(newStatus),
-    }) };
-  }
-  if (
-    completingWithInvoice &&
-    !["pending", "confirmed", "arrived", "in_session"].includes(appt.status)
-  ) {
-    return { error: await actionError("appointments.cannotTransitionStatus", {
-      from: await actionAppointmentStatus(appt.status),
-      to: await actionAppointmentStatus(newStatus),
-    }) };
-  }
-
-  const update: TablesUpdate<"appointments"> = {
-    status: newStatus as TablesUpdate<"appointments">["status"],
-    updated_by: user.id,
-  };
-
-  if (newStatus === "cancelled") {
-    const reason = (cancellationReason ?? "").trim();
-    if (!reason) {
-      return { error: await actionError("appointments.pleaseProvideAReasonForCancellingThisAppointment") };
-    }
-    if (reason.length > 500) {
-      return { error: await actionError("appointments.cancellationReasonMustBe500CharactersOrLess") };
-    }
-    update.cancellation_reason = reason;
-    update.cancelled_at = new Date().toISOString();
-    update.cancelled_by = user.id;
-  }
-
-  if (newStatus === "no_show") {
-    const reason = (noShowReason ?? "").trim();
-    if (!reason) {
-      return {
-        error: await actionError("appointments.pleaseProvideAReasonForMarkingThisAppointmentAsA"),
-      };
-    }
-    if (reason.length > 500) {
-      return { error: await actionError("appointments.noShowReasonMustBe500CharactersOrLess") };
-    }
-    update.no_show_reason = reason;
-    update.no_showed_at = new Date().toISOString();
-    update.no_showed_by = user.id;
-  }
-
   if (newStatus === "completed") {
-    if (!billingPayload) {
-      return { error: await actionError("appointments.billingDetailsAreRequiredToCompleteThisAppointment") };
-    }
-
-    const parsed = billingSchema.safeParse(billingPayload);
-    if (!parsed.success) {
-      const flat = await localizeZodFieldErrors(parsed.error);
-      const first = Object.values(flat).flat()[0];
-      return { error: first ?? await actionError("appointments.invalidBillingDetails"), fieldErrors: flat };
-    }
-    const billing = parsed.data;
-
-    const total = lineItemTotal(billing.line_items);
-    if (total <= 0) {
-      return { error: await actionError("appointments.invoiceTotalMustBeGreaterThanZero") };
-    }
-
-    // Validate deposit_amount against patient's available balance
-    if (billing.deposit_amount > 0) {
-      const balance = await getPatientAccountBalance(
-        appt.patient_id,
-        user.clinicId,
-      );
-      if (billing.deposit_amount > balance + 0.001) {
-        return {
-          error: await actionError("appointments.depositExceedsBalance", {
-            deposit: billing.deposit_amount.toFixed(2),
-            balance: balance.toFixed(2),
-          }),
-        };
-      }
-      if (billing.deposit_amount > total + 0.001) {
-        return { error: await actionError("appointments.depositAppliedCannotExceedInvoiceTotal") };
-      }
-    }
-
-    const collected =
-      billing.paid_amount +
-      billing.insurance_amount +
-      billing.secondary_amount +
-      billing.deposit_amount;
-    if (collected > total + 0.001) {
-      return { error: await actionError("appointments.collectedAmountExceedsInvoiceTotal") };
-    }
-    const baseBillingArgs = {
-      p_appointment_id: id,
-      p_line_items: billing.line_items,
-      p_paid_amount: Number(billing.paid_amount.toFixed(2)),
-      p_payment_method: billing.payment_method,
-      p_insurance_amount: Number(billing.insurance_amount.toFixed(2)),
-      p_insurance_calculation_mode: billing.insurance_calculation_mode,
-      p_insurance_percentage: billing.insurance_percentage,
-      p_patient_responsibility: Number(
-        billing.patient_responsibility.toFixed(2),
-      ),
-      p_secondary_amount: Number(billing.secondary_amount.toFixed(2)),
-      p_secondary_payment_method:
-        billing.secondary_payment_method ?? null,
-      p_deposit_amount: Number(billing.deposit_amount.toFixed(2)),
-      p_payment_note: billing.payment_note ?? null,
-    };
-
-    const previousSettlementAmount = billing.previous_settlement_amount;
-    const billingRpc =
-      previousSettlementAmount > 0
-        ? "complete_appointment_billing_with_previous_settlement"
-        : "complete_appointment_billing";
-    const { error } =
-      billingRpc === "complete_appointment_billing_with_previous_settlement"
-        ? await supabase.rpc(billingRpc, {
-            ...baseBillingArgs,
-            p_previous_settlement_amount: previousSettlementAmount,
-            p_previous_payment_method:
-              billing.previous_payment_method ?? null,
-            p_previous_note: billing.previous_note ?? null,
-          })
-        : await supabase.rpc(billingRpc, baseBillingArgs);
-
-    if (error) {
-      logBillingRpcError({
-        appointmentId: id,
-        clinicId: user.clinicId,
-        rpc: billingRpc,
-        error,
-        financialContext: {
-          submitted: {
-            paidAmount: billingPayload.paid_amount,
-            insuranceAmount: billingPayload.insurance_amount,
-            insuranceCalculationMode:
-              billingPayload.insurance_calculation_mode,
-            insurancePercentage: billingPayload.insurance_percentage ?? null,
-            patientResponsibility: billingPayload.patient_responsibility,
-            secondaryAmount: billingPayload.secondary_amount,
-            depositAmount: billingPayload.deposit_amount,
-          },
-          normalized: {
-            invoiceTotal: total,
-            paidAmount: billing.paid_amount,
-            insuranceAmount: billing.insurance_amount,
-            insuranceCalculationMode: billing.insurance_calculation_mode,
-            insurancePercentage: billing.insurance_percentage,
-            patientResponsibility: billing.patient_responsibility,
-            secondaryAmount: billing.secondary_amount,
-            depositAmount: billing.deposit_amount,
-            grossAllocated: Number(collected.toFixed(2)),
-            outstandingAmount: Number(
-              Math.max(0, total - collected).toFixed(2),
-            ),
-          },
-          rpcArguments: {
-            p_paid_amount: baseBillingArgs.p_paid_amount,
-            p_payment_method: baseBillingArgs.p_payment_method,
-            p_insurance_amount: baseBillingArgs.p_insurance_amount,
-            p_insurance_calculation_mode:
-              baseBillingArgs.p_insurance_calculation_mode,
-            p_insurance_percentage:
-              baseBillingArgs.p_insurance_percentage,
-            p_patient_responsibility:
-              baseBillingArgs.p_patient_responsibility,
-            p_secondary_amount: baseBillingArgs.p_secondary_amount,
-            p_secondary_payment_method:
-              baseBillingArgs.p_secondary_payment_method,
-            p_deposit_amount: baseBillingArgs.p_deposit_amount,
-          },
-        },
-      });
-      return {
-        error: await actionError(
-          "appointments.weCouldNotCompleteThisRequestPleaseTryAgain",
-        ),
-      };
-    }
-
-    // §7.3b: an invoice that completes with an outstanding balance enters the
-    // dunning follow-up sequence (per-clinic configurable timing), advanced by
-    // the daily morning cron. Registration is idempotent and best-effort — it
-    // never fails billing. Invoice *delivery* to the patient is no longer
-    // automatic (2026-07-19 flow revision): the employee sends it explicitly
-    // via sendInvoiceToPatient after saving.
-    if (total - collected > 0.001) {
-      await ensureInvoiceFollowupSequence(user.clinicId, id);
-    }
-
-    revalidatePath("/appointments");
-    revalidatePath(`/patients/${appt.patient_id}`);
-    return {};
-  }
-
-  const { error } = await supabase
-    .from("appointments")
-    .update(update)
-    .eq("id", id)
-    .eq("clinic_id", user.clinicId);
-
-  if (error) return { error: await actionError("appointments.failedToUpdateStatus") };
-
-  // §7.2a: confirming or cancelling an appointment notifies the patient
-  // immediately (WhatsApp + Email). Best-effort; never blocks the status change.
-  if (newStatus === "confirmed" || newStatus === "cancelled") {
-    await notifyAppointmentEvent({
-      clinicId: user.clinicId,
-      appointmentId: id,
-      event: newStatus,
+    const user = await requireMutationRole([
+      "admin",
+      "receptionist",
+      "manager",
+      "assistant",
+    ]);
+    const result = await completeAppointmentBillingMutation(user, {
+      appointment_id: id,
+      billing: billingPayload,
     });
+    return result.ok
+      ? {}
+      : domainFailureToActionResultWithFirstFieldError(result);
   }
-
-  revalidatePath("/appointments");
-  revalidatePath(`/patients/${appt.patient_id}`);
+  const user = await requireMutationRole([
+    "admin",
+    "receptionist",
+    "manager",
+    "assistant",
+  ]);
+  const result = await updateAppointmentStatusMutation(user, {
+    appointment_id: id,
+    status: newStatus,
+    reason:
+      newStatus === "cancelled"
+        ? cancellationReason
+        : newStatus === "no_show"
+          ? noShowReason
+          : null,
+  });
+  if (!result.ok) return domainFailureToActionResult(result);
   return {};
 }
 
 export async function softDeleteAppointment(id: string): Promise<ActionResult> {
   const user = await requireMutationRole(["admin", "receptionist", "manager"]);
-  const supabase = await createClient();
-
-  const { data: appt, error: fetchError } = await supabase
-    .from("appointments")
-    .select("status, paid_at, paid_amount, total_amount")
-    .eq("id", id)
-    .eq("clinic_id", user.clinicId)
-    .single();
-
-  if (fetchError || !appt) return { error: await actionError("appointments.appointmentNotFound") };
-
-  if (
-    ["arrived", "in_session", "completed"].includes(appt.status) ||
-    appt.paid_at !== null ||
-    (appt.paid_amount !== null && appt.paid_amount > 0) ||
-    (appt.total_amount !== null && appt.total_amount > 0)
-  ) {
-    return {
-      error:
-        await actionError("appointments.arrivedInSessionCompletedOrChargedAppointmentsCannotBeDeleted"),
-    };
-  }
-
-  const cascaded = await deleteAppointmentDependents(id, user.clinicId);
-  if (cascaded.error) return cascaded;
-  const { error } = await supabase
-    .from("appointments")
-    .update({
-      deleted_at: new Date().toISOString(),
-      total_amount: null,
-      paid_amount: null,
-      insurance_amount: null,
-      insurance_calculation_mode: "amount",
-      insurance_percentage: null,
-      patient_responsibility: null,
-      secondary_amount: 0,
-      deposit_amount: 0,
-      outstanding_amount: null,
-      paid_at: null,
-      payment_method: null,
-      secondary_payment_method: null,
-      payment_note: null,
-    } as TablesUpdate<"appointments">)
-    .eq("id", id)
-    .eq("clinic_id", user.clinicId);
-  if (error) return { error: await actionError("appointments.weCouldNotCompleteThisRequestPleaseTryAgain") };
-  revalidatePath("/appointments");
-  return {};
+  const result = await softDeleteAppointmentMutation(user, {
+    appointment_id: id,
+  });
+  return result.ok ? {} : domainFailureToActionResult(result);
 }
 
 export async function restoreAppointment(id: string): Promise<ActionResult> {
   const user = await requireMutationRole(["admin", "receptionist", "manager"]);
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("appointments")
-    .update({ deleted_at: null })
-    .eq("id", id)
-    .eq("clinic_id", user.clinicId);
-  if (error) return { error: await actionError("appointments.weCouldNotCompleteThisRequestPleaseTryAgain") };
-  revalidatePath("/appointments");
-  return {};
-}
-
-async function deleteAppointmentDependents(
-  appointmentId: string,
-  clinicId: string,
-): Promise<ActionResult> {
-  const adminClient = createClinicScopedAdminClient(clinicId);
-  const operations = [
-    adminClient
-      .from("appointment_services")
-      .delete()
-      .eq("appointment_id", appointmentId)
-      .eq("clinic_id", clinicId),
-    adminClient.from("feedback").delete().eq("appointment_id", appointmentId),
-    adminClient
-      .from("follow_ups")
-      .delete()
-      .eq("appointment_id", appointmentId)
-      .eq("clinic_id", clinicId),
-    adminClient
-      .from("outstanding_settlements")
-      .delete()
-      .eq("appointment_id", appointmentId)
-      .eq("clinic_id", clinicId),
-  ];
-
-  const results = await Promise.all(operations);
-  const failed = results.find((r) => r.error);
-  if (failed?.error) return { error: await actionError("appointments.weCouldNotCompleteThisRequestPleaseTryAgain") };
-  return {};
+  const result = await restoreAppointmentMutation(user, { appointment_id: id });
+  return result.ok ? {} : domainFailureToActionResult(result);
 }
 
 export async function undoAppointmentStatus(
   id: string,
-  targetStatus: Extract<AppointmentStatus, "pending" | "confirmed" | "arrived" | "in_session">,
+  targetStatus: InvoiceUndoStatus,
 ): Promise<ActionResult> {
-  const user = await requireMutationRole(["admin", "receptionist", "doctor", "manager"]);
-  const supabase = await createClient();
-
-  const { data: appt } = await supabase
-    .from("appointments")
-    .select("patient_id, doctor_id, status")
-    .eq("id", id)
-    .eq("clinic_id", user.clinicId)
-    .single();
-
-  if (!appt) return { error: await actionError("appointments.appointmentNotFound") };
-  if (user.role === "doctor") {
-    if (appt.doctor_id !== user.id) {
-      return { error: await actionError("appointments.youCanOnlyUpdateYourOwnAppointments") };
-    }
-    if (targetStatus !== "arrived" || appt.status !== "in_session") {
-      return { error: await actionError("appointments.doctorsCanOnlyUndoASessionStart") };
-    }
-  }
-
-  const { error } = await supabase.rpc("undo_appointment_status", {
-    p_appointment_id: id,
-    p_target_status: targetStatus,
+  const user = await requireMutationRole([
+    "admin",
+    "receptionist",
+    "doctor",
+    "manager",
+  ]);
+  const result = await undoAppointmentStatusMutation(user, {
+    appointment_id: id,
+    target_status: targetStatus,
   });
-
-  if (error) return { error: await actionError("appointments.weCouldNotCompleteThisRequestPleaseTryAgain") };
-
-  revalidatePath("/appointments");
-  revalidatePath(`/patients/${appt.patient_id}`);
-  return {};
+  return result.ok ? {} : domainFailureToActionResult(result);
 }
 
 export async function arriveAppointment(id: string): Promise<ActionResult> {
-  const user = await requireMutationRole(["admin", "receptionist", "manager", "assistant"]);
-  const supabase = await createClient();
-
-  const { data: appt } = await supabase
-    .from("appointments")
-    .select("status, patient_id")
-    .eq("id", id)
-    .eq("clinic_id", user.clinicId)
-    .single();
-
-  if (!appt) return { error: await actionError("appointments.appointmentNotFound") };
-  if (appt.status !== "confirmed") {
-    return { error: await actionError("appointments.cannotTransitionStatus", {
-      from: await actionAppointmentStatus(appt.status),
-      to: await actionAppointmentStatus("arrived"),
-    }) };
-  }
-
-  const { error } = await supabase
-    .from("appointments")
-    .update({
-      status: "arrived",
-      updated_by: user.id,
-    } as TablesUpdate<"appointments">)
-    .eq("id", id)
-    .eq("clinic_id", user.clinicId)
-    .eq("status", "confirmed");
-
-  if (error) return { error: await actionError("appointments.failedToMarkAppointmentAsArrived") };
-
-  revalidatePath("/appointments");
-  revalidatePath(`/patients/${appt.patient_id}`);
-  return { success: true };
+  const user = await requireMutationRole([
+    "admin",
+    "receptionist",
+    "manager",
+    "assistant",
+  ]);
+  const result = await arriveAppointmentMutation(user, { appointment_id: id });
+  return result.ok ? { success: true } : domainFailureToActionResult(result);
 }
 
 export async function startAppointmentSession(
   id: string,
 ): Promise<StartAppointmentSessionResult> {
   const user = await requireMutationRole(["doctor"]);
-  const supabase = await createClient();
-
-  const { data: appt, error: readError } = await supabase
-    .from("appointments")
-    .select("id, status, patient_id, doctor_id, clinic_id")
-    .eq("id", id)
-    .maybeSingle();
-
-  if (readError) return { error: await actionError("appointments.weCouldNotCompleteThisRequestPleaseTryAgain") };
-  if (!appt) return { error: await actionError("appointments.appointmentNotFound") };
-  if (appt.clinic_id !== user.clinicId) {
-    return { error: await actionError("appointments.appointmentNotFound") };
-  }
-  if (appt.doctor_id !== user.id) {
-    return { error: await actionError("appointments.onlyTheAssignedDoctorCanStartThisSession") };
-  }
-  if (appt.status !== "arrived") {
-    return { error: await actionError("appointments.thisAppointmentIsNoLongerArrived") };
-  }
-
-  const { data: startedSession, error } = await supabase
-    .rpc("start_appointment_session", { p_appointment_id: id })
-    .single();
-
-  if (error) return { error: await actionError("appointments.weCouldNotCompleteThisRequestPleaseTryAgain") };
-  if (startedSession.status !== "in_session") {
-    return { error: await actionError("appointments.couldNotVerifyTheUpdatedSessionStatus") };
-  }
-
-  const redirectTo = `/patients/${startedSession.patient_id}/medical-notes-report`;
-  revalidatePath("/appointments");
-  revalidatePath("/dashboard");
-  revalidatePath(`/patients/${startedSession.patient_id}`);
-  revalidatePath(redirectTo);
-  return { success: true, patientId: startedSession.patient_id, redirectTo };
-}
-
-const BILLING_UNDO_ACTIVITY_ACTIONS = [
-  "appointment.completed",
-  "appointment.billing_completion_undone",
-] as const;
-
-type AppointmentsSupabaseClient = Awaited<ReturnType<typeof createClient>>;
-
-async function loadInvoiceUndoEligibility({
-  id,
-  user,
-  supabase,
-  now,
-}: {
-  id: string;
-  user: Awaited<ReturnType<typeof requireUser>>;
-  supabase: AppointmentsSupabaseClient;
-  now?: Date;
-}): Promise<
-  BillingUndoEligibility & {
-    patientId: string | null;
-  }
-> {
-  if (
-    user.role !== "admin" &&
-    user.role !== "receptionist" &&
-    user.role !== "manager"
-  ) {
-    return {
-      ...computeBillingUndoEligibility({
-        currentStatus: "completed",
-        role: user.role,
-        latestBillingEvent: null,
-        now,
-      }),
-      patientId: null,
-    };
-  }
-
-  const [appointmentResult, activityResult] = await Promise.all([
-    supabase
-      .from("appointments")
-      .select("patient_id, status")
-      .eq("id", id)
-      .eq("clinic_id", user.clinicId)
-      .maybeSingle(),
-    supabase
-      .from("activity_events")
-      .select("id, action, occurred_at, previous_state")
-      .eq("clinic_id", user.clinicId)
-      .eq("entity_type", "appointment")
-      .eq("entity_id", id)
-      .in("action", [...BILLING_UNDO_ACTIVITY_ACTIONS])
-      .order("occurred_at", { ascending: false })
-      .order("id", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-  ]);
-
-  if (appointmentResult.error) {
-    console.error("appointment_billing_undo_appointment_read_failed", {
-      appointmentId: id,
-      clinicId: user.clinicId,
-      code: appointmentResult.error.code,
-      message: appointmentResult.error.message,
-      details: appointmentResult.error.details,
-      hint: appointmentResult.error.hint,
-    });
-  }
-  if (activityResult.error) {
-    console.error("appointment_billing_undo_activity_read_failed", {
-      appointmentId: id,
-      clinicId: user.clinicId,
-      code: activityResult.error.code,
-      message: activityResult.error.message,
-      details: activityResult.error.details,
-      hint: activityResult.error.hint,
-    });
-    return {
-      canUndo: false,
-      reason: "activity_unavailable",
-      targetStatus: null,
-      completionEventId: null,
-      completionOccurredAt: null,
-      expiresAt: null,
-      patientId: appointmentResult.data?.patient_id ?? null,
-    };
-  }
-
-  const latestBillingEvent =
-    (activityResult.data as BillingUndoActivityEvent | null) ?? null;
-  return {
-    ...computeBillingUndoEligibility({
-      currentStatus: appointmentResult.data?.status ?? null,
-      role: user.role,
-      latestBillingEvent,
-      now,
-    }),
-    patientId: appointmentResult.data?.patient_id ?? null,
-  };
-}
-
-export async function getInvoiceUndoEligibility(
-  id: string,
-): Promise<BillingUndoEligibility> {
-  const user = await requireUser();
-  const supabase = await createClient();
-  const eligibility = await loadInvoiceUndoEligibility({
-    id,
-    user,
-    supabase,
+  const result = await startAppointmentSessionMutation(user, {
+    appointment_id: id,
   });
-  return {
-    canUndo: eligibility.canUndo,
-    reason: eligibility.reason,
-    targetStatus: eligibility.targetStatus,
-    completionEventId: eligibility.completionEventId,
-    completionOccurredAt: eligibility.completionOccurredAt,
-    expiresAt: eligibility.expiresAt,
-  };
-}
-
-async function invoiceUndoEligibilityError(
-  reason: BillingUndoEligibility["reason"],
-): Promise<string> {
-  const key = {
-    eligible: "appointments.weCouldNotCompleteThisRequestPleaseTryAgain",
-    unauthorized: "appointments.notAuthorizedToUndoAppointmentBilling",
-    appointment_not_found: "appointments.appointmentNotFound",
-    not_completed: "appointments.billingUndoRequiresCompletedAppointment",
-    completion_event_missing:
-      "appointments.billingUndoCompletionEventMissing",
-    completion_already_undone:
-      "appointments.billingCompletionAlreadyUndone",
-    invalid_previous_status:
-      "appointments.billingUndoPreviousStatusUnavailable",
-    expired: "appointments.billingUndoWindowExpired",
-    activity_unavailable: "appointments.billingUndoActivityUnavailable",
-  } as const;
-  return actionError(key[reason]);
-}
-
-export type UndoInvoiceCompletionResult = ActionResult & {
-  eligibility?: BillingUndoEligibility;
-  targetStatus?: InvoiceUndoStatus;
-  rpc?: string;
-};
-
-export async function undoInvoiceCompletion(
-  id: string,
-): Promise<UndoInvoiceCompletionResult> {
-  const user = await requireMutationRole(["admin", "receptionist", "manager"]);
-  const supabase = await createClient();
-  const { patientId, ...eligibility } = await loadInvoiceUndoEligibility({
-    id,
-    user,
-    supabase,
-  });
-  if (!eligibility.canUndo || !eligibility.targetStatus) {
-    return {
-      error: await invoiceUndoEligibilityError(eligibility.reason),
-      eligibility,
-    };
-  }
-
-  const { data: provenanceRows, error: provenanceError } = await supabase
-    .from("outstanding_settlements")
-    .select("id")
-    .eq("clinic_id", user.clinicId)
-    .eq("source_appointment_id", id)
-    .limit(1);
-
-  if (provenanceError) {
-    return {
-      error: await actionError(
-        "appointments.weCouldNotCompleteThisRequestPleaseTryAgain",
-      ),
-      eligibility,
-    };
-  }
-
-  const undoRpc =
-    (provenanceRows?.length ?? 0) > 0
-      ? "undo_appointment_billing_with_previous_settlement"
-      : "undo_appointment_billing";
-
-  const { error } = await supabase.rpc(undoRpc, {
-    p_appointment_id: id,
-    p_target_status: eligibility.targetStatus,
-  });
-
-  if (error) {
-    logBillingUndoRpcError({
-      appointmentId: id,
-      clinicId: user.clinicId,
-      rpc: undoRpc,
-      error,
-      eligibility,
-    });
-    return {
-      error: await actionError(
-        "appointments.weCouldNotCompleteThisRequestPleaseTryAgain",
-      ),
-      eligibility,
-      rpc: undoRpc,
-    };
-  }
-
-  revalidatePath("/appointments");
-  revalidatePath("/revenue");
-  revalidatePath("/reports/revenue");
-  if (patientId) revalidatePath(`/patients/${patientId}`);
+  if (!result.ok) return domainFailureToActionResult(result);
   return {
     success: true,
-    eligibility,
-    targetStatus: eligibility.targetStatus,
-    rpc: undoRpc,
+    patientId: result.data.patient_id,
+    redirectTo: result.data.redirect_to,
   };
 }
 
-export type InvoiceChannelState = "sent" | "already_sent" | "failed" | "unavailable";
-export type SendInvoiceResult = ActionResult & {
-  channels?: { email: InvoiceChannelState; whatsapp: InvoiceChannelState };
-};
-
-/**
- * Manually deliver a completed appointment's invoice to the patient (§7.3a,
- * 2026-07-19 flow revision). Triggered by the "Send to patient" action after
- * the employee saves the invoice — never automatically. Email and WhatsApp are
- * independent and idempotent, so re-sending only retries the channel that has
- * not yet succeeded.
- */
-export async function sendInvoiceToPatient(
-  appointmentId: string,
-): Promise<SendInvoiceResult> {
+export async function permanentDeleteAppointment(
+  id: string,
+): Promise<ActionResult> {
   const user = await requireMutationRole(["admin", "receptionist", "manager"]);
-  const supabase = await createClient();
-
-  const { data: appt } = await supabase
-    .from("appointments")
-    .select("status, total_amount")
-    .eq("id", appointmentId)
-    .eq("clinic_id", user.clinicId)
-    .single();
-
-  if (!appt) return { error: await actionError("appointments.appointmentNotFound") };
-  if (appt.status !== "completed" || !((appt.total_amount ?? 0) > 0)) {
-    return { error: await actionError("appointments.noInvoiceToSend") };
-  }
-
-  const result = await deliverIssuedInvoice({
-    clinicId: user.clinicId,
-    appointmentId,
-    actorId: user.id,
+  const result = await permanentDeleteAppointmentMutation(user, {
+    appointment_id: id,
   });
-  if (!result) {
-    return { error: await actionError("appointments.failedToSendInvoice") };
-  }
-
-  const normalize = (
-    outcome:
-      | { status: "sent" | "duplicate" | "ambiguous" | "failed" | "not_attempted" }
-      | null,
-  ): InvoiceChannelState => {
-    switch (outcome?.status) {
-      case "sent":
-      case "ambiguous":
-        return "sent";
-      case "duplicate":
-        return "already_sent";
-      case "failed":
-        return "failed";
-      default:
-        return "unavailable";
-    }
-  };
-
-  return {
-    success: true,
-    channels: {
-      email: normalize(result.email),
-      whatsapp: normalize(result.whatsapp),
-    },
-  };
-}
-
-export async function permanentDeleteAppointment(id: string): Promise<ActionResult> {
-  const user = await requireMutationRole(["admin", "receptionist", "manager"]);
-  const supabase = await createClient();
-
-  const { data: appt, error: fetchError } = await supabase
-    .from("appointments")
-    .select("id")
-    .eq("id", id)
-    .eq("clinic_id", user.clinicId)
-    .not("deleted_at", "is", null)
-    .maybeSingle();
-
-  if (fetchError) return { error: await actionError("appointments.weCouldNotCompleteThisRequestPleaseTryAgain") };
-  if (!appt) return { error: await actionError("appointments.appointmentNotFound") };
-
-  const cascaded = await deleteAppointmentDependents(id, user.clinicId);
-  if (cascaded.error) return cascaded;
-
-  const { error } = await supabase
-    .from("appointments")
-    .delete()
-    .eq("id", id)
-    .eq("clinic_id", user.clinicId)
-    .not("deleted_at", "is", null);
-
-  if (error) return { error: await actionError("appointments.weCouldNotCompleteThisRequestPleaseTryAgain") };
-
-  revalidatePath("/appointments");
-  return { success: true };
-}
-
-export async function emptyAppointmentsTrash(): Promise<ActionResult> {
-  const user = await requireMutationRole(["admin", "receptionist", "manager"]);
-  const supabase = await createClient();
-
-  const { data: trashedAppointments, error: selectError } = await supabase
-    .from("appointments")
-    .select("id")
-    .eq("clinic_id", user.clinicId)
-    .not("deleted_at", "is", null);
-
-  if (selectError) return { error: await actionError("appointments.weCouldNotCompleteThisRequestPleaseTryAgain") };
-
-  const ids = (trashedAppointments ?? []).map((appointment) => appointment.id);
-  if (ids.length === 0) return { success: true };
-
-  const adminClient = createClinicScopedAdminClient(user.clinicId);
-
-  const { error: servicesError } = await adminClient
-    .from("appointment_services")
-    .delete()
-    .in("appointment_id", ids)
-    .eq("clinic_id", user.clinicId);
-  if (servicesError) return { error: await actionError("appointments.weCouldNotCompleteThisRequestPleaseTryAgain") };
-
-  const { error: feedbackError } = await adminClient
-    .from("feedback")
-    .delete()
-    .in("appointment_id", ids);
-  if (feedbackError) return { error: await actionError("appointments.weCouldNotCompleteThisRequestPleaseTryAgain") };
-
-  const { error: followUpsError } = await adminClient
-    .from("follow_ups")
-    .delete()
-    .in("appointment_id", ids)
-    .eq("clinic_id", user.clinicId);
-  if (followUpsError) return { error: await actionError("appointments.weCouldNotCompleteThisRequestPleaseTryAgain") };
-
-  const { error: settlementsError } = await adminClient
-    .from("outstanding_settlements")
-    .delete()
-    .in("appointment_id", ids)
-    .eq("clinic_id", user.clinicId);
-  if (settlementsError) return { error: await actionError("appointments.weCouldNotCompleteThisRequestPleaseTryAgain") };
-
-  const { error } = await supabase
-    .from("appointments")
-    .delete()
-    .eq("clinic_id", user.clinicId)
-    .in("id", ids)
-    .not("deleted_at", "is", null);
-
-  if (error) return { error: await actionError("appointments.weCouldNotCompleteThisRequestPleaseTryAgain") };
-
-  revalidatePath("/appointments");
-  return { success: true };
+  return result.ok
+    ? { success: true }
+    : domainFailureToActionResult(result);
 }
 
 export async function cancelAppointment(
@@ -1635,318 +233,101 @@ export async function cancelAppointment(
   return updateAppointmentStatus(id, "cancelled", null, reason);
 }
 
-export interface BillingContext {
-  patientId: string;
-  patientName: string;
-  hasInsurance: boolean;
-  insuranceProviderName: string | null;
-  accountBalance: number;
-  previousOutstandingBalance: number;
-  departmentId: string | null;
-  departmentName: string | null;
-  departmentColor: string | null;
-  packageInfo: {
-    name: string;
-    totalSessions: number;
-    usedSessions: number;
-    remainingSessions: number;
-    sessionNumber: number | null;
-    pricePerSession: number | null;
-  } | null;
-  services: { id: string; name: string; price: number; department_id: string }[];
-}
-
-/**
- * Loads the data the BillingDialog needs to render: department services,
- * patient account balance, and a couple of display fields. Single round-trip
- * from the client when the dialog opens.
- */
-export async function getBillingContext(
-  appointmentId: string,
-): Promise<{ data?: BillingContext; error?: string }> {
-  const user = await requireRole(["admin", "receptionist", "manager"]);
-  const supabase = await createClient();
-
-  const { data: appt, error: apptError } = await supabase
-    .from("appointments")
-    .select(
-      "id, patient_id, department_id, insurance_provider_id, package_session_number, patients(full_name), departments(name, color), insurance_providers(name), patient_packages(name, total_sessions, used_sessions, price_per_session)",
-    )
-    .eq("id", appointmentId)
-    .eq("clinic_id", user.clinicId)
-    .single();
-
-  if (apptError || !appt) return { error: await actionError("appointments.appointmentNotFound") };
-
-  const [balance, { data: previousOutstandingRows }] = await Promise.all([
-    getPatientAccountBalance(appt.patient_id, user.clinicId),
-    supabase
-      .from("appointments")
-      .select("outstanding_amount")
-      .eq("clinic_id", user.clinicId)
-      .eq("patient_id", appt.patient_id)
-      .neq("id", appointmentId)
-      .is("deleted_at", null)
-      .gt("outstanding_amount", 0),
-  ]);
-  const previousOutstandingBalance = Number(
-    (previousOutstandingRows ?? [])
-      .reduce((sum, row) => sum + Number(row.outstanding_amount ?? 0), 0)
-      .toFixed(2),
-  );
-
-  let services: BillingContext["services"] = [];
-  if (appt.department_id) {
-    const { data: svc } = await supabase
-      .from("services")
-      .select("id, name, price, department_id")
-      .eq("clinic_id", user.clinicId)
-      .eq("department_id", appt.department_id)
-      .order("name", { ascending: true });
-    services = (svc ?? []).map((s) => ({
-      id: s.id,
-      name: s.name,
-      price: Number(s.price),
-      department_id: s.department_id,
-    }));
-  }
-
-  // Fallback: if department has no services configured, surface all clinic services
-  // so reception can still bill from the price list.
-  if (services.length === 0) {
-    const { data: svc } = await supabase
-      .from("services")
-      .select("id, name, price, department_id")
-      .eq("clinic_id", user.clinicId)
-      .order("name", { ascending: true });
-    services = (svc ?? []).map((s) => ({
-      id: s.id,
-      name: s.name,
-      price: Number(s.price),
-      department_id: s.department_id ?? "",
-    }));
-  }
-
-  // "No Insurance (Self-Pay)" is a directory entry used at booking to flag
-  // self-paying patients — treat it as no insurance for billing purposes so
-  // the invoice doesn't show a "Covered by …" section.
-  const providerName = appt.insurance_providers?.name ?? null;
-  const isSelfPay =
-    !!providerName && /no\s*insurance|self[\s-]?pay/i.test(providerName);
-  const packageRow = appt.patient_packages;
-
-  return {
-    data: {
-      patientName: appt.patients?.full_name ?? "",
-      patientId: appt.patient_id,
-      hasInsurance: Boolean(appt.insurance_provider_id) && !isSelfPay,
-      insuranceProviderName: isSelfPay ? null : providerName,
-      accountBalance: balance,
-      previousOutstandingBalance,
-      departmentId: appt.department_id,
-      departmentName: appt.departments?.name ?? null,
-      departmentColor: appt.departments?.color ?? null,
-      packageInfo: packageRow
-        ? {
-            name: packageRow.name,
-            totalSessions: Number(packageRow.total_sessions),
-            usedSessions: Number(packageRow.used_sessions),
-            remainingSessions: Math.max(
-              0,
-              Number(packageRow.total_sessions) - Number(packageRow.used_sessions),
-            ),
-            sessionNumber: appt.package_session_number ?? null,
-            pricePerSession:
-              packageRow.price_per_session == null
-                ? null
-                : Number(packageRow.price_per_session),
-          }
-        : null,
-      services,
-    },
-  };
-}
-
-/**
- * Returns whether a patient already has at least one active (non-cancelled,
- * non-no_show, non-deleted) appointment on the calendar day of scheduledAt.
- * Used by the booking form to show a soft warning before submitting.
- * Errors are treated as "no conflict" so they never block the booking flow.
- */
-export async function checkSameDayPatient(
-  patientId: string,
-  scheduledAt: string,
-): Promise<{ hasSameDay: boolean }> {
-  try {
-    const user = await requireRole(["admin", "receptionist", "manager", "assistant"]);
-    const supabase = await createClient();
-
-    const date = new Date(scheduledAt);
-    const dayStart = new Date(date);
-    dayStart.setHours(0, 0, 0, 0);
-    const dayEnd = new Date(date);
-    dayEnd.setHours(23, 59, 59, 999);
-
-    const { data, error } = await supabase
-      .from("appointments")
-      .select("id")
-      .eq("patient_id", patientId)
-      .eq("clinic_id", user.clinicId)
-      .is("deleted_at", null)
-      .not("status", "in", '("cancelled","no_show","replaced")')
-      .gte("scheduled_at", dayStart.toISOString())
-      .lte("scheduled_at", dayEnd.toISOString())
-      .limit(1);
-
-    if (error || !data) return { hasSameDay: false };
-    return { hasSameDay: data.length > 0 };
-  } catch {
-    return { hasSameDay: false };
-  }
-}
-
-// ── Conflict resolution ───────────────────────────────────────────────────────
-
-export type ConflictingAppointment = {
-  id: string;
-  scheduled_at: string;
-  duration_minutes: number;
-  patients: { full_name: string } | null;
-  departments: { name: string; color: string | null } | null;
-  profiles: { full_name: string } | null;
-};
-
-/**
- * Returns pending appointments for the same doctor that overlap in time with
- * the given appointment. Used before confirming to detect scheduling conflicts.
- */
-export async function getConflictingPendingAppointments(
-  appointmentId: string,
-): Promise<{ data?: ConflictingAppointment[]; error?: string }> {
-  try {
-    const user = await requireRole(["admin", "receptionist", "manager", "assistant"]);
-    const supabase = await createClient();
-
-    // Fetch the target appointment
-    const { data: target, error: targetErr } = await supabase
-      .from("appointments")
-      .select("doctor_id, scheduled_at, duration_minutes")
-      .eq("id", appointmentId)
-      .eq("clinic_id", user.clinicId)
-      .single();
-
-    if (targetErr || !target) return { error: await actionError("appointments.appointmentNotFound") };
-
-    const targetStart = new Date(target.scheduled_at);
-    const targetEnd = new Date(targetStart.getTime() + (target.duration_minutes ?? 30) * 60_000);
-
-    // Fetch all pending appointments for the same doctor on the same date
-    const dayStart = new Date(targetStart);
-    dayStart.setHours(0, 0, 0, 0);
-    const dayEnd = new Date(targetStart);
-    dayEnd.setHours(23, 59, 59, 999);
-
-    const { data: candidates, error: candErr } = await supabase
-      .from("appointments")
-      .select(
-        "id, scheduled_at, duration_minutes, patients(full_name), departments(name, color), profiles!doctor_id(full_name)",
-      )
-      .eq("clinic_id", user.clinicId)
-      .eq("doctor_id", target.doctor_id)
-      .eq("status", "pending")
-      .neq("id", appointmentId)
-      .is("deleted_at", null)
-      .gte("scheduled_at", dayStart.toISOString())
-      .lte("scheduled_at", dayEnd.toISOString());
-
-    if (candErr) return { error: await actionError("appointments.failedToCheckForConflicts") };
-
-    // Filter to true time overlaps in JS
-    const conflicts = (candidates ?? []).filter((c) => {
-      const cStart = new Date(c.scheduled_at);
-      const cEnd = new Date(cStart.getTime() + (c.duration_minutes ?? 30) * 60_000);
-      return cStart < targetEnd && cEnd > targetStart;
-    });
-
-    return { data: conflicts as unknown as ConflictingAppointment[] };
-  } catch {
-    return { error: await actionError("appointments.failedToCheckForConflicts") };
-  }
-}
-
-/**
- * Confirms an appointment and displaces all listed conflicting pending
- * appointments (soft-deletes them and marks them as displaced so they appear
- * in the rebook queue instead of the recycle bin).
- */
 export async function confirmAndDisplaceConflicts(
   appointmentId: string,
   conflictingIds: string[],
 ): Promise<ActionResult> {
-  const user = await requireMutationRole(["admin", "receptionist", "manager", "assistant"]);
-  const supabase = await createClient();
-
-  // Confirm the target appointment
-  const { error: confirmErr } = await supabase
-    .from("appointments")
-    .update({ status: "confirmed", updated_by: user.id })
-    .eq("id", appointmentId)
-    .eq("clinic_id", user.clinicId)
-    .eq("status", "pending");
-
-  if (confirmErr) {
-    if (confirmErr.code === "check_violation" || confirmErr.message?.includes("transition")) {
-      return { error: await actionError("appointments.cannotConfirmThisAppointment") };
-    }
-    return { error: await actionError("appointments.failedToConfirmAppointment") };
-  }
-
-  // Displace all conflicting pending appointments
-  if (conflictingIds.length > 0) {
-    const now = new Date().toISOString();
-    const { error: displaceErr } = await supabase
-      .from("appointments")
-      .update({
-        deleted_at: now,
-        displaced_at: now,
-        displaced_by: user.id,
-      })
-      .in("id", conflictingIds)
-      .eq("clinic_id", user.clinicId)
-      .eq("status", "pending");
-
-    if (displaceErr) {
-      return { error: await actionError("appointments.appointmentConfirmedButFailedToRemoveConflictingAppointments") };
-    }
-  }
-
-  // §7.2a: notify the patient their appointment is confirmed. Best-effort.
-  await notifyAppointmentEvent({
-    clinicId: user.clinicId,
-    appointmentId,
-    event: "confirmed",
+  const user = await requireMutationRole([
+    "admin",
+    "receptionist",
+    "manager",
+    "assistant",
+  ]);
+  const result = await confirmAndDisplaceAppointmentsMutation(user, {
+    appointment_id: appointmentId,
+    conflicting_ids: conflictingIds,
   });
-
-  revalidatePath("/appointments");
-  return { success: true };
+  return result.ok
+    ? { success: true }
+    : domainFailureToActionResult(result);
 }
 
-/**
- * Permanently removes a displaced appointment from the rebook queue.
- */
-export async function dismissDisplacedAppointment(id: string): Promise<ActionResult> {
+export async function dismissDisplacedAppointment(
+  id: string,
+): Promise<ActionResult> {
   const user = await requireMutationRole(["admin", "receptionist", "manager"]);
-  const supabase = await createClient();
+  const result = await dismissDisplacedAppointmentMutation(user, {
+    appointment_id: id,
+  });
+  return result.ok
+    ? { success: true }
+    : domainFailureToActionResult(result);
+}
 
-  const { error } = await supabase
-    .from("appointments")
-    .delete()
-    .eq("id", id)
-    .eq("clinic_id", user.clinicId)
-    .not("displaced_at", "is", null);
-
-  if (error) return { error: await actionError("appointments.failedToDismissAppointment") };
-
-  revalidatePath("/appointments");
-  return { success: true };
+// Read-only helpers and the bulk-destructive UI-only operation remain on their
+// existing paths. The Assistant intentionally does not register empty-trash.
+export async function getReplacementDoctorOptions(...args: Parameters<typeof legacyGetReplacementDoctorOptions>) {
+  return legacyGetReplacementDoctorOptions(...args);
+}
+export async function getReplacementAvailability(...args: Parameters<typeof legacyGetReplacementAvailability>) {
+  return legacyGetReplacementAvailability(...args);
+}
+export async function getAppointmentReplacementChain(...args: Parameters<typeof legacyGetAppointmentReplacementChain>) {
+  return legacyGetAppointmentReplacementChain(...args);
+}
+export async function getInvoiceUndoEligibility(...args: Parameters<typeof legacyGetInvoiceUndoEligibility>) {
+  return legacyGetInvoiceUndoEligibility(...args);
+}
+export async function undoInvoiceCompletion(
+  id: string,
+): Promise<LegacyUndoInvoiceCompletionResult> {
+  const user = await requireMutationRole(["admin", "receptionist", "manager"]);
+  const result = await undoAppointmentBillingMutation(user, {
+    appointment_id: id,
+  });
+  if (!result.ok) {
+    return {
+      ...(await domainFailureToActionResult(result)),
+      ...(result.details?.eligibility
+        ? { eligibility: result.details.eligibility }
+        : {}),
+      ...(typeof result.details?.rpc === "string"
+        ? { rpc: result.details.rpc }
+        : {}),
+    } as LegacyUndoInvoiceCompletionResult;
+  }
+  return {
+    success: true,
+    targetStatus: result.data.status as InvoiceUndoStatus | undefined,
+    eligibility: result.data.eligibility,
+    rpc: result.data.rpc,
+  };
+}
+export async function sendInvoiceToPatient(
+  appointmentId: string,
+): Promise<LegacySendInvoiceResult> {
+  const user = await requireMutationRole(["admin", "receptionist", "manager"]);
+  const result = await sendInvoiceToPatientMutation(user, {
+    appointment_id: appointmentId,
+  });
+  if (!result.ok) return domainFailureToActionResult(result);
+  return {
+    success: true,
+    channels: result.data.channels as {
+      email: "sent" | "already_sent" | "failed" | "unavailable";
+      whatsapp: "sent" | "already_sent" | "failed" | "unavailable";
+    },
+  };
+}
+export async function emptyAppointmentsTrash(...args: Parameters<typeof legacyEmptyAppointmentsTrash>) {
+  return legacyEmptyAppointmentsTrash(...args);
+}
+export async function getBillingContext(...args: Parameters<typeof legacyGetBillingContext>) {
+  return legacyGetBillingContext(...args);
+}
+export async function checkSameDayPatient(...args: Parameters<typeof legacyCheckSameDayPatient>) {
+  return legacyCheckSameDayPatient(...args);
+}
+export async function getConflictingPendingAppointments(...args: Parameters<typeof legacyGetConflictingPendingAppointments>) {
+  return legacyGetConflictingPendingAppointments(...args);
 }

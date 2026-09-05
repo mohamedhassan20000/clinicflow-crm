@@ -1,17 +1,16 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { actionError } from "@/lib/i18n/action-errors";
 import { createClinicScopedAdminClient } from "@/lib/supabase/admin";
 import { requireMutationRole, requireRole } from "@/lib/rbac";
 import { isPrimaryClinicAdmin } from "@/lib/primary-admin";
-import { getEntitlements, hasFeature } from "@/lib/entitlements";
-import { AI_FINANCIAL_INSIGHTS_FEATURE } from "@/lib/ai/authorization";
 import {
   AI_USER_PERMISSION_KEYS,
   type AiUserPermissionKey,
 } from "@/lib/ai/permissions";
 import type { Database } from "@/types/database";
+import { domainFailureToActionResult } from "@/actions/_domain";
+import { setAiPermissionMutation } from "@/lib/settings/mutations";
 
 type UserRole = Database["public"]["Enums"]["user_role"];
 
@@ -149,52 +148,10 @@ export async function setStaffAiPermission(
     return { error: await actionError("ai-permissions.unknownPermission") };
   }
   const user = await requireMutationRole("admin");
-  // Same rule as the page and as listStaffAiPermissions — see requirePrimaryAdmin.
-  if (!(await isPrimaryClinicAdmin(user.id, user.clinicId))) {
-    return { error: await actionError("ai-permissions.primaryAdminOnly") };
-  }
-
-  const entitlements = await getEntitlements(user.clinicId);
-  if (
-    permissionKey === "ai.financial_insights" &&
-    !hasFeature(entitlements, AI_FINANCIAL_INSIGHTS_FEATURE)
-  ) {
-    return { error: await actionError("ai-permissions.planDoesNotIncludeFinancialAi") };
-  }
-
-  const adminClient = createClinicScopedAdminClient(user.clinicId);
-  const { data: target, error: targetError } = await adminClient
-    .from("profiles")
-    .select("id, role, clinic_id")
-    .eq("id", targetUserId)
-    .eq("clinic_id", user.clinicId)
-    .eq("is_deleted", false)
-    .is("deleted_at", null)
-    .single();
-  if (targetError || !target) {
-    return { error: await actionError("ai-permissions.staffMemberNotFound") };
-  }
-  if (!GRANTABLE_ROLES[permissionKey].includes(target.role)) {
-    return { error: await actionError("ai-permissions.thisPermissionDoesNotApplyToThatRole") };
-  }
-
-  const { error } = await adminClient.from("user_ai_permissions").upsert(
-    {
-      user_id: target.id,
-      clinic_id: target.clinic_id,
-      permission_key: permissionKey,
-      granted,
-      updated_by: user.id,
-    },
-    // Matches the tenant-scoped primary key. `target.clinic_id` is the actor's
-    // own clinic (the select above filters on it), and the table's composite FK
-    // to profiles(id, clinic_id) rejects the row outright if it ever were not.
-    { onConflict: "clinic_id,user_id,permission_key" },
-  );
-  if (error) {
-    return { error: await actionError("ai-permissions.weCouldNotCompleteThisRequestPleaseTryAgain") };
-  }
-
-  revalidatePath("/settings/ai");
-  return { success: true };
+  const result = await setAiPermissionMutation(user, {
+    target_user_id: targetUserId,
+    permission_key: permissionKey,
+    granted,
+  });
+  return result.ok ? { success: true } : domainFailureToActionResult(result);
 }

@@ -23,6 +23,10 @@ import {
   type ClinicReportId,
 } from "@/lib/ai/clinic-reports";
 import { getVisibleReportIds } from "@/lib/server-report-permissions";
+import { resolveAuthorizedResources } from "@/lib/ai/resources/registry";
+import type { ResourceId } from "@/lib/ai/resources/types";
+import { describeAuthorizedActions } from "@/lib/ai/actions/execute";
+import type { ActionRiskClass } from "@/lib/ai/actions/types";
 
 /**
  * Why the financial group is absent, when it is. The distinction is the whole
@@ -84,6 +88,30 @@ export type AssistantCapabilities = {
   financial: FinancialCapabilityState;
   /** Exact report ids the shared report policy authorizes for this user. */
   allowedReportIds: readonly ClinicReportId[];
+  /** Permission-filtered generic read resources served by the four Phase 1 tools. */
+  resources: readonly {
+    id: ResourceId;
+    label: string;
+    description: string;
+  }[];
+  /**
+   * Permission-filtered registered write actions (Phase 3–6), resolved through
+   * the same `assertActionAccess` the executor runs.
+   *
+   * Phase 7 completion. The panel already described what the assistant could
+   * *read*; after the write phases it could also create an appointment, issue a
+   * document and change a role, and none of that was visible anywhere the user
+   * looks. A capability surface that under-reports what the assistant can change
+   * is the more dangerous direction of drift, so the panel now enumerates
+   * actions with their risk class — every one of which still requires an
+   * on-screen confirmation before anything is written.
+   */
+  actions: readonly {
+    id: string;
+    label: string;
+    description: string;
+    risk: ActionRiskClass;
+  }[];
 };
 
 /**
@@ -139,7 +167,9 @@ const CLINIC_ANALYTICS_TOOLS = [
 ] as const;
 
 const OPERATIONAL_TOOLS = [
-  "list_appointments",
+  "query_resource",
+  "get_record",
+  "aggregate_resource",
   "count_new_patients",
   "list_pending_followups",
   "run_clinic_report",
@@ -149,7 +179,6 @@ export const FINANCIAL_TOOL_NAMES = [
   "get_revenue_summary",
   "compare_revenue_periods",
   "list_outstanding_invoices",
-  "send_invoice_reminders",
 ] as const;
 
 const EMPTY: AssistantCapabilities = {
@@ -159,6 +188,8 @@ const EMPTY: AssistantCapabilities = {
   operational: false,
   financial: "not_applicable",
   allowedReportIds: [],
+  resources: [],
+  actions: [],
 };
 
 /**
@@ -191,23 +222,18 @@ export async function resolveAssistantCapabilities(
       user,
       locale,
     });
-    const workflowMount = await resolveToolMount({
-      user,
-      locale,
-      taskClass: "staff_workflow",
-    });
-    const definitions = [
-      ...baseMount.definitions,
-      ...(workflowMount.workflowStepDefinitions ?? []).filter(
-        (definition) => definition.workflow.kind === "action",
-      ),
-    ];
-    const grantedPermissions = new Set([
-      ...(baseMount.grantedPermissions ?? []),
-      ...(workflowMount.grantedPermissions ?? []),
-    ]);
+    const definitions = baseMount.definitions;
+    const grantedPermissions = new Set(baseMount.grantedPermissions ?? []);
     const toolNames = definitions.map((definition) => definition.name);
     const mounted = new Set(toolNames);
+    const resources = mounted.has("query_resource")
+      ? await resolveAuthorizedResources(user)
+      : [];
+    // Gated on the mount for the same reason as resources: a user whose turn
+    // cannot reach `execute_action` is not told about actions they cannot run.
+    const actions = mounted.has("execute_action")
+      ? await describeAuthorizedActions(user)
+      : [];
 
     return {
       toolNames,
@@ -226,6 +252,17 @@ export async function resolveAssistantCapabilities(
             }),
           )
         : [],
+      resources: resources.map((definition) => ({
+        id: definition.id,
+        label: definition.labels[locale],
+        description: definition.description[locale],
+      })),
+      actions: actions.map((definition) => ({
+        id: definition.id,
+        label: definition.labels[locale],
+        description: definition.description[locale],
+        risk: definition.risk,
+      })),
     };
   } catch (error) {
     // Capabilities are presentation data. A failure here must degrade the

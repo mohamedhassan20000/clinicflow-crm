@@ -60,6 +60,7 @@ function AppointmentActionsInner({
   onActionComplete,
   onBillingChanged,
   showBillingUndo = false,
+  overduePending = false,
 }: {
   appointmentId: string;
   currentStatus: Status;
@@ -77,6 +78,8 @@ function AppointmentActionsInner({
   onBillingChanged?: () => void;
   /** Persistent billing Undo belongs in the appointment detail dialog only. */
   showBillingUndo?: boolean;
+  /** Derived UI state; the database status is still `pending`. */
+  overduePending?: boolean;
 }) {
   const t = useTranslations("appointments");
   const router = useRouter();
@@ -527,7 +530,7 @@ function AppointmentActionsInner({
     });
   }
 
-  const showConfirm = canOperate && effectiveStatus === "pending";
+  const showConfirm = canOperate && effectiveStatus === "pending" && !overduePending;
   const showArrive = canOperate && effectiveStatus === "confirmed";
   const showComplete =
     canComplete &&
@@ -538,16 +541,18 @@ function AppointmentActionsInner({
     canOperate &&
     (effectiveStatus === "pending" ||
       effectiveStatus === "confirmed");
-  const showNoShow = canOperate && effectiveStatus === "confirmed";
+  const showNoShow =
+    canOperate &&
+    (effectiveStatus === "confirmed" || (overduePending && effectiveStatus === "pending"));
   const showStartSession = isAssignedDoctor;
-  // Replace is a dedicated reschedule workflow, only for a FUTURE pending/
-  // confirmed appointment. Non-financial → available to the same operators.
+  // Replace is the existing reschedule workflow. It also resolves a derived
+  // overdue-pending item while preserving the atomic replacement chain.
   const showReplace =
     canReplace &&
     (effectiveStatus === "pending" || effectiveStatus === "confirmed") &&
     !!doctorId &&
     !!scheduledAt &&
-    new Date(scheduledAt) > new Date();
+    (new Date(scheduledAt) > new Date() || overduePending);
   const checkingBillingUndo =
     showBillingUndoAction &&
     (loadingUndoEligibility || undoEligibility === null);

@@ -158,8 +158,9 @@ Admins can grant per-user page visibility overrides through Settings → Staff, 
 | Table | Purpose |
 |---|---|
 | `clinics` | Clinic settings and branding |
-| `clinic_working_hours` | Weekly clinic operating hours |
-| `doctor_schedules` | Per-doctor working-hour overrides |
+| `clinic_working_hours` | Weekly clinic opening intervals — when the clinic is open (non-overlapping) |
+| `staff_shift_templates` | Reusable named staff shifts (Morning, Evening, …) — may overlap |
+| `doctor_schedules` | Per-staff concrete working intervals, one or more per weekday |
 | `profiles` | User accounts linked to Supabase Auth |
 | `patients` | Patient demographic records |
 | `appointments` | Appointment scheduling and billing |

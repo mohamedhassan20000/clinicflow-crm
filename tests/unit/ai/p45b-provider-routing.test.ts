@@ -11,8 +11,10 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@ai-sdk/anthropic", () => ({ createAnthropic: mocks.createAnthropic }));
-vi.mock("@/lib/ai/platform/managed-gateway", () => ({
-  managedGatewayProvider: { prepare: mocks.prepareManaged },
+// P12: hybrid's fallback target is the resolved MANAGED provider, which now
+// defaults to direct Anthropic rather than the gateway.
+vi.mock("@/lib/ai/platform/managed-provider", () => ({
+  resolveManagedProvider: () => ({ mode: "managed", prepare: mocks.prepareManaged }),
 }));
 
 import { getCertifiedModelRoute, getTaskPolicy } from "@/lib/ai/platform/registry";
@@ -58,8 +60,8 @@ beforeEach(() => {
   mocks.createAnthropic.mockImplementation(() => () => mocks.direct);
   mocks.prepareManaged.mockImplementation(() => ({
     model: mocks.managed,
-    providerOptions: { gateway: { only: ["anthropic"], zeroDataRetention: true } },
-    transport: "vercel_ai_gateway",
+    providerOptions: {},
+    transport: "anthropic_direct",
   }));
 });
 
@@ -83,7 +85,7 @@ describe("P4.5B tenant provider routing", () => {
     expect(mocks.prepareManaged).not.toHaveBeenCalled();
   });
 
-  it("hybrid audits once, then stays on the certified managed route", async () => {
+  it("hybrid audits once, then stays on the certified managed DIRECT route", async () => {
     let directCalls = 0;
     mocks.direct = new MockLanguageModelV3({
       provider: "anthropic",
@@ -94,7 +96,7 @@ describe("P4.5B tenant provider routing", () => {
       },
     });
     const managedCalls = { calls: 0 };
-    mocks.managed = successModel("gateway", managedCalls);
+    mocks.managed = successModel("managed-direct", managedCalls);
     const onFallback = vi.fn().mockResolvedValue(undefined);
     const prepared = prepareTenantProvider({
       mode: "hybrid",
@@ -106,8 +108,8 @@ describe("P4.5B tenant provider routing", () => {
     const first = await generateText({ model: prepared.model, prompt: "first", maxRetries: 0 });
     const second = await generateText({ model: prepared.model, prompt: "second", maxRetries: 0 });
 
-    expect(first.text).toBe("gateway");
-    expect(second.text).toBe("gateway");
+    expect(first.text).toBe("managed-direct");
+    expect(second.text).toBe("managed-direct");
     expect(directCalls).toBe(1);
     expect(managedCalls.calls).toBe(2);
     expect(onFallback).toHaveBeenCalledOnce();
@@ -121,7 +123,7 @@ describe("P4.5B tenant provider routing", () => {
       doGenerate: async () => { throw new DOMException("provider timeout", "TimeoutError"); },
     });
     const managedCalls = { calls: 0 };
-    mocks.managed = successModel("gateway", managedCalls);
+    mocks.managed = successModel("managed-direct", managedCalls);
     const prepared = prepareTenantProvider({
       mode: "hybrid",
       secret: "sk-ant-api03_example-secret-value",
@@ -141,7 +143,7 @@ describe("P4.5B tenant provider routing", () => {
       doGenerate: async () => { throw new Error("invalid request shape"); },
     });
     const managedCalls = { calls: 0 };
-    mocks.managed = successModel("gateway", managedCalls);
+    mocks.managed = successModel("managed-direct", managedCalls);
     const onFallback = vi.fn();
     const prepared = prepareTenantProvider({
       mode: "hybrid",

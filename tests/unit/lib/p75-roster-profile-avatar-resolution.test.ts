@@ -15,7 +15,10 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("server-only", () => ({}));
-vi.mock("@/lib/documents/assets", () => ({ inlineClinicLogo: mocks.inlineClinicLogo }));
+vi.mock("@/lib/documents/assets", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/documents/assets")>(),
+  inlineClinicLogo: mocks.inlineClinicLogo,
+}));
 vi.mock("@/lib/supabase/server", () => ({ createClient: mocks.createClient }));
 
 import { resolveRosterProfileDocumentSnapshot } from "@/lib/documents/resolvers/roster-profile";
@@ -71,7 +74,7 @@ describe("roster/profile document avatar resolution", () => {
     mocks.storageFrom.mockImplementation(() => ({ download: mocks.download }));
   });
 
-  it("inlines compact patient photos into Patient List preview and issuance snapshots", async () => {
+  it("never reads a patient photo for Patient List preview or issuance snapshots", async () => {
     const avatarPath = `avatars/clinic-1/${PATIENT_ID}/avatar.png`;
     mocks.createClient.mockResolvedValue(clientWith({
       ...commonResults(),
@@ -84,15 +87,22 @@ describe("roster/profile document avatar resolution", () => {
 
     const params = { documentType: "PATIENT_LIST_REPORT" as const };
     const preview = await resolveRosterProfileDocumentSnapshot(user, params);
-    const issuance = await resolveRosterProfileDocumentSnapshot(user, params, { inlineAssets: true });
+    const issuance = await resolveRosterProfileDocumentSnapshot(user, params);
 
-    expect(preview.data).toMatchObject({ kind: "patient-list", rows: [{ imageSrc: expect.stringMatching(/^data:image\/webp;base64,/) }] });
-    expect(issuance.data).toMatchObject({ kind: "patient-list", rows: [{ imageSrc: expect.stringMatching(/^data:image\/webp;base64,/) }] });
-    expect(mocks.storageFrom).toHaveBeenCalledWith("patient-assets");
-    expect(mocks.download).toHaveBeenCalledWith(avatarPath);
+    // A roster listing carries names only, so no photo reaches the snapshot and
+    // no avatar bytes are downloaded on the preview or the issuance path.
+    for (const snapshot of [preview, issuance]) {
+      expect(snapshot.data).toMatchObject({ kind: "patient-list", rows: [{ fullName: "Ada Lovelace" }] });
+      const [row] = (snapshot.data as { rows: Record<string, unknown>[] }).rows;
+      expect(row).not.toHaveProperty("imageSrc");
+      expect(row).not.toHaveProperty("doctorImageSrc");
+    }
+    expect(mocks.storageFrom).not.toHaveBeenCalled();
+    expect(mocks.download).not.toHaveBeenCalled();
+    expect(avatarPath).toBeTruthy();
   });
 
-  it("resolves staff-list photos from both supported staff profile stores", async () => {
+  it("never reads staff photos for the System Members roster", async () => {
     const secondStaffId = "66666666-6666-4666-8666-666666666666";
     mocks.createClient.mockResolvedValue(clientWith({
       ...commonResults(),
@@ -112,11 +122,13 @@ describe("roster/profile document avatar resolution", () => {
     );
 
     expect(snapshot.data).toMatchObject({ kind: "system-members", rows: [
-      { imageSrc: expect.stringMatching(/^data:image\/webp;base64,/) },
-      { imageSrc: expect.stringMatching(/^data:image\/webp;base64,/) },
+      { fullName: "Dr. Sara Emad" },
+      { fullName: "Mina Ali" },
     ] });
-    expect(mocks.storageFrom).toHaveBeenCalledWith("clinic-assets");
-    expect(mocks.storageFrom).toHaveBeenCalledWith("avatars");
+    for (const row of (snapshot.data as { rows: Record<string, unknown>[] }).rows) {
+      expect(row).not.toHaveProperty("imageSrc");
+    }
+    expect(mocks.storageFrom).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -145,7 +157,7 @@ describe("roster/profile document avatar resolution", () => {
     const params = { documentType: "STAFF_FILE" as const, staffId: STAFF_ID };
 
     const preview = await resolveRosterProfileDocumentSnapshot(user, params);
-    const issuance = await resolveRosterProfileDocumentSnapshot(user, params, { inlineAssets: true });
+    const issuance = await resolveRosterProfileDocumentSnapshot(user, params);
 
     expect(preview.data).toMatchObject({ kind: "staff-file", imageSrc: expect.stringMatching(/^data:image\/png;base64,/) });
     expect(issuance.data).toMatchObject({ kind: "staff-file", imageSrc: expect.stringMatching(/^data:image\/png;base64,/) });

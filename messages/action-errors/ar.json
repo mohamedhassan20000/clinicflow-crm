@@ -173,6 +173,11 @@
     "invalidMetaOnboardingDetails": "تعذر إكمال اتصال واتساب. يرجى إعادة بدء عملية الربط.",
     "metaPhoneNumberAlreadyConnected": "رقم واتساب هذا مرتبط بالفعل بعيادة أخرى.",
     "couldNotCompleteMetaOnboarding": "تعذر إكمال اتصال واتساب مع Meta. يرجى المحاولة مرة أخرى.",
+    "couldNotConnectWhatsAppBusiness": "تعذّر إكمال ربط واتساب الأعمال. يرجى إعادة المحاولة.",
+    "enterValidMetaApiCredentials": "أدخل بيانات Meta API صحيحة. تحقّق من معرّف التطبيق والمفتاح السري ورمز الوصول ومعرّف رقم الهاتف ومعرّف حساب واتساب للأعمال.",
+    "couldNotVerifyMetaApiCredentials": "لم تقبل Meta هذه البيانات. راجعها في تطبيق Meta الخاص بك ثم حاول مرة أخرى.",
+    "disconnectBeforeConnectingADifferentNumber": "يوجد رقم واتساب آخر متصل بالفعل. افصله قبل توصيل رقم مختلف.",
+    "couldNotDisconnectWhatsApp": "تعذّر فصل واتساب. حاول مرة أخرى.",
     "couldNotRefreshConnectionStatus": "تعذر تحديث حالة الاتصال. يرجى المحاولة مرة أخرى.",
     "invalidWhatsAppHealthAction": "إجراء تشخيص واتساب هذا غير متاح.",
     "whatsAppHealthChannelUnavailable": "اربط قناة واتساب قبل تشغيل التشخيص.",
@@ -184,9 +189,14 @@
     "whatsAppChannelCredentialsUnavailable": "بيانات اعتماد قناة واتساب غير متاحة.",
     "couldNotSubmitWhatsAppTemplate": "تعذر إرسال القالب إلى واتساب.",
     "couldNotSaveTemplateSubmission": "تم إرسال القالب، لكن تعذر حفظ حالته لدى المزود.",
+    "invalidBulkSend": "اختر محادثة واحدة على الأقل واكتب الرسالة المراد إرسالها.",
+    "bulkWhatsAppOffline": "واتساب غير متصل حاليًا. أعد ربط واتساب الخاص بالعيادة ثم ابدأ الإرسال مرة أخرى.",
+    "couldNotStartBulkSend": "تعذّر بدء الإرسال الجماعي. حاول مرة أخرى.",
     "invalidInboxReply": "أدخل ردًا صالحًا أو أكمل جميع قيم القالب.",
     "invalidConversationUpdate": "تحديث المحادثة غير صالح.",
     "conversationNotFound": "لم يتم العثور على المحادثة.",
+    "conversationNotLinked": "هذه المحادثة غير مرتبطة بملف مريض بعد.",
+    "patientHistoryUnavailable": "تعذّر تحميل هذا السجل الآن. يُرجى المحاولة مرة أخرى.",
     "conversationClosed": "أعد فتح هذه المحادثة قبل الرد.",
     "serviceWindowClosed": "أُغلقت نافذة خدمة واتساب البالغة 24 ساعة. اختر قالبًا معتمدًا.",
     "templateUnavailable": "هذا القالب غير متاح أو غير معتمد أو قيمه غير مكتملة.",
@@ -202,7 +212,17 @@
     "templateNameAlreadyExists": "يوجد قالب بهذا الاسم واللغة بالفعل.",
     "templateCannotBeDeletedWhileSubmitted": "لا يمكن حذف القالب أثناء مراجعته.",
     "couldNotDeleteTemplate": "تعذر حذف القالب. يرجى المحاولة مرة أخرى.",
-    "suggestionUnavailable": "لم يعد هذا الرد المقترح متاحًا."
+    "suggestionUnavailable": "لم يعد هذا الرد المقترح متاحًا.",
+    "theWhatsAppConnectionServiceIsUnavailable": "خدمة ربط واتساب غير متاحة حالياً. يرجى المحاولة مرة أخرى بعد قليل.",
+    "thisClinicsWhatsAppSessionIsHeldByAnotherService": "اتصال واتساب لهذه العيادة تديره نسخة أخرى من خدمة الربط. يرجى المحاولة مرة أخرى بعد أن تُحرّرها تلك النسخة.",
+    "disconnectTheMetaApiConnectionFirst": "هذه العيادة متصلة بالفعل عبر Meta API. افصل الاتصال أولاً للربط باستخدام رمز QR.",
+    "whatsAppServiceUpdateRequiredBeforePairing": "يلزم تحديث خدمة واتساب قبل ربط الحساب.",
+    "whatsAppHistorySyncNeedsConnectedSession": "قم بربط واتساب قبل مزامنة السجل.",
+    "whatsAppHistorySyncHasNoAnchorPoint": "لا توجد رسائل مستوردة يمكن مزامنة سجل أقدم منها بعد. لا يستطيع واتساب توسيع محادثة لم يسلّم لها رسالة واحدة على الأقل.",
+    "whatsAppHistorySyncAlreadyRunning": "هناك مزامنة سجل قيد التشغيل بالفعل. يرجى انتظار انتهائها.",
+    "whatsAppHistorySyncTooSoon": "تمت مزامنة السجل منذ قليل. يرجى المحاولة مرة أخرى بعد بضع دقائق.",
+    "whatsAppHistorySyncNotSupportedByService": "إصدار خدمة واتساب الحالي لا يستطيع طلب سجل أقدم.",
+    "couldNotSyncWhatsAppHistory": "تعذّرت مزامنة سجل واتساب الآن. يرجى المحاولة مرة أخرى بعد قليل."
   },
   "notifications": {
     "couldNotUpdateNotifications": "تعذر تحديث الإشعارات. يرجى المحاولة مرة أخرى."
@@ -229,7 +249,12 @@
     "thisInvitationIsNoLongerAvailable": "هذه الدعوة لم تعد متاحة.",
     "aiFeatureOverrideInvalid": "تجاوز ميزة الذكاء الاصطناعي هذا غير معروف.",
     "aiRequiresProAi": "تتطلب إمكانات الذكاء الاصطناعي وشروطه التجارية خطة الاحترافية مع الذكاء الاصطناعي.",
-    "aiCommercialTermsCouldNotBeSaved": "تعذر حفظ الشروط التجارية للذكاء الاصطناعي."
+    "aiCommercialTermsCouldNotBeSaved": "تعذر حفظ الشروط التجارية للذكاء الاصطناعي.",
+    "aiAllowanceOverrideCouldNotBeSaved": "تعذّر حفظ تجاوز حصة الذكاء الاصطناعي.",
+    "aiAllowanceOverrideCouldNotBeRemoved": "تعذّرت إزالة تجاوز حصة الذكاء الاصطناعي.",
+    "subscriptionIsAlreadyUnbounded": "هذا الاشتراك بلا تاريخ انتهاء، لذا لا يوجد ما يمكن تمديده.",
+    "subscriptionCouldNotBeExtended": "تعذّر تمديد الاشتراك.",
+    "clinicAccessCouldNotBeChanged": "تعذّر تغيير وصول العيادة."
   },
   "package-templates": {
     "failedToDeactivateTemplate": "تعذر تعطيل القالب.",
@@ -373,10 +398,15 @@
     "patientAiNotEntitled": "ذكاء المرضى غير مضمّن في باقتك.",
     "patientAiAutoNotEntitled": "الردود التلقائية غير متاحة في باقتك.",
     "patientAiCouldNotSaveMode": "تعذّر حفظ وضع الرد. يرجى المحاولة مرة أخرى.",
+    "patientAiInvalidStyle": "يرجى اختيار أسلوب تواصل صالح.",
+    "patientAiCouldNotSaveStyle": "تعذّر حفظ أسلوب التواصل. يرجى المحاولة مرة أخرى.",
     "patientAiInvalidFaq": "يرجى إدخال سؤال وإجابة صالحين.",
     "patientAiFaqDuplicate": "يوجد سؤال بهذا النص مسبقًا.",
     "patientAiCouldNotSaveFaq": "تعذّر حفظ هذا السؤال. يرجى المحاولة مرة أخرى.",
-    "patientAiFaqNotFound": "تعذّر العثور على هذا السؤال."
+    "patientAiFaqNotFound": "تعذّر العثور على هذا السؤال.",
+    "thePrimaryClinicAdminRoleCannotBeChanged": "لا يستطيع المساعد تغيير دور مسؤول العيادة الأساسي. نفّذ ذلك من الإعدادات ← الموظفون.",
+    "thePrimaryClinicAdminCannotBeDeactivated": "لا يستطيع المساعد تعطيل حساب مسؤول العيادة الأساسي. نفّذ ذلك من الإعدادات ← الموظفون.",
+    "thePrimaryClinicAdminCannotBeDeleted": "لا يستطيع المساعد حذف حساب مسؤول العيادة الأساسي. نفّذ ذلك من الإعدادات ← الموظفون."
   },
   "clinical": {
     "validationError": "يرجى تصحيح حقول السجل السريري والمحاولة مرة أخرى.",
@@ -385,11 +415,11 @@
     "recordLocked": "تم اعتماد هذا السجل السريري أو لم يعد قابلاً للتعديل.",
     "credentialUpdateDenied": "لا يمكن تحديث بيانات الاعتماد إلا بواسطة الطبيب أو مسؤول العيادة.",
     "signatureRequired": "اختر صورة توقيع أو ختم لرفعها.",
-    "signatureInvalid": "يجب أن يكون التوقيع بصيغة PNG أو JPEG أو WebP وبحجم لا يتجاوز 2 ميجابايت."
-    ,"invalidId": "معرّف السجل السريري غير صالح."
-    ,"readFailed": "تعذر تحميل السجل السريري."
-    ,"catalogReadFailed": "تعذر تحميل الكتالوجات السريرية."
-    ,"signatureReadFailed": "تعذر تحميل توقيع الطبيب."
+    "signatureInvalid": "يجب أن يكون التوقيع بصيغة PNG أو JPEG أو WebP وبحجم لا يتجاوز 2 ميجابايت.",
+    "invalidId": "معرّف السجل السريري غير صالح.",
+    "readFailed": "تعذر تحميل السجل السريري.",
+    "catalogReadFailed": "تعذر تحميل الكتالوجات السريرية.",
+    "signatureReadFailed": "تعذر تحميل توقيع الطبيب."
   },
   "staff-files": {
     "certificateMustBePdfWordJpegOrPng": "تعذر إكمال الطلب. يُرجى المحاولة مرة أخرى.",

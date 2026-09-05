@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({
   listDue: vi.fn(),
   getSettings: vi.fn(),
   send: vi.fn(),
-  waActive: vi.fn(),
+  waProvider: vi.fn(),
   emit: vi.fn(),
   captureMessage: vi.fn(),
   captureException: vi.fn(),
@@ -48,12 +48,13 @@ vi.mock("@/lib/supabase/admin", () => ({
   createClinicScopedAdminClient: () => ({ from: tableChain }),
 }));
 vi.mock("@/lib/messaging/automated-send", () => ({
+  AUTOMATED_TEMPLATE_APPROVAL_STATES: ["approved", "submitted", "draft"],
   dispatchPatientMessage: mocks.send,
   anyChannelSent: (r: { email?: { status: string }; whatsapp?: { status: string } }) =>
     r?.email?.status === "sent" || r?.whatsapp?.status === "sent",
 }));
 vi.mock("@/lib/messaging/channel-management", () => ({
-  hasActiveWhatsAppChannel: mocks.waActive,
+  getActiveWhatsAppProvider: mocks.waProvider,
 }));
 vi.mock("@/lib/notifications/emit", () => ({
   emitClinicNotification: mocks.emit,
@@ -116,7 +117,7 @@ beforeEach(() => {
     },
     error: null,
   });
-  mocks.waActive.mockResolvedValue(false);
+  mocks.waProvider.mockResolvedValue(null);
   mocks.send.mockResolvedValue({
     email: { status: "sent" },
     whatsapp: { status: "not_attempted", reason: "no_whatsapp_channel" },

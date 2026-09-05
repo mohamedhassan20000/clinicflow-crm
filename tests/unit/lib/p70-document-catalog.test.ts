@@ -1,3 +1,5 @@
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   DOCUMENT_CATALOG,
@@ -70,6 +72,32 @@ describe("P7-0 document catalog skeleton", () => {
       .toEqual(new Set(Object.keys(DOCUMENT_CATALOG)));
     for (const code of DOCUMENT_TYPE_CODES) {
       expect(DOCUMENT_PDF_RENDERERS[code]).toEqual(expect.any(Function));
+    }
+  });
+
+  it("routes every renderer family through the shared DocumentPage header owner", () => {
+    const rendererDirectory = join(process.cwd(), "lib/documents/renderers");
+    const rendererFiles = readdirSync(rendererDirectory)
+      .filter((file) => file.endsWith(".tsx"));
+
+    expect(rendererFiles.length).toBeGreaterThan(0);
+    for (const rendererFile of rendererFiles) {
+      const rendererSource = readFileSync(join(rendererDirectory, rendererFile), "utf8");
+      const templateImport = rendererSource.match(
+        /from "@\/components\/documents\/templates\/([^\"]+)"/,
+      );
+      expect(templateImport?.[1], `${rendererFile} must use a document template`).toBeTruthy();
+
+      const templateFile = join(
+        process.cwd(),
+        "components/documents/templates",
+        `${templateImport![1]}.tsx`,
+      );
+      const templateSource = readFileSync(templateFile, "utf8");
+      expect(templateSource, `${templateImport![1]} must render DocumentPage`)
+        .toMatch(/<DocumentPage\b/);
+      expect(templateSource).not.toMatch(/\bDocumentHeader\b/);
+      expect(templateSource).not.toContain("headerContactLayout");
     }
   });
 });

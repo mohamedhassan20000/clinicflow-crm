@@ -1,26 +1,23 @@
 import type { DocumentBranding, DocumentIdentity } from "@/components/documents/engine/types";
 import { formatDocIdentifier } from "@/lib/documents/format";
+import { getSharedDocumentSectionCopy } from "@/lib/documents/shared-section-copy";
+import type { Locale } from "@/lib/i18n/config";
 
-function optionalContactParts(branding: DocumentBranding): string[] {
-  return [branding.licenseNo, branding.address].filter(
-    (value): value is string => Boolean(value?.trim()),
-  );
-}
-
-function secondaryContactParts(branding: DocumentBranding): string[] {
-  return [branding.phone, branding.email, branding.website].filter(
-    (value): value is string => Boolean(value?.trim()),
-  );
+function text(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
 }
 
 export function DocumentHeader({
   branding,
   identity,
   previewNumber,
+  locale,
 }: {
   branding: DocumentBranding;
   identity: DocumentIdentity;
   previewNumber: string;
+  locale: Locale;
 }) {
   const labels = identity.labels;
   if (identity.issueTime && !labels.issueTime) {
@@ -29,17 +26,26 @@ export function DocumentHeader({
   if (identity.period && !labels.period) {
     throw new Error("Document identity requires a localized period label");
   }
-  const primary = optionalContactParts(branding);
-  const secondary = secondaryContactParts(branding);
+  // The clinic identifiers live in the metadata block, not beside the logo, so
+  // their labels are engine-owned rather than per-family template copy.
+  const headerCopy = getSharedDocumentSectionCopy(locale).header;
+  const address = text(branding.address);
+  const phone = text(branding.phone);
+  const email = text(branding.email);
+  const website = text(branding.website);
+  const taxId = text(branding.taxId);
+  const licenseNo = text(branding.licenseNo);
   const number = formatDocIdentifier(identity.documentNumber || previewNumber);
   const initial = branding.name.trim().charAt(0).toUpperCase() || "C";
 
   const rows = [
-    [labels.documentNumber, number, true],
-    [labels.issueDate, identity.issueDate, true],
-    identity.issueTime ? [labels.issueTime, identity.issueTime, true] : null,
-    identity.period ? [labels.period, identity.period, true] : null,
-  ].filter((row): row is [string, string, boolean] => row !== null);
+    [labels.documentNumber, number, true, false],
+    taxId ? [headerCopy.taxRegistrationNumber, taxId, true, true] : null,
+    licenseNo ? [headerCopy.registrationNumber, licenseNo, true, true] : null,
+    [labels.issueDate, identity.issueDate, true, false],
+    identity.issueTime ? [labels.issueTime, identity.issueTime, true, false] : null,
+    identity.period ? [labels.period, identity.period, true, false] : null,
+  ].filter((row): row is [string, string, boolean, boolean] => row !== null);
 
   return (
     <header className="cf-doc-header" data-testid="document-header">
@@ -56,15 +62,16 @@ export function DocumentHeader({
         <div className="cf-doc-branding-copy">
           <p className="cf-doc-clinic-name">{branding.name}</p>
           <div className="cf-doc-contact-lines">
-            {primary.length > 0 && <p>{primary.join(" · ")}</p>}
-            {secondary.length > 0 && (
+            {address && <p>{formatDocIdentifier(address)}</p>}
+            {phone && (
               <p>
-                {secondary.map((value, index) => (
-                  <span key={value}>
-                    {index > 0 ? " · " : ""}
-                    <bdi className="cf-doc-ltr">{formatDocIdentifier(value)}</bdi>
-                  </span>
-                ))}
+                <bdi className="cf-doc-ltr">{formatDocIdentifier(phone)}</bdi>
+              </p>
+            )}
+            {(email || website) && (
+              <p className="cf-doc-contact-pair">
+                {email && <bdi className="cf-doc-ltr">{formatDocIdentifier(email)}</bdi>}
+                {website && <bdi className="cf-doc-ltr">{formatDocIdentifier(website)}</bdi>}
               </p>
             )}
           </div>
@@ -73,10 +80,14 @@ export function DocumentHeader({
       <div className="cf-doc-identity">
         <h1 className="cf-doc-title">{identity.title}</h1>
         <div className="cf-doc-meta-grid">
-          {rows.map(([label, value, isLtr]) => (
+          {rows.map(([label, value, isLtr, isAtomic]) => (
             <div key={label} style={{ display: "contents" }}>
               <span className="cf-doc-meta-label">{label}</span>
-              <bdi className={`cf-doc-meta-value${isLtr ? " cf-doc-ltr" : ""}`}>
+              <bdi
+                className={`cf-doc-meta-value${isLtr ? " cf-doc-ltr" : ""}${
+                  isAtomic ? " cf-doc-meta-value-atomic" : ""
+                }`}
+              >
                 {formatDocIdentifier(value)}
               </bdi>
             </div>

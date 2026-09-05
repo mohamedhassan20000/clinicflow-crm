@@ -14,10 +14,17 @@ import {
   incrementClinicUsage,
 } from "@/lib/supabase/admin";
 import { decryptChannelCredentials } from "@/lib/messaging/crypto";
+import { outboundMediaPlaceholderBody } from "@/lib/messaging/media-placeholder";
 import { resendEmailProvider } from "@/lib/messaging/email-resend";
 import type { MessagingProvider } from "@/lib/messaging/provider";
 import { sanitizeProviderError } from "@/lib/messaging/scrub";
+import {
+  getWhatsAppProviderCapabilities,
+  isTemplateUsableForWhatsAppProvider,
+  resolveActiveChannels,
+} from "@/lib/messaging/provider-policy";
 import { dialog360WhatsAppProvider } from "@/lib/messaging/whatsapp-dialog360";
+import { linkedDeviceWhatsAppProvider } from "@/lib/messaging/whatsapp-linked-device";
 import { metaWhatsAppProvider } from "@/lib/messaging/whatsapp-meta";
 import type {
   ChannelCredentials,
@@ -71,10 +78,14 @@ const CHANNEL_FEATURE: Partial<Record<MessageChannel, string>> = {
   whatsapp: "whatsapp",
 };
 
-/** Meta-direct registers here in P6C; domain callers remain provider-neutral. */
+/**
+ * Meta-direct registered here in P6C, the linked-device pairing in P7E; domain
+ * callers remain provider-neutral and never choose a transport themselves.
+ */
 const ADAPTERS: Partial<Record<MessagingProviderId, MessagingProvider>> = {
   dialog360: dialog360WhatsAppProvider,
   meta: metaWhatsAppProvider,
+  linked_device: linkedDeviceWhatsAppProvider,
   resend: resendEmailProvider,
 };
 
@@ -177,7 +188,7 @@ export async function sendMessage(
   if (
     !input.clinicId?.trim() ||
     !input.recipient?.trim() ||
-    (!input.body?.trim() && !input.templateId)
+    (!input.body?.trim() && !input.templateId && !input.media)
   ) {
     return failure("INVALID_INPUT");
   }
@@ -194,13 +205,7 @@ export async function sendMessage(
     .eq("status", "active");
   if (channelsResult.error) return failure("CHANNEL_LOOKUP_FAILED");
 
-  const activeChannels = new Map<MessageChannel, ClinicChannelRow>();
-  for (const row of channelsResult.data ?? []) {
-    const existing = activeChannels.get(row.channel);
-    // The database keeps one active WhatsApp provider. If legacy data briefly
-    // contains two, prefer Meta deterministically after its completed cutover.
-    if (!existing || row.provider === "meta") activeChannels.set(row.channel, row);
-  }
+  const activeChannels = resolveActiveChannels(channelsResult.data ?? []);
   const preference = normalizePreference(input.channelPreference);
   if (preference.includes("email") && !activeChannels.has("email")) {
     const emailChannel = await provisionEmailChannel(client, input.clinicId);
@@ -236,6 +241,17 @@ export async function sendMessage(
   }
   if (!selected) return failure(firstBlock ?? "NO_ACTIVE_CHANNEL");
 
+  const whatsappCapabilities = selected.channel === "whatsapp"
+    ? getWhatsAppProviderCapabilities(selected.provider)
+    : null;
+
+  // Storage-reference media is intentionally a linked-device-only capability.
+  // Cloud API providers must reject it explicitly rather than silently sending
+  // only the caption and making staff believe the file was delivered.
+  if (input.media && !whatsappCapabilities?.mediaSupported) {
+    return failure("MEDIA_UNSUPPORTED");
+  }
+
   if (selected.channel === "email" && !input.subject?.trim()) {
     return failure("EMAIL_SUBJECT_REQUIRED");
   }
@@ -245,11 +261,12 @@ export async function sendMessage(
     channel: MessageChannel;
     status: Database["public"]["Enums"]["conversation_status"];
     window_expires_at: string | null;
+    whatsapp_account_id: string | null;
   } | null = null;
   if (input.conversationId) {
     const conversationResult = await client
       .from("conversations")
-      .select("id, channel, status, window_expires_at")
+      .select("id, channel, status, window_expires_at, whatsapp_account_id")
       .eq("id", input.conversationId)
       .maybeSingle();
     if (conversationResult.error || !conversationResult.data) {
@@ -259,6 +276,20 @@ export async function sendMessage(
     if (conversation.status !== "open") return failure("CONVERSATION_CLOSED");
     if (conversation.channel !== selected.channel) {
       return failure("CONVERSATION_NOT_FOUND");
+    }
+    if (selected.channel === "whatsapp") {
+      if (selected.provider === "linked_device") {
+        const session = await client.from("whatsapp_linked_device_sessions")
+          .select("authenticated_account_id").eq("clinic_id", input.clinicId).maybeSingle();
+        if (
+          session.error ||
+          !selected.sender_identity ||
+          session.data?.authenticated_account_id !== selected.sender_identity ||
+          conversation.whatsapp_account_id !== selected.sender_identity
+        ) return failure("CONVERSATION_NOT_FOUND");
+      } else if (conversation.whatsapp_account_id !== null) {
+        return failure("CONVERSATION_NOT_FOUND");
+      }
     }
   } else if (selected.channel === "whatsapp" && input.relatedType === "manual") {
     return failure("CONVERSATION_NOT_FOUND");
@@ -274,11 +305,21 @@ export async function sendMessage(
       )
       .eq("id", input.templateId)
       .maybeSingle();
+    // Provider approval is a Cloud API concept: Meta reviews a template before
+    // a WABA may send it. A linked device sends from the clinic's own WhatsApp
+    // account, where the template is just the clinic's own text and no reviewer
+    // exists — so only an explicitly rejected template is refused there.
+    const approvalOk = templateResult.data
+      ? isTemplateUsableForWhatsAppProvider(
+          selected.provider,
+          templateResult.data.approval_status,
+        )
+      : false;
     if (
       templateResult.error ||
       !templateResult.data ||
       templateResult.data.channel !== selected.channel ||
-      templateResult.data.approval_status !== "approved"
+      !approvalOk
     ) {
       return failure("TEMPLATE_NOT_APPROVED");
     }
@@ -298,8 +339,13 @@ export async function sendMessage(
     body = rendered;
   }
 
+  // The 24-hour service window is a Cloud API business rule enforced by Meta on
+  // WABA traffic. A linked device sends from the clinic's own WhatsApp account,
+  // where no such window exists and no template mechanism exists to reopen one,
+  // so applying the gate there would block sends WhatsApp itself allows.
   if (
     conversation?.channel === "whatsapp" &&
+    whatsappCapabilities?.serviceWindowRequired &&
     (!conversation.window_expires_at ||
       new Date(conversation.window_expires_at).valueOf() <= Date.now()) &&
     !template
@@ -321,6 +367,22 @@ export async function sendMessage(
     }
   }
 
+  // P16 — what the *record* says when the message is a file with no caption.
+  //
+  // `body` above is what WhatsApp receives and stays exactly as the sender
+  // wrote it (empty, for a bare file). The stored text is allowed to differ:
+  // an empty row rendered as "No message preview" in the conversation list and
+  // in the thread, for the two most ordinary things staff send. The marker is
+  // the same closed vocabulary the worker writes for inbound media, so one
+  // rule — `lib/messaging/media-placeholder.ts` — localizes both directions and
+  // keeps the marker out of the bubble, where the attachment itself is shown.
+  const storedBody = body.trim().length > 0 || !input.media
+    ? body
+    : outboundMediaPlaceholderBody({
+        kind: input.media.kind,
+        voiceNote: input.media.voiceNote,
+      });
+
   const insertResult = await client
     .from("outbound_messages")
     .insert({
@@ -329,9 +391,21 @@ export async function sendMessage(
       provider: selected.provider,
       recipient: input.recipient.trim(),
       template_id: template?.id ?? null,
-      body_preview: buildBodyPreview(body),
+      body_preview: buildBodyPreview(storedBody),
+      // P8: inbox threads keep the full text alongside the redacted preview.
+      // The Inbox used to render `body_preview`, so a long reply — an AI answer
+      // in particular — arrived complete on the patient's phone and appeared
+      // cut off at 120 characters to the staff member reading the same thread.
+      // Everything that is not a conversation (reminders, invoice follow-ups,
+      // every analytics path) still carries the preview alone: the database
+      // check constraint on this column enforces that, not this call site.
+      ...(input.relatedType === "manual" ? { body: storedBody.slice(0, 8192) } : {}),
       related_type: input.relatedType,
       related_id: input.conversationId ?? input.relatedId ?? null,
+      // P11T — attribution, written atomically with the row. Nothing reads it
+      // back to decide what the assistant may see; it is what lets a clinic ask
+      // which episode a message belonged to.
+      ...(input.episodeId ? { episode_id: input.episodeId } : {}),
       status: "queued",
     })
     .select("id")
@@ -359,8 +433,19 @@ export async function sendMessage(
               parameters: input.templateParameters ?? [],
             }
           : undefined,
-        // Attachments only apply to email; the WhatsApp adapters ignore them.
+        // Base64 attachments remain email-only. WhatsApp media is the separate
+        // private storage reference below.
         attachments: selected.channel === "email" ? input.attachments : undefined,
+        media: input.media
+          ? {
+              kind: input.media.kind,
+              mimeType: input.media.mimeType,
+              bucket: input.media.bucket,
+              storagePath: input.media.storagePath,
+              fileName: input.media.fileName,
+              voiceNote: input.media.voiceNote,
+            }
+          : undefined,
       },
       credentials,
     );
@@ -386,7 +471,7 @@ export async function sendMessage(
         extra: { outboundMessageId },
       });
     }
-    return failure("PROVIDER_SEND_AMBIGUOUS", outboundMessageId);
+    return failure(sendResult.failureCode ?? "PROVIDER_SEND_AMBIGUOUS", outboundMessageId);
   }
 
   if (!sendResult.ok) {
@@ -407,7 +492,7 @@ export async function sendMessage(
       });
       return failure("RECORD_FAILED", outboundMessageId);
     }
-    return failure("PROVIDER_SEND_FAILED", outboundMessageId);
+    return failure(sendResult.failureCode ?? "PROVIDER_SEND_FAILED", outboundMessageId);
   }
 
   const finalized = await persistFinalState({

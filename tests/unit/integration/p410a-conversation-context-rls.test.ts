@@ -102,10 +102,18 @@ async function cleanup() {
   await service.from("clinics").delete().in("id", [clinicA, clinicB]);
 }
 
-async function buildLiveSummaryTool(
+/**
+ * Phase 7. This built `get_patient_summary` to prove that an active-context
+ * patient id is re-authorized against live RLS on every turn — a stale or
+ * cross-clinic slot returns nothing, never data. That tool is superseded, so the
+ * same property is now asserted on the surface that carries it: the model reads
+ * the active id out of its prompt and passes it to `get_record`, whose compiler
+ * re-authorizes it identically. The claim under test is unchanged and still runs
+ * against real policies with real JWTs.
+ */
+async function buildLiveRecordTool(
   dbClient: Client,
   user: { id: string; clinicId: string; role: "doctor"; departmentId: string | null },
-  activeId: string | null,
 ) {
   vi.resetModules();
   vi.doMock("server-only", () => ({}));
@@ -115,7 +123,11 @@ async function buildLiveSummaryTool(
     getEntitlements: vi.fn(async () => ({
       clinicId: user.clinicId,
       planSlug: "pro_ai",
-      features: { ai_assistant: true },
+      features: {
+        ai_assistant: true,
+        "ai.read_clinical": true,
+        "ai.read_operational": true,
+      },
       limits: {},
       subscriptionAllowed: true,
     })),
@@ -142,11 +154,10 @@ async function buildLiveSummaryTool(
     })),
   }));
 
-  const { getPatientSummaryTool } = await import("@/lib/ai/tools/get-patient-summary");
-  return getPatientSummaryTool({
+  const { getRecordTool } = await import("@/lib/ai/tools/get-record");
+  return getRecordTool({
     user: { ...user, email: `${user.id}@example.test`, fullName: "Doctor", avatarUrl: null, mustChangePassword: false },
     locale: "en",
-    activePatientId: activeId,
   });
 }
 
@@ -437,37 +448,55 @@ describe("P4.10A session-scoped lifecycle", () => {
   });
 });
 
-describe("P4.10A default parameter re-authorizes every turn", () => {
-  it("returns the summary when the active patient is in the doctor's scope", async () => {
-    const tool = await buildLiveSummaryTool(
-      doctorA,
-      { id: doctorAId, clinicId: clinicA, role: "doctor", departmentId: departmentA },
-      patientA,
-    );
-    const result = (await tool.execute!({}, {} as never)) as { found: boolean; patient?: { full_name: string } };
-    expect(result).toMatchObject({ found: true, patient: { full_name: "Mohamed Hassan" } });
+describe("P4.10A active-context id is re-authorized every turn", () => {
+  const actor = () => ({
+    id: doctorAId,
+    clinicId: clinicA,
+    role: "doctor" as const,
+    departmentId: departmentA,
   });
 
-  it("returns found:false when the active patient is outside the doctor's RLS scope", async () => {
+  it("returns the record when the active patient is in the doctor's scope", async () => {
+    const tool = await buildLiveRecordTool(doctorA, actor());
+    const result = (await tool.execute!(
+      { resource: "patients", id: patientA, fields: ["id", "full_name"] },
+      {} as never,
+    )) as { record?: { full_name: string } };
+    expect(result).toMatchObject({ record: { full_name: "Mohamed Hassan" } });
+  });
+
+  it("denies with unauthorized_scope when the active patient is outside the doctor's RLS scope", async () => {
     // patientB belongs to department B — not doctor A's assignment/department.
     // The advisory context can never widen access: RLS still returns nothing.
-    const tool = await buildLiveSummaryTool(
-      doctorA,
-      { id: doctorAId, clinicId: clinicA, role: "doctor", departmentId: departmentA },
-      patientB,
-    );
-    const result = (await tool.execute!({}, {} as never)) as { found: boolean };
-    expect(result.found).toBe(false);
-    expect(result).not.toHaveProperty("patient");
+    const tool = await buildLiveRecordTool(doctorA, actor());
+    // Raw tool, so the denial surfaces as the typed authorization error the
+    // hardening boundary would render as `{permission_denied, reason}`.
+    await expect(
+      tool.execute!(
+        { resource: "patients", id: patientB, fields: ["id", "full_name"] },
+        {} as never,
+      ),
+    ).rejects.toMatchObject({ reason: "unauthorized_scope" });
   });
 
-  it("returns found:false when the active patient belongs to another clinic", async () => {
-    const tool = await buildLiveSummaryTool(
-      doctorA,
-      { id: doctorAId, clinicId: clinicA, role: "doctor", departmentId: departmentA },
-      patientClinicB,
-    );
-    const result = (await tool.execute!({}, {} as never)) as { found: boolean };
-    expect(result.found).toBe(false);
+  it("denies identically when the active patient belongs to another clinic", async () => {
+    const tool = await buildLiveRecordTool(doctorA, actor());
+    const denial = async (id: string) => {
+      try {
+        await tool.execute!(
+          { resource: "patients", id, fields: ["id", "full_name"] },
+          {} as never,
+        );
+        throw new Error(`Expected a denial for ${id}.`);
+      } catch (error) {
+        const typed = error as { reason?: string; message?: string };
+        return { reason: typed.reason, message: typed.message };
+      }
+    };
+    const foreign = await denial(patientClinicB);
+    const absent = await denial("00000000-0000-4000-8000-0000000000ff");
+    // Byte-identical: "not yours" must not be distinguishable from "not there".
+    expect(JSON.stringify(foreign)).toBe(JSON.stringify(absent));
+    expect(foreign.reason).toBe("unauthorized_scope");
   });
 });

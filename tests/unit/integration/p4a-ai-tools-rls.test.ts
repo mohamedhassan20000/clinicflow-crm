@@ -11,6 +11,7 @@ import {
   parseAssistantPageContext,
   patientIdFromAssistantPageContext,
 } from "@/lib/ai/page-context";
+import { readLocalPolicyQual } from "./helpers/local-policy";
 
 // P4A two-clinic denial suite (§10's most important suite). Asserts:
 //   * agent_conversations / agent_messages are owner-scoped — every normal
@@ -66,7 +67,6 @@ let adminAId = "";
 let doctorAId = "";
 let receptionistAId = "";
 let managerAId = "";
-let doctorDepartmentBId = "";
 let doctorBId = "";
 
 function client() {
@@ -129,7 +129,7 @@ async function buildLiveTools(dbClient: Client, user: {
     getEntitlements: vi.fn(async () => ({
       clinicId: user.clinicId,
       planSlug: "pro_ai",
-      features: { ai_assistant: true },
+      features: { ai_assistant: true, "ai.read_clinical": true },
       limits: {},
       subscriptionAllowed: true,
     })),
@@ -167,15 +167,9 @@ async function buildLiveTools(dbClient: Client, user: {
     },
     locale: "en",
   } as const;
-  // P4.6A: an unauthorized tool is no longer mounted at all. `unmounted` builds
-  // clinical tools directly so tests can still prove the second line of defense
-  // — each tool's own role re-check inside execute() — holds against a future
-  // registry mis-wiring.
-  const { getPatientSummaryTool } = await import("@/lib/ai/tools/get-patient-summary");
   return {
     clinical: await buildDoctorTools(context),
     staff: await buildStaffTools(context),
-    unmounted: { get_patient_summary: getPatientSummaryTool(context) },
   };
 }
 
@@ -198,7 +192,6 @@ beforeAll(async () => {
   doctorAId = doctor.id;
   receptionistAId = receptionist.id;
   managerAId = manager.id;
-  doctorDepartmentBId = departmentDoctor.id;
   doctorBId = docB.id;
   anon = client();
 
@@ -338,96 +331,26 @@ afterAll(async () => {
   ]);
 }, 60_000);
 
+/**
+ * Phase 7. The `get_patient_summary` / `search_patient_visits` cases that opened
+ * this block were removed with their tools. Every property they held is asserted
+ * against live policies on the surface that replaced them, in the integration
+ * suites written for it:
+ *   • doctor department scope → phase1-resource-query-rls ("doctor receives only
+ *     their department-scoped Dermatology patient") and phase2-clinical-parity-rls
+ *     ("keeps doctor and assistant scope unchanged")
+ *   • cross-clinic denial → phase1-resource-query-rls ("returns byte-identical
+ *     unauthorized_scope for cross-tenant and missing UUIDs")
+ *   • receptionist reads notes / manager does not → phase2-clinical-parity-rls
+ *     ("keeps medical-note narrative, attachment metadata, and bytes on one
+ *     matrix") and its literal role × resource matrix
+ *   • tool output equals a direct authenticated query → phase2-clinical-parity-rls
+ *     ("matches direct authenticated RLS output as a compiler-fidelity check")
+ * The `search_authorized_patients` cases below are unchanged; that tool is
+ * retained (§6.3).
+ */
 describe("P4A doctor tools through live clinical RLS", () => {
   const toolOptions = {} as never;
-
-  it("denies doctor A a summary and visit search for doctor B's department patient", async () => {
-    const { clinical: tools } = await buildLiveTools(doctorA, {
-      id: doctorAId,
-      clinicId: clinicA,
-      role: "doctor",
-      departmentId: departmentA,
-    });
-
-    const summary = await tools.get_patient_summary.execute!(
-      { patient_id: patientDepartmentB },
-      toolOptions,
-    );
-    expect(summary).toMatchObject({ found: false });
-    expect(summary).not.toHaveProperty("patient");
-
-    const visits = await tools.search_patient_visits.execute!(
-      { patient_id: patientDepartmentB, query: "confidential" },
-      toolOptions,
-    );
-    // toMatchObject rather than toEqual: every tool result now also carries the
-    // untrusted-text provenance marker added at the mount boundary (P4.6A). The
-    // property under test is that no clinical row crossed the boundary, which
-    // the explicit emptiness assertions below still pin down exactly.
-    expect(visits).toMatchObject({ found: false, notes: [], appointments: [] });
-  });
-
-  it("returns the same patient's real clinical summary to the matching department doctor", async () => {
-    const { clinical: tools } = await buildLiveTools(doctorDepartmentB, {
-      id: doctorDepartmentBId,
-      clinicId: clinicA,
-      role: "doctor",
-      departmentId: departmentB,
-    });
-
-    const summary = (await tools.get_patient_summary.execute!(
-      { patient_id: patientDepartmentB },
-      toolOptions,
-    )) as {
-      found: boolean;
-      patient: { full_name: string };
-      notes: { excerpt: string }[];
-      appointments: { date: string }[];
-    };
-    expect(summary).toMatchObject({
-      found: true,
-      patient: { full_name: "Department B Patient" },
-    });
-    expect(summary.notes).toEqual([
-      expect.objectContaining({ excerpt: "Department B confidential clinical marker" }),
-    ]);
-    expect(summary.appointments).toEqual([
-      expect.objectContaining({ date: "2026-07-16T07:00:00+00:00" }),
-    ]);
-  });
-
-  it("denies a cross-clinic patient through both patient tools", async () => {
-    const { clinical: tools } = await buildLiveTools(doctorA, {
-      id: doctorAId,
-      clinicId: clinicA,
-      role: "doctor",
-      departmentId: departmentA,
-    });
-    await expect(
-      tools.get_patient_summary.execute!({ patient_id: patientClinicB }, toolOptions),
-    ).resolves.toMatchObject({ found: false });
-    await expect(
-      tools.search_patient_visits.execute!(
-        { patient_id: patientClinicB, query: "confidential" },
-        toolOptions,
-      ),
-    ).resolves.toMatchObject({ found: false, notes: [], appointments: [] });
-  });
-
-  it.each([
-    ["receptionist", () => receptionistA],
-    ["manager", () => managerA],
-  ] as const)("rejects the %s persona at the tool boundary", async (role, getClient) => {
-    const { unmounted: tools } = await buildLiveTools(getClient(), {
-      id: role === "receptionist" ? receptionistAId : managerAId,
-      clinicId: clinicA,
-      role,
-      departmentId: null,
-    });
-    await expect(
-      tools.get_patient_summary.execute!({ patient_id: patientDepartmentA }, toolOptions),
-    ).rejects.toMatchObject({ reason: "role_forbidden" });
-  });
 
   it.each([
     ["admin", () => adminA, () => adminAId],
@@ -488,6 +411,24 @@ describe("P4A doctor tools through live clinical RLS", () => {
 });
 
 describe("P4A agent conversation RLS", () => {
+  it("H1 — keeps role and patient-liveness checks on the message policy itself", () => {
+    const policy = readLocalPolicyQual(
+      "agent_messages",
+      "agent_owner_all_messages",
+    ).replace(/\s+/g, " ").toLowerCase();
+
+    expect(policy, "H1 message policy must carry the parent role-array term")
+      .toContain("auth_role() = any");
+    for (const role of ["admin", "manager", "doctor", "receptionist", "assistant"]) {
+      expect(policy, `H1 message policy must independently admit ${role}`)
+        .toContain(`'${role}'::user_role`);
+    }
+    expect(policy, "H1 message policy must independently reject soft-deleted patients")
+      .toContain("p.is_deleted = false");
+    expect(policy, "H1 message policy must independently reject patients with deleted_at")
+      .toContain("p.deleted_at is null");
+  });
+
   it("keeps P4.8A patient page context inside the existing live tenant/doctor boundary", async () => {
     const ownContext = parseAssistantPageContext({
       type: "patient",
@@ -609,6 +550,62 @@ describe("P4A agent conversation RLS", () => {
     expect(msg.data).toEqual([{ id: msgDoctorA }]);
   });
 
+  it("replays a six-message same-timestamp conversation in stable sequence", async () => {
+    const conversationId = randomUUID();
+    const createdAt = "2026-08-13T12:00:00.000Z";
+    const user = {
+      id: doctorAId,
+      clinicId: clinicA,
+      email: `${doctorAId}@example.test`,
+      fullName: "Doctor A",
+      role: "doctor" as const,
+      avatarUrl: null,
+      departmentId: departmentA,
+      mustChangePassword: false,
+    };
+
+    try {
+      const conversation = await service.from("agent_conversations").insert({
+        id: conversationId,
+        clinic_id: clinicA,
+        user_id: doctorAId,
+        persona: "doctor",
+      });
+      if (conversation.error) throw conversation.error;
+
+      const messages = await service.from("agent_messages").insert(
+        Array.from({ length: 6 }, (_, index) => ({
+          clinic_id: clinicA,
+          conversation_id: conversationId,
+          role: index % 2 === 0 ? "user" as const : "assistant" as const,
+          content: `message-${index + 1}`,
+          created_at: createdAt,
+        })),
+      );
+      if (messages.error) throw messages.error;
+
+      const loaded = await ensureDoctorConversation({
+        supabase: doctorA,
+        user,
+        conversationId,
+        locale: "en",
+        patientId: null,
+      });
+      expect(loaded.messages.map((message) =>
+        message.parts[0]?.type === "text" ? message.parts[0].text : null,
+      )).toEqual([
+        "message-1",
+        "message-2",
+        "message-3",
+        "message-4",
+        "message-5",
+        "message-6",
+      ]);
+    } finally {
+      await service.from("agent_conversations").delete().eq("id", conversationId);
+    }
+  });
+
   it("hides a colleague's conversation from another staff member in the same clinic", async () => {
     // Admin A is in clinic A but is NOT the owner of doctor A's conversation.
     const conv = await adminA.from("agent_conversations").select("id");
@@ -616,6 +613,101 @@ describe("P4A agent conversation RLS", () => {
     expect(conv.data).toEqual([]);
     const msg = await adminA.from("agent_messages").select("id");
     expect(msg.data).toEqual([]);
+  });
+
+  it("keeps patient-liveness behavior in parity with the parent conversation policy", async () => {
+    const conversationId = randomUUID();
+    const messageId = randomUUID();
+
+    try {
+      const conversation = await service.from("agent_conversations").insert({
+        id: conversationId,
+        clinic_id: clinicA,
+        user_id: doctorAId,
+        persona: "doctor",
+        patient_id: patientDepartmentA,
+      });
+      if (conversation.error) throw conversation.error;
+
+      const message = await service.from("agent_messages").insert({
+        id: messageId,
+        clinic_id: clinicA,
+        conversation_id: conversationId,
+        role: "user",
+        content: "Patient-bound history",
+      });
+      if (message.error) throw message.error;
+
+      const before = await doctorA
+        .from("agent_messages")
+        .select("id")
+        .eq("id", messageId);
+      expect(before.error).toBeNull();
+      expect(before.data).toEqual([{ id: messageId }]);
+
+      const softDelete = await service
+        .from("patients")
+        .update({ is_deleted: true, deleted_at: new Date().toISOString() })
+        .eq("id", patientDepartmentA);
+      if (softDelete.error) throw softDelete.error;
+
+      const hiddenConversation = await doctorA
+        .from("agent_conversations")
+        .select("id")
+        .eq("id", conversationId);
+      const hiddenMessage = await doctorA
+        .from("agent_messages")
+        .select("id")
+        .eq("id", messageId);
+      expect(hiddenConversation.data).toEqual([]);
+      expect(hiddenMessage.data).toEqual([]);
+    } finally {
+      await service
+        .from("patients")
+        .update({ is_deleted: false, deleted_at: null })
+        .eq("id", patientDepartmentA);
+      await service.from("agent_conversations").delete().eq("id", conversationId);
+    }
+  });
+
+  it("rejects an authenticated owner supplying an arbitrary replay sequence", async () => {
+    const conversationId = randomUUID();
+    const messageId = randomUUID();
+
+    try {
+      const conversation = await service.from("agent_conversations").insert({
+        id: conversationId,
+        clinic_id: clinicA,
+        user_id: doctorAId,
+        persona: "doctor",
+      });
+      if (conversation.error) throw conversation.error;
+
+      const attackerPayload = {
+        id: messageId,
+        clinic_id: clinicA,
+        conversation_id: conversationId,
+        role: "user",
+        content: "Attacker-controlled replay position",
+        sequence: 0,
+      };
+      const attempted = await doctorA
+        .from("agent_messages")
+        .insert(attackerPayload as never);
+
+      expect(attempted.error?.code).toBe("428C9");
+      expect(attempted.error?.message).toContain(
+        "cannot insert a non-DEFAULT value into column \"sequence\"",
+      );
+
+      const stored = await service
+        .from("agent_messages")
+        .select("id")
+        .eq("id", messageId);
+      expect(stored.data).toEqual([]);
+    } finally {
+      await service.from("agent_conversations").delete().eq("id", conversationId);
+    }
   });
 
   it.each([
@@ -709,7 +801,7 @@ describe("P4A log_agent_tool_call audit boundary (§6.6)", () => {
   it("rejects a clinic user forging an audit entry", async () => {
     const forged = await doctorA.rpc("log_agent_tool_call", {
       p_clinic_id: clinicA,
-      p_tool: "get_patient_summary",
+      p_tool: "query_resource",
       p_actor_id: doctorAId,
       p_summary: { found: true },
     });
@@ -719,7 +811,7 @@ describe("P4A log_agent_tool_call audit boundary (§6.6)", () => {
   it("records a service-role tool call that the clinic admin can read", async () => {
     const logged = await service.rpc("log_agent_tool_call", {
       p_clinic_id: clinicA,
-      p_tool: "get_patient_summary",
+      p_tool: "query_resource",
       p_actor_id: doctorAId,
       p_summary: { found: true, patient_id: "p1" },
     });
@@ -729,7 +821,7 @@ describe("P4A log_agent_tool_call audit boundary (§6.6)", () => {
       .from("audit_logs")
       .select("action, clinic_id, actor_id")
       .eq("clinic_id", clinicA)
-      .eq("action", "agent_tool:get_patient_summary")
+      .eq("action", "agent_tool:query_resource")
       .eq("actor_id", doctorAId);
     expect(seen.error).toBeNull();
     expect(seen.data?.length).toBeGreaterThan(0);
@@ -739,7 +831,7 @@ describe("P4A log_agent_tool_call audit boundary (§6.6)", () => {
     const doctorView = await doctorA
       .from("audit_logs")
       .select("action")
-      .eq("action", "agent_tool:get_patient_summary");
+      .eq("action", "agent_tool:query_resource");
     expect(doctorView.data ?? []).toEqual([]);
   });
 });

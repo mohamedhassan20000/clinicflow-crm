@@ -70,6 +70,7 @@ function reserve(input: {
 
 async function cleanup() {
   await service.from("clinic_feature_overrides").delete().in("clinic_id", [clinicA, clinicB]);
+  await service.from("ai_commercial_terms").delete().in("clinic_id", [clinicA, clinicB]);
   await service.from("profiles").delete().in("id", [primaryA, secondaryA, primaryB]);
   await service.from("subscriptions").delete().in("clinic_id", [clinicA, clinicB]);
   await service.from("clinics").delete().in("id", [clinicA, clinicB]);
@@ -113,6 +114,11 @@ beforeAll(async () => {
     { id: primaryB, clinic_id: clinicB, full_name: "Primary B", role: "admin", created_at: "2026-01-01T00:00:00Z" },
   ]);
   if (profiles.error) throw profiles.error;
+  const terms = await service.from("ai_commercial_terms").insert([
+    { clinic_id: clinicA, change_reason: "pilot", updated_by: primaryA, accepted_at: new Date().toISOString() },
+    { clinic_id: clinicB, change_reason: "pilot", updated_by: primaryB, accepted_at: new Date().toISOString() },
+  ]);
+  if (terms.error) throw terms.error;
   const login = await clinicCaller.auth.signInWithPassword({
     email: `p45b-${suffix}-primary-a@example.com`,
     password,
@@ -141,7 +147,7 @@ describe("P4.5B provider connection isolation and accounting", () => {
     expect(crossClinic.error?.message).toContain("AI_PROVIDER_PRIMARY_ADMIN_REQUIRED");
   });
 
-  it("atomically rotates credentials and strict BYOK spends zero managed credits", async () => {
+  it("atomically rotates credentials, and strict BYOK spends no managed credit and no funded request unit", async () => {
     const first = await service.rpc("activate_ai_provider_connection", connectionArgs(connectionOne));
     const second = await service.rpc("activate_ai_provider_connection", connectionArgs(connectionTwo));
     expect(first.error).toBeNull();
@@ -166,14 +172,42 @@ describe("P4.5B provider connection isolation and accounting", () => {
     const reserved = await reserve({ requestId, leaseToken: randomUUID(), mode: "byok_strict" });
     expect(reserved.error).toBeNull();
     const row = reserved.data![0];
-    // L4 / roadmap §8: BYOK clinics remain subject to ClinicFlow's request /
-    // fair-use cap. A strict BYOK reservation still consumes one ai_messages
-    // request unit even though its token spend is billed to the tenant provider.
-    expect(row.legacy_used).toBeGreaterThanOrEqual(1);
+    // P12 / audit finding G3 — this expectation is INVERTED from P4.5B, on
+    // purpose, and the inversion is the fix rather than a relaxation.
+    //
+    // `ai_messages` counts ClinicFlow-FUNDED requests: its limit is sized to the
+    // funded credit pool and it is what `increment_usage` enforces. Charging a
+    // BYOK turn against it meant a clinic paying Anthropic directly was still cut
+    // off by a number describing money ClinicFlow was not spending. So a strict
+    // BYOK reservation now claims no funded request unit.
+    //
+    // BYOK is not thereby unmetered. It keeps concurrency
+    // (`ai_concurrent_requests`, asserted below), the platform fair-use ceiling
+    // (`ai_byok_requests_month`, enforced in reserve_ai_budget_v2_internal),
+    // authorization, safety gates, credential security and this ledger. See
+    // `lib/ai/allowance.ts` for the invariant in full.
+    expect(row.legacy_used).toBe(0);
     const strictUsage = await service.from("usage_counters")
       .select("used")
-      .eq("clinic_id", clinicA).eq("period_start", periodStart).eq("metric", "ai_messages").single();
-    expect(strictUsage.data?.used).toBeGreaterThanOrEqual(1);
+      .eq("clinic_id", clinicA).eq("period_start", periodStart).eq("metric", "ai_messages")
+      .maybeSingle();
+    expect(strictUsage.data?.used ?? 0).toBe(0);
+    // Recorded as not drawing on the managed pool, which is what makes the
+    // zero-managed-spend reconciliation below enforceable rather than trusted.
+    const reservationRow = await service.from("ai_budget_reservations")
+      .select("consumes_managed_budget, resolution_reason, credential_mode")
+      .eq("clinic_id", clinicA).eq("request_id", requestId).single();
+    expect(reservationRow.data).toEqual({
+      consumes_managed_budget: false,
+      resolution_reason: "policy",
+      credential_mode: "byok_strict",
+    });
+    // The managed pool is untouched while the reservation is still open: a BYOK
+    // turn reserves no cost ceiling at all.
+    const openPeriod = await service.from("ai_budget_periods")
+      .select("reserved_micros, spent_micros")
+      .eq("clinic_id", clinicA).eq("period_start", periodStart).single();
+    expect(openPeriod.data).toEqual({ reserved_micros: 0, spent_micros: 0 });
     const reconciliation = {
       p_reservation_id: row.reservation_id,
       p_lease_token: row.returned_lease_token,
@@ -195,9 +229,15 @@ describe("P4.5B provider connection isolation and accounting", () => {
     expect(reconciled.error).toBeNull();
     expect(idempotentRetry.error).toBeNull();
     const period = await service.from("ai_budget_periods")
-      .select("reserved_micros, spent_micros")
+      .select("reserved_micros, spent_micros, byok_spent_micros")
       .eq("clinic_id", clinicA).eq("period_start", periodStart).single();
-    expect(period.data).toEqual({ reserved_micros: 0, spent_micros: 0 });
+    // Managed books untouched; the clinic's own provider cost is recorded
+    // separately for observability and never compared against any allowance.
+    expect(period.data).toEqual({
+      reserved_micros: 0,
+      spent_micros: 0,
+      byok_spent_micros: 10,
+    });
     const event = await service.from("ai_usage_events")
       .select("credential_mode, billing_disposition")
       .eq("request_id", requestId).single();

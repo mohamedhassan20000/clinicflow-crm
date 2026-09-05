@@ -10,11 +10,12 @@ import { getRolePageSlugs } from "@/lib/page-permissions";
 import type { ClinicReportId } from "@/lib/ai/clinic-reports";
 import {
   REPORT_CATALOG,
-  isReportId,
   reportDefaultVisibleForRole,
   reportsOpenableByRole,
 } from "@/lib/reports/catalog";
 import type { Database } from "@/types/database";
+import { domainFailureToActionResult } from "@/actions/_domain";
+import { saveReportPermissionsMutation } from "@/lib/settings/mutations";
 
 type UserRole = Database["public"]["Enums"]["user_role"];
 
@@ -187,56 +188,16 @@ export async function saveUserReportVisibilityChanges(
   changes: PendingReportVisibilityChange[],
 ): Promise<ReportPermissionResult> {
   const user = await requireMutationRole("admin");
-  if (!(await isPrimaryClinicAdmin(user.id, user.clinicId))) {
-    return {
-      error: await actionError(
-        "page-permissions.onlyThePrimaryClinicAdminCanCustomizePageVisibility",
-      ),
-    };
-  }
-  const primaryAdminId = await getPrimaryClinicAdminId(user.clinicId);
-  if (targetUserId === primaryAdminId) {
-    return {
-      error: await actionError(
-        "page-permissions.thePrimaryClinicAdminCannotBeCustomized",
-      ),
-    };
-  }
-
-  const { adminClient, target, error: targetError } = await loadTarget(
-    user.clinicId,
-    targetUserId,
-  );
-  if (targetError || !target) {
-    return { error: await actionError("page-permissions.staffMemberNotFound") };
-  }
-
-  const allowed = new Set(configurableReportsForRole(target.role as UserRole));
-  const rows = changes
-    .filter((change) => isReportId(change.reportId) && allowed.has(change.reportId))
-    .map((change) => ({
-      user_id: target.id,
-      clinic_id: target.clinic_id,
+  // See saveUserPageVisibilityChanges: role-invalid report ids are dropped
+  // before the single upsert, never turned into a partial write plus an error.
+  const result = await saveReportPermissionsMutation(user, {
+    target_user_id: targetUserId,
+    changes: changes.map((change) => ({
       report_id: change.reportId,
       is_visible: change.isVisible,
-    }));
-
-  if (rows.length === 0) return { success: true };
-
-  const { error } = await adminClient
-    .from("user_report_permissions")
-    .upsert(rows, { onConflict: "user_id,report_id" });
-
-  if (error) {
-    return {
-      error: await actionError(
-        "page-permissions.weCouldNotCompleteThisRequestPleaseTryAgain",
-      ),
-    };
-  }
-
-  revalidatePath("/settings/customize");
-  return { success: true };
+    })),
+  });
+  return result.ok ? { success: true } : domainFailureToActionResult(result);
 }
 
 export async function updateUserReportVisibility(

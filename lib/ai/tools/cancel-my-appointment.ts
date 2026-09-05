@@ -19,6 +19,9 @@ export function cancelMyAppointmentTool(ctx: PatientToolContext) {
       const identity = await authorizePatientConversation(ctx, {
         requireLinked: true,
         requireVerified: true,
+        // P8: nothing acts on the patient's behalf while a staff member has the
+        // conversation.
+        refuseIfPaused: true,
       });
       const { data, error } = await cancelPatientAiAppointment({
         clinicId: identity.clinicId,

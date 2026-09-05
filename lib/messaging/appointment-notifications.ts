@@ -15,7 +15,8 @@ import {
   dispatchPatientMessage,
   type AutomatedTemplateRow,
 } from "@/lib/messaging/automated-send";
-import { hasActiveWhatsAppChannel } from "@/lib/messaging/channel-management";
+import { getActiveWhatsAppProvider } from "@/lib/messaging/channel-management";
+import { AUTOMATED_TEMPLATE_APPROVAL_STATES } from "@/lib/messaging/automated-send";
 
 export type { AppointmentEvent };
 
@@ -55,7 +56,7 @@ export async function notifyAppointmentEvent(input: {
     const settings = await getClinicReminderSettings(clinicId);
     if (settings.error || !settings.data) return;
 
-    const [patient, doctor, templates, whatsappActive] = await Promise.all([
+    const [patient, doctor, templates, whatsappProvider] = await Promise.all([
       client
         .from("patients")
         .select("id, full_name, phone, email")
@@ -70,9 +71,9 @@ export async function notifyAppointmentEvent(input: {
         .from("message_templates")
         .select("id, name, language, variables, approval_status, channel")
         .eq("channel", "whatsapp")
-        .eq("approval_status", "approved")
+        .in("approval_status", AUTOMATED_TEMPLATE_APPROVAL_STATES)
         .eq("name", APPOINTMENT_EVENT_TEMPLATE_NAME[event]),
-      hasActiveWhatsAppChannel(clinicId),
+      getActiveWhatsAppProvider(clinicId),
     ]);
     if (patient.error || !patient.data) return;
 
@@ -103,7 +104,8 @@ export async function notifyAppointmentEvent(input: {
       dedupeKey: `appointment:${event}:${appointmentId}`,
       recipient: { phone: patient.data.phone, email: patient.data.email },
       locale,
-      whatsappActive,
+      whatsappActive: whatsappProvider !== null,
+      whatsappProvider,
       whatsappTemplates: (templates.data ?? []) as AutomatedTemplateRow[],
       templateValues: {
         patient_name: patient.data.full_name,

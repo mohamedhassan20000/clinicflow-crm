@@ -21,21 +21,27 @@ vi.mock("@/lib/entitlements", () => ({
 }));
 vi.mock("@/lib/ai/platform/provider-connections", () => ({
   resolveAiProviderCredential: mocks.resolveCredential,
+  resolveByokFallbackCredential: vi.fn().mockResolvedValue(null),
+}));
+vi.mock("@/lib/ai/usage-notifications", () => ({
+  notifyAiUsageThresholds: vi.fn().mockResolvedValue({ notified: [] }),
 }));
 vi.mock("@/lib/supabase/admin", () => ({
   reserveAiBudget: mocks.reserve,
   reconcileAiBudget: mocks.reconcile,
   logAiProviderFallback: vi.fn(),
 }));
-vi.mock("@/lib/ai/platform/managed-gateway", () => ({
-  managedGatewayProvider: {
+// P12: the managed provider is resolved through the transport registry, and the
+// default it resolves to is the direct Anthropic adapter.
+vi.mock("@/lib/ai/platform/managed-provider", () => ({
+  resolveManagedProvider: () => ({
     mode: "managed",
     prepare: () => ({
       model: mocks.model,
       providerOptions: {},
-      transport: "vercel_ai_gateway",
+      transport: "anthropic_direct",
     }),
-  },
+  }),
 }));
 vi.mock("@/lib/ai/tools", async () => {
   const [{ tool }, { z }] = await Promise.all([

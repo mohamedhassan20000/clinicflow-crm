@@ -1,7 +1,10 @@
 import "server-only";
 
 import { InvoiceDocument } from "@/components/documents/templates/invoice";
-import type { DocumentIssueReservation } from "@/lib/documents/issuance";
+import {
+  DocumentIssueError,
+  type DocumentIssueReservation,
+} from "@/lib/documents/issuance";
 import { renderDocumentPdf } from "@/lib/documents/pdf";
 import { getInvoiceCopy } from "@/lib/documents/invoice-copy";
 import { parseInvoiceDocumentSnapshot } from "@/lib/documents/resolvers/invoice";
@@ -10,13 +13,20 @@ import { generateDocumentVerificationQrDataUrl } from "@/lib/documents/verificat
 export async function renderIssuedInvoicePdf(
   reservation: DocumentIssueReservation,
 ) {
-  const snapshot = parseInvoiceDocumentSnapshot(reservation.snapshot);
-  const [copy, qrDataUrl] = await Promise.all([
-    getInvoiceCopy(reservation.locale),
-    snapshot.settings.qrEnabled
-      ? generateDocumentVerificationQrDataUrl(reservation.verificationToken)
-      : Promise.resolve(null),
-  ]);
+  let snapshot: ReturnType<typeof parseInvoiceDocumentSnapshot>;
+  let copy: Awaited<ReturnType<typeof getInvoiceCopy>>;
+  let qrDataUrl: string | null;
+  try {
+    snapshot = parseInvoiceDocumentSnapshot(reservation.snapshot);
+    [copy, qrDataUrl] = await Promise.all([
+      getInvoiceCopy(reservation.locale),
+      snapshot.settings.qrEnabled
+        ? generateDocumentVerificationQrDataUrl(reservation.verificationToken)
+        : Promise.resolve(null),
+    ]);
+  } catch (error) {
+    throw new DocumentIssueError("renderer-dispatch", error);
+  }
 
   return renderDocumentPdf({
     locale: reservation.locale,

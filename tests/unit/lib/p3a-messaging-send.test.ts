@@ -121,6 +121,16 @@ vi.mock("@/lib/messaging/whatsapp-meta", () => ({
   },
 }));
 
+vi.mock("@/lib/messaging/whatsapp-linked-device", () => ({
+  linkedDeviceWhatsAppProvider: {
+    id: "linked_device",
+    channel: "whatsapp",
+    send: mocks.whatsappSend,
+    verifySignature: vi.fn(),
+    parseWebhook: vi.fn(),
+  },
+}));
+
 import { encryptChannelCredentials } from "@/lib/messaging/crypto";
 import { buildBodyPreview, sendMessage } from "@/lib/messaging/send";
 
@@ -416,6 +426,40 @@ describe("sendMessage", () => {
       error: "mailbox unavailable",
     }));
     expect(mocks.incrementClinicUsage).not.toHaveBeenCalled();
+  });
+
+  it("preserves the worker's safe media failure stage", async () => {
+    mocks.state.channels = {
+      data: [channelRow("whatsapp", { provider: "linked_device" })],
+      error: null,
+    };
+    mocks.getEntitlements.mockResolvedValue(entitled({ whatsapp: true }));
+    mocks.whatsappSend.mockResolvedValue({
+      ok: false,
+      error: "Linked device send failed (400)",
+      failureCode: "MEDIA_REQUEST_REJECTED",
+    });
+
+    await expect(sendMessage({
+      ...baseInput,
+      recipient: "+201000000000",
+      subject: undefined,
+      relatedType: "appointment",
+      channelPreference: ["whatsapp"],
+      media: {
+        mediaId: "media-1",
+        kind: "image",
+        mimeType: "image/jpeg",
+        bucket: "whatsapp-outbound",
+        storagePath: `${CLINIC_ID}/2026-08/photo.jpg`,
+        fileName: "photo.jpg",
+        voiceNote: false,
+      },
+    })).resolves.toEqual({
+      ok: false,
+      code: "MEDIA_REQUEST_REJECTED",
+      outboundMessageId: "out-1",
+    });
   });
 
   it("leaves the row queued on an ambiguous provider outcome (P3-M1)", async () => {

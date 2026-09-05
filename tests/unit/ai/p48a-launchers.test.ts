@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   visibility: vi.fn(),
   surfaceAccess: vi.fn(),
-  loadConversation: vi.fn(),
+  pageContextSeed: vi.fn(),
   capabilities: vi.fn(),
   permission: vi.fn(),
   patientAccess: vi.fn(),
@@ -17,7 +17,9 @@ vi.mock("@/lib/server-page-permissions", () => ({
 }));
 vi.mock("@/lib/ai/surface", () => ({
   getStaffAssistantSurfaceAccess: mocks.surfaceAccess,
-  loadAssistantConversationForSurface: mocks.loadConversation,
+}));
+vi.mock("@/lib/ai/page-context-seed", () => ({
+  resolvePageContextSeed: mocks.pageContextSeed,
 }));
 vi.mock("@/lib/ai/capabilities", () => ({
   resolveAssistantCapabilities: mocks.capabilities,
@@ -57,7 +59,7 @@ const USER = {
 const PATIENT_ID = "00000000-0000-4000-8000-000000000011";
 const RANGE = { from: "2026-07-01", to: "2026-07-07" };
 const CAPABILITIES = {
-  toolNames: ["list_appointments"],
+  toolNames: ["query_resource"],
   items: [],
   financial: "not_applicable",
 };
@@ -66,10 +68,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.visibility.mockResolvedValue("visible");
   mocks.surfaceAccess.mockResolvedValue({ state: "available", remaining: 19, limit: 20 });
-  mocks.loadConversation.mockResolvedValue({
-    conversation: null,
-    persistenceAvailable: true,
-  });
+  mocks.pageContextSeed.mockResolvedValue([]);
   mocks.capabilities.mockResolvedValue(CAPABILITIES);
   mocks.permission.mockResolvedValue(true);
   mocks.patientAccess.mockResolvedValue(undefined);
@@ -204,7 +203,7 @@ describe("P4.8 launcher registry and visibility resolver", () => {
       defaultEnabled: true,
     });
     expect(mocks.surfaceAccess).not.toHaveBeenCalled();
-    expect(mocks.loadConversation).not.toHaveBeenCalled();
+    expect(mocks.pageContextSeed).not.toHaveBeenCalled();
     expect(mocks.capabilities).not.toHaveBeenCalled();
   });
 
@@ -223,7 +222,7 @@ describe("P4.8 launcher registry and visibility resolver", () => {
       context: { type: "patient", patientId: PATIENT_ID },
       access: { state: "available" },
     });
-    expect(mocks.loadConversation).not.toHaveBeenCalled();
+    expect(mocks.pageContextSeed).not.toHaveBeenCalled();
     expect(mocks.capabilities).not.toHaveBeenCalled();
   });
 
@@ -233,11 +232,22 @@ describe("P4.8 launcher registry and visibility resolver", () => {
       user: USER,
       context: { type: "patient", patientId: PATIENT_ID },
     })).resolves.toBeNull();
-    expect(mocks.loadConversation).not.toHaveBeenCalled();
+    expect(mocks.pageContextSeed).not.toHaveBeenCalled();
     expect(mocks.capabilities).not.toHaveBeenCalled();
   });
 
-  it("hydrates and re-authorizes patient history only at the opened-session boundary", async () => {
+  // Post-plan completion, change 3: a launcher no longer resumes the caller's
+  // latest conversation. It seeds a *new* one with the server-derived context of
+  // the record on screen, and past conversations are reached through the shared
+  // history actions instead. The patient re-authorization at this boundary is
+  // unchanged and still gates everything after it.
+  it("re-authorizes the patient and seeds a new session rather than resuming history", async () => {
+    mocks.pageContextSeed.mockResolvedValueOnce([{
+      entityType: "patient",
+      entityId: PATIENT_ID,
+      displayLabel: "Seeded Patient",
+      setBy: "page_context",
+    }]);
     const resolution = await resolveAssistantLauncherSession({
       user: USER,
       context: { type: "patient", patientId: PATIENT_ID },
@@ -245,26 +255,30 @@ describe("P4.8 launcher registry and visibility resolver", () => {
     expect(resolution).toMatchObject({
       context: { type: "patient", patientId: PATIENT_ID },
       capabilities: null,
+      seededActiveContext: {
+        patient: expect.objectContaining({
+          entity_type: "patient",
+          entity_id: PATIENT_ID,
+          display_label: "Seeded Patient",
+          set_by: "page_context",
+        }),
+      },
     });
     expect(mocks.patientAccess).toHaveBeenCalledWith({
       supabase: {},
       user: USER,
       patientId: PATIENT_ID,
     });
-    expect(mocks.loadConversation).toHaveBeenCalledWith({
-      user: USER,
-      patientId: PATIENT_ID,
-    });
     expect(mocks.capabilities).not.toHaveBeenCalled();
   });
 
-  it("never reads patient conversation history when opened-session authorization fails", async () => {
+  it("never derives patient context when opened-session authorization fails", async () => {
     mocks.patientAccess.mockRejectedValueOnce(new Error("invalid_patient_context"));
     await expect(resolveAssistantLauncherSession({
       user: USER,
       context: { type: "patient", patientId: PATIENT_ID },
     })).resolves.toBeNull();
-    expect(mocks.loadConversation).not.toHaveBeenCalled();
+    expect(mocks.pageContextSeed).not.toHaveBeenCalled();
     expect(mocks.capabilities).not.toHaveBeenCalled();
   });
 
@@ -296,21 +310,25 @@ describe("P4.8 launcher registry and visibility resolver", () => {
         context: { type: "dashboard" },
       });
       expect(resolution).toMatchObject({ context: { type: "dashboard" } });
-      expect(mocks.loadConversation).not.toHaveBeenCalled();
+      expect(mocks.pageContextSeed).not.toHaveBeenCalled();
       expect(mocks.capabilities).not.toHaveBeenCalled();
     },
   );
 
-  it("defers dashboard history and tool-derived capabilities until session hydration", async () => {
+  it("defers tool-derived capabilities until session hydration and seeds no slot for a view context", async () => {
     await expect(resolveAssistantLauncherSession({
       user: USER,
       context: { type: "dashboard" },
       locale: "ar",
-    })).resolves.toMatchObject({ capabilities: CAPABILITIES });
-    expect(mocks.loadConversation).toHaveBeenCalledWith({
-      user: USER,
-      patientId: null,
+    })).resolves.toMatchObject({
+      capabilities: CAPABILITIES,
+      seededActiveContext: {},
     });
+    expect(mocks.pageContextSeed).toHaveBeenCalledWith(expect.objectContaining({
+      user: USER,
+      context: { type: "dashboard" },
+      locale: "ar",
+    }));
     expect(mocks.capabilities).toHaveBeenCalledWith(USER, "ar");
   });
 
@@ -377,12 +395,12 @@ describe("P4.8 launcher registry and visibility resolver", () => {
         user: USER,
         context: { type: "dashboard" },
       })).resolves.toBeNull();
-      expect(mocks.loadConversation).not.toHaveBeenCalled();
+      expect(mocks.pageContextSeed).not.toHaveBeenCalled();
     },
   );
 
   it("fails soft without logging patient identifiers when session hydration throws", async () => {
-    mocks.loadConversation.mockRejectedValueOnce(new Error("conversation store unavailable"));
+    mocks.pageContextSeed.mockRejectedValueOnce(new Error("conversation store unavailable"));
     await expect(resolveAssistantLauncherSession({
       user: USER,
       context: { type: "patient", patientId: PATIENT_ID },

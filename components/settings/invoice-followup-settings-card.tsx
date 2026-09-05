@@ -24,6 +24,14 @@ type Props = {
   secondDays: number;
   emailSubject: string | null;
   emailBody: string | null;
+  /**
+   * The clinic's own name, so the subject placeholder can show the exact
+   * default line this clinic would send. Required rather than optional: the
+   * placeholder message takes it as an ICU argument, and a caller that omits it
+   * makes next-intl throw `FORMATTING_ERROR` at render — which is how this was
+   * missed the first time.
+   */
+  clinicName: string;
   canManage: boolean;
 };
 
@@ -39,6 +47,7 @@ export function InvoiceFollowupSettingsCard({
   secondDays: initialSecond,
   emailSubject: initialSubject,
   emailBody: initialBody,
+  clinicName,
   canManage,
 }: Props) {
   const t = useTranslations("settings");
@@ -127,7 +136,16 @@ export function InvoiceFollowupSettingsCard({
             id="followup-subject"
             value={emailSubject}
             onChange={(e) => setEmailSubject(e.target.value)}
-            placeholder={t("invoiceFollowupEmailSubjectPlaceholder")}
+            placeholder={
+              // The built-in dunning subject is "Outstanding balance — <clinic>"
+              // (see `followupCopy` in lib/messaging/patient-copy.ts), so with a
+              // name to hand the placeholder is the real default rather than an
+              // illustration. Without one there is nothing to interpolate, and
+              // the field label reads better than a dangling dash.
+              clinicName.trim()
+                ? t("invoiceFollowupEmailSubjectPlaceholder", { clinicName: clinicName.trim() })
+                : t("invoiceFollowupEmailSubject")
+            }
             maxLength={200}
             disabled={disabled || !enabled}
           />

@@ -2,7 +2,6 @@ import "server-only";
 
 import { createAnthropic } from "@ai-sdk/anthropic";
 import {
-  APICallError,
   wrapLanguageModel,
   type LanguageModelMiddleware,
 } from "ai";
@@ -12,33 +11,16 @@ import type {
   AiProviderRequest,
   PreparedAiProvider,
 } from "@/lib/ai/platform/types";
-import { managedGatewayProvider } from "@/lib/ai/platform/managed-gateway";
+import { resolveManagedProvider } from "@/lib/ai/platform/managed-provider";
+import { withProviderResilience } from "@/lib/ai/platform/provider-resilience";
+import { promptCacheProviderOptions } from "@/lib/ai/platform/prompt-cache";
+import {
+  classifyAiProviderFailure,
+  type AiProviderFailureClass,
+} from "@/lib/ai/platform/failure";
 
-export type AiProviderFailureClass =
-  | "authentication"
-  | "permission"
-  | "quota"
-  | "rate_limit"
-  | "timeout"
-  | "provider_unavailable"
-  | "request_failed";
-
-export function classifyAiProviderFailure(error: unknown): AiProviderFailureClass {
-  if (error instanceof DOMException && error.name === "TimeoutError") return "timeout";
-  if (error instanceof Error && (error.name === "AbortError" || /timed?\s*out/i.test(error.message))) {
-    return "timeout";
-  }
-  if (APICallError.isInstance(error)) {
-    if (error.statusCode === 401) return "authentication";
-    if (error.statusCode === 403) return "permission";
-    if (error.statusCode === 402) return "quota";
-    if (error.statusCode === 429) return "rate_limit";
-    if (error.statusCode === undefined || error.statusCode >= 500) {
-      return "provider_unavailable";
-    }
-  }
-  return "request_failed";
-}
+export { classifyAiProviderFailure };
+export type { AiProviderFailureClass };
 
 function mergeProviderOptions(
   current: AiProviderOptions | undefined,
@@ -94,10 +76,14 @@ function hybridFallbackMiddleware(input: {
 }
 
 /**
- * Tenant credentials use the direct provider adapter. Current Gateway BYOK
- * always permits system-credential fallback, so it cannot enforce strict mode.
- * Hybrid fallback is consequently explicit, local, audited, and invoked only
- * after the direct provider fails before a stream is established.
+ * Tenant credentials call Anthropic directly with the clinic's own decrypted
+ * key. Since P12 this is the same transport the managed path uses, so the two
+ * modes differ in exactly one thing — whose credential pays — and in nothing a
+ * prompt, tool, or gate above this layer can observe.
+ *
+ * Hybrid's fallback target is now the managed DIRECT adapter rather than the
+ * gateway. It remains explicit, local, audited, and invoked only after the
+ * clinic's own provider fails before a stream is established.
  */
 export function prepareTenantProvider(input: {
   mode: Exclude<AiCredentialMode, "managed">;
@@ -114,16 +100,30 @@ export function prepareTenantProvider(input: {
     throw error;
   }
   const anthropic = createAnthropic({ apiKey: input.secret });
-  const directModel = anthropic(input.request.route.providerModelId);
+  // The clinic's own key gets the same platform concurrency ceiling and the same
+  // single bounded retry as the managed key. The clinic pays for its own tokens,
+  // but it still runs inside ClinicFlow's process and must not be able to pin a
+  // server instance's request slots or hammer a rate-limited provider.
+  const directModel = withProviderResilience(
+    anthropic(input.request.route.providerModelId),
+    {
+      clinicId: input.request.clinicId,
+      providerId: "anthropic",
+      modelId: input.request.route.providerModelId,
+    },
+  );
   if (input.mode === "byok_strict") {
     return {
       model: directModel,
-      providerOptions: {},
+      // F-14 — the clinic's own key gets the same prompt caching the managed
+      // key gets. It is the same provider and the same transport; withholding
+      // it would make a BYOK clinic pay more for identical behaviour.
+      providerOptions: promptCacheProviderOptions("anthropic_direct"),
       transport: "anthropic_direct",
     };
   }
 
-  const managed = managedGatewayProvider.prepare(input.request);
+  const managed = resolveManagedProvider().prepare(input.request);
   return {
     model: wrapLanguageModel({
       model: directModel,
@@ -134,7 +134,7 @@ export function prepareTenantProvider(input: {
       modelId: input.request.route.providerModelId,
       providerId: "anthropic-hybrid",
     }),
-    providerOptions: {},
+    providerOptions: promptCacheProviderOptions("anthropic_direct_hybrid"),
     transport: "anthropic_direct_hybrid",
   };
 }

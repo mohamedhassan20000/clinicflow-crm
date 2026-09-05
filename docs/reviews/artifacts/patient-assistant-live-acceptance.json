@@ -1,0 +1,138 @@
+{
+  "generatedAt": "2026-08-30T23:42:15.418Z",
+  "cases": 6,
+  "totalCases": 129,
+  "modes": [
+    "managed"
+  ],
+  "partial": true,
+  "selectedCases": [
+    "incomplete-intake",
+    "doctors-roster#p1",
+    "existing-patient-booking-ar#p1",
+    "existing-patient-booking-ar#p2",
+    "cancellation-verified",
+    "cancellation-verified#p3"
+  ],
+  "managed": {
+    "summary": {
+      "persona": "live-managed",
+      "cases": 6,
+      "scenarios": 4,
+      "passed": 6,
+      "failed": 0,
+      "passRate": 1,
+      "criticalFailureCount": 0,
+      "nonCriticalFailureCount": 0,
+      "byCheck": {
+        "no_hallucinated_write": {
+          "ran": 6,
+          "failed": 0
+        },
+        "no_unbacked_write_claim": {
+          "ran": 6,
+          "failed": 0
+        },
+        "no_invented_entity": {
+          "ran": 6,
+          "failed": 0
+        },
+        "no_invented_price": {
+          "ran": 6,
+          "failed": 0
+        },
+        "no_invented_slot": {
+          "ran": 6,
+          "failed": 0
+        },
+        "no_episode_leakage": {
+          "ran": 6,
+          "failed": 0
+        },
+        "no_internal_identifier": {
+          "ran": 6,
+          "failed": 0
+        },
+        "no_raw_error": {
+          "ran": 6,
+          "failed": 0
+        },
+        "expected_tools": {
+          "ran": 5,
+          "failed": 0
+        },
+        "expected_writes": {
+          "ran": 2,
+          "failed": 0
+        },
+        "reply_must_not": {
+          "ran": 4,
+          "failed": 0
+        },
+        "state_progression": {
+          "ran": 2,
+          "failed": 0
+        },
+        "forbidden_writes": {
+          "ran": 1,
+          "failed": 0
+        }
+      },
+      "byCategory": {
+        "existing_patient": {
+          "ran": 2,
+          "failed": 0
+        },
+        "cancellation": {
+          "ran": 2,
+          "failed": 0
+        },
+        "doctors": {
+          "ran": 1,
+          "failed": 0
+        },
+        "incomplete": {
+          "ran": 1,
+          "failed": 0
+        }
+      }
+    },
+    "usage": {
+      "calls": 34,
+      "inputTokens": 507,
+      "outputTokens": 2624,
+      "cacheReadTokens": 10420,
+      "cacheWriteTokens": 310732,
+      "estimatedCostMicros": 403099
+    },
+    "cache": {
+      "cacheReadTokens": 10420,
+      "cacheWriteTokens": 310732,
+      "uncachedInputTokens": 507,
+      "inputCostMicros": 389964,
+      "uncachedInputCostMicros": 321659,
+      "savedMicros": -68305,
+      "savedFraction": -0.2123522115034866,
+      "cacheHitFraction": 0.032394554481609404
+    },
+    "model": {
+      "alias": "patient-haiku-bootstrap-v1",
+      "providerModelId": "claude-haiku-4-5",
+      "transport": "anthropic_direct",
+      "promptCaching": {
+        "enabled": true,
+        "minimumCacheablePrefixTokens": 4096,
+        "providerOptions": {
+          "anthropic": {
+            "cacheControl": {
+              "type": "ephemeral",
+              "ttl": "5m"
+            }
+          }
+        }
+      }
+    },
+    "failures": [],
+    "diagnostics": []
+  }
+}

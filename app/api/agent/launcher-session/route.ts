@@ -123,14 +123,16 @@ export async function POST(request: Request) {
     });
     if (!resolution) return errorResponse("temporarily_unavailable", 503);
 
+    // A contextual launcher always opens a *new* conversation seeded with the
+    // server-derived context of the record on screen. Past conversations stay
+    // reachable from the same shared history the /assistant page uses, so the
+    // shortcut neither hijacks an unrelated chat nor needs its own persistence.
     return Response.json(
       {
-        initialConversationId:
-          resolution.conversation?.id ?? crypto.randomUUID(),
-        initialMessages: resolution.conversation?.messages ?? [],
-        initialActiveContext: resolution.conversation?.activeContext ?? {},
-        historyTruncated:
-          resolution.conversation?.historyTruncated ?? false,
+        initialConversationId: crypto.randomUUID(),
+        initialMessages: [],
+        initialActiveContext: resolution.seededActiveContext,
+        historyTruncated: false,
         remaining: resolution.access.remaining,
         capabilities: resolution.capabilities,
       },

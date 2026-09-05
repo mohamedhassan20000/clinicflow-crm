@@ -28,6 +28,7 @@ function user(role: Role): MockUser {
 
 const PRO_AI_FEATURES = {
   ai_assistant: true,
+  "ai.read_operational": true,
   "ai.staff_assistant": true,
   "ai.staff_analytics": true,
   "ai.financial_insights": true,
@@ -248,8 +249,8 @@ describe("M3 — denied, clarified, and failed invocations are audited", () => {
       error: null,
     };
 
-    const result = (await tools.list_appointments!.execute!(
-      { preset: "today", doctor: "Ahmed" },
+    const result = (await tools.query_resource!.execute!(
+      { resource: "appointments", filters: { doctor: "Ahmed" } },
       opts,
     )) as Record<string, unknown>;
 
@@ -259,8 +260,12 @@ describe("M3 — denied, clarified, and failed invocations are audited", () => {
 
   it("does not double-log a successful invocation", async () => {
     const { tools, mocks, logAgentToolCall } = await load(user("admin"));
-    mocks.state.tableResults["appointments"] = { data: [], error: null };
-    await tools.list_appointments!.execute!({ preset: "today" }, opts);
+    mocks.state.tableResults["appointments"] = {
+      data: [],
+      error: null,
+      count: 0,
+    };
+    await tools.query_resource!.execute!({ resource: "appointments" }, opts);
     // The tool logs its own success with the redacted parameter detail the
     // wrapper cannot see; the wrapper must stay out of the way.
     expect(logAgentToolCall).toHaveBeenCalledTimes(1);
@@ -379,18 +384,22 @@ describe("M7 — report pass-through text survives, and truncation is visible", 
           scheduled_at: "2026-07-20T09:00:00.000Z",
           status: "confirmed",
           duration_minutes: 30,
-          patients: { full_name: "y".repeat(400), file_number: "CF-1" },
-          profiles: { full_name: "Dr House" },
-          departments: { name: "Cardiology" },
+          patient: {
+            id: "33333333-3333-4333-8333-333333333333",
+            full_name: "y".repeat(400),
+            file_number: "CF-1",
+          },
         },
       ],
       error: null,
+      count: 1,
     };
 
-    const result = (await tools.list_appointments!.execute!({ preset: "today" }, opts)) as {
-      text_truncated_fields?: string[];
-    };
-    expect(result.text_truncated_fields).toContain("appointments[0].patient_name");
+    const result = (await tools.query_resource!.execute!(
+      { resource: "appointments", relations: { patient: ["id", "full_name"] } },
+      opts,
+    )) as { text_truncated_fields?: string[] };
+    expect(result.text_truncated_fields).toContain("rows[0].patient.full_name");
   });
 
   it("renders the truncation signal as a user-visible notice", async () => {
@@ -405,44 +414,55 @@ describe("M7 — report pass-through text survives, and truncation is visible", 
 // ---------------------------------------------------------------------------
 
 describe("L5 — `truncated` is false when the row count exactly equals the cap", () => {
+  // Phase 7: the cap moved from the removed tool's hand-written 50 to the
+  // appointments resource's declared page size. The property is unchanged and is
+  // the reason it was worth re-pointing rather than deleting — a list that says
+  // "there is more" when there is not, or stays silent when there is, is a lie
+  // the user cannot detect.
+  const PAGE_SIZE = 50;
+
   function appointment(index: number) {
     return {
-      id: `a${index}`,
+      id: `${String(index).padStart(8, "0")}-0000-4000-8000-000000000000`,
+      patient_id: "33333333-3333-4333-8333-333333333333",
+      doctor_id: "44444444-4444-4444-8444-444444444444",
+      department_id: "55555555-5555-4555-8555-555555555555",
       scheduled_at: "2026-07-20T09:00:00.000Z",
-      status: "confirmed",
       duration_minutes: 30,
-      patients: { full_name: `Patient ${index}`, file_number: `CF-${index}` },
-      profiles: { full_name: "Dr House" },
-      departments: { name: "Cardiology" },
+      status: "confirmed",
     };
   }
 
-  it("does not claim truncation at exactly 50 appointments", async () => {
+  it("does not claim truncation at exactly one full page", async () => {
     const { tools, mocks } = await load(user("admin"));
     mocks.state.tableResults["appointments"] = {
-      data: Array.from({ length: 50 }, (_, i) => appointment(i)),
+      data: Array.from({ length: PAGE_SIZE }, (_, i) => appointment(i)),
       error: null,
+      count: PAGE_SIZE,
     };
-    const result = (await tools.list_appointments!.execute!({ preset: "today" }, opts)) as {
-      truncated: boolean;
-      appointments: unknown[];
-    };
+    const result = (await tools.query_resource!.execute!(
+      { resource: "appointments", page_size: PAGE_SIZE },
+      opts,
+    )) as { truncated: boolean; rows: unknown[]; total: number };
     expect(result.truncated).toBe(false);
-    expect(result.appointments).toHaveLength(50);
+    expect(result.rows).toHaveLength(PAGE_SIZE);
+    expect(result.total).toBe(PAGE_SIZE);
   });
 
-  it("claims truncation, and returns exactly the cap, at 51", async () => {
+  it("claims truncation, and returns exactly the page, at one row more", async () => {
     const { tools, mocks } = await load(user("admin"));
     mocks.state.tableResults["appointments"] = {
-      data: Array.from({ length: 51 }, (_, i) => appointment(i)),
+      data: Array.from({ length: PAGE_SIZE + 1 }, (_, i) => appointment(i)),
       error: null,
+      count: PAGE_SIZE + 1,
     };
-    const result = (await tools.list_appointments!.execute!({ preset: "today" }, opts)) as {
-      truncated: boolean;
-      appointments: unknown[];
-    };
+    const result = (await tools.query_resource!.execute!(
+      { resource: "appointments", page_size: PAGE_SIZE },
+      opts,
+    )) as { truncated: boolean; rows: unknown[]; notice: string | null };
     expect(result.truncated).toBe(true);
-    expect(result.appointments).toHaveLength(50);
+    expect(result.rows).toHaveLength(PAGE_SIZE);
+    expect(result.notice).toContain(String(PAGE_SIZE + 1));
   });
 });
 

@@ -4,31 +4,54 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import {
+  ArrowDown,
+  BotOff,
+  CalendarClock,
   CheckCheck,
   CircleUserRound,
-  Clock3,
   Loader2,
   LockKeyhole,
   MessageCircleMore,
   Plus,
   Search,
   Send,
+  SendHorizonal,
   Sparkles,
   TriangleAlert,
   UserRoundCheck,
+  Users,
   X,
 } from "lucide-react";
-import { useFormatter, useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
 import {
   approveAiSuggestion,
   clearConversationEscalation,
   dismissAiSuggestion,
   linkConversationPatient,
-  sendInboxReply,
+  setConversationAiEnabled,
+  setConversationHumanTakeover,
   updateConversationAssignment,
   updateConversationStatus,
 } from "@/actions/messaging";
+import { MessageAttachments } from "@/components/inbox/message-attachments";
+import {
+  isMediaPlaceholderBody,
+  mediaPlaceholderKind,
+} from "@/lib/messaging/media-placeholder";
+import {
+  CONVERSATION_BADGE_STATES,
+  CONVERSATION_BADGE_CLASSES,
+  conversationBadgeState,
+  type ConversationBadgeState,
+} from "@/lib/messaging/conversation-status";
+import { InboxComposer } from "@/components/inbox/inbox-composer";
+import { BulkSendDialog } from "@/components/inbox/bulk-send-dialog";
+import { MAX_BULK_RECIPIENTS } from "@/lib/messaging/bulk-send-plan";
+import { Checkbox } from "@/components/ui/checkbox";
+import { InboxAiRepliesControl } from "@/components/inbox/inbox-ai-replies-control";
+import { NewConversationDialog } from "@/components/inbox/new-conversation-dialog";
+import { PatientAppointmentsDialog } from "@/components/inbox/patient-appointments-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -48,11 +71,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { formatInboxTimestamp } from "@/lib/i18n/message-timestamp";
 import { createClient } from "@/lib/supabase/client";
 import type {
   InboxConversation,
   InboxData,
-  InboxTemplate,
 } from "@/lib/messaging/inbox";
 import { cn } from "@/lib/utils";
 
@@ -68,6 +91,22 @@ const ESCALATION_REASONS = new Set([
 /** Maps a stored escalation reason to its `inbox.ai.reason.*` message key. */
 function escalationReasonKey(reason: string | null): string {
   return `ai.reason.${reason && ESCALATION_REASONS.has(reason) ? reason : "low_confidence"}`;
+}
+
+/**
+ * P8: what to call this conversation.
+ *
+ * The linked patient's own name wins outright — it is the record the clinic
+ * keeps. Failing that, the name WhatsApp reports for the contact is far more
+ * useful to a receptionist than a bare number, but it is chosen by whoever is
+ * typing, so it is a label and nothing more: it never resolves a patient, never
+ * matches a record, and is never shown as though it were verified.
+ */
+function conversationTitle(
+  conversation: Pick<InboxConversation, "patientName" | "displayName" | "sender">,
+  fallback: string,
+): string {
+  return conversation.patientName ?? conversation.displayName ?? conversation.sender ?? fallback;
 }
 
 function initials(name: string) {
@@ -93,36 +132,179 @@ function readSeenSnapshot(viewerId: string): string | null {
   }
 }
 
+
+/**
+ * P11P — the one badge that says what a thread needs, beside the name.
+ *
+ * Label only, one or two words, never the enum. `conversationBadgeState` owns
+ * the decision; this owns nothing but how it looks.
+ */
+function ConversationStatusBadge({
+  conversation,
+  t,
+}: {
+  conversation: Pick<
+    InboxData["conversations"][number],
+    | "status"
+    | "escalatedAt"
+    | "hasDeliveryFailure"
+    | "lastMessageAt"
+    | "lastInboundAt"
+    | "hasActiveEpisode"
+    | "patientId"
+    | "aiPausedAt"
+    // P15 — the five inputs the canonical derivation gained. Listed rather
+    // than spread so a field that stops being loaded fails the build here
+    // instead of silently changing every badge in the list.
+    | "aiTechnicalFailureAt"
+    | "aiEnabled"
+    | "hasOutstandingReview"
+    | "lastAssistantReplyAt"
+    | "lastHumanReplyAt"
+  >;
+  t: ReturnType<typeof useTranslations>;
+}) {
+  const state = conversationBadgeState(conversation);
+  // Literal keys rather than one key interpolated from the state: the i18n
+  // gate resolves literal keys only, and a computed key is exactly the kind that
+  // goes missing from a catalog with nothing failing until a clinic sees it.
+  const label = {
+    aiHandling: t("statusBadge.aiHandling"),
+    done: t("statusBadge.done"),
+    needsReview: t("statusBadge.needsReview"),
+    newContact: t("statusBadge.newContact"),
+    humanHandling: t("statusBadge.humanHandling"),
+    waitingPatient: t("statusBadge.waitingPatient"),
+    problem: t("statusBadge.problem"),
+  }[state];
+  // The badge itself has room for two words. The full product wording lives on
+  // the title/aria label, so the state is unambiguous to anyone who hovers or
+  // uses a screen reader without the list turning into prose.
+  const description = {
+    aiHandling: t("statusBadgeDescription.aiHandling"),
+    done: t("statusBadgeDescription.done"),
+    needsReview: t("statusBadgeDescription.needsReview"),
+    newContact: t("statusBadgeDescription.newContact"),
+    humanHandling: t("statusBadgeDescription.humanHandling"),
+    waitingPatient: t("statusBadgeDescription.waitingPatient"),
+    problem: t("statusBadgeDescription.problem"),
+  }[state];
+  return (
+    <Badge
+      variant="outline"
+      className={cn("shrink-0 px-1.5 font-medium", CONVERSATION_BADGE_CLASSES[state])}
+      data-testid="conversation-status-badge"
+      data-state={state}
+      title={description}
+      aria-label={description}
+    >
+      {label}
+    </Badge>
+  );
+}
+
+/**
+ * P16 — the one line a conversation row shows under the contact's name.
+ *
+ * A media message has no text of its own, so what is stored is the worker's
+ * marker (`[image]`, `[document]`, …) for inbound and, since P16, the same
+ * marker for a caption-less outbound file. Neither is something to show a
+ * receptionist: the raw marker reads like the patient typed brackets, and the
+ * empty string used to fall through to "No message preview" — which is what a
+ * clinic saw for every photo and every PDF on the thread.
+ *
+ * So the marker becomes a localized label ("Photo" / "صورة") and
+ * "No message preview" goes back to meaning what it says: a message this build
+ * has no idea how to describe.
+ */
+function conversationPreviewLine(
+  preview: string,
+  t: ReturnType<typeof useTranslations<"inbox">>,
+): string {
+  // Spelled out rather than interpolated: the i18n gate reads these call sites
+  // to prove every rendered key exists in both catalogs, and a template literal
+  // is a key it cannot follow.
+  switch (mediaPlaceholderKind(preview)) {
+    case "image":
+      return t("mediaPreview.image");
+    case "video":
+      return t("mediaPreview.video");
+    case "videoNote":
+      return t("mediaPreview.videoNote");
+    case "document":
+      return t("mediaPreview.document");
+    case "sticker":
+      return t("mediaPreview.sticker");
+    case "contact":
+      return t("mediaPreview.contact");
+    case "location":
+      return t("mediaPreview.location");
+    case "audio":
+      return t("mediaPreview.audio");
+    case "voiceMessage":
+      return t("mediaPreview.voiceMessage");
+    default:
+      return preview.trim() || t("noPreview");
+  }
+}
+
 export function InboxShell({
   data,
   clinicId,
   viewerId,
+  // Least privilege by default: a caller that does not say who is looking gets
+  // the read-only header control, never the one that can change a clinic-wide
+  // setting. The server action is the actual gate either way.
+  viewerRole = "receptionist",
 }: {
   data: InboxData;
   clinicId: string;
   viewerId: string;
+  /**
+   * P17 (§7) — who is looking, so the header's clinic-wide AI switch is
+   * offered only to the role that may change it. The server action enforces the
+   * same gate; this only decides whether an unusable control is rendered.
+   */
+  viewerRole?: "admin" | "receptionist";
 }) {
   const t = useTranslations("inbox");
-  const format = useFormatter();
+  const locale = useLocale();
   const router = useRouter();
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [query, setQuery] = useState("");
-  const [reply, setReply] = useState("");
+  const [query, setQuery] = useState(data.search);
+  const [statusFilter, setStatusFilter] = useState<ConversationBadgeState | "all">("all");
+  /**
+   * P11Q — bulk selection is a *mode*, not a permanent column.
+   *
+   * The Inbox is a place people read one conversation at a time, so a checkbox
+   * on every row all day would be clutter charged to the common case for the
+   * sake of the rare one. Selection appears only once staff ask for it, and the
+   * whole apparatus — checkboxes, count, send button — leaves with it.
+   */
+  const [selecting, setSelecting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkOpen, setBulkOpen] = useState(false);
   const [suggestionDraft, setSuggestionDraft] = useState("");
   const [suggestionEditing, setSuggestionEditing] = useState(false);
   const [suggestionDraftFor, setSuggestionDraftFor] = useState<string | null>(null);
-  const [templateId, setTemplateId] = useState<string | null>(null);
-  const [templateParameters, setTemplateParameters] = useState<string[]>([]);
   const [patientQuery, setPatientQuery] = useState("");
   const [patientDialogOpen, setPatientDialogOpen] = useState(false);
+  const [pastAppointmentsOpen, setPastAppointmentsOpen] = useState(false);
   const [now, setNow] = useState(() => new Date(data.loadedAt).valueOf());
   const [realtimeStatus, setRealtimeStatus] = useState<"connecting" | "subscribed" | "error">("connecting");
   const [pending, startTransition] = useTransition();
+  const threadRef = useRef<HTMLDivElement | null>(null);
+  const [hasNewBelow, setHasNewBelow] = useState(false);
+  // Whether the reader is following the conversation. Starts true because a
+  // freshly opened thread is opened at its newest message.
+  const followingRef = useRef(true);
+  // Which thread the refs above describe, so opening a different one is
+  // distinguishable from a new message arriving in the current one.
+  const conversationRef = useRef<string | null>(null);
 
   const selected = data.conversations.find(
     (conversation) => conversation.id === data.selectedConversationId,
   ) ?? null;
-  const selectedTemplate = data.templates.find((template) => template.id === templateId) ?? null;
   const suggestion =
     data.suggestion && selected && data.suggestion.conversationId === selected.id
       ? data.suggestion
@@ -180,6 +362,80 @@ export function InboxShell({
     return () => window.clearInterval(interval);
   }, []);
 
+  /**
+   * P10 — following the conversation, the way every chat client does.
+   *
+   * There was no scroll management here at all: the thread rendered at
+   * `scrollTop = 0` and stayed there, so a staff member sending a reply, or an
+   * AI or inbound message arriving, left the newest message off-screen below a
+   * scroll they had to perform themselves every single time.
+   *
+   * The rule is the ordinary one, and the half that matters is the second:
+   *
+   *   * near the bottom → follow new messages;
+   *   * scrolled up reading history → do not move them, and show a button
+   *     saying there is something new.
+   *
+   * "Near" is a threshold rather than an exact bottom because the bottom is
+   * rarely exact — a growing composer, an image finishing its layout, or a
+   * fractional device pixel ratio all leave a few pixels of slack that would
+   * otherwise read as "the user has scrolled away".
+   */
+  const NEAR_BOTTOM_PX = 120;
+
+  const scrollToNewest = useCallback((behavior: ScrollBehavior = "smooth") => {
+    const thread = threadRef.current;
+    if (!thread) return;
+    // `scrollTo` is what gives the smooth behaviour, and it is also the one
+    // part of this that jsdom does not implement — so the assignment is the
+    // fallback rather than a second code path. Both land in the same place.
+    if (typeof thread.scrollTo === "function") {
+      thread.scrollTo({ top: thread.scrollHeight, behavior });
+    } else {
+      thread.scrollTop = thread.scrollHeight;
+    }
+    followingRef.current = true;
+    setHasNewBelow(false);
+  }, []);
+
+  const handleThreadScroll = useCallback(() => {
+    const thread = threadRef.current;
+    if (!thread) return;
+    const distance = thread.scrollHeight - thread.scrollTop - thread.clientHeight;
+    const following = distance <= NEAR_BOTTOM_PX;
+    followingRef.current = following;
+    if (following) setHasNewBelow(false);
+  }, []);
+
+  /**
+   * One effect, because there are not two decisions here — there is one, and
+   * it depends on whether the conversation changed.
+   *
+   * Splitting it into "reset on conversation change" and "follow on new
+   * message" created a race that jsdom found immediately: both fire on the
+   * same commit when a thread is opened, and whichever ran second decided
+   * whether the new-message indicator was showing. Keeping the two branches in
+   * one effect makes the ordering a property of the code rather than of the
+   * scheduler.
+   */
+  const newestMessageId = data.messages[data.messages.length - 1]?.id ?? null;
+  useEffect(() => {
+    const thread = threadRef.current;
+    if (!selected?.id) return;
+    if (conversationRef.current !== selected.id) {
+      // A different thread: land on its newest message, never on the top, and
+      // never carrying the previous thread's indicator across.
+      conversationRef.current = selected.id;
+      followingRef.current = true;
+      setHasNewBelow(false);
+      if (thread) thread.scrollTop = thread.scrollHeight;
+      return;
+    }
+    if (!newestMessageId) return;
+    if (followingRef.current) scrollToNewest();
+    else setHasNewBelow(true);
+  }, [newestMessageId, scrollToNewest, selected?.id]);
+
   // While Realtime is degraded, use a narrow refresh backstop. Normal
   // subscribed inboxes remain fully event-led.
   useEffect(() => {
@@ -192,9 +448,58 @@ export function InboxShell({
     const supabase = createClient();
     let disposed = false;
     const channels: ReturnType<typeof supabase.channel>[] = [];
+    // P11T — the Inbox's own refresh rate is what was taking it down.
+    //
+    // The measured failure: `get_inbox_conversation_summaries` timing out
+    // against the `authenticated` role's 8s budget, 1,431 times in 24 hours,
+    // always in bursts of seven or eight within two seconds and always
+    // immediately after outbound write activity. The RPC itself is not slow —
+    // P11S made it 268 ms, and `pg_stat_statements` records mean 416 ms against
+    // a **max of 7,466 ms** over 1,300 calls. A function whose mean is 0.4 s and
+    // whose worst case is 7.5 s is not slow; it is starved.
+    //
+    // What starves it is this callback. Four channels subscribe to every row
+    // change on `conversations`, `inbound_messages`, `outbound_messages` and
+    // `ai_suggested_replies`, clinic-wide, and each one calls `router.refresh()`
+    // — a full `loadInboxData`: the summaries RPC plus four list reads plus
+    // three thread reads. One AI turn writes ten to twenty rows across those
+    // tables (the inbound, the conversation's stage/collected/status columns,
+    // the draft, the outbound, then its sent → delivered → read ticks), a bulk
+    // send writes hundreds, and *every open Inbox tab in the clinic runs the
+    // whole load for every one of them, at the same instant*. Five staff with
+    // the Inbox open turn one patient message into dozens of concurrent RPCs on
+    // a shared-CPU instance, which is precisely the burst signature in the logs.
+    //
+    // Two changes, and neither hides an error:
+    //
+    //   * **A real debounce.** 250 ms is shorter than the gap between the writes
+    //     of a single turn, so it coalesced almost nothing. At 1.2 s a whole
+    //     turn collapses into one refresh, with a hard ceiling so a continuous
+    //     stream still updates promptly rather than being starved by its own
+    //     traffic.
+    //   * **Jitter.** The debounce alone keeps every tab in lockstep, because
+    //     they are all timing from the same broadcast. A random spread breaks
+    //     the thundering herd, which is the half that actually produced the
+    //     concurrency.
+    const REFRESH_DEBOUNCE_MS = 1_200;
+    const REFRESH_JITTER_MS = 800;
+    const REFRESH_MAX_WAIT_MS = 4_000;
+    let firstPendingAt: number | null = null;
     const refresh = () => {
+      const now = Date.now();
+      if (firstPendingAt === null) firstPendingAt = now;
+      // Never let coalescing push an update past the ceiling: a busy thread must
+      // still be seen to move.
+      const remaining = REFRESH_MAX_WAIT_MS - (now - firstPendingAt);
+      const delay = Math.max(
+        0,
+        Math.min(REFRESH_DEBOUNCE_MS + Math.random() * REFRESH_JITTER_MS, remaining),
+      );
       if (refreshTimer.current) clearTimeout(refreshTimer.current);
-      refreshTimer.current = setTimeout(() => router.refresh(), 250);
+      refreshTimer.current = setTimeout(() => {
+        firstPendingAt = null;
+        router.refresh();
+      }, delay);
     };
     async function subscribe() {
       const { data: { session } } = await supabase.auth.getSession();
@@ -235,13 +540,30 @@ export function InboxShell({
 
   const filtered = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();
-    if (!normalized) return data.conversations;
     return data.conversations.filter((conversation) =>
-      [conversation.patientName, conversation.sender, conversation.preview, conversation.patientFileNumber]
-        .filter(Boolean)
-        .some((value) => value!.toLocaleLowerCase().includes(normalized)),
+      (statusFilter === "all" || conversationBadgeState(conversation) === statusFilter) &&
+      (!normalized ||
+        [
+          conversation.patientName,
+          conversation.displayName,
+          conversation.sender,
+          conversation.preview,
+          conversation.patientFileNumber,
+        ]
+          .filter(Boolean)
+          .some((value) => value!.toLocaleLowerCase().includes(normalized))),
     );
-  }, [data.conversations, query]);
+  }, [data.conversations, query, statusFilter]);
+
+  const statusFilterLabels: Record<ConversationBadgeState, string> = {
+    aiHandling: t("statusBadge.aiHandling"),
+    done: t("statusBadge.done"),
+    needsReview: t("statusBadge.needsReview"),
+    newContact: t("statusBadge.newContact"),
+    humanHandling: t("statusBadge.humanHandling"),
+    waitingPatient: t("statusBadge.waitingPatient"),
+    problem: t("statusBadge.problem"),
+  };
 
   const filteredPatients = useMemo(() => {
     const normalized = patientQuery.trim().toLocaleLowerCase();
@@ -292,11 +614,6 @@ export function InboxShell({
     });
   }
 
-  function chooseTemplate(template: InboxTemplate) {
-    setTemplateId(template.id);
-    setTemplateParameters(template.variableNames.map(() => ""));
-  }
-
   function handleApproveSuggestion() {
     if (!suggestion) return;
     const edited = suggestionEditing ? suggestionDraft.trim() : undefined;
@@ -325,36 +642,78 @@ export function InboxShell({
     );
   }
 
-  function handleSend() {
-    if (!selected) return;
-    const templateReady =
-      selectedTemplate && templateParameters.every((parameter) => parameter.trim().length > 0);
-    if ((!windowOpen && !templateReady) || (windowOpen && !reply.trim())) return;
-    startTransition(async () => {
-      const result = await sendInboxReply({
-        conversationId: selected.id,
-        body: windowOpen ? reply : "",
-        templateId: windowOpen ? null : selectedTemplate?.id,
-        templateParameters: windowOpen ? [] : templateParameters,
-      });
-      if (result.error) {
-        toast.error(result.error);
-        return;
-      }
-      setReply("");
-      setTemplateId(null);
-      setTemplateParameters([]);
-      toast.success(t("replySent"));
-      router.refresh();
-    });
-  }
-
   return (
     <div className="space-y-5" data-realtime-status={realtimeStatus}>
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">{t("description")}</p>
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">{t("description")}</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {selecting ? (
+            <>
+              <span className="text-sm text-muted-foreground" data-testid="bulk-selected-count">
+                {t("bulk.selectedCount", { count: selectedIds.length })}
+              </span>
+              <Button
+                size="sm"
+                disabled={selectedIds.length === 0}
+                onClick={() => setBulkOpen(true)}
+                data-testid="bulk-compose"
+              >
+                <SendHorizonal className="size-4" aria-hidden />
+                {t("bulk.compose")}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setSelecting(false);
+                  setSelectedIds([]);
+                }}
+                data-testid="bulk-cancel"
+              >
+                {t("bulk.cancel")}
+              </Button>
+            </>
+          ) : (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setSelecting(true)}
+              data-testid="bulk-start-selecting"
+            >
+              <Users className="size-4" aria-hidden />
+              {t("bulk.select")}
+            </Button>
+          )}
+          {/* P17 (§7) — the clinic-wide AI reply setting, where WhatsApp is
+              actually read. Same stored value and same action as Settings → Messaging.
+              i18n-allow: implementation note inside a JSX comment, never rendered.
+              Per-conversation overrides and Pause AI are unchanged and still win
+              where they apply. */}
+          <InboxAiRepliesControl
+            mode={data.clinicAi?.mode ?? "off"}
+            overrideCount={data.clinicAi?.overrideCount ?? 0}
+            canManage={viewerRole === "admin"}
+          />
+          <NewConversationDialog contacts={data.contacts} directory={data.contactDirectory} />
+        </div>
       </header>
+
+      {/* H3: the Inbox loaded, but an optional P8 column was not available —
+          the window between a deploy and its migration. Contact labels and
+          takeover badges are missing; conversations, replies and templates are
+          not, and the page says which of the two this is instead of failing
+          whole. */}
+      {!data.error && data.degraded ? (
+        <div
+          role="status"
+          className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-amber-800 dark:text-amber-300"
+        >
+          {t("degradedNotice")}
+        </div>
+      ) : null}
 
       {data.error ? (
         <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
@@ -367,54 +726,151 @@ export function InboxShell({
           </span>
           <h2 className="font-semibold">{t("emptyTitle")}</h2>
           <p className="mt-1 max-w-md text-sm text-muted-foreground">{t("emptyDescription")}</p>
+          <div className="mt-4">
+            <NewConversationDialog contacts={data.contacts} directory={data.contactDirectory} />
+          </div>
         </div>
       ) : (
         <div className="grid min-h-[36rem] overflow-hidden rounded-xl border bg-card lg:h-[calc(100dvh-13rem)] lg:grid-cols-[22rem_minmax(0,1fr)]">
           <aside className="flex min-h-72 flex-col border-b lg:min-h-0 lg:border-b-0 lg:border-e">
-            <div className="border-b p-3">
-              <div className="relative">
+            <div className="space-y-2 border-b p-3">
+              <form
+                className="relative"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  const params = new URLSearchParams();
+                  if (selected?.id) params.set("conversation", selected.id);
+                  if (query.trim()) params.set("q", query.trim());
+                  router.replace(`/inbox${params.size ? `?${params.toString()}` : ""}`);
+                }}
+              >
                 <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
                 <Input
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder={t("searchPlaceholder")}
-                  className="ps-9"
+                  className="ps-9 pe-16"
                   aria-label={t("searchLabel")}
                 />
+                <Button type="submit" variant="ghost" size="sm" className="absolute end-1 top-1/2 -translate-y-1/2">
+                  {t("search")}
+                </Button>
+              </form>
+              <div className="flex min-w-0 items-center gap-2">
+                <Select
+                  value={statusFilter}
+                  onValueChange={(value) =>
+                    setStatusFilter(value as ConversationBadgeState | "all")
+                  }
+                >
+                  <SelectTrigger
+                    size="sm"
+                    className="min-w-0 flex-1 sm:max-w-52"
+                    aria-label={t("statusFilter.label")}
+                  >
+                    <SelectValue placeholder={t("statusFilter.label")} />
+                  </SelectTrigger>
+                  <SelectContent align="start">
+                    <SelectItem value="all">{t("statusFilter.all")}</SelectItem>
+                    {CONVERSATION_BADGE_STATES.map((state) => (
+                      <SelectItem key={state} value={state}>
+                        {statusFilterLabels[state]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {statusFilter !== "all" ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="shrink-0"
+                    onClick={() => setStatusFilter("all")}
+                  >
+                    {t("statusFilter.clear")}
+                  </Button>
+                ) : null}
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto">
+            {/* The list pane's scroll container. Named so a test can assert
+                the node itself survives a selection — the property the reader's
+                scroll position depends on. */}
+            <div className="flex-1 overflow-y-auto" data-testid="conversation-list-scroll">
               {filtered.length === 0 ? (
                 <p className="p-6 text-center text-sm text-muted-foreground">{t("noMatches")}</p>
               ) : (
                 filtered.map((conversation) => {
-                  const name = conversation.patientName ?? conversation.sender ?? t("unknownSender");
+                  const name = conversationTitle(conversation, t("unknownSender"));
                   const unread = visibleUnread(conversation);
-                  return (
-                    <Link
-                      key={conversation.id}
-                      href={`/inbox?conversation=${conversation.id}`}
-                      className={cn(
-                        "flex gap-3 border-b px-3 py-3 text-start transition-colors hover:bg-muted/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring",
-                        selected?.id === conversation.id && "bg-primary/8",
-                      )}
-                    >
+                  const rowClassName = cn(
+                    "flex w-full gap-3 border-b px-3 py-3 text-start transition-colors hover:bg-muted/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring",
+                    selected?.id === conversation.id && "bg-primary/8",
+                  );
+                  const checked = selectedIds.includes(conversation.id);
+                  // P12 — no "AI paused" chip on this row any more. The status
+                  // badge beside the name now reads "Active conversation" for
+                  // exactly the threads that chip marked, and two chips saying
+                  // one thing is the double badge this pass set out to remove.
+                  // The thread header keeps it, beside the control that sets it.
+                  const body = (
+                    <>
                       <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold text-muted-foreground">
                         {initials(name)}
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="flex items-center gap-2">
-                          <span className="truncate text-sm font-medium">{name}</span>
+                          <span className="truncate text-sm font-medium" dir="auto">
+                            {name}
+                          </span>
+                          <ConversationStatusBadge conversation={conversation} t={t} />
                           {unread > 0 ? <Badge className="ms-auto min-w-5 justify-center px-1.5">{unread}</Badge> : null}
                         </span>
-                        <span className="mt-1 block truncate text-xs text-muted-foreground">
-                          {conversation.preview || t("noPreview")}
+                        <span className="mt-1 block truncate text-xs text-muted-foreground" dir="auto">
+                          {conversationPreviewLine(conversation.preview, t)}
                         </span>
-                        <span className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
+                        <span className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
                           <span>{conversation.assignedName ?? t("unassigned")}</span>
-                          {conversation.status === "closed" ? <Badge variant="outline">{t("closed")}</Badge> : null}
                         </span>
                       </span>
+                    </>
+                  );
+                  // Selection mode swaps navigation for selection on the same
+                  // row, rather than adding a second control beside it: in this
+                  // mode a click means "choose this thread", and a row that
+                  // still navigated away mid-selection would lose the choices.
+                  return selecting ? (
+                    <button
+                      key={conversation.id}
+                      type="button"
+                      role="checkbox"
+                      aria-checked={checked}
+                      onClick={() =>
+                        setSelectedIds((current) =>
+                          current.includes(conversation.id)
+                            ? current.filter((id) => id !== conversation.id)
+                            : current.length >= MAX_BULK_RECIPIENTS
+                              ? current
+                              : [...current, conversation.id],
+                        )
+                      }
+                      className={cn(rowClassName, checked && "bg-primary/10")}
+                      data-testid="bulk-selectable-row"
+                    >
+                      <Checkbox
+                        checked={checked}
+                        tabIndex={-1}
+                        aria-hidden
+                        className="mt-3 shrink-0 pointer-events-none"
+                      />
+                      {body}
+                    </button>
+                  ) : (
+                    <Link
+                      key={conversation.id}
+                      href={`/inbox?conversation=${conversation.id}${data.search ? `&q=${encodeURIComponent(data.search)}` : ""}`}
+                      className={rowClassName}
+                    >
+                      {body}
                     </Link>
                   );
                 })
@@ -423,14 +879,31 @@ export function InboxShell({
           </aside>
 
           {selected ? (
-            <section className="flex min-h-[36rem] min-w-0 flex-col">
+            /*
+             * P12 — the remount boundary, moved here from the page.
+             *
+             * Everything about *one* conversation lives inside this section:
+             * the thread, its scroll container, and the composer (which keys
+             * itself, and always did). Keying the section is what makes "no
+             * state from thread A reaches thread B" a structural property here
+             * rather than something each child has to remember.
+             *
+             * The `<aside>` beside it is about *all* the conversations, so it
+             * is deliberately outside this boundary: its scroll container is
+             * the same DOM node before and after a selection, which is what
+             * keeps the reader where they were in a long list.
+             */
+            <section key={selected.id} className="flex min-h-[36rem] min-w-0 flex-col">
               <div className="flex flex-wrap items-center gap-3 border-b px-4 py-3">
                 <span className="flex size-10 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
-                  {initials(selected.patientName ?? selected.sender ?? t("unknownSender"))}
+                  {initials(conversationTitle(selected, t("unknownSender")))}
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="truncate font-semibold">{selected.patientName ?? selected.sender ?? t("unknownSender")}</h2>
+                    <h2 className="truncate font-semibold" dir="auto">
+                      {conversationTitle(selected, t("unknownSender"))}
+                    </h2>
+                    <ConversationStatusBadge conversation={selected} t={t} />
                     {selected.identityVerifiedAt ? (
                       <Badge variant="secondary" className="gap-1 text-emerald-700 dark:text-emerald-300">
                         <UserRoundCheck className="size-3" aria-hidden />
@@ -442,9 +915,99 @@ export function InboxShell({
                         {t("notVerified")}
                       </Badge>
                     )}
+                    {selected.aiPausedAt ? (
+                      <Badge variant="outline" className="gap-1">
+                        <BotOff className="size-3" aria-hidden />
+                        {t("ai.pausedBadge")}
+                      </Badge>
+                    ) : null}
                   </div>
+                  {/* The number stays LTR whatever the interface language: a
+                      phone number reversed by bidi reordering is a wrong number. */}
                   <p className="truncate text-xs text-muted-foreground" dir="ltr">{selected.sender ?? "—"}</p>
+                  {/* P8: once a patient is linked their record is the identity,
+                      and the WhatsApp name is kept beside it as context — useful
+                      when the two disagree, and never presented as proof. */}
+                  {selected.patientName && selected.displayName ? (
+                    <p className="truncate text-xs text-muted-foreground" dir="auto">
+                      {t("whatsappName")}: {selected.displayName}
+                    </p>
+                  ) : null}
                 </div>
+
+                <Button
+                  variant={selected.aiPausedAt ? "secondary" : "outline"}
+                  size="sm"
+                  disabled={pending}
+                  aria-pressed={Boolean(selected.aiPausedAt)}
+                  title={selected.aiPausedAt ? t("ai.resumeAiHint") : t("ai.pauseAiHint")}
+                  onClick={() =>
+                    runAction(
+                      () =>
+                        setConversationHumanTakeover({
+                          conversationId: selected.id,
+                          paused: !selected.aiPausedAt,
+                        }),
+                      selected.aiPausedAt ? t("ai.resumed") : t("ai.paused"),
+                    )
+                  }
+                >
+                  <BotOff className="size-4" aria-hidden />
+                  {selected.aiPausedAt ? t("ai.resumeAi") : t("ai.pauseAi")}
+                </Button>
+
+                {/* P15 (§3): per-conversation exception. See ai-enablement.ts */}
+                {selected.aiEnabledOverride !== undefined ? (
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={pending}
+                      aria-pressed={selected.aiEnabledOverride !== null}
+                      title={
+                        selected.aiEnabledOverride === true
+                          ? t("ai.aiAllowedHere")
+                          : selected.aiEnabledOverride === false
+                            ? t("ai.aiExcludedHere")
+                            : t("ai.aiEnabledHereHint")
+                      }
+                      onClick={() =>
+                        runAction(
+                          () =>
+                            setConversationAiEnabled({
+                              conversationId: selected.id,
+                              // One click cycles between "the clinic decides"
+                              // and the opposite of whatever the clinic is
+                              // currently doing. Two buttons for three states
+                              // would be a menu; this is the only exception a
+                              // staff member ever wants to make.
+                              override:
+                                selected.aiEnabledOverride !== null
+                                  ? null
+                                  : !selected.aiEnabled,
+                            }),
+                          t("ai.aiOverrideUpdated"),
+                        )
+                      }
+                    >
+                      {selected.aiEnabledOverride !== null
+                        ? t("ai.followClinicSetting")
+                        : selected.aiEnabled
+                          ? t("ai.excludeAiHere")
+                          : t("ai.allowAiHere")}
+                    </Button>
+                    {selected.aiEnabledOverride !== null ? (
+                      <span
+                        className="text-xs text-muted-foreground"
+                        data-testid="conversation-ai-override-note"
+                      >
+                        {selected.aiEnabledOverride
+                          ? t("ai.aiAllowedHere")
+                          : t("ai.aiExcludedHere")}
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null}
 
                 <Select
                   value={selected.assignedTo ?? "__unassigned__"}
@@ -522,6 +1085,39 @@ export function InboxShell({
                   </DialogContent>
                 </Dialog>
 
+                {/*
+                  P12 — the patient's visits, one click from the thread.
+
+                  Offered only when `patient_id` is actually set on the
+                  conversation. An unlinked thread (NEW_CONTACT) has no
+                  authoritative history: the control is disabled and says why,
+                  rather than disappearing and leaving staff wondering where it
+                  went on the one row where they most expect it.
+                */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!selected.patientId}
+                  data-testid="past-appointments-trigger"
+                  title={
+                    selected.patientId
+                      ? t("pastAppointments.title")
+                      : t("pastAppointments.linkPatientFirst")
+                  }
+                  onClick={() => setPastAppointmentsOpen(true)}
+                >
+                  <CalendarClock className="size-4" aria-hidden />
+                  {t("pastAppointments.title")}
+                </Button>
+
+                <PatientAppointmentsDialog
+                  conversationId={selected.id}
+                  patientId={selected.patientId}
+                  patientName={selected.patientName}
+                  open={pastAppointmentsOpen}
+                  onOpenChange={setPastAppointmentsOpen}
+                />
+
                 <Button
                   variant="outline"
                   size="sm"
@@ -535,28 +1131,126 @@ export function InboxShell({
                 </Button>
               </div>
 
-              <div className="flex-1 space-y-3 overflow-y-auto bg-muted/20 p-4" aria-live="polite">
+              <div className="relative flex flex-1 flex-col overflow-hidden">
+              <div
+                ref={threadRef}
+                onScroll={handleThreadScroll}
+                data-testid="inbox-thread"
+                className="flex-1 space-y-3 overflow-y-auto bg-muted/20 p-4"
+                aria-live="polite"
+              >
                 {data.messages.length === 0 ? (
                   <p className="py-12 text-center text-sm text-muted-foreground">{t("noMessages")}</p>
                 ) : (
-                  data.messages.map((message) => (
+                  <>
+                  {/* M6: an imported thread can be a year of messages. Only the
+                      newest page is serialized into this payload, and staff are
+                      told rather than left to assume they are seeing all of it. */}
+                  {data.messagesTruncated ? (
+                    <p className="pb-2 text-center text-xs text-muted-foreground">
+                      {t("olderMessagesTruncated")}
+                    </p>
+                  ) : null}
+                  {data.messages.map((message) => (
                     <div key={message.id} className={cn("flex", message.direction === "outbound" && "justify-end")}>
                       <div className={cn(
                         "max-w-[85%] rounded-2xl px-3 py-2 text-sm shadow-xs sm:max-w-[70%]",
                         message.direction === "outbound" ? "rounded-ee-sm bg-primary text-primary-foreground" : "rounded-es-sm border bg-card",
                       )}>
-                        <p className="whitespace-pre-wrap break-words">{message.body || t("noPreview")}</p>
+                        {/* P8: the whole message, never a preview and never
+                            clamped. `whitespace-pre-wrap` keeps the paragraph
+                            breaks a long AI answer relies on, `wrap-anywhere`
+                            breaks an unspaced string (a URL, a long Arabic word)
+                            instead of letting it widen the bubble, and `dir=auto`
+                            lets each message pick its own direction so an Arabic
+                            reply reads right-to-left inside an English interface
+                            and vice versa. */}
+                        {/* P11P: `[image]` is the worker's placeholder for an
+                            uncaptioned media message, not something the patient
+                            typed. It earns the conversation list its preview
+                            line and has no business in the thread, where the
+                            media itself is rendered immediately below. When the
+                            media is genuinely gone — an imported history row
+                            that never carried bytes — the attachment renderer
+                            says so specifically, so the placeholder is dropped
+                            there too rather than doubling up on the bad news. */}
+                        {message.body && !isMediaPlaceholderBody(message.body) ? (
+                          <p className="whitespace-pre-wrap break-words wrap-anywhere" dir="auto">
+                            {message.body}
+                          </p>
+                        ) : message.attachments.length === 0 ? (
+                          // P16: the media row could not be read or does not
+                          // exist. Naming the kind is still the truth of the
+                          // message ("a photo arrived") and is strictly more
+                          // useful than the blank last-resort line.
+                          <p>{conversationPreviewLine(message.body, t)}</p>
+                        ) : null}
+                        <MessageAttachments
+                          attachments={message.attachments}
+                          tone={message.direction === "outbound" ? "outbound" : "inbound"}
+                        />
                         <div className={cn("mt-1 flex items-center justify-end gap-1 text-[10px]", message.direction === "outbound" ? "text-primary-foreground/70" : "text-muted-foreground")}>
-                          <span>{format.dateTime(new Date(message.occurredAt), { dateStyle: "short", timeStyle: "short" })}</span>
+                          <span>{formatInboxTimestamp(new Date(message.occurredAt), locale)}</span>
                           {message.status ? <CheckCheck className="size-3" aria-label={messageStatusLabel(message.status)} /> : null}
                         </div>
                       </div>
                     </div>
-                  ))
+                  ))}
+                  </>
                 )}
               </div>
 
+              {/* The other half of the rule: when the reader is scrolled up,
+                  their position is left alone and this is how they learn there
+                  is something new — one affordance, dismissed by using it. */}
+              {hasNewBelow ? (
+                <div className="pointer-events-none absolute inset-x-0 bottom-2 flex justify-center">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    data-testid="inbox-new-messages"
+                    className="pointer-events-auto shadow-md"
+                    onClick={() => scrollToNewest()}
+                  >
+                    <ArrowDown className="size-4" aria-hidden />
+                    {t("newMessagesBelow")}
+                  </Button>
+                </div>
+              ) : null}
+              </div>
+
               <div className="space-y-3 border-t p-3">
+                {selected.aiPausedAt ? (
+                  <div
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-sky-500/30 bg-sky-500/5 p-3 text-sm text-sky-900 dark:text-sky-200"
+                    data-testid="ai-paused-banner"
+                  >
+                    <span className="flex items-center gap-2">
+                      <BotOff className="size-4 shrink-0" aria-hidden />
+                      {selected.aiPausedByName
+                        ? t("ai.pausedBannerBy", { name: selected.aiPausedByName })
+                        : t("ai.pausedBanner")}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={pending}
+                      onClick={() =>
+                        runAction(
+                          () =>
+                            setConversationHumanTakeover({
+                              conversationId: selected.id,
+                              paused: false,
+                            }),
+                          t("ai.resumed"),
+                        )
+                      }
+                    >
+                      {t("ai.resumeAi")}
+                    </Button>
+                  </div>
+                ) : null}
+
                 {selected.escalatedAt ? (
                   <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-amber-800 dark:text-amber-300">
                     <span className="flex items-center gap-2">
@@ -576,7 +1270,11 @@ export function InboxShell({
                   >
                     <div className="flex items-center gap-2 text-xs font-medium text-primary">
                       <Sparkles className="size-3.5" aria-hidden />
-                      {suggestion.escalate ? t("ai.suggestionEscalationTitle") : t("ai.suggestionTitle")}
+                      {suggestion.escalate
+                        ? t("ai.suggestionEscalationTitle")
+                        : selected.aiPausedAt
+                          ? t("ai.suggestionPausedTitle")
+                          : t("ai.suggestionTitle")}
                     </div>
                     {suggestionEditing ? (
                       <Textarea
@@ -587,7 +1285,9 @@ export function InboxShell({
                         className="max-h-48 min-h-16 resize-none bg-background"
                       />
                     ) : (
-                      <p className="whitespace-pre-wrap break-words text-sm">{suggestion.body}</p>
+                      <p className="whitespace-pre-wrap break-words wrap-anywhere text-sm" dir="auto">
+                        {suggestion.body}
+                      </p>
                     )}
                     <div className="flex flex-wrap items-center gap-2">
                       <Button
@@ -622,58 +1322,39 @@ export function InboxShell({
                     <span>{t("closedReplyHint")}</span>
                     <Button size="sm" onClick={() => runAction(() => updateConversationStatus({ conversationId: selected.id, status: "open" }), t("conversationReopened"))}>{t("reopen")}</Button>
                   </div>
-                ) : windowOpen ? (
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-xs text-emerald-700 dark:text-emerald-300">
-                      <Clock3 className="size-3.5" aria-hidden />{t("windowOpen")}
-                    </div>
-                    <div className="flex items-end gap-2">
-                      <Textarea value={reply} onChange={(event) => setReply(event.target.value)} maxLength={4096} placeholder={t("replyPlaceholder")} aria-label={t("replyLabel")} className="max-h-40 min-h-11 resize-none" />
-                      <Button size="icon" disabled={pending || !reply.trim()} onClick={handleSend} aria-label={t("sendReply")}>
-                        {pending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Send className="size-4 rtl:-scale-x-100" aria-hidden />}
-                      </Button>
-                    </div>
-                  </div>
                 ) : (
-                  <div className="space-y-3">
-                    <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-amber-800 dark:text-amber-300">
-                      <p className="font-medium">{t("windowClosedTitle")}</p>
-                      <p className="mt-1 text-xs">{t("windowClosedDescription")}</p>
-                    </div>
-                    {data.templates.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">{t("noApprovedTemplates")}</p>
-                    ) : (
-                      <div className="space-y-3">
-                        <Select value={templateId ?? undefined} onValueChange={(id) => {
-                          const template = data.templates.find((item) => item.id === id);
-                          if (template) chooseTemplate(template);
-                        }}>
-                          <SelectTrigger className="w-full" aria-label={t("chooseTemplate")}><SelectValue placeholder={t("chooseTemplate")} /></SelectTrigger>
-                          <SelectContent>
-                            {data.templates.map((template) => <SelectItem key={template.id} value={template.id}>{template.name} · {template.language.toUpperCase()}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                        {selectedTemplate ? (
-                          <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
-                            <p className="whitespace-pre-wrap text-sm">{selectedTemplate.body}</p>
-                            {selectedTemplate.variableNames.map((name, index) => (
-                              <Input key={`${selectedTemplate.id}-${name}-${index}`} value={templateParameters[index] ?? ""} onChange={(event) => setTemplateParameters((current) => current.map((value, parameterIndex) => parameterIndex === index ? event.target.value : value))} placeholder={t("templateVariable", { name })} aria-label={t("templateVariable", { name })} maxLength={1000} />
-                            ))}
-                            <Button disabled={pending || templateParameters.some((parameter) => !parameter.trim())} onClick={handleSend}>
-                              {pending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Send className="size-4 rtl:-scale-x-100" aria-hidden />}
-                              {t("sendTemplate")}
-                            </Button>
-                          </div>
-                        ) : null}
-                      </div>
-                    )}
-                  </div>
+                  <InboxComposer
+                    key={selected.id}
+                    conversation={selected}
+                    templates={data.templates}
+                    documents={data.documents}
+                    provider={data.whatsappProvider}
+                    windowOpen={windowOpen}
+                  />
                 )}
               </div>
             </section>
           ) : null}
         </div>
       )}
+      <BulkSendDialog
+        open={bulkOpen}
+        onOpenChange={(next) => {
+          setBulkOpen(next);
+          if (!next) {
+            setSelecting(false);
+            setSelectedIds([]);
+          }
+        }}
+        conversationIds={selectedIds}
+        labels={data.conversations
+          .filter((conversation) => selectedIds.includes(conversation.id))
+          .map((conversation) => ({
+            conversationId: conversation.id,
+            name: conversationTitle(conversation, t("unknownSender")),
+          }))}
+        onSent={() => router.refresh()}
+      />
     </div>
   );
 }

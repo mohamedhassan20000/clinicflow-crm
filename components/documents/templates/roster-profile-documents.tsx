@@ -1,6 +1,6 @@
 import { DocumentPage, type DocumentLifecycle, type DocumentRenderContextBoundary } from "@/components/documents/engine";
 import {
-  AvatarName, DataTable, FieldGrid, GroupedTables, IdentityHero, NotesCallout, SectionHeader,
+  DataTable, FieldGrid, GroupedTables, IdentityHero, NotesCallout, SectionHeader,
   SignatureBlock, StatusBadge, TotalsSummary, VerificationBlock,
   type DocumentTableColumn, type DocumentTableGroup,
 } from "@/components/documents/primitives";
@@ -77,9 +77,12 @@ function PatientListBody({ snapshot, copy, verification }: {
   }
   const groups: DocumentTableGroup[] = Array.from(grouped, ([title, rows]) => ({
     id: rows[0]?.departmentId ?? title, title, countLabel: copy.patientsCount(rows.length),
+    // A roster listing is not a patient file: rows carry names only, never photos.
     rows: rows.map((row) => ({ id: row.id, cells: {
-      patient: <AvatarName name={row.fullName} imageSrc={row.imageSrc} />, file: row.fileNumber,
-      nationalId: row.nationalId, doctor: row.doctorName, phone: row.phone,
+      patient: row.fullName, file: row.fileNumber,
+      nationalId: row.nationalId,
+      doctor: row.doctorName,
+      phone: row.phone,
       blood: <StatusBadge label={row.bloodType} tone="neutral" /> } })),
   }));
   if (groups.length === 0) groups.push({ id: "empty", title: copy.allDepartments, rows: [] });
@@ -119,6 +122,7 @@ function PatientFileBody({ snapshot, copy, date, number, verification }: {
       { label: copy.phone, value: patient.phone, direction: "ltr" },
       { label: copy.email, value: patient.email, direction: "ltr" },
       { label: copy.department, value: patient.departmentName },
+      // Only the file's own subject keeps a photo; the assigned doctor does not.
       { label: copy.doctor, value: patient.doctorName },
       { label: copy.insurance, value: patient.insuranceName },
       { label: copy.bloodType, value: <StatusBadge label={patient.bloodType} tone="neutral" /> },
@@ -151,8 +155,9 @@ function SystemMembersBody({ snapshot, copy, date, verification }: {
   }
   const groups: DocumentTableGroup[] = Array.from(grouped, ([title, rows]) => ({
     id: rows[0]?.departmentId ?? title, title, countLabel: copy.membersCount(rows.length),
+    // The system-members roster is a listing, not an employee file: names only.
     rows: rows.map((row) => ({ id: row.id, cells: {
-      member: <AvatarName name={row.fullName} imageSrc={row.imageSrc} detail={row.initials} />,
+      member: row.fullName,
       department: row.departmentName, role: copy.roleLabel(row.role), joined: date(row.joinedAt),
       status: <StatusBadge label={row.isActive ? copy.active : copy.inactive}
         tone={row.isActive ? "success" : "neutral"} />,
@@ -204,6 +209,7 @@ function StaffFileBody({ snapshot, copy, date, number, verification }: {
     <IdentityHero name={staff.fullName} identifier={staff.id}
       detail={`${copy.role}: ${copy.roleLabel(staff.role)} · ${copy.department}: ${staff.departmentName}`}
       initials={staff.initials} imageSrc={staff.imageSrc}
+      imageBackgroundSrc={staff.imageBackgroundSrc}
       status={<StatusBadge label={staff.isActive ? copy.active : copy.inactive}
         tone={staff.isActive ? "success" : "neutral"} />} />
     <FieldGrid columns={2} items={[

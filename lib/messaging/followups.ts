@@ -14,7 +14,8 @@ import {
   dispatchPatientMessage,
   anyChannelSent,
 } from "@/lib/messaging/automated-send";
-import { hasActiveWhatsAppChannel } from "@/lib/messaging/channel-management";
+import { getActiveWhatsAppProvider } from "@/lib/messaging/channel-management";
+import { AUTOMATED_TEMPLATE_APPROVAL_STATES } from "@/lib/messaging/automated-send";
 import { emitClinicNotification } from "@/lib/notifications/emit";
 
 /**
@@ -196,7 +197,7 @@ export async function runInvoiceFollowups(
       continue;
     }
 
-    const [patient, templates, whatsappActive] = await Promise.all([
+    const [patient, templates, whatsappProvider] = await Promise.all([
       client
         .from("patients")
         .select("id, full_name, phone, email")
@@ -206,9 +207,9 @@ export async function runInvoiceFollowups(
         .from("message_templates")
         .select("id, name, language, variables, approval_status, channel")
         .eq("channel", "whatsapp")
-        .eq("approval_status", "approved")
+        .in("approval_status", AUTOMATED_TEMPLATE_APPROVAL_STATES)
         .eq("name", FOLLOWUP_TEMPLATE_NAME),
-      hasActiveWhatsAppChannel(sequence.clinic_id),
+      getActiveWhatsAppProvider(sequence.clinic_id),
     ]);
 
     const locale = patientCopyLocale(settings.data.locale);
@@ -230,7 +231,8 @@ export async function runInvoiceFollowups(
           dedupeKey: `invoice_followup:${sequence.appointment_id}:step${sequence.step}`,
           recipient: { phone: patient.data.phone, email: patient.data.email },
           locale,
-          whatsappActive,
+          whatsappActive: whatsappProvider !== null,
+          whatsappProvider,
           whatsappTemplates: templates.data ?? [],
           templateValues: {
             patient_name: patient.data.full_name,

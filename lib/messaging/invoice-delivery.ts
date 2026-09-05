@@ -19,7 +19,8 @@ import {
   type AutomatedTemplateRow,
   type DispatchResult,
 } from "@/lib/messaging/automated-send";
-import { hasActiveWhatsAppChannel } from "@/lib/messaging/channel-management";
+import { getActiveWhatsAppProvider } from "@/lib/messaging/channel-management";
+import { AUTOMATED_TEMPLATE_APPROVAL_STATES } from "@/lib/messaging/automated-send";
 import type { MessageAttachment } from "@/lib/messaging/types";
 
 /**
@@ -77,7 +78,7 @@ export async function buildInvoiceSummary(
       .from("message_templates")
       .select("id, name, language, variables, approval_status, channel")
       .eq("channel", "whatsapp")
-      .eq("approval_status", "approved")
+      .in("approval_status", AUTOMATED_TEMPLATE_APPROVAL_STATES)
       .eq("name", INVOICE_TEMPLATE_NAME),
   ]);
   if (patient.error || !patient.data) return null;
@@ -221,9 +222,9 @@ export async function deliverIssuedInvoice(input: {
   try {
     const settings = await getClinicReminderSettings(input.clinicId);
     const locale = patientCopyLocale(settings.data?.locale);
-    const [composed, whatsappActive, prepared] = await Promise.all([
+    const [composed, whatsappProvider, prepared] = await Promise.all([
       buildInvoiceSummary(input.clinicId, input.appointmentId),
-      hasActiveWhatsAppChannel(input.clinicId),
+      getActiveWhatsAppProvider(input.clinicId),
       prepareInvoiceAttachment({
         clinicId: input.clinicId,
         actorId: input.actorId,
@@ -243,7 +244,8 @@ export async function deliverIssuedInvoice(input: {
         email: summary.patient.email,
       },
       locale: summary.locale,
-      whatsappActive,
+      whatsappActive: whatsappProvider !== null,
+      whatsappProvider,
       whatsappTemplates: templates,
       templateValues: rendered.templateValues,
       subject: rendered.subject,

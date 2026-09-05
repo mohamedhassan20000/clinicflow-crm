@@ -37,7 +37,6 @@ export {
 export async function resolveGenericDocumentSnapshot(
   user: AuthedUser,
   rawParams: GenericDocumentParams,
-  options: { inlineAssets?: boolean } = {},
 ): Promise<GenericDocumentSnapshot> {
   const params = genericDocumentParamsSchema.parse(rawParams);
   const supabase = await createClient();
@@ -67,7 +66,7 @@ export async function resolveGenericDocumentSnapshot(
     blocks: params.blocks,
     branding: {
       name: clinic.name,
-      logoSrc: options.inlineAssets ? await inlineClinicLogo(clinic.logo_url, user.clinicId) : clinic.logo_url,
+      logoSrc: await inlineClinicLogo(clinic.logo_url, user.clinicId),
       address: clinic.address, phone: clinic.phone, email: clinic.email, website: clinic.website,
       licenseNo: clinic.license_no, taxId: clinic.tax_id, footerText: clinic.document_footer,
     },

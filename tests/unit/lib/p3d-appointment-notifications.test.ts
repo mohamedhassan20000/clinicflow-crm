@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   getSettings: vi.fn(),
   send: vi.fn(),
-  waActive: vi.fn(),
+  waProvider: vi.fn(),
   captureException: vi.fn(),
   tables: {} as Record<string, { data: unknown; error: unknown }>,
 }));
@@ -27,10 +27,11 @@ vi.mock("@/lib/supabase/admin", () => ({
   }),
 }));
 vi.mock("@/lib/messaging/automated-send", () => ({
+  AUTOMATED_TEMPLATE_APPROVAL_STATES: ["approved", "submitted", "draft"],
   dispatchPatientMessage: mocks.send,
 }));
 vi.mock("@/lib/messaging/channel-management", () => ({
-  hasActiveWhatsAppChannel: mocks.waActive,
+  getActiveWhatsAppProvider: mocks.waProvider,
 }));
 
 import { notifyAppointmentEvent } from "@/lib/messaging/appointment-notifications";
@@ -70,7 +71,7 @@ beforeEach(() => {
     },
     error: null,
   });
-  mocks.waActive.mockResolvedValue(true);
+  mocks.waProvider.mockResolvedValue("meta");
   mocks.send.mockResolvedValue({
     email: { status: "sent" },
     whatsapp: { status: "sent" },

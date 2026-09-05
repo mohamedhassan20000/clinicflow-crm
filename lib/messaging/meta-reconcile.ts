@@ -18,6 +18,7 @@ import {
   fetchMetaTemplates,
   getMetaWabaSubscription,
   subscribeMetaWabaWebhook,
+  META_COEXISTENCE_WEBHOOK_FIELDS,
 } from "@/lib/messaging/whatsapp-meta";
 
 /**
@@ -141,6 +142,15 @@ export async function applyChannelStateSignals(input: {
       webhookSubscribed,
       approvedTemplateCount,
       failureReason: input.signals.failureReason,
+      // P7C: the flow is a stored property of the channel, never something a
+      // caller may assert, so a webhook can't turn a standard channel into a
+      // Coexistence one to bypass the template gate.
+      coexistence: row.onboarding_flow === "coexistence",
+      // P7D: likewise a stored property of the channel, never caller-asserted —
+      // a webhook cannot relabel a platform channel as clinic-owned to bypass
+      // the business-verification and template gates.
+      selfManaged: row.onboarding_flow === "manual_api",
+      phoneOnBusinessApp: input.signals.phoneOnBusinessApp,
     });
 
   // A send is only allowed once the channel is fully connected; a failed
@@ -223,7 +233,15 @@ export async function reconcileMetaChannel(
 
   let webhookSubscribed = snapshot.snapshot.webhookSubscribed;
   if (!webhookSubscribed) {
-    const retried = await subscribeMetaWabaWebhook(credentials);
+    // A Coexistence WABA must be re-subscribed with its extra fields, otherwise
+    // the repair would silently restore a subscription that drops the clinic's
+    // Business-app traffic.
+    const retried = await subscribeMetaWabaWebhook(
+      credentials,
+      channel.data.onboarding_flow === "coexistence"
+        ? { fields: META_COEXISTENCE_WEBHOOK_FIELDS }
+        : undefined,
+    );
     if (retried.ok) {
       const verified = await getMetaWabaSubscription(credentials);
       webhookSubscribed = verified.ok && verified.subscribed;
@@ -272,6 +290,7 @@ export async function reconcileMetaChannel(
       messagingLimitTier: snapshot.snapshot.messagingLimitTier,
       accountReviewStatus: snapshot.snapshot.accountReviewStatus,
       webhookSubscribed,
+      phoneOnBusinessApp: snapshot.snapshot.phoneOnBusinessApp,
     },
     markSynced: true,
   });

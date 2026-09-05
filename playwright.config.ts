@@ -42,10 +42,16 @@ export default defineConfig({
           NEXT_PUBLIC_SUPABASE_URL: localSupabaseUrl,
           NEXT_PUBLIC_SUPABASE_ANON_KEY: requireLocalKey("LOCAL_SUPABASE_PUBLISHABLE_KEY"),
           SUPABASE_SERVICE_ROLE_KEY: requireLocalKey("LOCAL_SUPABASE_SECRET_KEY"),
+          AI_ACTION_CONFIRMATION_HMAC_KEY:
+            process.env.AI_ACTION_CONFIRMATION_HMAC_KEY ??
+            Buffer.alloc(32, 9).toString("base64"),
           UPSTASH_REDIS_REST_URL: "http://127.0.0.1:3011",
           UPSTASH_REDIS_REST_TOKEN: "playwright-test-token",
           DIALOG360_API_BASE_URL: "http://127.0.0.1:3011",
           MESSAGING_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
+          // The messaging settings page derives each clinic's webhook callback
+          // URL from this, so it must be set for the connection-method specs.
+          NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL ?? baseURL,
         },
         url: baseURL,
         reuseExistingServer,

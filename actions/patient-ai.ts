@@ -10,8 +10,16 @@ import { AI_PATIENT_SUGGEST_FEATURE } from "@/lib/ai/patient-authorization";
 import { AI_PATIENT_AUTO_FEATURE } from "@/lib/ai/patient-reply-mode";
 import {
   createClinicScopedAdminClient,
+  setClinicAiCommunicationStyle,
   setClinicAiReplyMode,
 } from "@/lib/supabase/admin";
+import {
+  AI_ARABIC_STYLES,
+  AI_LANGUAGE_MODES,
+  AI_TONES,
+  MAX_STYLE_INSTRUCTION_LENGTH,
+  sanitizeStyleInstruction,
+} from "@/lib/ai/communication-style";
 
 export type PatientAiActionResult = { success?: boolean; error?: string };
 
@@ -21,6 +29,17 @@ async function patientAiError(key: Parameters<typeof actionError>[0]) {
 
 const replyModeSchema = z.object({
   mode: z.enum(["off", "suggest", "auto"]),
+});
+
+const communicationStyleSchema = z.object({
+  language: z.enum(AI_LANGUAGE_MODES),
+  arabicStyle: z.enum(AI_ARABIC_STYLES),
+  tone: z.enum(AI_TONES),
+  styleInstruction: z
+    .string()
+    .max(MAX_STYLE_INSTRUCTION_LENGTH)
+    .nullable()
+    .optional(),
 });
 
 const faqSchema = z.object({
@@ -60,6 +79,55 @@ export async function setPatientAiReplyMode(input: {
   if (updated.error || !updated.data) {
     return patientAiError("settings.patientAiCouldNotSaveMode");
   }
+  revalidatePath("/settings/patient-ai");
+  // P17 (§7): the same stored value is now read in two more places — the
+  // Messaging settings card and the Inbox header — and a switch that does not
+  // come back changed after a refresh reads as a switch that did not work.
+  revalidatePath("/settings/messaging");
+  revalidatePath("/inbox");
+  return { success: true };
+}
+
+/**
+ * P10 (§1): set how the patient assistant speaks — language, Arabic register,
+ * tone, and one short clinic-authored style line.
+ *
+ * Same gate as the reply mode: primary-admin-only mutation, entitlement
+ * checked, service-role write through a reviewed RPC because `clinics` is keyed
+ * by primary key rather than `clinic_id`.
+ *
+ * The style line is sanitized here as well as at render time. Not because the
+ * render-time fence is insufficient — it is what actually contains the text —
+ * but because storing a line with newlines or control characters in it means
+ * every future reader has to remember to fence it, and the shortest way to
+ * guarantee that is for the stored value never to contain them.
+ */
+export async function setPatientAiCommunicationStyle(input: {
+  language: "auto" | "ar" | "en";
+  arabicStyle: "auto" | "msa" | "egyptian" | "gulf" | "saudi" | "levantine";
+  tone: "friendly" | "neutral" | "formal";
+  styleInstruction?: string | null;
+}): Promise<PatientAiActionResult> {
+  const user = await requireMutationRole("admin");
+  const parsed = communicationStyleSchema.safeParse(input);
+  if (!parsed.success) return patientAiError("settings.patientAiInvalidStyle");
+
+  const entitlements = await getEntitlements(user.clinicId);
+  if (
+    !hasFeature(entitlements, AI_ASSISTANT_FEATURE) ||
+    !hasFeature(entitlements, AI_PATIENT_SUGGEST_FEATURE)
+  ) {
+    return patientAiError("settings.patientAiNotEntitled");
+  }
+
+  const result = await setClinicAiCommunicationStyle({
+    clinicId: user.clinicId,
+    languageMode: parsed.data.language,
+    arabicStyle: parsed.data.arabicStyle,
+    tone: parsed.data.tone,
+    styleInstruction: sanitizeStyleInstruction(parsed.data.styleInstruction),
+  });
+  if (result.error) return patientAiError("settings.patientAiCouldNotSaveStyle");
   revalidatePath("/settings/patient-ai");
   return { success: true };
 }

@@ -42,6 +42,7 @@ import {
   type CalendarAppointmentStatus,
   type CalendarFinancialRow,
 } from "@/lib/appointments/calendar";
+import { OverduePendingAppointmentsSection } from "@/components/dashboard/overdue-pending-appointments-section";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("protected");
@@ -61,6 +62,10 @@ interface PageProps {
     nat?: string;
     phone?: string;
     name?: string;
+    /** P10: `ai=1` restricts the calendar to assistant-created appointments. */
+    ai?: string;
+    /** P10: `appointment=<uuid>` opens that appointment's details. */
+    appointment?: string;
   }>;
 }
 
@@ -96,7 +101,15 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
     nat,
     phone,
     name,
+    ai,
   } = appointmentSearchParams;
+  // P10 — the dashboard's "AI appointments awaiting confirmation" card.
+  //
+  // Filtering by `status=pending` alone was never the right query: a clinic has
+  // plenty of pending appointments staff created themselves, and the card is
+  // about the ones the assistant created and nobody has confirmed. The column
+  // that distinguishes them already exists.
+  const aiOnly = ai === "1";
   const currentAppointmentsUrl = pathWithSearch(
     "/appointments",
     new URLSearchParams(
@@ -228,6 +241,7 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
     query = query.eq("department_id", selectedDepartmentId);
   }
   if (statusFilter) query = query.eq("status", statusFilter);
+  if (aiOnly) query = query.not("ai_patient_conversation_id", "is", null);
   if (patientIds) query = query.in("patient_id", patientIds);
 
   const { data: appointments, error: appointmentsError } = await query;
@@ -344,7 +358,8 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
     Number(!!nat) +
     Number(!!phone) +
     Number(!!name) +
-    Number(!!statusFilter);
+    Number(!!statusFilter) +
+    Number(aiOnly);
 
   const rangeLabel =
     view === "day"
@@ -391,6 +406,14 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
         hideDoctorFilter={isScopedViewer}
         hideDeptFilter={isScopedViewer}
       />
+
+      {canEditAppointments && !isDoctor ? (
+        <OverduePendingAppointmentsSection
+          clinicId={user.clinicId}
+          currentUserId={user.id}
+          currentUserRole={user.role as "admin" | "receptionist" | "manager" | "assistant"}
+        />
+      ) : null}
 
       {view === "day" ? (
         <DayCalendar

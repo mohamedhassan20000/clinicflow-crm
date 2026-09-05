@@ -89,8 +89,10 @@ describe("P7-12 patient history & financial document contract", () => {
 
   it("issues + reprints through the shared engine pipeline", () => {
     const actions = readFileSync(join(process.cwd(), "actions/documents.ts"), "utf8");
-    expect(actions).toContain("issueDocumentFoundation({");
-    expect(actions).toContain("render: getDocumentPdfRenderer(parsed.data.documentType)");
+    const core = readFileSync(join(process.cwd(), "lib/documents/mutations.ts"), "utf8");
+    expect(actions).toContain("issuePatientHistoryDocumentCore(user, {");
+    expect(core).toContain("issueDocumentFoundation({");
+    expect(core).toContain("render: getDocumentPdfRenderer(code)");
     expect(actions).toContain("record_patient_history_document_reprint");
     const renderer = readFileSync(
       join(process.cwd(), "lib/documents/renderers/patient-history.tsx"),

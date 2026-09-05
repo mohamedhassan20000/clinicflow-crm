@@ -4,9 +4,16 @@ import { z } from "zod";
 import { notFound } from "next/navigation";
 import { requireActiveSubscription } from "@/lib/billing/subscriptions";
 import { getDocumentCatalogEntry } from "@/lib/documents/catalog";
-import { issueDocumentFoundation } from "@/lib/documents/issuance";
 import { documentPdfHref } from "@/lib/documents/module";
-import { getDocumentPdfRenderer } from "@/lib/documents/renderers/registry";
+import {
+  issueAnalyticalDocumentCore,
+  issueInvoiceDocumentCore,
+  issuePatientHistoryDocumentCore,
+  issueRevenueDocumentCore,
+  issueRosterProfileDocumentCore,
+  type DocumentIssueCoreData,
+} from "@/lib/documents/mutations";
+import type { DomainMutationResult } from "@/lib/domain-mutations";
 import {
   analyticalDocumentParamsSchema,
   parseAnalyticalDocumentSnapshot,
@@ -39,7 +46,6 @@ import {
   type InvoiceDocumentParams,
   type InvoiceDocumentSnapshot,
 } from "@/lib/documents/resolvers/invoice";
-import { issueInvoiceDocument } from "@/lib/documents/invoice-issuance";
 import {
   parsePatientHistoryDocumentSnapshot,
   patientHistoryDocumentParamsSchema,
@@ -51,7 +57,31 @@ import {
 import { requireUser } from "@/lib/rbac";
 import { requireReportAccess, requireReportsIndexAccess } from "@/lib/reports/access";
 import { createClient } from "@/lib/supabase/server";
-import type { Json } from "@/types/database";
+
+/**
+ * Phase 6 — the issuance bodies moved to `lib/documents/mutations.ts` so the
+ * Assistant's `documents.issue` action runs the identical code. These server
+ * actions keep their session guard, subscription check, and UI error codes and
+ * are now thin adapters over the shared cores.
+ */
+function toIssueActionResult(
+  result: DomainMutationResult<DocumentIssueCoreData>,
+):
+  | { data: { documentId: string; documentNumber: string; reused: boolean }; errorCode?: never }
+  | { data?: never; errorCode: DocumentActionErrorCode } {
+  if (!result.ok) {
+    return {
+      errorCode: result.code === "invalidInput" ? "invalidInput" : "issueFailed",
+    };
+  }
+  return {
+    data: {
+      documentId: result.data.documentId,
+      documentNumber: result.data.documentNumber,
+      reused: result.data.reused,
+    },
+  };
+}
 
 const localeSchema = z.enum(["ar", "en"]);
 const issueRevenueSchema = revenueDocumentParamsSchema.and(z.object({
@@ -153,53 +183,12 @@ export async function issueRevenueReportDocument(
   await requireActiveSubscription(user.clinicId);
   const parsed = issueRevenueSchema.safeParse(input);
   if (!parsed.success) return { errorCode: "invalidInput" };
-
-  try {
-    const snapshot = await resolveRevenueDocumentSnapshot(user, parsed.data, {
-      inlineLogo: true,
-    });
-    const catalog = getDocumentCatalogEntry("REVENUE_REPORT");
-    const result = await issueDocumentFoundation({
-      clinicId: user.clinicId,
-      actorId: user.id,
-      draftId: parsed.data.draftId,
-      documentType: catalog.code,
-      idempotencyKey: `revenue:${parsed.data.idempotencyKey}`,
-      locale: parsed.data.locale,
-      numberingPrefix: snapshot.settings.numberingPrefix,
-      periodKey: snapshot.settings.numberingYearlyReset
-        ? new Date(snapshot.generatedAt).getFullYear().toString()
-        : "",
-      sequencePadding: snapshot.settings.sequencePadding,
-      params: {
-        version: 1,
-        from: parsed.data.from,
-        to: parsed.data.to,
-        doctorId: parsed.data.doctorId ?? null,
-        departmentId: parsed.data.departmentId ?? null,
-      },
-      snapshot: snapshot as unknown as Json,
-      watermark: snapshot.settings.watermark,
-      render: getDocumentPdfRenderer(catalog.code),
-    });
-    return {
-      data: {
-        documentId: result.documentId,
-        documentNumber: result.documentNumber,
-        reused: result.reused,
-      },
-    };
-  } catch (error) {
-    console.error("revenue_document_issue_failed", {
-      clinicId: user.clinicId,
-      stage:
-        error && typeof error === "object" && "stage" in error
-          ? String(error.stage)
-          : "unknown",
-      message: error instanceof Error ? error.message : "unknown",
-    });
-    return { errorCode: "issueFailed" };
-  }
+  return toIssueActionResult(
+    await issueRevenueDocumentCore(user, {
+      ...parsed.data,
+      draftId: parsed.data.draftId ?? null,
+    }),
+  );
 }
 
 export async function getIssuedRevenueDocument(
@@ -386,65 +375,12 @@ export async function issueAnalyticalReportDocument(
   if (!parsed.success) return { errorCode: "invalidInput" };
   const user = await requireAnalyticalDocumentAccess(parsed.data.documentType);
   await requireActiveSubscription(user.clinicId);
-
-  try {
-    const snapshot = await resolveAnalyticalDocumentSnapshot(user, parsed.data, {
-      inlineLogo: true,
-    });
-    const catalog = getDocumentCatalogEntry(parsed.data.documentType);
-    const result = await issueDocumentFoundation({
-      clinicId: user.clinicId,
-      actorId: user.id,
-      draftId: parsed.data.draftId,
-      documentType: catalog.code,
-      idempotencyKey:
-        `analytical:${catalog.code.toLowerCase()}:${parsed.data.idempotencyKey}`,
-      locale: parsed.data.locale,
-      numberingPrefix: snapshot.settings.numberingPrefix,
-      periodKey: snapshot.settings.numberingYearlyReset
-        ? new Date(snapshot.generatedAt).getFullYear().toString()
-        : "",
-      sequencePadding: snapshot.settings.sequencePadding,
-      params: {
-        version: 1,
-        documentType: parsed.data.documentType,
-        from: parsed.data.from,
-        to: parsed.data.to,
-        doctorId: parsed.data.doctorId ?? null,
-        departmentId: parsed.data.departmentId ?? null,
-        receptionistId: parsed.data.receptionistId ?? null,
-      },
-      snapshot: snapshot as unknown as Json,
-      watermark: snapshot.settings.watermark,
-      doctorId:
-        parsed.data.documentType === "DOCTOR_PERFORMANCE_REPORT"
-          ? parsed.data.doctorId ?? null
-          : null,
-      staffId:
-        parsed.data.documentType === "RECEPTIONIST_PERFORMANCE_REPORT"
-          ? parsed.data.receptionistId ?? null
-          : null,
-      render: getDocumentPdfRenderer(parsed.data.documentType),
-    });
-    return {
-      data: {
-        documentId: result.documentId,
-        documentNumber: result.documentNumber,
-        reused: result.reused,
-      },
-    };
-  } catch (error) {
-    console.error("analytical_document_issue_failed", {
-      clinicId: user.clinicId,
-      documentType: parsed.data.documentType,
-      stage:
-        error && typeof error === "object" && "stage" in error
-          ? String(error.stage)
-          : "unknown",
-      message: error instanceof Error ? error.message : "unknown",
-    });
-    return { errorCode: "issueFailed" };
-  }
+  return toIssueActionResult(
+    await issueAnalyticalDocumentCore(user, {
+      ...parsed.data,
+      draftId: parsed.data.draftId ?? null,
+    }),
+  );
 }
 
 export async function getIssuedAnalyticalDocument(
@@ -638,44 +574,12 @@ export async function issueRosterProfileDocument(input: RosterProfileDocumentPar
   if (!parsed.success) return { errorCode: "invalidInput" };
   const user = await requireRosterProfileDocumentAccess(parsed.data.documentType);
   await requireActiveSubscription(user.clinicId);
-  try {
-    const snapshot = await resolveRosterProfileDocumentSnapshot(user, parsed.data, {
-      inlineAssets: true,
-      attachmentKeys: parsed.data.attachmentKeys,
-    });
-    const result = await issueDocumentFoundation({
-      clinicId: user.clinicId,
-      actorId: user.id,
-      draftId: parsed.data.draftId,
-      documentType: parsed.data.documentType,
-      idempotencyKey: `roster-profile:${parsed.data.documentType.toLowerCase()}:${parsed.data.idempotencyKey}`,
-      locale: parsed.data.locale,
-      numberingPrefix: snapshot.settings.numberingPrefix,
-      periodKey: snapshot.settings.numberingYearlyReset
-        ? new Date(snapshot.generatedAt).getFullYear().toString() : "",
-      sequencePadding: snapshot.settings.sequencePadding,
-      params: {
-        version: 1, documentType: parsed.data.documentType,
-        patientId: parsed.data.patientId ?? null, staffId: parsed.data.staffId ?? null,
-        departmentId: parsed.data.departmentId ?? null, doctorId: parsed.data.doctorId ?? null,
-        role: parsed.data.role ?? null, search: parsed.data.search ?? null,
-        attachmentKeys: parsed.data.attachmentKeys,
-      },
-      snapshot: snapshot as unknown as Json,
-      watermark: snapshot.settings.watermark,
-      patientId: parsed.data.documentType === "PATIENT_FILE" ? parsed.data.patientId ?? null : null,
-      staffId: parsed.data.documentType === "STAFF_FILE" ? parsed.data.staffId ?? null : null,
-      render: getDocumentPdfRenderer(parsed.data.documentType),
-    });
-    return { data: { documentId: result.documentId, documentNumber: result.documentNumber, reused: result.reused } };
-  } catch (error) {
-    console.error("roster_profile_document_issue_failed", {
-      clinicId: user.clinicId, documentType: parsed.data.documentType,
-      stage: error && typeof error === "object" && "stage" in error ? String(error.stage) : "unknown",
-      message: error instanceof Error ? error.message : "unknown",
-    });
-    return { errorCode: "issueFailed" };
-  }
+  return toIssueActionResult(
+    await issueRosterProfileDocumentCore(user, {
+      ...parsed.data,
+      draftId: parsed.data.draftId ?? null,
+    }),
+  );
 }
 
 export async function getIssuedRosterProfileDocument(
@@ -801,26 +705,12 @@ export async function issueInvoiceReportDocument(
   if (!parsed.success) return { errorCode: "invalidInput" };
   const user = await requireInvoiceDocumentAccess();
   await requireActiveSubscription(user.clinicId);
-  try {
-    const result = await issueInvoiceDocument({
-      clinicId: user.clinicId,
-      actorId: user.id,
-      appointmentId: parsed.data.appointmentId,
-      locale: parsed.data.locale,
-      draftId: parsed.data.draftId,
-    });
-    return { data: result };
-  } catch (error) {
-    console.error("invoice_document_issue_failed", {
-      clinicId: user.clinicId,
-      stage:
-        error && typeof error === "object" && "stage" in error
-          ? String(error.stage)
-          : "unknown",
-      message: error instanceof Error ? error.message : "unknown",
-    });
-    return { errorCode: "issueFailed" };
-  }
+  return toIssueActionResult(
+    await issueInvoiceDocumentCore(user, {
+      ...parsed.data,
+      draftId: parsed.data.draftId ?? null,
+    }),
+  );
 }
 
 export async function getIssuedInvoiceDocument(
@@ -994,55 +884,12 @@ export async function issuePatientHistoryDocument(
   if (!parsed.success) return { errorCode: "invalidInput" };
   const user = await requirePatientHistoryDocumentAccess(parsed.data.documentType);
   await requireActiveSubscription(user.clinicId);
-  try {
-    const snapshot = await resolvePatientHistoryDocumentSnapshot(user, parsed.data, {
-      inlineAssets: true,
-    });
-    const result = await issueDocumentFoundation({
-      clinicId: user.clinicId,
-      actorId: user.id,
-      draftId: parsed.data.draftId,
-      documentType: parsed.data.documentType,
-      idempotencyKey:
-        `patient-history:${parsed.data.documentType.toLowerCase()}:${parsed.data.idempotencyKey}`,
-      locale: parsed.data.locale,
-      numberingPrefix: snapshot.settings.numberingPrefix,
-      periodKey: snapshot.settings.numberingYearlyReset
-        ? new Date(snapshot.generatedAt).getFullYear().toString()
-        : "",
-      sequencePadding: snapshot.settings.sequencePadding,
-      params: {
-        version: 1,
-        documentType: parsed.data.documentType,
-        patientId: parsed.data.patientId,
-        preset: snapshot.range.preset,
-        from: snapshot.range.from,
-        to: snapshot.range.to,
-      },
-      snapshot: snapshot as unknown as Json,
-      watermark: snapshot.settings.watermark,
-      patientId: parsed.data.patientId,
-      render: getDocumentPdfRenderer(parsed.data.documentType),
-    });
-    return {
-      data: {
-        documentId: result.documentId,
-        documentNumber: result.documentNumber,
-        reused: result.reused,
-      },
-    };
-  } catch (error) {
-    console.error("patient_history_document_issue_failed", {
-      clinicId: user.clinicId,
-      documentType: parsed.data.documentType,
-      stage:
-        error && typeof error === "object" && "stage" in error
-          ? String(error.stage)
-          : "unknown",
-      message: error instanceof Error ? error.message : "unknown",
-    });
-    return { errorCode: "issueFailed" };
-  }
+  return toIssueActionResult(
+    await issuePatientHistoryDocumentCore(user, {
+      ...parsed.data,
+      draftId: parsed.data.draftId ?? null,
+    }),
+  );
 }
 
 export async function getIssuedPatientHistoryDocument(

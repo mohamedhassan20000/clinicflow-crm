@@ -63,6 +63,13 @@ function descriptionKey(context: LaunchableAssistantPageContext) {
  * One Sheet launcher for every contextual Assistant entry point. The context
  * sent to chat is the strict, minimized contract; display labels (such as a
  * patient name) stay UI-only and never enter the request payload.
+ *
+ * The Sheet hosts the *same* `AssistantChat` as `/assistant` — same transport,
+ * same conversation persistence, same confirmation pipeline, and since the
+ * post-plan completion pass the same conversation history. There is deliberately
+ * no shortcut-only chat implementation: opening a shortcut starts a new
+ * conversation seeded server-side with the record on screen, and the user can
+ * still browse to, and continue, any earlier conversation from inside it.
  */
 export function AssistantLauncher({
   context,

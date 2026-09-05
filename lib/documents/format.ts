@@ -22,9 +22,29 @@ function resolveLocale(
   return { ...DEFAULT_DOCUMENT_LOCALE, ...locale };
 }
 
-/** Converts Arabic-Indic digits in identifiers/phones supplied as text. */
+/**
+ * Bidi formatting controls Intl bakes into Arabic patterns (`ar` emits U+200F
+ * between the day/month/year fields of a numeric date). Documents render every
+ * such value inside an explicit `<bdi class="cf-doc-ltr">` isolate, so an
+ * embedded RLM only re-orders the fields against that isolate — `16/08/2026`
+ * comes out as `162026/08/`. The isolate carries the direction; the string
+ * itself must stay free of embedded controls.
+ */
+const BIDI_CONTROL_CHARACTERS = /[\u200E\u200F\u061C\u202A-\u202E\u2066-\u2069]/g;
+
+/** Strips embedded bidi controls so wrapper isolates alone decide ordering. */
+export function stripBidiControls(value: string): string {
+  return value.replace(BIDI_CONTROL_CHARACTERS, "");
+}
+
+/**
+ * Converts Arabic-Indic digits in identifiers/phones supplied as text, and
+ * drops embedded bidi controls (see `stripBidiControls`). Every document string
+ * passes through here — directly, or via `normalizeDocumentDigits` — so this is
+ * the one choke point where both normalizations are guaranteed.
+ */
 export function toLatinDigits(value: string | number | bigint): string {
-  return String(value).replace(/[٠-٩۰-۹]/g, (digit) => {
+  return stripBidiControls(String(value)).replace(/[٠-٩۰-۹]/g, (digit) => {
     const code = digit.charCodeAt(0);
     const numeric = code >= ARABIC_INDIC_ZERO && code <= ARABIC_INDIC_ZERO + 9
       ? code - ARABIC_INDIC_ZERO

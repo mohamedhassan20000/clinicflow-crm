@@ -24,8 +24,8 @@ export function normalizeClinicAiReplyMode(value: string | null | undefined): Cl
  * Resolves the mode a patient turn actually runs in, fail-closed.
  *
  * - No active subscription, no `ai_assistant`, or no `ai.patient_suggest` → `off`.
- *   Patient AI is `pro_ai`-only and opt-in; without the suggest entitlement the
- *   agent never drafts anything, regardless of the clinic column.
+ *   Patient AI is feature- and terms-gated; without the suggest entitlement
+ *   the agent never drafts anything, regardless of the clinic column.
  * - Clinic column `off` → `off`.
  * - Clinic column `auto` **without** `ai.patient_auto` → downgraded to `suggest`.
  *   This is the §12-HP / §P5 safety gate: `auto` stays behind its own

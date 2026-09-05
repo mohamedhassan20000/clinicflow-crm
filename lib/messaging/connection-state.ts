@@ -65,6 +65,32 @@ export type ChannelStateSignals = {
   messagingLimitTier?: string | null;
   /** Raw provider failure signal — sanitized by this module, never stored raw. */
   failureReason?: string | null;
+  /**
+   * P7C: the channel was onboarded through WhatsApp Business App Coexistence.
+   * Such a number is already live in the clinic's Business app, so it is never
+   * gated on Cloud API phone verification or on template approval — it can talk
+   * to patients the moment Meta confirms it and our webhook is subscribed.
+   */
+  coexistence?: boolean | null;
+  /**
+   * P7C: Meta's `is_on_biz_app` for the number, when the reconciliation poll
+   * observed it. Only an explicit `false` is acted on — it means the number left
+   * the Business app, ending coexistence. `true`/`null`/`undefined` change
+   * nothing, because a Coexistence channel only exists at all after the server
+   * verified the number against Meta during provisioning, and this signal is not
+   * carried by webhooks (so requiring it would flap the state between polls).
+   */
+  phoneOnBusinessApp?: boolean | null;
+  /**
+   * P7D: the channel is the clinic's *own* Meta app / WABA, connected with
+   * credentials they supplied and we verified against Meta. Such a number is
+   * already live on their own Cloud API account, so neither our business-review
+   * gate nor our template-approval gate describes whether it can message
+   * patients — only phone health and the webhook subscription do. Business
+   * verification still governs *volume*, and is surfaced through the health
+   * dashboard exactly as it is for a Coexistence channel.
+   */
+  selfManaged?: boolean | null;
 };
 
 export type DerivedConnectionState = {
@@ -141,7 +167,15 @@ export function deriveConnectionState(
   signals: ChannelStateSignals,
 ): DerivedConnectionState {
   const businessVerification = classifyVerification(signals.businessVerificationStatus);
-  const phone = classifyPhone(signals.phoneStatus);
+  const coexistence = signals.coexistence === true;
+  const selfManaged = signals.selfManaged === true;
+  const rawPhone = classifyPhone(signals.phoneStatus);
+  // A Coexistence number is already live on the Business app, so Meta's Cloud
+  // API `code_verification_status` is not a meaningful gate for it — the
+  // equivalent proof was obtained server-side during provisioning, which is the
+  // only way such a channel comes to exist. A blocked number still fails.
+  const phone: PhoneClass =
+    coexistence && rawPhone !== "blocked" ? "connected" : rawPhone;
   const review = lower(signals.accountReviewStatus);
   const reviewApproved = review === "approved";
   const verification = reviewApproved ? "verified" : businessVerification;
@@ -151,6 +185,11 @@ export function deriveConnectionState(
   //    from the most specific available signal and sanitized to a closed code.
   if (phone === "blocked") {
     return { state: "verification_failed", reason: sanitizeFailureReason(signals.phoneStatus) };
+  }
+  // P7C: Meta explicitly reporting the number as no longer on the Business app
+  // ends coexistence — the clinic disconnected it there, or Meta unlinked it.
+  if (coexistence && signals.phoneOnBusinessApp === false) {
+    return { state: "verification_failed", reason: "generic" };
   }
   if (verification === "rejected") {
     return {
@@ -164,6 +203,16 @@ export function deriveConnectionState(
       reason: sanitizeFailureReason(signals.failureReason ?? signals.accountReviewStatus),
     };
   }
+  // P7D: a clinic-owned Cloud API number is gated only on its own health and on
+  // our subscription to their WABA. Failure signals above still apply — this
+  // branch sits after them deliberately, so a banned or rejected number is never
+  // reported as connected merely because the clinic owns the account.
+  if (selfManaged) {
+    return signals.webhookSubscribed === true
+      ? { state: "connected", reason: null }
+      : { state: "connecting_to_meta", reason: null };
+  }
+
   if (
     signals.webhookSubscribed === false &&
     phone === "connected" &&
@@ -175,6 +224,16 @@ export function deriveConnectionState(
   // 2. Phone must be connected before anything downstream can be claimed.
   if (phone === "pending") return { state: "waiting_phone_verification", reason: null };
   if (phone === "connected") {
+    if (coexistence) {
+      // The number already converses with patients from the Business app. Once
+      // Meta confirms it and our webhook is subscribed, the channel genuinely
+      // works — waiting on template approval would misreport it as unfinished.
+      // Business verification still gates *volume*, not connectivity, so it is
+      // surfaced through the health dashboard rather than the connection state.
+      return signals.webhookSubscribed === true
+        ? { state: "connected", reason: null }
+        : { state: "connecting_to_meta", reason: null };
+    }
     if (verification === "verified") {
       return approved >= 1 && signals.webhookSubscribed === true
         ? { state: "connected", reason: null }

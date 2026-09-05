@@ -11,12 +11,14 @@ import {
   type TemplateVariable,
 } from "@/lib/messaging/patient-copy";
 import type {
+  MessagingProviderId,
   MessageAttachment,
   MessageChannel,
   OutboundRelatedType,
   SendErrorCode,
 } from "@/lib/messaging/types";
 import type { Database } from "@/types/database";
+import { isTemplateUsableForWhatsAppProvider } from "@/lib/messaging/provider-policy";
 
 /**
  * Independent-channel, idempotent patient dispatch (2026-07-19 flow revision).
@@ -62,7 +64,7 @@ export type DispatchInput = {
   dedupeKey: string;
   recipient: { phone: string | null; email: string | null };
   locale: PatientCopyLocale;
-  /** Approved WhatsApp templates for this clinic matching the send's template name. */
+  /** Candidate WhatsApp templates for this clinic matching the send's template name. */
   whatsappTemplates: readonly AutomatedTemplateRow[];
   templateValues: Partial<Record<TemplateVariable, string>>;
   /** Freeform copy for the email channel. */
@@ -72,6 +74,12 @@ export type DispatchInput = {
   relatedId: string;
   /** Whether the clinic has an active WhatsApp integration. */
   whatsappActive: boolean;
+  /**
+   * Which transport carries it, which decides whether a template needs Meta's
+   * approval to be usable. Omitted means "a Cloud API transport" — the strict
+   * reading, so an unset value can never loosen the gate.
+   */
+  whatsappProvider?: MessagingProviderId | null;
   /** Email-only attachments (e.g. the canonical invoice PDF). */
   emailAttachments?: readonly MessageAttachment[];
 };
@@ -86,19 +94,38 @@ function templateVariableNames(
     : [];
 }
 
-/** Prefer the clinic-locale variant, fall back to any approved language. */
+/**
+ * The stored approval states worth loading for an automated send. The provider
+ * decides which of them are actually usable, so the query fetches the
+ * candidates and pickAutomatedTemplate makes the call.
+ */
+export const AUTOMATED_TEMPLATE_APPROVAL_STATES = [
+  "approved",
+  "submitted",
+  "draft",
+] as const;
+
+/**
+ * Prefer the clinic-locale variant, fall back to any usable language.
+ *
+ * On a Cloud API transport only a Meta-approved template may be sent, and that
+ * gate is enforced again inside sendMessage. A linked device is the clinic's own
+ * WhatsApp account: there is no template catalogue, no reviewer and nothing to
+ * approve, so the clinic's own saved body is what goes out — anything but an
+ * explicitly rejected template is usable there.
+ */
 export function pickAutomatedTemplate(
   templates: readonly AutomatedTemplateRow[],
   locale: PatientCopyLocale,
+  provider?: MessagingProviderId | null,
 ): AutomatedTemplateRow | null {
-  const approved = templates.filter(
+  const usable = templates.filter(
     (template) =>
-      template.channel === "whatsapp" && template.approval_status === "approved",
+      template.channel === "whatsapp" &&
+      isTemplateUsableForWhatsAppProvider(provider, template.approval_status),
   );
   return (
-    approved.find((template) => template.language === locale) ??
-    approved[0] ??
-    null
+    usable.find((template) => template.language === locale) ?? usable[0] ?? null
   );
 }
 
@@ -176,7 +203,11 @@ export async function dispatchPatientMessage(
   } else if (!input.recipient.phone) {
     result.whatsapp = { status: "not_attempted", reason: "no_address" };
   } else {
-    const template = pickAutomatedTemplate(input.whatsappTemplates, input.locale);
+    const template = pickAutomatedTemplate(
+      input.whatsappTemplates,
+      input.locale,
+      input.whatsappProvider,
+    );
     const parameters = template
       ? templateParameterValues(
           templateVariableNames(template.variables),

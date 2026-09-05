@@ -29,12 +29,27 @@ export type AssistantToolPresentation = {
 export const ASSISTANT_TOOL_PRESENTATION: Readonly<
   Record<string, AssistantToolPresentation>
 > = {
-  // P4 tools
-  get_patient_summary: { labelKey: "toolPatientSummary", group: "clinical" },
+  // P4 tools retained through the Phase 7 cutover. The clinical record reads
+  // that stood here are served by the generic resource tools below.
   search_authorized_patients: { labelKey: "toolPatientLookup", group: "clinical" },
-  search_patient_visits: { labelKey: "toolVisitSearch", group: "clinical" },
-  list_doctor_appointments: { labelKey: "toolAppointments", group: "clinical" },
   check_availability: { labelKey: "toolAvailability", group: "clinical" },
+
+  // Phase 1 generic resource reads.
+  query_resource: { labelKey: "toolRecordReview", group: "operational" },
+  get_record: { labelKey: "toolRecordReview", group: "operational" },
+  aggregate_resource: { labelKey: "toolRecordReview", group: "operational" },
+  describe_capabilities: { labelKey: "toolCapabilities", group: "guidance" },
+
+  // Phase 3 generic action foundation. The model-facing execute tool produces
+  // previews only; the authenticated UI confirmation performs execution.
+  execute_action: { labelKey: "toolExecuteAction", group: "operational" },
+  describe_action: { labelKey: "toolDescribeAction", group: "guidance" },
+
+  // Phase 6 document capability. Describing what a document needs is guidance;
+  // resolving a real snapshot is an operational read. Issuing and reprinting are
+  // actions and surface through `execute_action`.
+  describe_documents: { labelKey: "toolDescribeDocuments", group: "guidance" },
+  preview_document: { labelKey: "toolPreviewDocument", group: "operational" },
 
   // P4.6A clinic-wide aggregates
   get_clinic_summary: { labelKey: "toolClinicSummary", group: "operational" },
@@ -42,7 +57,6 @@ export const ASSISTANT_TOOL_PRESENTATION: Readonly<
   get_appointment_stats: { labelKey: "toolAppointmentStats", group: "operational" },
 
   // P4.6A operational lists, counts, and reports
-  list_appointments: { labelKey: "toolListAppointments", group: "operational" },
   count_new_patients: { labelKey: "toolCountNewPatients", group: "operational" },
   list_pending_followups: { labelKey: "toolPendingFollowups", group: "operational" },
   run_clinic_report: { labelKey: "toolRunReport", group: "operational" },
@@ -64,23 +78,6 @@ export const ASSISTANT_TOOL_PRESENTATION: Readonly<
   // a record.
   list_my_capabilities: { labelKey: "toolCapabilities", group: "guidance" },
 
-  // P4.11 workflow envelope; action previews add their own confirmation card.
-  execute_read_only_workflow: {
-    labelKey: "toolWorkflow",
-    group: "operational",
-  },
-  send_appointment_reminders: {
-    labelKey: "toolAppointmentReminderWorkflow",
-    group: "operational",
-  },
-  send_invoice_reminders: {
-    labelKey: "toolInvoiceReminderWorkflow",
-    group: "financial",
-  },
-  create_pending_booking: {
-    labelKey: "toolPendingBookingWorkflow",
-    group: "operational",
-  },
 };
 
 export function presentationFor(toolName: string): AssistantToolPresentation {
@@ -181,6 +178,7 @@ const DENIAL_REASONS: readonly AiToolDenialReason[] = [
   "usage_limit_reached",
   "lookup_failed",
   "subscription_inactive",
+  "unauthorized_scope",
 ];
 
 function isDenialReason(value: unknown): value is AiToolDenialReason {

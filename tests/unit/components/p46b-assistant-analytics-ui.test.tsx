@@ -51,6 +51,8 @@ function capabilities(
     operational: false,
     financial: "not_applicable",
     allowedReportIds: [],
+    resources: [],
+    actions: [],
     ...overrides,
   };
 }
@@ -116,7 +118,7 @@ describe("P4.6B — capability-driven affordances", () => {
         toolNames: [
           "get_clinic_summary",
           "get_appointment_stats",
-          "list_appointments",
+          "query_resource",
           "run_clinic_report",
         ],
         clinicAnalytics: true,
@@ -134,7 +136,7 @@ describe("P4.6B — capability-driven affordances", () => {
   it("never offers a financial prompt to a receptionist, whose mount has none", () => {
     renderChat(
       capabilities({
-        toolNames: ["list_appointments", "count_new_patients", "list_pending_followups"],
+        toolNames: ["query_resource", "count_new_patients", "list_pending_followups"],
         operational: true,
         financial: "not_applicable",
       }),
@@ -151,7 +153,7 @@ describe("P4.6B — capability-driven affordances", () => {
   it("sends a manager without the grant to their admin, not to a pricing page", () => {
     renderChat(
       capabilities({
-        toolNames: ["get_clinic_summary", "list_appointments"],
+        toolNames: ["get_clinic_summary", "query_resource"],
         clinicAnalytics: true,
         operational: true,
         financial: "not_granted",
@@ -197,16 +199,16 @@ describe("P4.6B — result presentation", () => {
   });
 
   it("does not mark an operational result as financial", () => {
-    renderChat(capabilities(), [toolPart("list_appointments", { appointments: [] })]);
+    renderChat(capabilities(), [toolPart("query_resource", { rows: [] })]);
 
-    expect(screen.getByText("Listing appointments")).toBeVisible();
+    expect(screen.getByText("Reviewing authorized records")).toBeVisible();
     expect(screen.queryByText("Financial")).not.toBeInTheDocument();
   });
 
   it("says a capped list may be incomplete, independently of the model's summary", () => {
     renderChat(
       capabilities(),
-      [toolPart("list_appointments", { truncated: true, row_cap: 50, appointments: [] })],
+      [toolPart("query_resource", { truncated: true, row_cap: 50, rows: [] })],
     );
 
     expect(
@@ -410,7 +412,12 @@ describe("P4.6B — result presentation", () => {
 describe("P4.7 — capability panel component and accessibility", () => {
   const items: AssistantCapabilities["items"] = [
     {
-      name: "get_patient_summary",
+      // P7-06: this named a tool the Phase 7 cutover deleted, so it exercised
+      // `presentationFor`'s fallback branch rather than a real presentation
+      // mapping. `search_authorized_patients` is registered in
+      // `ASSISTANT_TOOL_PRESENTATION` under the clinical group, which is what
+      // this fixture was meant to represent.
+      name: "search_authorized_patients",
       group: "clinical",
       description: "Summarize an authorized patient record.",
     },

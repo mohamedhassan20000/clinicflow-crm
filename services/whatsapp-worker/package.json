@@ -1,0 +1,28 @@
+{
+  "name": "@clinicflow/whatsapp-worker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Long-lived per-clinic WhatsApp linked-device sessions for ClinicFlow.",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "node --env-file=.env --experimental-strip-types src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "test": "node --test --experimental-strip-types tests/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@hapi/boom": "^10.0.1",
+    "@supabase/supabase-js": "^2.103.3",
+    "baileys": "6.7.24",
+    "pino": "^9.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.0",
+    "typescript": "^5.9.2"
+  }
+}

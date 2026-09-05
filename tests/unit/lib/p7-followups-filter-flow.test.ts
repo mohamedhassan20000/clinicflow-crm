@@ -113,12 +113,14 @@ describe("P7 Follow-ups filter and document flow", () => {
     });
 
     const actions = readFileSync(join(process.cwd(), "actions/documents.ts"), "utf8");
+    const core = readFileSync(join(process.cwd(), "lib/documents/mutations.ts"), "utf8");
     const renderer = readFileSync(
       join(process.cwd(), "lib/documents/renderers/analytical-report.tsx"),
       "utf8",
     );
     expect(actions).toContain("resolveAnalyticalDocumentSnapshot(user, parsed.data");
-    expect(actions).toContain("snapshot: snapshot as unknown as Json");
+    expect(core).toContain("resolveAnalyticalDocumentSnapshot(user, parsed.data");
+    expect(core).toContain("snapshot: snapshot as unknown as Json");
     expect(renderer).toContain("parseAnalyticalDocumentSnapshot(reservation.snapshot)");
     expect(renderer).toContain("snapshot={snapshot}");
   });

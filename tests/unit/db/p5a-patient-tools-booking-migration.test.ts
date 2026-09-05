@@ -9,6 +9,10 @@ const fixesMigration = readFileSync(
   "supabase/migrations/20260727200000_p5a_review_fixes.sql",
   "utf8",
 );
+const phase4Migration = readFileSync(
+  "supabase/migrations/20260813160000_ai_assistant_phase4_orchestration.sql",
+  "utf8",
+);
 const executable = migration
   .split("\n")
   .filter((line) => !line.trimStart().startsWith("--"))
@@ -37,7 +41,7 @@ describe("P5A patient identity and booking migration", () => {
     expect(migration).toContain("trg_appointments_ai_pending_policy");
   });
 
-  it("keeps AI metadata server-owned while preserving confirmed P4.11 booking creation", () => {
+  it("keeps legacy provenance protected while using only Phase 4 action receipts for new bookings", () => {
     expect(migration).toMatch(
       /new\.ai_patient_conversation_id is not null[\s\S]*?or new\.ai_workflow_run_id is not null[\s\S]*?or new\.expires_at is not null/,
     );
@@ -45,15 +49,22 @@ describe("P5A patient identity and booking migration", () => {
     expect(workflowBooking).toContain(
       "createClinicScopedAdminClient(input.user.clinicId)",
     );
-    expect(workflowBooking).toContain('.eq("confirmed_by", input.user.id)');
-    expect(workflowBooking).toContain(
-      '(step as { tool?: unknown }).tool === "create_pending_booking"',
-    );
+    expect(workflowBooking).toContain('.from("ai_action_receipts")');
+    expect(workflowBooking).toContain('.eq("actor_id", input.user.id)');
+    expect(workflowBooking).toContain('.eq("action_id", "appointments.create_pending")');
+    expect(workflowBooking).toContain('.eq("phase", "execute")');
+    expect(workflowBooking).not.toContain('.from("ai_workflow_runs")');
     expect(fixesMigration).toContain(
       "old.ai_workflow_step_id is distinct from new.ai_workflow_step_id",
     );
     expect(fixesMigration).toMatch(
       /update of\s+ai_patient_conversation_id,\s+ai_workflow_run_id,\s+ai_workflow_step_id,\s+expires_at/,
+    );
+    expect(phase4Migration).toContain(
+      "old.ai_workflow_step_id is distinct from new.ai_workflow_step_id",
+    );
+    expect(phase4Migration).toMatch(
+      /update of\s+ai_patient_conversation_id,\s+ai_workflow_run_id,\s+ai_workflow_step_id,\s+ai_action_receipt_id,\s+expires_at/,
     );
   });
 

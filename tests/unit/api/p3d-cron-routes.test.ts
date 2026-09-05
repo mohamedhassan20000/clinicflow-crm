@@ -44,7 +44,7 @@ beforeEach(() => {
   process.env.CRON_SECRET = "cron-secret";
   mocks.runReminders.mockResolvedValue({ appointments: 1, sent: 1, failed: 0, skipped: 0 });
   mocks.runFollowups.mockResolvedValue({ due: 1, sent: 1, failed: 0, stopped: 0, skipped: 0 });
-  mocks.runBookingExpiry.mockResolvedValue({ expired: 1 });
+  mocks.runBookingExpiry.mockResolvedValue({ expired: 1, expiredRequests: 2 });
   mocks.runAlertScan.mockResolvedValue({ scanned: 0, alerts: 0 });
   mocks.runChannelReconcile.mockResolvedValue({ scanned: 0, transitioned: 0, failed: 0 });
   mocks.runWhatsAppHealth.mockResolvedValue({ scanned: 0, healthy: 0, degraded: 0, failed: 0 });
@@ -90,6 +90,7 @@ describe("/api/cron/reminders (daily messaging cron)", () => {
     expect(body.reminders.sent).toBe(1);
     expect(body.followups.sent).toBe(1);
     expect(body.bookingExpiry.expired).toBe(1);
+    expect(body.bookingExpiry.expiredRequests).toBe(2);
     expect(body.whatsappHealth.scanned).toBe(0);
     expect(mocks.runReminders).toHaveBeenCalledOnce();
     expect(mocks.runFollowups).toHaveBeenCalledOnce();

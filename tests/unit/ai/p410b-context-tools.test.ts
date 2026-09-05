@@ -11,11 +11,9 @@ const USER = {
   avatarUrl: null,
   mustChangePassword: false,
 };
-const APPOINTMENT = "22222222-2222-4222-8222-222222222222";
 const INVOICE = "33333333-3333-4333-8333-333333333333";
 const OTHER_INVOICE = "77777777-7777-4777-8777-777777777777";
 const STAFF = "44444444-4444-4444-8444-444444444444";
-const DEPARTMENT = "55555555-5555-4555-8555-555555555555";
 const CONVERSATION = "66666666-6666-4666-8666-666666666666";
 const opts = {} as never;
 
@@ -41,7 +39,6 @@ async function loadTools(activeContext: Record<string, unknown> = {}) {
   vi.resetModules();
   const mocks = createServerActionMocks();
   const assertAnalyticsToolAccess = vi.fn(async () => undefined);
-  const assertDoctorToolAccess = vi.fn(async () => undefined);
   const assertFinancialInsightsAccess = vi.fn(async () => undefined);
   const logAgentToolCall = vi.fn(async () => ({ data: "audit-1", error: null }));
   const getNoShowReportData = vi.fn(async () => ({ total: 2 }));
@@ -58,7 +55,6 @@ async function loadTools(activeContext: Record<string, unknown> = {}) {
   vi.doMock("@/lib/supabase/admin", () => ({ logAgentToolCall }));
   vi.doMock("@/lib/ai/authorization", () => ({
     assertAnalyticsToolAccess,
-    assertDoctorToolAccess,
     assertFinancialInsightsAccess,
   }));
   vi.doMock("@/lib/reports/data", () => ({
@@ -71,17 +67,11 @@ async function loadTools(activeContext: Record<string, unknown> = {}) {
   }));
 
   const { ConversationContextRecorder } = await import("@/lib/ai/conversation-context");
-  const [
-    { listAppointmentsTool },
-    { listDoctorAppointmentsTool },
-    { listOutstandingInvoicesTool },
-    { runClinicReportTool },
-  ] = await Promise.all([
-    import("@/lib/ai/tools/list-appointments"),
-    import("@/lib/ai/tools/list-doctor-appointments"),
-    import("@/lib/ai/tools/list-outstanding-invoices"),
-    import("@/lib/ai/tools/run-clinic-report"),
-  ]);
+  const [{ listOutstandingInvoicesTool }, { runClinicReportTool }] =
+    await Promise.all([
+      import("@/lib/ai/tools/list-outstanding-invoices"),
+      import("@/lib/ai/tools/run-clinic-report"),
+    ]);
 
   const recorder = new ConversationContextRecorder();
   const context = {
@@ -96,179 +86,26 @@ async function loadTools(activeContext: Record<string, unknown> = {}) {
     mocks,
     recorder,
     assertAnalyticsToolAccess,
-    assertDoctorToolAccess,
     assertFinancialInsightsAccess,
     getNoShowReportData,
     getDoctorPerformanceData,
-    listAppointments: listAppointmentsTool(context),
-    listDoctorAppointments: listDoctorAppointmentsTool(context),
     listOutstandingInvoices: listOutstandingInvoicesTool(context),
     runClinicReport: runClinicReportTool(context),
   };
 }
 
+/**
+ * Phase 7. The appointment-list cases that stood in these blocks went with
+ * `list_appointments` / `list_doctor_appointments` when the resource layer
+ * superseded them. Their `use_active_*` intent flags have no generic successor
+ * *by construction*: `query_resource` never reads the active context at all, so
+ * "a broad query is never silently narrowed by a stale slot" stopped being a
+ * behaviour to test and became a structural property, asserted in
+ * `tests/unit/ai/phase7-context-parity.test.ts` alongside the proposal cases
+ * these blocks used to own. The report, invoice and staff cases below are
+ * unchanged — those tools were retained.
+ */
 describe("P410-M1 advisory list context", () => {
-  it("keeps a clinic-wide appointment query broad while active slots remain set", async () => {
-    const tools = await loadTools({
-      appointment: slot("appointment", APPOINTMENT, "Appointment"),
-      staff: slot("staff", STAFF, "Dr Ahmed"),
-      department: slot("department", DEPARTMENT, "Cardiology"),
-    });
-    tools.mocks.state.tableResults.appointments = { data: [], error: null };
-
-    await tools.listAppointments.execute!({ preset: "today" }, opts);
-
-    expect(tools.assertAnalyticsToolAccess).toHaveBeenCalledWith(USER);
-    expect(
-      tools.mocks.state.queryLog.some(
-        (entry) =>
-          entry.table === "appointments" &&
-          entry.args[0] === "eq" &&
-          [APPOINTMENT, STAFF, DEPARTMENT].includes(String(entry.args[2])),
-      ),
-    ).toBe(false);
-    expect(
-      tools.mocks.state.queryLog.some(
-        (entry) =>
-          entry.table === "profiles" || entry.table === "departments",
-      ),
-    ).toBe(false);
-    expect(tools.recorder.takeAll()).toEqual([]);
-  });
-
-  it("revalidates and applies only the active entities explicitly selected by intent flags", async () => {
-    const tools = await loadTools({
-      appointment: slot("appointment", APPOINTMENT, "Appointment"),
-      staff: slot("staff", STAFF, "Dr Ahmed"),
-      department: slot("department", DEPARTMENT, "Cardiology"),
-    });
-    tools.mocks.state.tableResults.profiles = {
-      data: { full_name: "Dr Ahmed" },
-      error: null,
-    };
-    tools.mocks.state.tableResults.departments = {
-      data: { name: "Cardiology" },
-      error: null,
-    };
-    tools.mocks.state.tableResults.appointments = { data: [], error: null };
-
-    await tools.listAppointments.execute!(
-      {
-        preset: "today",
-        use_active_appointment: true,
-        use_active_staff: true,
-        use_active_department: true,
-      },
-      opts,
-    );
-
-    for (const [column, id] of [
-      ["id", APPOINTMENT],
-      ["doctor_id", STAFF],
-      ["department_id", DEPARTMENT],
-    ]) {
-      expect(tools.mocks.state.queryLog).toContainEqual(
-        expect.objectContaining({ args: ["eq", column, id] }),
-      );
-    }
-    expect(tools.recorder.takeAll()).toEqual([]);
-  });
-
-  it("runs the same broad appointment query with no active slots", async () => {
-    const tools = await loadTools();
-    tools.mocks.state.tableResults.appointments = { data: [], error: null };
-
-    await expect(
-      tools.listAppointments.execute!({ preset: "today" }, opts),
-    ).resolves.toMatchObject({ appointments: [] });
-    expect(
-      tools.mocks.state.queryLog.some(
-        (entry) =>
-          entry.table === "profiles" || entry.table === "departments",
-      ),
-    ).toBe(false);
-  });
-
-  it("ignores a stale or unauthorized active staff slot for broad intent and fails closed when explicitly scoped", async () => {
-    const broad = await loadTools({
-      staff: slot("staff", STAFF, "Former Doctor"),
-    });
-    broad.mocks.state.tableResults.appointments = { data: [], error: null };
-
-    await expect(
-      broad.listAppointments.execute!({ preset: "today" }, opts),
-    ).resolves.toMatchObject({ appointments: [] });
-    expect(
-      broad.mocks.state.queryLog.some((entry) => entry.table === "profiles"),
-    ).toBe(false);
-
-    const scoped = await loadTools({
-      staff: slot("staff", STAFF, "Former Doctor"),
-    });
-    scoped.mocks.state.tableResults.profiles = { data: null, error: null };
-    await expect(
-      scoped.listAppointments.execute!(
-        { preset: "today", use_active_staff: true },
-        opts,
-      ),
-    ).resolves.toMatchObject({
-      needs_clarification: true,
-      field: "doctor",
-      candidates: [],
-    });
-    expect(
-      scoped.mocks.state.queryLog.some(
-        (entry) => entry.table === "appointments",
-      ),
-    ).toBe(false);
-  });
-
-  it("keeps the doctor's schedule broad unless the active appointment is explicitly selected", async () => {
-    const broad = await loadTools({
-      appointment: slot("appointment", APPOINTMENT, "Appointment"),
-    });
-    broad.mocks.state.tableResults.clinics = {
-      data: { timezone: "Europe/Istanbul" },
-      error: null,
-    };
-    broad.mocks.state.tableResults.appointments = { data: [], error: null };
-    await broad.listDoctorAppointments.execute!(
-      { from: "2026-07-26", to: "2026-07-26" },
-      opts,
-    );
-    expect(
-      broad.mocks.state.queryLog.some(
-        (entry) =>
-          entry.table === "appointments" &&
-          entry.args[0] === "eq" &&
-          entry.args[1] === "id",
-      ),
-    ).toBe(false);
-
-    const scoped = await loadTools({
-      appointment: slot("appointment", APPOINTMENT, "Appointment"),
-    });
-    scoped.mocks.state.tableResults.clinics = {
-      data: { timezone: "Europe/Istanbul" },
-      error: null,
-    };
-    scoped.mocks.state.tableResults.appointments = { data: [], error: null };
-    await scoped.listDoctorAppointments.execute!(
-      {
-        from: "2026-07-26",
-        to: "2026-07-26",
-        use_active_appointment: true,
-      },
-      opts,
-    );
-    expect(scoped.mocks.state.queryLog).toContainEqual(
-      expect.objectContaining({
-        table: "appointments",
-        args: ["eq", "id", APPOINTMENT],
-      }),
-    );
-  });
-
   it("keeps an aggregate doctor-performance report clinic-wide unless active staff intent is explicit", async () => {
     const broad = await loadTools({
       staff: slot("staff", STAFF, "Dr Ahmed"),
@@ -309,91 +146,6 @@ describe("P410-M1 advisory list context", () => {
     expect(scoped.mocks.state.queryLog).toContainEqual(
       expect.objectContaining({ args: ["eq", "id", STAFF] }),
     );
-  });
-
-  it("records deterministic name resolutions and a unique authorized appointment", async () => {
-    const tools = await loadTools();
-    tools.mocks.state.rpcResults.search_staff_ranked = {
-      data: [
-        {
-          id: STAFF,
-          full_name: "Dr Ahmed",
-          score: 0.99,
-          match_kind: "exact_name",
-        },
-      ],
-      error: null,
-    };
-    tools.mocks.state.rpcResults.search_departments_ranked = {
-      data: [
-        {
-          id: DEPARTMENT,
-          name: "Cardiology",
-          score: 0.99,
-          match_kind: "exact_name",
-        },
-      ],
-      error: null,
-    };
-    tools.mocks.state.tableResults.appointments = {
-      data: [
-        {
-          id: APPOINTMENT,
-          scheduled_at: "2026-07-26T10:00:00.000Z",
-          status: "confirmed",
-          duration_minutes: 30,
-          patients: { full_name: "Mona Ali", file_number: "CF-1" },
-          profiles: { full_name: "Dr Ahmed" },
-          departments: { name: "Cardiology" },
-        },
-      ],
-      error: null,
-    };
-
-    await tools.listAppointments.execute!(
-      { preset: "today", doctor: "Dr Ahmed", department: "Cardiology" },
-      opts,
-    );
-
-    expect(tools.recorder.takeAll()).toEqual([
-      {
-        entityType: "staff",
-        entityId: STAFF,
-        displayLabel: "Dr Ahmed",
-        setBy: "resolution",
-      },
-      {
-        entityType: "department",
-        entityId: DEPARTMENT,
-        displayLabel: "Cardiology",
-        setBy: "resolution",
-      },
-      {
-        entityType: "appointment",
-        entityId: APPOINTMENT,
-        displayLabel: "Mona Ali · 2026-07-26T10:00:00.000Z",
-        setBy: "resolution",
-      },
-    ]);
-  });
-
-  it("never promotes a model-supplied staff UUID into stored context", async () => {
-    const tools = await loadTools();
-    tools.mocks.state.tableResults.profiles = {
-      data: { full_name: "Dr Ahmed" },
-      error: null,
-    };
-    tools.mocks.state.tableResults.appointments = { data: [], error: null };
-
-    await tools.listAppointments.execute!(
-      { preset: "today", doctor: STAFF },
-      opts,
-    );
-
-    expect(tools.mocks.state.queryLog).toContainEqual(
-      expect.objectContaining({ args: ["eq", "doctor_id", STAFF] }),
-    );
-    expect(tools.recorder.takeAll()).toEqual([]);
   });
 
 });
@@ -548,29 +300,6 @@ describe("P410-M2 complete-result uniqueness", () => {
     expect(tools.recorder.takeAll()).toEqual([]);
   });
 
-  it("does not infer a unique appointment from a truncated appointment page", async () => {
-    const tools = await loadTools();
-    tools.mocks.state.tableResults.appointments = {
-      data: Array.from({ length: 51 }, (_, index) => ({
-        id:
-          index === 0
-            ? APPOINTMENT
-            : `${String(index).padStart(8, "0")}-0000-4000-8000-000000000000`,
-        scheduled_at: `2026-07-26T${String(index % 24).padStart(2, "0")}:00:00.000Z`,
-        status: "confirmed",
-        duration_minutes: 30,
-        patients: { full_name: `Patient ${index}`, file_number: `CF-${index}` },
-        profiles: { full_name: "Dr Ahmed" },
-        departments: { name: "Cardiology" },
-      })),
-      error: null,
-    };
-
-    await expect(
-      tools.listAppointments.execute!({ preset: "today" }, opts),
-    ).resolves.toMatchObject({ truncated: true });
-    expect(tools.recorder.takeAll()).toEqual([]);
-  });
 });
 
 describe("P4.10B report defaults", () => {

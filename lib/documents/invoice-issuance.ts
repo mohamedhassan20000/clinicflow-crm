@@ -1,9 +1,14 @@
 import "server-only";
 
 import { getDocumentCatalogEntry } from "@/lib/documents/catalog";
-import { issueDocumentFoundation } from "@/lib/documents/issuance";
+import {
+  DocumentIssueError,
+  finalizeDocumentDraft,
+  issueDocumentFoundation,
+} from "@/lib/documents/issuance";
 import { getDocumentPdfRenderer } from "@/lib/documents/renderers/registry";
 import { resolveInvoiceDocumentSnapshot } from "@/lib/documents/resolvers/invoice";
+import { findCompletedClinicDocument } from "@/lib/supabase/admin";
 import type { Json } from "@/types/database";
 
 /**
@@ -27,18 +32,52 @@ export async function issueInvoiceDocument(input: {
   verificationToken: string;
   reused: boolean;
 }> {
-  const snapshot = await resolveInvoiceDocumentSnapshot(
-    input.clinicId,
-    { appointmentId: input.appointmentId },
-    { inlineLogo: true },
-  );
   const catalog = getDocumentCatalogEntry("INVOICE");
+  const idempotencyKey = `invoice:${input.appointmentId}`;
+
+  let existing: Awaited<ReturnType<typeof findCompletedClinicDocument>>;
+  try {
+    existing = await findCompletedClinicDocument({
+      clinicId: input.clinicId,
+      documentType: catalog.code,
+      idempotencyKey,
+    });
+  } catch (error) {
+    throw new DocumentIssueError("reservation", error);
+  }
+  if (existing.error) throw new DocumentIssueError("reservation", existing.error);
+  if (existing.data) {
+    await finalizeDocumentDraft({ ...input, documentId: existing.data.id });
+    return {
+      documentId: existing.data.id,
+      documentNumber: existing.data.document_number,
+      verificationToken: existing.data.verification_token,
+      reused: true,
+    };
+  }
+
+  let snapshot: Awaited<ReturnType<typeof resolveInvoiceDocumentSnapshot>>;
+  try {
+    snapshot = await resolveInvoiceDocumentSnapshot(
+      input.clinicId,
+      { appointmentId: input.appointmentId },
+    );
+  } catch (error) {
+    throw new DocumentIssueError("invoice-data-resolution", error);
+  }
+
+  let render;
+  try {
+    render = getDocumentPdfRenderer(catalog.code);
+  } catch (error) {
+    throw new DocumentIssueError("renderer-dispatch", error);
+  }
   const result = await issueDocumentFoundation({
     clinicId: input.clinicId,
     actorId: input.actorId,
     draftId: input.draftId,
     documentType: catalog.code,
-    idempotencyKey: `invoice:${input.appointmentId}`,
+    idempotencyKey,
     locale: input.locale,
     numberingPrefix: snapshot.settings.numberingPrefix,
     periodKey: snapshot.settings.numberingYearlyReset
@@ -52,7 +91,7 @@ export async function issueInvoiceDocument(input: {
     snapshot: snapshot as unknown as Json,
     watermark: snapshot.settings.watermark,
     appointmentId: input.appointmentId,
-    render: getDocumentPdfRenderer(catalog.code),
+    render,
   });
   return {
     documentId: result.documentId,

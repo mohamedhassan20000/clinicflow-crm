@@ -6,6 +6,10 @@ import {
   isKnownAiFeature,
 } from "@/lib/ai/commercial-policy";
 import { aiUsageThreshold, computeClinicAiCommercialUsage } from "@/lib/ai/commercial";
+import {
+  AI_USAGE_THRESHOLD_PERCENTS,
+  crossedAiUsageThresholds,
+} from "@/lib/ai/allowance";
 
 const PERIOD = "2026-07-01";
 const PLAN_CREDITS = 1_620_000_000;
@@ -13,6 +17,7 @@ const PLAN_CREDITS = 1_620_000_000;
 function baseInput() {
   return {
     periodStart: PERIOD,
+    resetDate: "2026-08-01",
     planBudgetMicros: PLAN_CREDITS,
     requestPlanLimit: 1000,
     period: null,
@@ -20,15 +25,40 @@ function baseInput() {
     terms: null,
     byokRequestUsed: 0,
     byokEstimatedCostMicros: 0,
+    byokConfigured: false,
+    credentialMode: "managed",
   } as const;
 }
 
 describe("P4.5C commercial policy", () => {
   it("keeps a closed namespaced feature vocabulary", () => {
-    expect(NAMESPACED_AI_FEATURES).toContain("ai.staff_assistant");
-    expect(NAMESPACED_AI_FEATURES).toContain("ai.financial_insights");
-    expect(NAMESPACED_AI_FEATURES).toContain("ai.assistant_customization");
-    expect(isKnownAiFeature("ai.hybrid_fallback")).toBe(true);
+    expect(NAMESPACED_AI_FEATURES).toEqual([
+      "ai.staff_assistant",
+      "ai.patient_suggest",
+      "ai.patient_auto",
+      "ai.managed",
+      "ai.byok",
+      "ai.hybrid_fallback",
+      "ai.staff_analytics",
+      "ai.financial_insights",
+      "ai.assistant_customization",
+      "ai.workflows",
+      "ai.followup_generation",
+      "ai.scheduling",
+      "ai.read_operational",
+      "ai.read_clinical",
+      "ai.read_financial",
+      "ai.write_scheduling",
+      "ai.write_records",
+      "ai.write_administration",
+      "ai.write_privileged",
+      "ai.documents",
+      "ai.bulk_export",
+    ]);
+    expect(new Set(NAMESPACED_AI_FEATURES).size).toBe(NAMESPACED_AI_FEATURES.length);
+    for (const feature of NAMESPACED_AI_FEATURES) {
+      expect(isKnownAiFeature(feature)).toBe(true);
+    }
     expect(isKnownAiFeature("ai.tenant_selected_model")).toBe(false);
     expect(isAiFeatureKey("ai.tenant_selected_model")).toBe(true);
   });
@@ -39,11 +69,21 @@ describe("P4.5C commercial policy", () => {
     expect(aiModeFeatures("hybrid")).toEqual(["ai.byok", "ai.hybrid_fallback"]);
   });
 
-  it("uses the roadmap's 70/90/100 degradation thresholds", () => {
-    expect(aiUsageThreshold(69)).toBe("normal");
-    expect(aiUsageThreshold(70)).toBe("seventy");
-    expect(aiUsageThreshold(90)).toBe("ninety");
-    expect(aiUsageThreshold(100)).toBe("exhausted");
+  it("uses the 75/90/100 notification thresholds from the shared constants", () => {
+    expect(aiUsageThreshold(74)).toBe("normal");
+    expect(aiUsageThreshold(AI_USAGE_THRESHOLD_PERCENTS.warning)).toBe("warning");
+    expect(aiUsageThreshold(AI_USAGE_THRESHOLD_PERCENTS.critical)).toBe("critical");
+    expect(aiUsageThreshold(AI_USAGE_THRESHOLD_PERCENTS.exhausted)).toBe("exhausted");
+    // The bands are read from one source, so the meter, the notifier and the
+    // owner console cannot drift apart.
+    expect(AI_USAGE_THRESHOLD_PERCENTS).toEqual({ warning: 75, critical: 90, exhausted: 100 });
+  });
+
+  it("reports every threshold a percentage has crossed, most severe first", () => {
+    expect(crossedAiUsageThresholds(50)).toEqual([]);
+    expect(crossedAiUsageThresholds(75)).toEqual([75]);
+    expect(crossedAiUsageThresholds(92)).toEqual([90, 75]);
+    expect(crossedAiUsageThresholds(100)).toEqual([100, 90, 75]);
   });
 });
 
@@ -135,7 +175,63 @@ describe("computeClinicAiCommercialUsage", () => {
     // 500M override + 200M add-on + 100M overage = 800M
     expect(usage.budgetLimitMicros).toBe(800_000_000);
     expect(usage.usedPercent).toBe(50);
+    expect(usage.remainingMicros).toBe(400_000_000);
     expect(usage.overageMode).toBe("contracted");
     expect(usage.hasAddon).toBe(true);
+  });
+
+  it("carries the reset date through unchanged", () => {
+    const usage = computeClinicAiCommercialUsage({ ...baseInput() });
+    expect(usage.periodStart).toBe(PERIOD);
+    expect(usage.resetDate).toBe("2026-08-01");
+  });
+
+  it("shows a managed clinic as managed while allowance remains", () => {
+    const usage = computeClinicAiCommercialUsage({
+      ...baseInput(),
+      period: { budget_limit_micros: PLAN_CREDITS, reserved_micros: 0, spent_micros: 10_000_000 },
+      byokConfigured: true,
+    });
+    expect(usage.providerState).toBe("managed");
+  });
+
+  it("shows an exhausted managed clinic with a key as running on its own key", () => {
+    const usage = computeClinicAiCommercialUsage({
+      ...baseInput(),
+      period: {
+        budget_limit_micros: PLAN_CREDITS,
+        reserved_micros: 0,
+        spent_micros: PLAN_CREDITS,
+      },
+      byokConfigured: true,
+    });
+    expect(usage.threshold).toBe("exhausted");
+    expect(usage.providerState).toBe("auto_byok");
+    expect(usage.remainingMicros).toBe(0);
+  });
+
+  it("keeps an exhausted managed clinic WITHOUT a key on the managed state", () => {
+    // There is nothing to hand over to, so the meter must not imply there is.
+    const usage = computeClinicAiCommercialUsage({
+      ...baseInput(),
+      period: {
+        budget_limit_micros: PLAN_CREDITS,
+        reserved_micros: 0,
+        spent_micros: PLAN_CREDITS,
+      },
+      byokConfigured: false,
+    });
+    expect(usage.threshold).toBe("exhausted");
+    expect(usage.providerState).toBe("managed");
+  });
+
+  it("shows a clinic that CHOSE BYOK as BYOK regardless of allowance", () => {
+    const usage = computeClinicAiCommercialUsage({
+      ...baseInput(),
+      credentialMode: "byok_strict",
+      byokConfigured: true,
+      period: { budget_limit_micros: PLAN_CREDITS, reserved_micros: 0, spent_micros: 0 },
+    });
+    expect(usage.providerState).toBe("byok");
   });
 });

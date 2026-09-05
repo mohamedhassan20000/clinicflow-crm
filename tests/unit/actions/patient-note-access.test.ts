@@ -141,6 +141,7 @@ describe("patient action permissions", () => {
     const result = await createPatient(null, patientForm({ phone: "123" }));
 
     expect(result).toEqual({
+      error: "Enter a valid phone number",
       fieldErrors: {
         phone: ["Enter a valid phone number"],
       },
@@ -323,6 +324,7 @@ describe("patient action permissions", () => {
     );
 
     expect(result).toEqual({
+      error: "Select an active insurance provider.",
       fieldErrors: {
         insurance_provider_id: ["Select an active insurance provider."],
       },

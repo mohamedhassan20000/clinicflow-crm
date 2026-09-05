@@ -2,6 +2,7 @@ import "server-only";
 
 import { z } from "zod";
 import { inlineClinicLogo, inlineClinicianSignature } from "@/lib/documents/assets";
+import { DocumentSubjectNotFoundError } from "@/lib/documents/resolvers/errors";
 import { getDocumentCatalogEntry } from "@/lib/documents/catalog";
 import type { AuthedUser } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
@@ -92,8 +93,13 @@ async function loadRecord(
       .select("*, prescription_medications(*)")
       .eq("clinic_id", user.clinicId).eq("id", params.recordId).in("status", allowedStatuses)
       .order("sort_order", { referencedTable: "prescription_medications" }).maybeSingle();
-    if (error || !data || (!options.allowDraft && !data.finalized_at)) {
-      throw new Error(error?.message ?? "Prescription not found");
+    // P6-12: `.maybeSingle()` reports an empty result as no data and no error,
+    // so a real `error` here is an infrastructure failure and stays retryable.
+    // A missing row, an RLS-excluded row, and a row this path may not issue from
+    // are one indistinguishable subject miss.
+    if (error) throw new Error(error.message);
+    if (!data || (!options.allowDraft && !data.finalized_at)) {
+      throw new DocumentSubjectNotFoundError("clinical_record");
     }
     return { header: data, data: { kind: "prescription" as const, id: data.id,
       appointmentId: data.appointment_id, createdAt: data.created_at, finalizedAt: data.finalized_at,
@@ -108,8 +114,9 @@ async function loadRecord(
       .select("*, lab_request_tests(*)")
       .eq("clinic_id", user.clinicId).eq("id", params.recordId).in("status", allowedStatuses)
       .order("sort_order", { referencedTable: "lab_request_tests" }).maybeSingle();
-    if (error || !data || (!options.allowDraft && !data.finalized_at)) {
-      throw new Error(error?.message ?? "Lab request not found");
+    if (error) throw new Error(error.message);
+    if (!data || (!options.allowDraft && !data.finalized_at)) {
+      throw new DocumentSubjectNotFoundError("clinical_record");
     }
     return { header: data, data: { kind: "lab-request" as const, id: data.id,
       appointmentId: data.appointment_id, createdAt: data.created_at, finalizedAt: data.finalized_at,
@@ -119,8 +126,9 @@ async function loadRecord(
   }
   const { data, error } = await supabase.from("sick_leaves").select("*")
     .eq("clinic_id", user.clinicId).eq("id", params.recordId).in("status", allowedStatuses).maybeSingle();
-  if (error || !data || (!options.allowDraft && !data.finalized_at)) {
-    throw new Error(error?.message ?? "Sick leave not found");
+  if (error) throw new Error(error.message);
+  if (!data || (!options.allowDraft && !data.finalized_at)) {
+    throw new DocumentSubjectNotFoundError("clinical_record");
   }
   return { header: data, data: { kind: "sick-leave" as const, id: data.id,
     appointmentId: data.appointment_id, createdAt: data.created_at, finalizedAt: data.finalized_at,

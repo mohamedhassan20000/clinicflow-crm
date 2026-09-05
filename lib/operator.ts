@@ -54,3 +54,32 @@ export function manualGrantPeriod(
   end.setUTCDate(Math.min(day, lastDay));
   return { current_period_start: now.toISOString(), current_period_end: end.toISOString() };
 }
+
+/**
+ * Extension in whole days, used by the owner "add N days" control.
+ *
+ * The day count is added to the later of now and the current period end — the
+ * same accumulation rule as `manualGrantPeriod`, so extending a live period
+ * lengthens it rather than restarting it, while extending a lapsed one gives
+ * the clinic the full N days from today. The period start is preserved when one
+ * already exists, because it is billing history, not an access grant; it is
+ * only stamped when the row has none.
+ */
+export function extendedSubscriptionPeriod(
+  days: number,
+  currentPeriodEnd: string | null,
+  currentPeriodStart: string | null,
+  now = new Date(),
+): { current_period_start: string; current_period_end: string } {
+  const existingEnd = currentPeriodEnd ? new Date(currentPeriodEnd) : null;
+  const base = existingEnd && existingEnd.getTime() > now.getTime() ? existingEnd : now;
+  const end = new Date(base.getTime() + days * 24 * 60 * 60 * 1000);
+  const start = currentPeriodStart ? new Date(currentPeriodStart) : now;
+  // The subscriptions_period_order CHECK requires end > start; a preserved start
+  // that somehow sits after the new end would violate it, so fall back to now.
+  const safeStart = start.getTime() < end.getTime() ? start : now;
+  return {
+    current_period_start: safeStart.toISOString(),
+    current_period_end: end.toISOString(),
+  };
+}

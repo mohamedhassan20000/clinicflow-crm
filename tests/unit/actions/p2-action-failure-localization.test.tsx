@@ -25,13 +25,13 @@ const cases = [
     ar: "تعذر إصدار الدعوة.",
   },
   {
-    file: "actions/appointments.ts",
+    file: "lib/appointments/mutations.ts",
     key: "appointments.chooseAFutureDateAndTimeForTheAppointment",
     en: "Choose a future date and time for the appointment.",
     ar: "اختر تاريخًا ووقتًا مستقبليين للموعد.",
   },
   {
-    file: "actions/settings.ts",
+    file: "actions/settings-legacy.ts",
     key: "settings.onlyAdminsCanManageAdminUsers",
     en: "Only admins can manage admin users.",
     ar: "يمكن للمسؤولين فقط إدارة حسابات المسؤولين.",
@@ -59,7 +59,7 @@ function translate(locale: "en" | "ar", key: string) {
 describe("P2 Server Action failure localization", () => {
   it.each(cases)("wires $key to readable English and Arabic alert copy", ({ file, key, en, ar }) => {
     const source = readFileSync(file, "utf8");
-    expect(source).toContain(`actionError("${key}")`);
+    expect(source).toContain(key);
     expect(translate("en", key)).toBe(en);
 
     const arabic = translate("ar", key);

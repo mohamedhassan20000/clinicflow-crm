@@ -43,6 +43,7 @@ function proAiEntitlements(patientAuto: boolean) {
       "ai.patient_auto": patientAuto,
     },
     subscriptionAllowed: true,
+    aiTermsAccepted: true,
   });
 }
 

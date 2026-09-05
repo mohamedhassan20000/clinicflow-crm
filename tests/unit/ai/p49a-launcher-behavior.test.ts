@@ -4,6 +4,7 @@ type Role = "admin" | "manager" | "receptionist" | "doctor";
 
 const BASE_FEATURES = {
   ai_assistant: true,
+  "ai.read_clinical": true,
   "ai.staff_assistant": true,
   "ai.staff_analytics": true,
   "ai.financial_insights": true,
@@ -172,7 +173,7 @@ describe("P49A-M2 — launcher placement is behaviorally isolated", () => {
     for (const result of [defaulted, roleDisabled, userDisabled, userEnabled]) {
       expect(result.directAuthorization).toBe("allowed");
       expect(result.toolNames).toEqual(defaulted.toolNames);
-      expect(result.toolNames).toContain("get_patient_summary");
+      expect(result.toolNames).toContain("get_record");
     }
   });
 

@@ -4,9 +4,8 @@ import { z } from "zod";
 import { notFound } from "next/navigation";
 import { requireActiveSubscription } from "@/lib/billing/subscriptions";
 import { getDocumentCatalogEntry } from "@/lib/documents/catalog";
-import { issueDocumentFoundation } from "@/lib/documents/issuance";
+import { issueGenericDocumentCore } from "@/lib/documents/mutations";
 import { documentPdfHref } from "@/lib/documents/module";
-import { getDocumentPdfRenderer } from "@/lib/documents/renderers/registry";
 import {
   GENERIC_DOCUMENT_CODE,
   genericDocumentParamsSchema,
@@ -75,36 +74,22 @@ export async function issueGenericDocument(input: GenericDocumentParams & {
   if (!parsed.success) return { errorCode: "invalidInput" };
   const user = await requireGenericDocumentAccess();
   await requireActiveSubscription(user.clinicId);
-  try {
-    const snapshot = await resolveGenericDocumentSnapshot(user, parsed.data, { inlineAssets: true });
-    const result = await issueDocumentFoundation({
-      clinicId: user.clinicId,
-      actorId: user.id,
-      draftId: parsed.data.draftId,
-      documentType: GENERIC_DOCUMENT_CODE,
-      idempotencyKey: `generic-document:${parsed.data.idempotencyKey}`,
-      locale: parsed.data.locale,
-      numberingPrefix: snapshot.settings.numberingPrefix,
-      periodKey: snapshot.settings.numberingYearlyReset
-        ? new Date(snapshot.generatedAt).getFullYear().toString() : "",
-      sequencePadding: snapshot.settings.sequencePadding,
-      params: {
-        version: 1, documentType: GENERIC_DOCUMENT_CODE,
-        title: parsed.data.title, blocks: parsed.data.blocks,
-      },
-      snapshot: snapshot as unknown as Json,
-      watermark: snapshot.settings.watermark,
-      render: getDocumentPdfRenderer(GENERIC_DOCUMENT_CODE),
-    });
-    return { data: { documentId: result.documentId, documentNumber: result.documentNumber, reused: result.reused } };
-  } catch (error) {
-    console.error("generic_document_issue_failed", {
-      clinicId: user.clinicId,
-      stage: error && typeof error === "object" && "stage" in error ? String(error.stage) : "unknown",
-      message: error instanceof Error ? error.message : "unknown",
-    });
-    return { errorCode: "issueFailed" };
+  const result = await issueGenericDocumentCore(user, {
+    ...parsed.data,
+    draftId: parsed.data.draftId ?? null,
+  });
+  if (!result.ok) {
+    return {
+      errorCode: result.code === "invalidInput" ? "invalidInput" : "issueFailed",
+    };
   }
+  return {
+    data: {
+      documentId: result.data.documentId,
+      documentNumber: result.data.documentNumber,
+      reused: result.data.reused,
+    },
+  };
 }
 
 export async function getIssuedGenericDocument(

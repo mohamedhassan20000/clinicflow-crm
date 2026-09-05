@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import {
   revokeAiProviderCredential,
   saveAiProviderCredential,
+  setAiAutoByokFallbackPreference,
   setAiProviderMode,
   testAiProviderCredential,
   type AiProviderActionResult,
@@ -87,6 +88,11 @@ export function AiProviderSettingsPanel({
     revokeAiProviderCredential as Action,
     null,
   );
+  const [fallbackState, fallbackAction, fallbackPending] = useActionState(
+    setAiAutoByokFallbackPreference as Action,
+    null,
+  );
+  const [autoFallback, setAutoFallback] = useState(settings.autoByokFallbackEnabled);
 
   useEffect(() => {
     if (!credentialState?.success) return;
@@ -107,6 +113,9 @@ export function AiProviderSettingsPanel({
     if (!revokeState?.success) return;
     toast.success(t("aiCredentialRevoked"));
   }, [revokeState, t]);
+  useEffect(() => {
+    if (fallbackState?.success) toast.success(t("aiProviderModeSaved"));
+  }, [fallbackState, t]);
 
   const connection = settings.connection;
   const healthyConnection = connection?.healthStatus === "valid";
@@ -212,6 +221,43 @@ export function AiProviderSettingsPanel({
                 >
                   {modePending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
                   {t("saveProviderMode")}
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="border-b">
+            <div className="flex items-start gap-3">
+              <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+                <ShieldCheck className="size-5" aria-hidden />
+              </span>
+              <div>
+                <CardTitle>{t("aiAutoFallbackTitle")}</CardTitle>
+                <CardDescription>{t("aiAutoFallbackDescription")}</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <form action={fallbackAction} className="space-y-4">
+              <ActionError message={fallbackState?.error} />
+              <div className="flex items-start gap-3">
+                <Checkbox
+                  id="autoByokFallbackEnabled"
+                  name="autoByokFallbackEnabled"
+                  checked={autoFallback}
+                  onCheckedChange={(value) => setAutoFallback(value === true)}
+                  disabled={fallbackPending}
+                />
+                <Label htmlFor="autoByokFallbackEnabled" className="text-sm font-normal leading-5">
+                  {autoFallback ? t("aiAutoFallbackEnabled") : t("aiAutoFallbackDisabled")}
+                </Label>
+              </div>
+              <div className="flex justify-end">
+                <Button type="submit" variant="outline" disabled={fallbackPending}>
+                  {fallbackPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
+                  {t("aiAutoFallbackSave")}
                 </Button>
               </div>
             </form>

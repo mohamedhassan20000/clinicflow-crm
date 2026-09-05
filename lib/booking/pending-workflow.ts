@@ -122,7 +122,7 @@ async function validatePendingBooking(
   };
 }
 
-export async function previewPendingWorkflowBooking(input: {
+export async function previewPendingBooking(input: {
   supabase: SupabaseClient<Database>;
   user: AuthedUser;
   booking: PendingBookingInput;
@@ -130,127 +130,58 @@ export async function previewPendingWorkflowBooking(input: {
   return validatePendingBooking(input.supabase, input.user, input.booking);
 }
 
-export async function createPendingWorkflowBooking(input: {
+/**
+ * Phase 4 replacement for the retired workflow-run provenance path. The
+ * action executor opens the receipt before calling this function; that receipt
+ * is both the durable audit anchor and the idempotency key for the insert.
+ */
+export async function createPendingActionBooking(input: {
   supabase: SupabaseClient<Database>;
   user: AuthedUser;
   booking: PendingBookingInput;
-  workflowRunId: string;
-  workflowStepId: string;
+  actionReceiptId: string;
 }): Promise<
   | { ok: true; appointmentId: string; preview: PendingBookingPreview }
-  | {
-      ok: false;
-      reason:
-        | "no_longer_available"
-        | "patient_pending_cap"
-        | "slot_pending_cap"
-        | "create_failed";
-    }
+  | { ok: false; reason: "no_longer_available" | "patient_pending_cap" | "slot_pending_cap" | "create_failed" }
 > {
-  const preview = await validatePendingBooking(
-    input.supabase,
-    input.user,
-    input.booking,
-  );
+  const preview = await validatePendingBooking(input.supabase, input.user, input.booking);
   if (!preview) return { ok: false, reason: "no_longer_available" };
-
-  // The caller is an authenticated P4.11 confirmation request. Keep the
-  // privileged persistence boundary tied to that exact session rather than
-  // trusting an AuthedUser-shaped object supplied by another server caller.
   const session = await input.supabase.auth.getUser();
-  if (session.error || session.data.user?.id !== input.user.id) {
-    return { ok: false, reason: "create_failed" };
-  }
+  if (session.error || session.data.user?.id !== input.user.id) return { ok: false, reason: "create_failed" };
 
-  // P5A makes every AI provenance/TTL column server-owned. The authenticated
-  // request client still performs all availability reads under normal RLS, but
-  // the confirmed insert must use the clinic-scoped service client so browsers
-  // cannot forge workflow provenance. Re-check the content-free P4.11 ledger
-  // before elevating: same tenant, same actor, confirmed execute run, and exact
-  // registered booking step.
   const writer = createClinicScopedAdminClient(input.user.clinicId);
-  const existing = await writer
-    .from("appointments")
-    .select("id")
-    .eq("ai_workflow_run_id", input.workflowRunId)
-    .eq("ai_workflow_step_id", input.workflowStepId)
+  const receipt = await writer.from("ai_action_receipts")
+    .select("id, clinic_id, actor_id, conversation_id, action_id, phase")
+    .eq("id", input.actionReceiptId)
+    .eq("clinic_id", input.user.clinicId)
+    .eq("actor_id", input.user.id)
+    .eq("action_id", "appointments.create_pending")
+    .eq("phase", "execute")
     .maybeSingle();
+  if (receipt.error || !receipt.data) return { ok: false, reason: "create_failed" };
 
-  const workflow = await writer
-    .from("ai_workflow_runs")
-    .select("id, user_id, mode, state, plan, confirmed_by, confirmed_at")
-    .eq("id", input.workflowRunId)
-    .eq("user_id", input.user.id)
-    .eq("confirmed_by", input.user.id)
-    .eq("mode", "execute")
-    .not("confirmed_at", "is", null)
-    .maybeSingle();
-  const plan = workflow.data?.plan;
-  const steps =
-    plan && typeof plan === "object" && !Array.isArray(plan)
-      ? (plan as { steps?: unknown }).steps
-      : null;
-  const isRegisteredBookingStep =
-    Array.isArray(steps) &&
-    steps.some(
-      (step) =>
-        step !== null &&
-        typeof step === "object" &&
-        (step as { id?: unknown }).id === input.workflowStepId &&
-        (step as { tool?: unknown }).tool === "create_pending_booking",
-    );
-  if (
-    existing.error ||
-    workflow.error ||
-    !workflow.data ||
-    !workflow.data.confirmed_at ||
-    ![
-      "running",
-      "partially_failed",
-      "failed",
-      "needs_clarification",
-      ...(existing.data ? ["succeeded"] : []),
-    ].includes(workflow.data.state) ||
-    !isRegisteredBookingStep
-  ) {
-    return { ok: false, reason: "create_failed" };
-  }
-  if (existing.data) {
-    return { ok: true, appointmentId: existing.data.id, preview };
-  }
+  const existing = await writer.from("appointments").select("id")
+    .eq("ai_action_receipt_id", input.actionReceiptId).maybeSingle();
+  if (existing.error) return { ok: false, reason: "create_failed" };
+  if (existing.data) return { ok: true, appointmentId: existing.data.id, preview };
 
-  const inserted = await writer
-    .from("appointments")
-    .insert({
-      clinic_id: input.user.clinicId,
-      patient_id: input.booking.patient_id,
-      doctor_id: input.booking.doctor_id,
-      department_id: input.booking.department_id ?? null,
-      scheduled_at: preview.scheduled_at,
-      duration_minutes: input.booking.duration_minutes,
-      status: "pending",
-      created_by: input.user.id,
-      ai_workflow_run_id: input.workflowRunId,
-      ai_workflow_step_id: input.workflowStepId,
-    })
-    .select("id")
-    .single();
+  const inserted = await writer.from("appointments").insert({
+    clinic_id: input.user.clinicId,
+    patient_id: input.booking.patient_id,
+    doctor_id: input.booking.doctor_id,
+    department_id: input.booking.department_id ?? null,
+    scheduled_at: preview.scheduled_at,
+    duration_minutes: input.booking.duration_minutes,
+    status: "pending",
+    created_by: input.user.id,
+    ai_action_receipt_id: input.actionReceiptId,
+  }).select("id").single();
   if (inserted.error || !inserted.data) {
-    const raced = await writer
-      .from("appointments")
-      .select("id")
-      .eq("ai_workflow_run_id", input.workflowRunId)
-      .eq("ai_workflow_step_id", input.workflowStepId)
-      .maybeSingle();
-    if (raced.data) {
-      return { ok: true, appointmentId: raced.data.id, preview };
-    }
-    if (inserted.error?.message.includes("AI_PENDING_PATIENT_CAP")) {
-      return { ok: false, reason: "patient_pending_cap" };
-    }
-    if (inserted.error?.message.includes("AI_PENDING_SLOT_CAP")) {
-      return { ok: false, reason: "slot_pending_cap" };
-    }
+    const raced = await writer.from("appointments").select("id")
+      .eq("ai_action_receipt_id", input.actionReceiptId).maybeSingle();
+    if (raced.data) return { ok: true, appointmentId: raced.data.id, preview };
+    if (inserted.error?.message.includes("AI_PENDING_PATIENT_CAP")) return { ok: false, reason: "patient_pending_cap" };
+    if (inserted.error?.message.includes("AI_PENDING_SLOT_CAP")) return { ok: false, reason: "slot_pending_cap" };
     return { ok: false, reason: "create_failed" };
   }
   return { ok: true, appointmentId: inserted.data.id, preview };

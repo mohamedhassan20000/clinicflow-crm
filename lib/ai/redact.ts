@@ -1,12 +1,20 @@
 /**
- * PHI/PII minimization before tool outputs enter the model context (§9.3).
+ * PHI/PII minimization for the **audit trail** (§6.6, §9.3).
  *
- * The doctor assistant summarizes clinical history, but the model never needs
- * raw national IDs, file numbers, or contact details to do so — summaries cite
- * notes by date/author, not by identifier dump. These helpers strip direct
- * identifiers from free text and shape structured tool payloads so the minimal
- * necessary data crosses the LLM boundary. This is defense-in-depth on top of
- * RLS scoping, not a substitute for it.
+ * Originally this module also shaped tool payloads on their way to the model:
+ * `redactPatientIdentity` reduced a patient row to name/age/blood type for
+ * `get_patient_summary`, and `ageFromDateOfBirth` existed to avoid emitting a
+ * raw date of birth. Both were removed in Phase 7 along with their only caller.
+ * They were not merely unused — they encoded a *narrower* contract than the one
+ * the plan settled on: §7.2 makes the readable field set equal to what RLS
+ * grants, so `date_of_birth` and `blood_type` are returned outright to any role
+ * authorized for them, and the field policy (not a redactor) is where a
+ * narrowing must be declared and justified. Leaving the helpers here would have
+ * suggested a minimization that no longer runs.
+ *
+ * What remains is the audit path, which is unchanged: `toolAuditSummary` still
+ * strips emails and long digit runs from the parameters written to
+ * `audit_logs`, so the trail is safe for a clinic admin to read.
  */
 
 // Gulf/Egypt national ids and clinic file numbers are long digit runs; emails
@@ -20,47 +28,6 @@ export function redactText(input: string): string {
   return input
     .replace(EMAIL_RE, "[redacted-email]")
     .replace(LONG_DIGIT_RE, "[redacted-number]");
-}
-
-export type RedactedPatientIdentity = {
-  full_name: string;
-  age: number | null;
-  blood_type: string | null;
-};
-
-/**
- * Computes an age from a date of birth without exposing the raw DOB (itself a
- * sensitive identifier). Returns null for missing/unparseable values.
- */
-export function ageFromDateOfBirth(
-  dateOfBirth: string | null | undefined,
-  now = new Date(),
-): number | null {
-  if (!dateOfBirth) return null;
-  const dob = new Date(dateOfBirth);
-  if (Number.isNaN(dob.getTime())) return null;
-  let age = now.getUTCFullYear() - dob.getUTCFullYear();
-  const monthDiff = now.getUTCMonth() - dob.getUTCMonth();
-  if (monthDiff < 0 || (monthDiff === 0 && now.getUTCDate() < dob.getUTCDate())) {
-    age -= 1;
-  }
-  return age >= 0 && age < 200 ? age : null;
-}
-
-/**
- * Reduces a patient row to the non-identifying clinical context the assistant
- * needs. national_id, file_number, phone, email and raw DOB are dropped.
- */
-export function redactPatientIdentity(patient: {
-  full_name: string;
-  date_of_birth?: string | null;
-  blood_type?: string | null;
-}): RedactedPatientIdentity {
-  return {
-    full_name: patient.full_name,
-    age: ageFromDateOfBirth(patient.date_of_birth ?? null),
-    blood_type: patient.blood_type ?? null,
-  };
 }
 
 /**

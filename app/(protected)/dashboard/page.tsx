@@ -16,6 +16,9 @@ import {
   type AssistantLauncherResolution,
 } from "@/lib/ai/launchers";
 import type { UserRole } from "@/lib/rbac";
+import { AiPendingAppointmentsSection } from "@/components/dashboard/ai-pending-appointments-section";
+import { ClinicOverviewKpis } from "@/components/dashboard/clinic-overview-kpis";
+import { OverduePendingAppointmentsSection } from "@/components/dashboard/overdue-pending-appointments-section";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("protected");
@@ -63,14 +66,6 @@ function nextNHoursBounds(hours: number) {
   const now = new Date();
   const end = new Date(now.getTime() + hours * 60 * 60 * 1000);
   return { start: now.toISOString(), end: end.toISOString() };
-}
-
-function last30DaysBounds() {
-  const end = new Date();
-  const start = new Date(end);
-  start.setDate(start.getDate() - 29);
-  start.setHours(0, 0, 0, 0);
-  return { start: start.toISOString(), end: end.toISOString() };
 }
 
 // ── Aggregate helpers ────────────────────────────────────────────────────────
@@ -484,6 +479,7 @@ export default async function DashboardPage() {
     const initialFollowUpOutcomes = { allFine: fuAllFine, hasProblem: fuHasProblem, total: (aFollowUps ?? []).length };
 
     return (
+      <div className="space-y-6">
       <AdminDashboard
         assistantLauncher={dashboardAssistantLauncher(await assistantPromise, user.role)}
         fullName={user.fullName}
@@ -515,7 +511,22 @@ export default async function DashboardPage() {
           departmentsList: aAllDepartments ?? [],
           doctorsList: (aAllDoctors ?? []).map((d) => ({ id: d.id, name: d.full_name })),
         }}
+        aiReviewQueues={(
+          <div className="space-y-6">
+            <OverduePendingAppointmentsSection
+              clinicId={clinicId}
+              currentUserId={user.id}
+              currentUserRole="admin"
+            />
+            <AiPendingAppointmentsSection clinicId={clinicId} />
+          </div>
+        )}
       />
+      {/* Secondary summary: the clinic-wide totals close the dashboard rather than open it. */}
+      <div className="mt-2 border-t border-border/60 pt-8">
+        <ClinicOverviewKpis clinicId={clinicId} />
+      </div>
+      </div>
     );
   }
 
@@ -582,6 +593,7 @@ export default async function DashboardPage() {
     ]));
 
     return (
+      <div className="space-y-6">
       <ReceptionistDashboard
         assistantLauncher={dashboardAssistantLauncher(await assistantPromise, user.role)}
         fullName={user.fullName}
@@ -594,7 +606,21 @@ export default async function DashboardPage() {
         pendingAppointments={(pendingAppts ?? []) as Parameters<typeof ReceptionistDashboard>[0]["pendingAppointments"]}
         nextTwoHoursAppointments={(next2hAppts ?? []) as Parameters<typeof ReceptionistDashboard>[0]["nextTwoHoursAppointments"]}
         inSessionGroups={inSessionGroups}
+        aiReviewQueues={(
+          <div className="space-y-6">
+            <OverduePendingAppointmentsSection
+              clinicId={clinicId}
+              currentUserId={user.id}
+              currentUserRole={user.role}
+            />
+            {/* Unchanged gate: receptionists review the AI queues, assistants do not. */}
+            {user.role === "receptionist" ? (
+              <AiPendingAppointmentsSection clinicId={clinicId} />
+            ) : null}
+          </div>
+        )}
       />
+      </div>
     );
   }
 
@@ -610,6 +636,7 @@ export default async function DashboardPage() {
     ]);
 
     return (
+      <div className="space-y-6">
       <DoctorDashboard
         assistantLauncher={dashboardAssistantLauncher(await assistantPromise, user.role)}
         fullName={user.fullName}
@@ -619,6 +646,7 @@ export default async function DashboardPage() {
         departmentName={deptInfo?.name ?? t("myDepartment")}
         initial={initial}
       />
+      </div>
     );
   }
 
@@ -769,6 +797,7 @@ export default async function DashboardPage() {
   const mgrInitialFollowUpOutcomes = { allFine: mgrFuAllFine, hasProblem: mgrFuHasProblem, total: (mgrFollowUps ?? []).length };
 
   return (
+    <div className="space-y-6">
     <ManagerDashboard
       assistantLauncher={dashboardAssistantLauncher(await assistantPromise, user.role)}
       clinicId={clinicId}
@@ -787,6 +816,17 @@ export default async function DashboardPage() {
       initialFollowUpOutcomes={mgrInitialFollowUpOutcomes}
       departmentsList={allDepartments ?? []}
       doctorsList={(allDoctorProfiles ?? []).map((d) => ({ id: d.id, name: d.full_name }))}
+      aiReviewQueues={(
+        <div className="space-y-6">
+          <OverduePendingAppointmentsSection
+            clinicId={clinicId}
+            currentUserId={user.id}
+            currentUserRole="manager"
+          />
+          <AiPendingAppointmentsSection clinicId={clinicId} />
+        </div>
+      )}
     />
+    </div>
   );
 }

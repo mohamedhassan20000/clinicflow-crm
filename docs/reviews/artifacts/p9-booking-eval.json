@@ -1,0 +1,419 @@
+{
+  "generatedAt": "2026-08-22T19:09:35.489Z",
+  "scenarioCount": 8,
+  "variants": [
+    {
+      "variantId": "haiku-6-flat",
+      "label": "Haiku 4.5 · maxSteps 6 · flat mount (production baseline)",
+      "scenarios": 8,
+      "repeatedQuestionRate": 0,
+      "flowRestartRate": 0,
+      "otherDoctorsSuccess": 0,
+      "bookingCompletionRate": 0,
+      "medianTurnsToBooking": null,
+      "technicalFallbackRate": 0,
+      "unnecessaryEscalationRate": 0,
+      "neverOfferedAttempts": 0,
+      "illegalTransitions": 0,
+      "turnFailureRate": 1,
+      "p50LatencyMs": 7452,
+      "p95LatencyMs": 7906,
+      "totalInputTokens": 0,
+      "totalOutputTokens": 0,
+      "tokensPerConversation": 0,
+      "costMicros": 0,
+      "costPerCompletedBookingMicros": null
+    }
+  ],
+  "transcriptsRedacted": true,
+  "runs": [
+    {
+      "variantId": "haiku-6-flat",
+      "scenarios": [
+        {
+          "scenarioId": "scn-other-doctors-en",
+          "booked": false,
+          "turnsToBooking": null,
+          "neverOfferedAttempts": 0,
+          "turns": [
+            {
+              "index": 0,
+              "toolsCalled": [],
+              "stageBefore": "idle",
+              "stageAfter": "idle",
+              "steps": 0,
+              "latencyMs": 1583,
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "failed": true
+            },
+            {
+              "index": 1,
+              "toolsCalled": [],
+              "stageBefore": "idle",
+              "stageAfter": "idle",
+              "steps": 0,
+              "latencyMs": 610,
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "failed": true
+            },
+            {
+              "index": 2,
+              "toolsCalled": [],
+              "stageBefore": "idle",
+              "stageAfter": "idle",
+              "steps": 0,
+              "latencyMs": 780,
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "failed": true
+            }
+          ]
+        },
+        {
+          "scenarioId": "scn-other-doctors-ar",
+          "booked": false,
+          "turnsToBooking": null,
+          "neverOfferedAttempts": 0,
+          "turns": [
+            {
+              "index": 0,
+              "toolsCalled": [],
+              "stageBefore": "idle",
+              "stageAfter": "idle",
+              "steps": 0,
+              "latencyMs": 455,
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "failed": true
+            },
+            {
+              "index": 1,
+              "toolsCalled": [],
+              "stageBefore": "idle",
+              "stageAfter": "idle",
+              "steps": 0,
+              "latencyMs": 181,
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "failed": true
+            },
+            {
+              "index": 2,
+              "toolsCalled": [],
+              "stageBefore": "idle",
+              "stageAfter": "idle",
+              "steps": 0,
+              "latencyMs": 7537,
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "failed": true
+            }
+          ]
+        },
+        {
+          "scenarioId": "scn-full-booking-en",
+          "booked": false,
+          "turnsToBooking": null,
+          "neverOfferedAttempts": 0,
+          "turns": [
+            {
+              "index": 0,
+              "toolsCalled": [],
+              "stageBefore": "idle",
+              "stageAfter": "idle",
+              "steps": 0,
+              "latencyMs": 7471,
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "failed": true
+            },
+            {
+              "index": 1,
+              "toolsCalled": [],
+              "stageBefore": "idle",
+              "stageAfter": "idle",
+              "steps": 0,
+              "latencyMs": 7606,
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "failed": true
+            },
+            {
+              "index": 2,
+              "toolsCalled": [],
+              "stageBefore": "idle",
+              "stageAfter": "idle",
+              "steps": 0,
+              "latencyMs": 6978,
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "failed": true
+            },
+            {
+              "index": 3,
+              "toolsCalled": [],
+              "stageBefore": "idle",
+              "stageAfter": "idle",
+              "steps": 0,
+              "latencyMs": 7113,
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "failed": true
+            }
+          ]
+        },
+        {
+          "scenarioId": "scn-full-booking-ar",
+          "booked": false,
+          "turnsToBooking": null,
+          "neverOfferedAttempts": 0,
+          "turns": [
+            {
+              "index": 0,
+              "toolsCalled": [],
+              "stageBefore": "idle",
+              "stageAfter": "idle",
+              "steps": 0,
+              "latencyMs": 7303,
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "failed": true
+            },
+            {
+              "index": 1,
+              "toolsCalled": [],
+              "stageBefore": "idle",
+              "stageAfter": "idle",
+              "steps": 0,
+              "latencyMs": 7439,
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "failed": true
+            },
+            {
+              "index": 2,
+              "toolsCalled": [],
+              "stageBefore": "idle",
+              "stageAfter": "idle",
+              "steps": 0,
+              "latencyMs": 7906,
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "failed": true
+            },
+            {
+              "index": 3,
+              "toolsCalled": [],
+              "stageBefore": "idle",
+              "stageAfter": "idle",
+              "steps": 0,
+              "latencyMs": 7869,
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "failed": true
+            }
+          ]
+        },
+        {
+          "scenarioId": "scn-fragmented-en",
+          "booked": false,
+          "turnsToBooking": null,
+          "neverOfferedAttempts": 0,
+          "turns": [
+            {
+              "index": 0,
+              "toolsCalled": [],
+              "stageBefore": "idle",
+              "stageAfter": "idle",
+              "steps": 0,
+              "latencyMs": 7273,
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "failed": true
+            },
+            {
+              "index": 1,
+              "toolsCalled": [],
+              "stageBefore": "idle",
+              "stageAfter": "idle",
+              "steps": 0,
+              "latencyMs": 7705,
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "failed": true
+            },
+            {
+              "index": 2,
+              "toolsCalled": [],
+              "stageBefore": "idle",
+              "stageAfter": "idle",
+              "steps": 0,
+              "latencyMs": 7928,
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "failed": true
+            },
+            {
+              "index": 3,
+              "toolsCalled": [],
+              "stageBefore": "idle",
+              "stageAfter": "idle",
+              "steps": 0,
+              "latencyMs": 7328,
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "failed": true
+            },
+            {
+              "index": 4,
+              "toolsCalled": [],
+              "stageBefore": "idle",
+              "stageAfter": "idle",
+              "steps": 0,
+              "latencyMs": 7729,
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "failed": true
+            }
+          ]
+        },
+        {
+          "scenarioId": "scn-hallucinated-slot-en",
+          "booked": false,
+          "turnsToBooking": null,
+          "neverOfferedAttempts": 0,
+          "turns": [
+            {
+              "index": 0,
+              "toolsCalled": [],
+              "stageBefore": "idle",
+              "stageAfter": "idle",
+              "steps": 0,
+              "latencyMs": 7310,
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "failed": true
+            },
+            {
+              "index": 1,
+              "toolsCalled": [],
+              "stageBefore": "idle",
+              "stageAfter": "idle",
+              "steps": 0,
+              "latencyMs": 7573,
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "failed": true
+            },
+            {
+              "index": 2,
+              "toolsCalled": [],
+              "stageBefore": "idle",
+              "stageAfter": "idle",
+              "steps": 0,
+              "latencyMs": 7466,
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "failed": true
+            }
+          ]
+        },
+        {
+          "scenarioId": "scn-stranger-intake-en",
+          "booked": false,
+          "turnsToBooking": null,
+          "neverOfferedAttempts": 0,
+          "turns": [
+            {
+              "index": 0,
+              "toolsCalled": [],
+              "stageBefore": "idle",
+              "stageAfter": "idle",
+              "steps": 0,
+              "latencyMs": 7639,
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "failed": true
+            },
+            {
+              "index": 1,
+              "toolsCalled": [],
+              "stageBefore": "idle",
+              "stageAfter": "idle",
+              "steps": 0,
+              "latencyMs": 6977,
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "failed": true
+            },
+            {
+              "index": 2,
+              "toolsCalled": [],
+              "stageBefore": "idle",
+              "stageAfter": "idle",
+              "steps": 0,
+              "latencyMs": 7634,
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "failed": true
+            },
+            {
+              "index": 3,
+              "toolsCalled": [],
+              "stageBefore": "idle",
+              "stageAfter": "idle",
+              "steps": 0,
+              "latencyMs": 7678,
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "failed": true
+            }
+          ]
+        },
+        {
+          "scenarioId": "scn-wrong-doctor-ar",
+          "booked": false,
+          "turnsToBooking": null,
+          "neverOfferedAttempts": 0,
+          "turns": [
+            {
+              "index": 0,
+              "toolsCalled": [],
+              "stageBefore": "idle",
+              "stageAfter": "idle",
+              "steps": 0,
+              "latencyMs": 7133,
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "failed": true
+            },
+            {
+              "index": 1,
+              "toolsCalled": [],
+              "stageBefore": "idle",
+              "stageAfter": "idle",
+              "steps": 0,
+              "latencyMs": 7804,
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "failed": true
+            },
+            {
+              "index": 2,
+              "toolsCalled": [],
+              "stageBefore": "idle",
+              "stageAfter": "idle",
+              "steps": 0,
+              "latencyMs": 7452,
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "failed": true
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

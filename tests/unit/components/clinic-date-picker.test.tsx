@@ -8,6 +8,8 @@ import {
   SingleDatePicker,
   TimePicker,
 } from "@/components/ui/clinic-date-picker";
+import { ClinicSettingsProvider } from "@/contexts/clinic-settings-context";
+import { DEFAULT_CLINIC_LOCALE } from "@/lib/datetime";
 
 describe("Clinic date pickers", () => {
   it("keeps From and To as independent controlled values while guiding range selection", async () => {
@@ -105,6 +107,24 @@ describe("Clinic date pickers", () => {
     await user.click(screen.getByRole("combobox", { name: "Minute" }));
     await user.click(screen.getByRole("option", { name: "45" }));
     expect(onChange).toHaveBeenCalledWith("08:45");
+  });
+
+  it("uses the clinic 12-hour display while preserving the HH:mm value contract", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <ClinicSettingsProvider
+        timeFormat="12h"
+        locale={{ ...DEFAULT_CLINIC_LOCALE, timeFormat: "12h" }}
+      >
+        <TimePicker value="13:15" label="Start time" onChange={onChange} />
+      </ClinicSettingsProvider>,
+    );
+    expect(screen.getByRole("button", { name: /Start time/i })).toHaveTextContent("1:15 PM");
+    await user.click(screen.getByRole("button", { name: /Start time/i }));
+    await user.click(screen.getByRole("combobox", { name: "Minute" }));
+    await user.click(screen.getByRole("option", { name: "45" }));
+    expect(onChange).toHaveBeenCalledWith("13:45");
   });
 
   it("preserves local date-time strings when composing date and time selection", async () => {

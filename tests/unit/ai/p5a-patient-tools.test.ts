@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  directory: vi.fn(),
   entitlements: vi.fn(),
   resolveContext: vi.fn(),
   verifyDob: vi.fn(),
   listAppointments: vi.fn(),
   cancelAppointment: vi.fn(),
   searchFaq: vi.fn(),
+  clinicInfo: vi.fn(),
   availability: vi.fn(),
   createBooking: vi.fn(),
   audit: vi.fn(),
@@ -30,10 +32,27 @@ vi.mock("@/lib/supabase/admin", () => ({
   listPatientAiAppointments: mocks.listAppointments,
   cancelPatientAiAppointment: mocks.cancelAppointment,
   searchPatientClinicFaq: mocks.searchFaq,
+  getPatientClinicPublicInfo: mocks.clinicInfo,
+  getPendingConversationIntake: vi
+    .fn()
+    .mockResolvedValue({ data: null, error: null }),
   logAgentToolCall: vi.fn().mockResolvedValue({ data: "audit", error: null }),
+  setConversationAiState: vi.fn().mockResolvedValue({ data: null, error: null }),
 }));
+
+/**
+ * P9B: the availability and booking tools now resolve their doctor against the
+ * clinic's directory before touching the schedule, so a doctor id the clinic
+ * never issued cannot reach the engine. The directory itself has its own tests;
+ * here it only needs to know the one doctor these cases book with.
+ */
+vi.mock("@/lib/ai/doctor-directory", async (original) => {
+  const actual = await original<typeof import("@/lib/ai/doctor-directory")>();
+  return { ...actual, loadDoctorDirectory: mocks.directory };
+});
 vi.mock("@/lib/booking/patient", () => ({
   getPatientAvailableSlots: mocks.availability,
+  getPatientAvailableDays: vi.fn(),
   createPatientPendingBooking: mocks.createBooking,
 }));
 vi.mock("@/lib/ai/audit", () => ({ logAgentTool: mocks.audit }));
@@ -72,6 +91,19 @@ function resolved(overrides: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.directory.mockResolvedValue({
+    departments: [],
+    doctors: [
+      {
+        id: DOCTOR,
+        name: "Sara Ali",
+        departmentId: null,
+        departmentName: null,
+        state: "available",
+        unavailableUntil: null,
+      },
+    ],
+  });
   mocks.entitlements.mockResolvedValue({
     clinicId: CLINIC,
     planSlug: "pro_ai",
@@ -118,15 +150,25 @@ describe("P5A patient tool mount", () => {
   it("mounts the complete patient booking allow-list and no staff tool", () => {
     const tools = buildPatientTools(context, "patient_booking");
     expect(Object.keys(tools)).toEqual([...PATIENT_TOOL_NAMES]);
-    expect(tools).not.toHaveProperty("get_patient_summary");
+    expect(tools).not.toHaveProperty("query_resource");
+    expect(tools).not.toHaveProperty("get_record");
     expect(tools).not.toHaveProperty("search_authorized_patients");
-    expect(tools).not.toHaveProperty("execute_read_only_workflow");
+    expect(tools).not.toHaveProperty("execute_action");
     expect(tools).not.toHaveProperty("run_clinic_report");
   });
 
-  it("narrows a FAQ task to the FAQ tool alone", () => {
+  it("narrows a FAQ task to deterministic clinic information and nothing else", () => {
+    // P10/P11I widened this set, and the shape of the widening is the point:
+    // every addition reads the clinic's *own settings* and discloses nothing
+    // patient-specific, which is the same standard `get_clinic_info` already
+    // met. No booking, intake, identity or appointment tool is here, and that
+    // is the property this assertion exists to hold.
     expect(Object.keys(buildPatientTools(context, "patient_faq"))).toEqual([
+      "get_clinic_info",
       "answer_clinic_faq",
+      "list_clinic_departments",
+      "list_clinic_insurance",
+      "list_department_services",
     ]);
   });
 
@@ -255,5 +297,27 @@ describe("P5A booking, FAQ, and policy behavior", () => {
     expect(buildPatientSystemPrompt("en")).toContain("Do not provide medical advice");
     expect(buildPatientSystemPrompt("ar")).toContain("لا تقدم نصيحة طبية");
     expect(buildPatientSystemPrompt("ar")).toContain("لا تقل أبدًا إنه مؤكد");
+  });
+
+  /**
+   * P11S superseded the first two assertions here. The episode welcome used to
+   * be an instruction ("briefly introduce yourself as the clinic assistant"),
+   * which produced an introduction most of the time — and a patient's first
+   * contact with a clinic is the one sentence that must not be probabilistic.
+   * `lib/ai/episode-greeting.ts` composes it now, so what the prompt must say
+   * is the opposite: do not write one, it is already there. The remaining
+   * assertions are unchanged.
+   */
+  it("defers the episode welcome to the server, and keeps days-first availability and pending-only wording", () => {
+    const en = buildPatientSystemPrompt("en");
+    const ar = buildPatientSystemPrompt("ar");
+    expect(en).toContain("The first message of a new episode is opened for you by the system");
+    expect(en).toContain("Do not write a welcome of your own and do not introduce yourself");
+    expect(en).toContain("offer only the returned DAYS");
+    expect(en).toContain("submitted PENDING request");
+    expect(ar).toContain("أول رسالة في أي حلقة جديدة يفتحها النظام نيابةً عنك");
+    expect(ar).toContain("لا تكتب ترحيبًا من عندك ولا تعرّف بنفسك");
+    expect(ar).toContain("الأيام التي أعادتها فقط");
+    expect(ar).toContain("طلب معلّق فقط");
   });
 });

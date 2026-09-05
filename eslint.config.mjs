@@ -49,6 +49,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // services/ holds separately deployed Node services with their own
+    // toolchains (see services/whatsapp-worker); they are not part of the
+    // Next.js app's lint or type graph.
+    "services/**",
   ]),
 ]);
 

@@ -3,6 +3,8 @@ import { createClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/types/database";
 import type { FxSnapshot } from "@/lib/currency/provider";
 import { requirePlatformAdmin } from "@/lib/rbac";
+import { resolveSubscriptionAccess } from "@/lib/billing/access";
+import { resolveEffectiveAiFeature } from "@/lib/ai/commercial-policy";
 
 /**
  * Service-role Supabase client. Server-only.
@@ -177,6 +179,22 @@ export async function reserveDocumentIssue(input: ReserveDocumentIssueInput) {
     p_invoice_id: input.invoiceId ?? undefined,
     p_regenerated_from: input.regeneratedFrom ?? undefined,
   });
+}
+
+/** Find an immutable completed artifact before retrying a natural idempotency key. */
+export async function findCompletedClinicDocument(input: {
+  clinicId: string;
+  documentType: string;
+  idempotencyKey: string;
+}) {
+  return createAdminClient()
+    .from("documents")
+    .select("id, document_number, verification_token, status")
+    .eq("clinic_id", input.clinicId)
+    .eq("doc_type", input.documentType)
+    .eq("idempotency_key", input.idempotencyKey)
+    .in("status", ["issued", "cancelled", "void"])
+    .maybeSingle();
 }
 
 export async function completeDocumentIssue(input: {
@@ -419,6 +437,51 @@ export async function reserveAiBudget(input: {
   });
 }
 
+/**
+ * Durable, idempotent claim on one included-usage threshold notice.
+ *
+ * Returns true exactly once per (clinic, billing period, threshold), even under
+ * concurrent turns — the RPC is an INSERT ... ON CONFLICT DO NOTHING behind the
+ * service-role guard. Callers emit the notification only when it returns true.
+ */
+export async function claimAiUsageThresholdNotice(input: {
+  clinicId: string;
+  periodStart: string;
+  threshold: number;
+  usedPercent: number;
+}) {
+  return createAdminClient().rpc("claim_ai_usage_threshold_notice", {
+    p_clinic_id: input.clinicId,
+    p_period_start: input.periodStart,
+    p_threshold: input.threshold,
+    p_used_percent: input.usedPercent,
+  });
+}
+
+/** Clinic-admin toggle for the automatic managed→BYOK handover (P12/G1). */
+export async function setAiAutoByokFallback(input: {
+  clinicId: string;
+  actorId: string;
+  enabled: boolean;
+}) {
+  return createAdminClient().rpc("set_ai_auto_byok_fallback", {
+    p_clinic_id: input.clinicId,
+    p_actor_id: input.actorId,
+    p_enabled: input.enabled,
+  });
+}
+
+/** Platform-owner allowance console source (plan default + per-clinic override). */
+export async function loadOperatorAiAllowanceReport(input: {
+  periodStart: string;
+  clinicId?: string;
+}) {
+  return createAdminClient().rpc("operator_ai_allowance_report", {
+    p_period_start: input.periodStart,
+    p_clinic_id: input.clinicId ?? undefined,
+  });
+}
+
 /** Atomic P4.5B credential activation/rotation plus metadata-only audit. */
 export async function activateAiProviderConnection(input: {
   connectionId: string;
@@ -553,6 +616,175 @@ export async function logAgentToolCall(input: {
 }
 
 /**
+ * Phase 3 reviewed service boundary for confirmation/receipt control-plane
+ * state. These RPCs never execute a clinic-domain mutation and never receive
+ * action arguments, previews, prompts, completions, or free text. The actual
+ * action handler continues to run with the authenticated caller and RLS.
+ */
+export async function issueAiActionConfirmation(input: {
+  tokenHash: string;
+  clinicId: string;
+  actorId: string;
+  conversationId: string;
+  actionId: string;
+  inputDigest: string;
+  expiresAt: string;
+  riskClass?: string;
+  privilegedBinding?: {
+    targetUserId: string;
+    beforeDigest: string;
+    afterDigest: string;
+  };
+}) {
+  return createAdminClient().rpc("issue_ai_action_confirmation", {
+    p_token_hash: input.tokenHash,
+    p_clinic_id: input.clinicId,
+    p_actor_id: input.actorId,
+    p_conversation_id: input.conversationId,
+    p_action_id: input.actionId,
+    p_input_digest: input.inputDigest,
+    p_expires_at: input.expiresAt,
+    p_risk_class: input.riskClass ?? "normal",
+    p_target_user_id: input.privilegedBinding?.targetUserId ?? null,
+    p_before_digest: input.privilegedBinding?.beforeDigest ?? null,
+    p_after_digest: input.privilegedBinding?.afterDigest ?? null,
+  });
+}
+
+export async function verifyAiActionStepUp(input: {
+  tokenHash: string;
+  clinicId: string;
+  actorId: string;
+  reauthNonceHash: string;
+  verifiedAt: string;
+}) {
+  return createAdminClient().rpc("verify_ai_action_step_up", {
+    p_token_hash: input.tokenHash,
+    p_clinic_id: input.clinicId,
+    p_actor_id: input.actorId,
+    p_reauth_nonce_hash: input.reauthNonceHash,
+    p_verified_at: input.verifiedAt,
+  });
+}
+
+export async function claimAiActionConfirmation(input: {
+  tokenHash: string;
+  clinicId: string;
+  actorId: string;
+  conversationId: string;
+  actionId: string;
+  inputDigest: string;
+  consumedAt: string;
+  privilegedBinding?: {
+    targetUserId: string;
+    beforeDigest: string;
+    afterDigest: string;
+  };
+  reauthNonceHash?: string;
+}) {
+  return createAdminClient().rpc("claim_ai_action_confirmation", {
+    p_token_hash: input.tokenHash,
+    p_clinic_id: input.clinicId,
+    p_actor_id: input.actorId,
+    p_conversation_id: input.conversationId,
+    p_action_id: input.actionId,
+    p_input_digest: input.inputDigest,
+    p_consumed_at: input.consumedAt,
+    p_target_user_id: input.privilegedBinding?.targetUserId ?? null,
+    p_before_digest: input.privilegedBinding?.beforeDigest ?? null,
+    p_after_digest: input.privilegedBinding?.afterDigest ?? null,
+    p_reauth_nonce_hash: input.reauthNonceHash ?? null,
+  });
+}
+
+export async function consumeAiPrivilegedActionRateLimit(input: {
+  clinicId: string;
+  actorId: string;
+  conversationId: string;
+  phase: string;
+  occurredAt: string;
+}) {
+  return createAdminClient().rpc("consume_ai_privileged_action_rate_limit", {
+    p_clinic_id: input.clinicId,
+    p_actor_id: input.actorId,
+    p_conversation_id: input.conversationId,
+    p_phase: input.phase,
+    p_occurred_at: input.occurredAt,
+  });
+}
+
+export async function beginAiActionReceipt(input: {
+  clinicId: string;
+  actorId: string;
+  conversationId: string;
+  aiRequestId: string | null;
+  actionId: string;
+  riskClass: string;
+  phase: string;
+  inputDigest: string;
+}) {
+  return createAdminClient().rpc("begin_ai_action_receipt", {
+    p_clinic_id: input.clinicId,
+    p_actor_id: input.actorId,
+    p_conversation_id: input.conversationId,
+    p_ai_request_id: input.aiRequestId,
+    p_action_id: input.actionId,
+    p_risk_class: input.riskClass,
+    p_phase: input.phase,
+    p_input_digest: input.inputDigest,
+  });
+}
+
+export async function finalizeAiActionReceipt(input: {
+  receiptId: string;
+  clinicId: string;
+  actorId: string;
+  authorizationOutcome: string;
+  denialReason: string | null;
+  targetTable: string | null;
+  targetRecordIds: readonly string[];
+  beforeDigest: string | null;
+  afterDigest: string | null;
+  outcome: string;
+  errorCode: string | null;
+}) {
+  return createAdminClient().rpc("finalize_ai_action_receipt", {
+    p_receipt_id: input.receiptId,
+    p_clinic_id: input.clinicId,
+    p_actor_id: input.actorId,
+    p_authorization_outcome: input.authorizationOutcome,
+    p_denial_reason: input.denialReason,
+    p_target_table: input.targetTable,
+    p_target_record_ids: [...input.targetRecordIds],
+    p_before_digest: input.beforeDigest,
+    p_after_digest: input.afterDigest,
+    p_outcome: input.outcome,
+    p_error_code: input.errorCode,
+  });
+}
+
+/**
+ * Phase 6 retention purge. Service-role only, like every other AI control-plane
+ * RPC; the windows are supplied by `lib/ai/retention.ts` rather than being
+ * literals in SQL, so the policy has exactly one home.
+ */
+export async function purgeAiRetentionData(input: {
+  messageRetentionDays: number;
+  receiptRetentionDays: number;
+  confirmationRetentionDays: number;
+  batchLimit: number;
+  now?: string;
+}) {
+  return createAdminClient().rpc("purge_ai_retention_data", {
+    p_message_retention_days: input.messageRetentionDays,
+    p_receipt_retention_days: input.receiptRetentionDays,
+    p_confirmation_retention_days: input.confirmationRetentionDays,
+    p_batch_limit: input.batchLimit,
+    ...(input.now ? { p_now: input.now } : {}),
+  });
+}
+
+/**
  * P5B (§6.2): the clinic fields the patient-reply orchestrator needs to resolve
  * mode, locale, and canned escalation copy. `clinics` has no clinic_id column,
  * so it is read by primary key here rather than through the auto-scoping client.
@@ -560,9 +792,75 @@ export async function logAgentToolCall(input: {
 export async function getClinicAiReplyContext(clinicId: string) {
   return createAdminClient()
     .from("clinics")
-    .select("name, locale, country, phone, ai_reply_mode")
+    // P10: the configured register travels with the mode, so the orchestrator
+    // can resolve the reply language before it builds the agent rather than
+    // after. Kept as one literal: PostgREST infers the row type from the
+    // select string, and a concatenated one infers nothing.
+    .select(
+      "name, locale, country, phone, time_format, ai_reply_mode, ai_language_mode, ai_arabic_style, ai_tone, ai_style_instruction",
+    )
     .eq("id", clinicId)
     .maybeSingle();
+}
+
+/**
+ * P10 — the clinic's stored currency code, for quoting a configured price.
+ *
+ * `clinics` carries no `clinic_id` column, so it is read by primary key here
+ * rather than through the auto-scoping client — the same reason
+ * `getClinicAiReplyContext` lives here. A missing or unreadable value returns
+ * null, and the assistant then states the amount without a currency rather
+ * than failing the answer.
+ */
+export async function getClinicCurrency(clinicId: string): Promise<string | null> {
+  const result = await createAdminClient()
+    .from("clinics")
+    .select("currency")
+    .eq("id", clinicId)
+    .maybeSingle();
+  return result.data?.currency ?? null;
+}
+
+/** Public clinic settings exposed to the patient assistant. */
+export async function getPatientClinicPublicInfo(clinicId: string) {
+  const admin = createAdminClient();
+  const [clinic, workingHours] = await Promise.all([
+    admin
+      .from("clinics")
+      .select(
+        "name, address, phone, website, timezone, locale, working_hours_start, working_hours_end",
+      )
+      .eq("id", clinicId)
+      .eq("is_active", true)
+      .maybeSingle(),
+    admin
+      .from("clinic_working_hours")
+      .select("day_of_week, shift_start, shift_end")
+      .eq("clinic_id", clinicId)
+      .order("day_of_week")
+      .order("shift_start"),
+  ]);
+  const error = clinic.error ?? workingHours.error;
+  if (error || !clinic.data) return { data: null, error };
+  return {
+    data: {
+      name: clinic.data.name,
+      address: clinic.data.address,
+      phone: clinic.data.phone,
+      website: clinic.data.website,
+      timezone: clinic.data.timezone,
+      locale: clinic.data.locale,
+      working_hours: workingHours.data ?? [],
+      default_working_hours:
+        clinic.data.working_hours_start && clinic.data.working_hours_end
+          ? {
+              start: clinic.data.working_hours_start,
+              end: clinic.data.working_hours_end,
+            }
+          : null,
+    },
+    error: null,
+  };
 }
 
 /** P5B (§6.2): update the per-clinic patient AI reply mode. `clinics` is keyed
@@ -589,6 +887,60 @@ export async function resolvePatientAiContext(input: {
   return createAdminClient().rpc("resolve_patient_ai_context", {
     p_clinic_id: input.clinicId,
     p_conversation_id: input.conversationId,
+  });
+}
+
+/**
+ * Atomically detaches an unavailable patient and clears only the conversation's
+ * episode-scoped Assistant state. The RPC is idempotent and leaves a valid
+ * active patient link untouched.
+ */
+export async function normalizeStalePatientConversationEpisode(input: {
+  clinicId: string;
+  conversationId: string;
+}) {
+  return createAdminClient().rpc("normalize_stale_patient_conversation_episode", {
+    p_clinic_id: input.clinicId,
+    p_conversation_id: input.conversationId,
+  });
+}
+
+/**
+ * P11T — the conversation's active episode, opened if the thread was resting.
+ *
+ * Idempotent, and the episode's `started_at` is always the P11O context
+ * boundary, so the durable record and the cut every reader already uses cannot
+ * disagree. Called once at the top of an assistant turn, before anything that
+ * feeds the model is read.
+ */
+export async function resolveConversationEpisode(input: {
+  clinicId: string;
+  conversationId: string;
+  startedAt?: string | null;
+}) {
+  return createAdminClient().rpc("resolve_conversation_episode", {
+    p_clinic_id: input.clinicId,
+    p_conversation_id: input.conversationId,
+    p_started_at: input.startedAt ?? undefined,
+  });
+}
+
+/**
+ * P11T — ends the thread's active episode with a stated reason and clears the
+ * current-episode pointer. Idempotent; a thread with no active episode is
+ * already ended, which is a normal outcome rather than an error.
+ */
+export async function closeConversationEpisode(input: {
+  clinicId: string;
+  conversationId: string;
+  reason: "manual_close" | "assistant_close" | "idle_timeout" | "superseded";
+  endedAt?: string;
+}) {
+  return createAdminClient().rpc("close_conversation_episode", {
+    p_clinic_id: input.clinicId,
+    p_conversation_id: input.conversationId,
+    p_end_reason: input.reason,
+    p_ended_at: input.endedAt ?? undefined,
   });
 }
 
@@ -646,6 +998,32 @@ export async function cancelPatientAiAppointment(input: {
   });
 }
 
+export async function preparePatientAiReschedule(input: {
+  clinicId: string;
+  conversationId: string;
+  appointmentId: string;
+}) {
+  return createAdminClient().rpc("prepare_patient_ai_reschedule", {
+    p_clinic_id: input.clinicId,
+    p_conversation_id: input.conversationId,
+    p_appointment_id: input.appointmentId,
+  });
+}
+
+export async function reschedulePatientAiAppointment(input: {
+  clinicId: string;
+  conversationId: string;
+  appointmentId: string;
+  scheduledAt: string;
+}) {
+  return createAdminClient().rpc("reschedule_patient_ai_appointment", {
+    p_clinic_id: input.clinicId,
+    p_conversation_id: input.conversationId,
+    p_appointment_id: input.appointmentId,
+    p_scheduled_at: input.scheduledAt,
+  });
+}
+
 export async function searchPatientClinicFaq(input: {
   clinicId: string;
   conversationId: string;
@@ -668,6 +1046,14 @@ export async function expireAiPendingBookings(now = new Date(), limit = 500) {
   });
 }
 
+/** Expires provisional intake requests so stale rows cannot block rebooking. */
+export async function expireAiAppointmentRequests(now = new Date(), limit = 500) {
+  return createAdminClient().rpc("expire_ai_appointment_requests", {
+    p_now: now.toISOString(),
+    p_limit: limit,
+  });
+}
+
 /** Atomic webhook boundary: one inbound event creates/repairs one sender thread. */
 export async function persistWhatsAppInbound(input: {
   clinicId: string;
@@ -675,6 +1061,10 @@ export async function persistWhatsAppInbound(input: {
   body: string;
   providerMessageId: string;
   receivedAt: string;
+  /** P8: WhatsApp's own label for the contact. Never identity, never matched. */
+  displayName?: string | null;
+  /** P8: a message from the history sync — persisted, but with no live effects. */
+  historical?: boolean;
 }) {
   return createAdminClient().rpc("persist_whatsapp_inbound", {
     p_clinic_id: input.clinicId,
@@ -682,6 +1072,659 @@ export async function persistWhatsAppInbound(input: {
     p_body: input.body,
     p_provider_message_id: input.providerMessageId,
     p_received_at: input.receivedAt,
+    p_display_name: input.displayName ?? undefined,
+    p_historical: input.historical ?? false,
+  });
+}
+
+/** Linked-device inbound persistence, isolated by authenticated account. */
+export async function persistLinkedDeviceInbound(input: {
+  clinicId: string;
+  authenticatedAccountId: string;
+  sender: string;
+  body: string;
+  providerMessageId: string;
+  receivedAt: string;
+  displayName?: string | null;
+  historical?: boolean;
+}) {
+  return createAdminClient().rpc("persist_linked_device_inbound", {
+    p_clinic_id: input.clinicId,
+    p_authenticated_account_id: input.authenticatedAccountId,
+    p_sender: input.sender,
+    p_body: input.body,
+    p_provider_message_id: input.providerMessageId,
+    p_received_at: input.receivedAt,
+    p_display_name: input.displayName ?? undefined,
+    p_historical: input.historical ?? false,
+  });
+}
+
+/**
+ * P8: opens (or renames) the inbox thread for a chat the history sync listed.
+ *
+ * Deliberately free of every live-message side effect — no service window, no
+ * status change, no notification — because importing a year of conversation must
+ * not look like a year of patients writing in at once.
+ */
+/**
+ * P8 — the private bucket holding inbound WhatsApp attachments.
+ *
+ * Storage has no per-clinic client the way PostgREST does, so these two helpers
+ * live here (the one module allowed to hold the raw service-role client) and take
+ * the clinic id explicitly. Both refuse any path outside `<clinicId>/`: a signed
+ * URL is a bearer token for a file, and a single bad row must not be enough to
+ * mint one for another tenant.
+ */
+export const WHATSAPP_ATTACHMENT_BUCKET = "whatsapp-inbound";
+
+export async function signWhatsAppAttachmentUrls(input: {
+  clinicId: string;
+  paths: readonly string[];
+  expiresInSeconds: number;
+}) {
+  const scoped = input.paths.filter(
+    (path) => path.startsWith(`${input.clinicId}/`) && !path.includes(".."),
+  );
+  if (scoped.length === 0) return { data: [], error: null };
+  return createAdminClient()
+    .storage.from(WHATSAPP_ATTACHMENT_BUCKET)
+    .createSignedUrls(scoped, input.expiresInSeconds);
+}
+
+export async function downloadWhatsAppAttachment(input: {
+  clinicId: string;
+  storagePath: string;
+}) {
+  if (!input.storagePath.startsWith(`${input.clinicId}/`) || input.storagePath.includes("..")) {
+    return { data: null, error: new Error("FOREIGN_ATTACHMENT_PATH") };
+  }
+  return createAdminClient()
+    .storage.from(WHATSAPP_ATTACHMENT_BUCKET)
+    .download(input.storagePath);
+}
+
+/**
+ * P8B §5 — the bucket staff-supplied outbound files live in.
+ *
+ * Separate from `whatsapp-inbound` deliberately. The two have different
+ * lifecycles, different retention questions and different threat models: one
+ * holds what strangers sent us, the other holds what our own staff chose to
+ * send out. Mixing them would make either one's policy the other's ceiling.
+ */
+export const WHATSAPP_OUTBOUND_BUCKET = "whatsapp-outbound";
+
+/**
+ * Buckets a WhatsApp send may read from, and the tenant rule for each.
+ *
+ * This is the single place that decides whether a stored object can leave the
+ * building over WhatsApp. `whatsapp-outbound` is clinic-partitioned at the path
+ * root; the two document buckets are partitioned one level in, which is the
+ * layout their own migrations established. A bucket that is not named here
+ * cannot be sent from at all, whatever a row says.
+ */
+const SENDABLE_BUCKET_PREFIX: Record<string, (clinicId: string) => readonly string[]> = {
+  "whatsapp-outbound": (clinicId) => [`${clinicId}/`],
+  "patient-assets": (clinicId) => [`documents/${clinicId}/`],
+  "clinic-documents": (clinicId) => [`documents/${clinicId}/`],
+};
+
+/**
+ * Is this exact object one this clinic may send?
+ *
+ * Path containment only — the *record-level* authorization (is this staff member
+ * allowed to see this patient's file?) happens before a row is ever written, in
+ * the action that prepares the send. This is the second of the two checks, and
+ * it is the one that holds even if the first is wrong: a path outside the
+ * clinic's own prefix is refused regardless of what any row claims.
+ */
+export function isSendableStoragePath(
+  bucket: string,
+  storagePath: string,
+  clinicId: string,
+): boolean {
+  const prefixes = SENDABLE_BUCKET_PREFIX[bucket];
+  if (!prefixes) return false;
+  if (storagePath.includes("..") || storagePath.startsWith("/")) return false;
+  return prefixes(clinicId).some((prefix) => storagePath.startsWith(prefix));
+}
+
+/** Writes one staff-supplied file into the private outbound bucket. */
+export async function uploadOutboundMedia(input: {
+  clinicId: string;
+  path: string;
+  bytes: Buffer;
+  contentType: string;
+}) {
+  if (!isSendableStoragePath(WHATSAPP_OUTBOUND_BUCKET, input.path, input.clinicId)) {
+    return { data: null, error: new Error("FOREIGN_OUTBOUND_PATH") };
+  }
+  return createAdminClient()
+    .storage.from(WHATSAPP_OUTBOUND_BUCKET)
+    .upload(input.path, input.bytes, {
+      contentType: input.contentType,
+      // A prepared file is written exactly once, under a fresh identifier. No
+      // caller can overwrite bytes another send is already carrying.
+      upsert: false,
+    });
+}
+
+/** Signs outbound files for the thread view, one clinic at a time. */
+export async function signOutboundMediaUrls(input: {
+  clinicId: string;
+  paths: readonly string[];
+  expiresInSeconds: number;
+}) {
+  const scoped = input.paths.filter((path) =>
+    isSendableStoragePath(WHATSAPP_OUTBOUND_BUCKET, path, input.clinicId),
+  );
+  if (scoped.length === 0) return { data: [], error: null };
+  return createAdminClient()
+    .storage.from(WHATSAPP_OUTBOUND_BUCKET)
+    .createSignedUrls(scoped, input.expiresInSeconds);
+}
+
+/**
+ * Signs already-authorized outbound-media references for the Inbox thread.
+ * Each bucket is handled separately and every path is checked again before a
+ * bearer URL is minted.
+ */
+export async function signSendableMediaUrls(input: {
+  clinicId: string;
+  items: readonly { bucket: string; storagePath: string }[];
+  expiresInSeconds: number;
+}): Promise<Map<string, string>> {
+  const byBucket = new Map<string, string[]>();
+  for (const item of input.items) {
+    if (!isSendableStoragePath(item.bucket, item.storagePath, input.clinicId)) continue;
+    const paths = byBucket.get(item.bucket) ?? [];
+    if (!paths.includes(item.storagePath)) paths.push(item.storagePath);
+    byBucket.set(item.bucket, paths);
+  }
+
+  const signed = new Map<string, string>();
+  await Promise.all(
+    [...byBucket.entries()].map(async ([bucket, paths]) => {
+      const result = await createAdminClient()
+        .storage.from(bucket)
+        .createSignedUrls(paths, input.expiresInSeconds);
+      if (result.error) return;
+      for (const row of result.data ?? []) {
+        if (row.signedUrl) signed.set(`${bucket}\u0000${row.path}`, row.signedUrl);
+      }
+    }),
+  );
+  return signed;
+}
+
+/** Reads any sendable object's bytes, after the bucket/prefix check. */
+export async function downloadSendableObject(input: {
+  clinicId: string;
+  bucket: string;
+  storagePath: string;
+}) {
+  if (!isSendableStoragePath(input.bucket, input.storagePath, input.clinicId)) {
+    return { data: null, error: new Error("FOREIGN_MEDIA_PATH") };
+  }
+  return createAdminClient().storage.from(input.bucket).download(input.storagePath);
+}
+
+/** Removes a prepared file that was never sent, or whose send failed. */
+export async function removeOutboundMedia(input: {
+  clinicId: string;
+  paths: readonly string[];
+}) {
+  const scoped = input.paths.filter((path) =>
+    isSendableStoragePath(WHATSAPP_OUTBOUND_BUCKET, path, input.clinicId),
+  );
+  if (scoped.length === 0) return { data: [], error: null };
+  return createAdminClient().storage.from(WHATSAPP_OUTBOUND_BUCKET).remove(scoped);
+}
+
+/**
+ * P11S — one sweep of the five-minute patient-episode idle close.
+ *
+ * The whole decision lives in `close_idle_patient_ai_episodes`, so the pg_cron
+ * job and the cron route cannot disagree about what "finished" means. Here only
+ * because the service-role client is confined to this file.
+ */
+export async function closeIdlePatientAiEpisodes(now?: Date) {
+  return createAdminClient().rpc("close_idle_patient_ai_episodes", {
+    ...(now ? { p_now: now.toISOString() } : {}),
+  });
+}
+
+export async function upsertWhatsAppHistoryChat(input: {
+  clinicId: string;
+  participant: string;
+  displayName: string | null;
+  lastMessageAt: string | null;
+}) {
+  return createAdminClient().rpc("upsert_whatsapp_history_chat", {
+    p_clinic_id: input.clinicId,
+    p_participant: input.participant,
+    p_display_name: input.displayName ?? undefined,
+    p_last_message_at: input.lastMessageAt ?? undefined,
+  });
+}
+
+export async function upsertLinkedDeviceHistoryChat(input: {
+  clinicId: string;
+  authenticatedAccountId: string;
+  participant: string;
+  displayName: string | null;
+  lastMessageAt: string | null;
+}) {
+  return createAdminClient().rpc("upsert_linked_device_history_chat", {
+    p_clinic_id: input.clinicId,
+    p_authenticated_account_id: input.authenticatedAccountId,
+    p_participant: input.participant,
+    p_display_name: input.displayName ?? undefined,
+    p_last_message_at: input.lastMessageAt ?? undefined,
+  });
+}
+
+/**
+ * P8: the human-takeover switch. Conditional inside the function, so two staff
+ * members flipping it at once produce one transition; `changed = false` means
+ * somebody else got there first.
+ */
+export async function setConversationAiPause(input: {
+  clinicId: string;
+  conversationId: string;
+  paused: boolean;
+  actorId: string;
+  reason?: string | null;
+}) {
+  return createAdminClient().rpc("set_conversation_ai_pause", {
+    p_clinic_id: input.clinicId,
+    p_conversation_id: input.conversationId,
+    p_paused: input.paused,
+    p_actor_id: input.actorId,
+    // `p_reason` defaults to null in SQL and the function coalesces it, so
+    // omitting the key is exactly equivalent to sending null — and the
+    // generated signature only admits the omission.
+    p_reason: input.reason ?? undefined,
+  });
+}
+
+/**
+ * P8B §1: persists what the assistant has established in a conversation.
+ *
+ * `collected` is *merged* by the RPC, never replaced, so a turn that settles a
+ * date of birth cannot erase a name settled two turns earlier. `pending` is
+ * singular by design — one outstanding question at a time — and
+ * `clearPending: true` is how "nothing is outstanding any more" is said, since
+ * a null argument already means "leave it alone".
+ *
+ * Nothing written here is ever an authorization input: see
+ * `lib/ai/collected-state.ts` for why the shape is deliberately incapable of
+ * carrying a patient id or a verification flag.
+ */
+export async function setConversationAiState(input: {
+  clinicId: string;
+  conversationId: string;
+  collected?: Record<string, string | number> | null;
+  pending?: Record<string, unknown> | null;
+  clearPending?: boolean;
+  /**
+   * P9: the whole booking-stage snapshot, replaced rather than merged. Unlike
+   * `collected`, this object is internally consistent — a stage, when it was
+   * entered, and the offers that belong to it — so merging two partial
+   * snapshots could produce a record that was never true. Callers always send
+   * the complete object they just derived.
+   */
+  stage?: Record<string, unknown> | null;
+}) {
+  return createAdminClient().rpc("set_conversation_ai_state", {
+    p_clinic_id: input.clinicId,
+    p_conversation_id: input.conversationId,
+    p_collected: (input.collected ?? null) as never,
+    p_pending: (input.pending ?? null) as never,
+    p_clear_pending: input.clearPending ?? false,
+    p_stage: (input.stage ?? null) as never,
+  });
+}
+
+/**
+ * P8B §3: opens (or re-opens) the WhatsApp thread for one number.
+ *
+ * Takes a number and never a patient id. It cannot create a patient — there is
+ * no branch in the function that touches `public.patients` — and an existing
+ * thread is returned rather than duplicated, so a staff member pressing "New
+ * conversation" for a number that already has one lands in it.
+ */
+export async function openWhatsAppConversation(input: {
+  clinicId: string;
+  participantAddress: string;
+  displayName?: string | null;
+  actorId?: string | null;
+}) {
+  return createAdminClient().rpc("open_whatsapp_conversation", {
+    p_clinic_id: input.clinicId,
+    p_participant: input.participantAddress,
+    p_display_name: input.displayName ?? undefined,
+    p_actor_id: input.actorId ?? undefined,
+  });
+}
+
+export async function openLinkedDeviceConversation(input: {
+  clinicId: string;
+  authenticatedAccountId: string;
+  participantAddress: string;
+  displayName?: string | null;
+  actorId?: string | null;
+}) {
+  return createAdminClient().rpc("open_linked_device_conversation", {
+    p_clinic_id: input.clinicId,
+    p_authenticated_account_id: input.authenticatedAccountId,
+    p_participant: input.participantAddress,
+    p_display_name: input.displayName ?? undefined,
+    p_actor_id: input.actorId ?? undefined,
+  });
+}
+
+/**
+ * P8B §3: records the contacts the linked device reports.
+ *
+ * Observed WhatsApp contact data and nothing more. A row says the linked
+ * session reported this number/name; it implies no patient and links none.
+ */
+export async function upsertWhatsAppContacts(input: {
+  clinicId: string;
+  contacts: ReadonlyArray<{ participantAddress: string; displayName: string | null }>;
+}) {
+  return createAdminClient().rpc("upsert_whatsapp_contacts", {
+    p_clinic_id: input.clinicId,
+    p_contacts: input.contacts as never,
+  });
+}
+
+/**
+ * P8B §5/§7: takes one prepared outbound file for a send.
+ *
+ * A claim, not a read: exactly one caller moves the draft out of `draft`, so a
+ * prepared file can never be attached to two messages, and a replayed send
+ * finds nothing to claim rather than sending twice.
+ */
+export async function claimOutboundMedia(input: {
+  clinicId: string;
+  mediaId: string;
+  conversationId: string;
+}) {
+  return createAdminClient().rpc("claim_outbound_media", {
+    p_clinic_id: input.clinicId,
+    p_media_id: input.mediaId,
+    p_conversation_id: input.conversationId,
+  });
+}
+
+/** P8B §5/§7: closes out a claimed file, against the message it went with. */
+export async function finalizeOutboundMedia(input: {
+  clinicId: string;
+  mediaId: string;
+  outboundMessageId?: string | null;
+  failureReason?: string | null;
+}) {
+  return createAdminClient().rpc("finalize_outbound_media", {
+    p_clinic_id: input.clinicId,
+    p_media_id: input.mediaId,
+    p_outbound_message_id: input.outboundMessageId ?? undefined,
+    p_failure_reason: input.failureReason ?? undefined,
+  });
+}
+
+/**
+ * Releases a deterministic pre-send media failure for another attempt.
+ *
+ * The compare-and-set is the concurrency guard: only the caller holding the
+ * current `sending` claim can return it to `draft`. Uploaded bytes stay in the
+ * private bucket, so retry never depends on the browser uploading them again.
+ */
+export async function releaseOutboundMedia(input: {
+  clinicId: string;
+  mediaId: string;
+  failureReason: string;
+}) {
+  return createClinicScopedAdminClient(input.clinicId)
+    .from("outbound_message_media")
+    .update({
+      status: "draft",
+      outbound_message_id: null,
+      failure_reason: input.failureReason.slice(0, 120),
+    })
+    .eq("id", input.mediaId)
+    .eq("status", "sending")
+    .select("id")
+    .maybeSingle();
+}
+
+/** Keeps an uncertain provider outcome single-use until delivery resolves it. */
+export async function holdOutboundMedia(input: {
+  clinicId: string;
+  mediaId: string;
+  outboundMessageId: string;
+  failureReason: string;
+}) {
+  return createClinicScopedAdminClient(input.clinicId)
+    .from("outbound_message_media")
+    .update({
+      outbound_message_id: input.outboundMessageId,
+      failure_reason: input.failureReason.slice(0, 120),
+    })
+    .eq("id", input.mediaId)
+    .eq("status", "sending")
+    .select("id")
+    .maybeSingle();
+}
+
+/** Stages an unknown WhatsApp sender without creating a public patient row. */
+export async function stagePatientIntakeFromConversation(input: {
+  clinicId: string;
+  conversationId: string;
+  fullName: string;
+  nationalId: string;
+  dateOfBirth: string;
+  email: string;
+  departmentId: string;
+  doctorId: string;
+  /** P9C: the staged person is not the sender ("ممكن احجز لصاحبي"). */
+  forThirdParty?: boolean;
+  /** Only read for a third party, and only as a contact number. */
+  phone?: string | null;
+  /** P10: optional, one of the eight stored blood groups. Never blocks an intake. */
+  bloodType?: string | null;
+  /**
+   * P10: the name exactly as the patient typed it, when `fullName` is a Latin
+   * transliteration of it. Kept beside the transliteration, never instead of it.
+   */
+  fullNameOriginal?: string | null;
+}) {
+  return createAdminClient().rpc("stage_patient_intake_from_conversation", {
+    p_clinic_id: input.clinicId,
+    p_conversation_id: input.conversationId,
+    p_full_name: input.fullName,
+    p_national_id: input.nationalId,
+    p_date_of_birth: input.dateOfBirth,
+    p_email: input.email,
+    p_department_id: input.departmentId,
+    p_doctor_id: input.doctorId,
+    p_for_third_party: input.forThirdParty === true,
+    p_phone: input.phone ?? undefined,
+    p_blood_type: input.bloodType ?? undefined,
+    p_full_name_original: input.fullNameOriginal ?? undefined,
+  });
+}
+
+/**
+ * P10 — the clinic's patient-assistant communication style.
+ *
+ * `clinics` is keyed by `id` and carries no `clinic_id`, so this goes through
+ * the reviewed service-role RPC rather than the auto-scoping client, exactly as
+ * `setClinicAiReplyMode` does.
+ */
+export async function setClinicAiCommunicationStyle(input: {
+  clinicId: string;
+  languageMode: string;
+  arabicStyle: string;
+  tone: string;
+  styleInstruction: string | null;
+}) {
+  return createAdminClient().rpc("set_clinic_ai_communication_style", {
+    p_clinic_id: input.clinicId,
+    p_language_mode: input.languageMode,
+    p_arabic_style: input.arabicStyle,
+    p_tone: input.tone,
+    // The generated signature types this as non-nullable text while the SQL
+    // function nullifs an empty string back to null, so an unset style line
+    // travels as "" and is stored as null by the function itself.
+    p_style_instruction: input.styleInstruction ?? "",
+  });
+}
+
+/**
+ * P10 — booking-scope identity for a thread already linked by its own number.
+ *
+ * Writes `booking_identity_confirmed_at` and nothing else. It cannot set
+ * `identity_verified_at`, so no disclosure path can be reached through it.
+ */
+export async function confirmPatientBookingIdentity(input: {
+  clinicId: string;
+  conversationId: string;
+}) {
+  return createAdminClient().rpc("confirm_patient_booking_identity", {
+    p_clinic_id: input.clinicId,
+    p_conversation_id: input.conversationId,
+  });
+}
+
+/**
+ * P10 — a returning patient writing from a number that is not on their file.
+ *
+ * Exact normalized name AND national id, rate-limited on the same counter as
+ * the date-of-birth check, and incapable of reporting which half failed.
+ */
+export async function identifyPatientForBooking(input: {
+  clinicId: string;
+  conversationId: string;
+  fullName: string;
+  nationalId: string;
+}) {
+  return createAdminClient().rpc("identify_patient_for_booking", {
+    p_clinic_id: input.clinicId,
+    p_conversation_id: input.conversationId,
+    p_full_name: input.fullName,
+    p_national_id: input.nationalId,
+  });
+}
+
+/**
+ * P11 — "عايز أعرف ميعادي" from a name and a national id.
+ *
+ * Deliberately not a variant of `listPatientAiAppointments`: that one reads the
+ * thread's own `patient_id`, and the whole security property here is that the
+ * answer comes from the two supplied values and from nothing else. The RPC
+ * links nothing, verifies nothing, and reports every failure identically.
+ */
+export async function lookupPatientAppointmentsByIdentity(input: {
+  clinicId: string;
+  conversationId: string;
+  fullName: string;
+  nationalId: string;
+}) {
+  return createAdminClient().rpc("lookup_patient_appointments_by_identity", {
+    p_clinic_id: input.clinicId,
+    p_conversation_id: input.conversationId,
+    p_full_name: input.fullName,
+    p_national_id: input.nationalId,
+  });
+}
+
+/**
+ * P9C — the pending intake this conversation is currently working on, if any.
+ *
+ * `create_preliminary_booking` needs it to answer one question the conversation
+ * cannot answer for itself: is this appointment for the sender, or for the
+ * person they are booking on behalf of? Getting that wrong means an appointment
+ * filed under the wrong patient, so it is read from the staged row rather than
+ * inferred from anything the model said.
+ */
+/**
+ * Item #3 — the clinic's own file for this beneficiary, when it has one.
+ *
+ * Thin on purpose: every part of the identity decision — the exact folded
+ * national/civil id, the folded name as confirmation, ambiguity failing closed,
+ * the clinic scope — is in `find_clinic_patient_by_identity`, next to the data
+ * it decides about and reachable only by `service_role`. This is the call.
+ */
+export async function findClinicPatientByIdentity(input: {
+  clinicId: string;
+  nationalId: string;
+  fullName: string;
+}) {
+  return createAdminClient().rpc("find_clinic_patient_by_identity", {
+    p_clinic_id: input.clinicId,
+    p_national_id: input.nationalId,
+    p_full_name: input.fullName,
+  });
+}
+
+/**
+ * Item #3 — stages a third-party intake that points at the beneficiary's
+ * existing file rather than proposing a second one.
+ *
+ * Takes no patient id: `stage_matched_third_party_intake` re-proves the
+ * identity from the id and the name itself, so no caller can name the record an
+ * appointment lands on.
+ */
+export async function stageMatchedThirdPartyIntake(input: {
+  clinicId: string;
+  conversationId: string;
+  fullName: string;
+  nationalId: string;
+  phone?: string | null;
+  departmentId: string;
+  doctorId: string;
+}) {
+  return createAdminClient().rpc("stage_matched_third_party_intake", {
+    p_clinic_id: input.clinicId,
+    p_conversation_id: input.conversationId,
+    p_full_name: input.fullName,
+    p_national_id: input.nationalId,
+    p_phone: input.phone ?? null,
+    p_department_id: input.departmentId,
+    p_doctor_id: input.doctorId,
+  });
+}
+
+export async function getPendingConversationIntake(input: {
+  clinicId: string;
+  conversationId: string;
+}) {
+  return createClinicScopedAdminClient(input.clinicId)
+    .from("ai_patient_intakes")
+    .select("id, full_name, doctor_id, department_id, is_third_party")
+    .eq("conversation_id", input.conversationId)
+    .eq("review_status", "pending_review")
+    .maybeSingle();
+}
+
+/** Creates a real-slot pending request owned by a provisional intake. */
+export async function createProvisionalAiAppointmentRequest(input: {
+  clinicId: string;
+  conversationId: string;
+  doctorId: string;
+  scheduledAt: string;
+  durationMinutes: number;
+  serviceId?: string | null;
+}) {
+  return createAdminClient().rpc("create_provisional_ai_appointment_request", {
+    p_clinic_id: input.clinicId,
+    p_conversation_id: input.conversationId,
+    p_doctor_id: input.doctorId,
+    p_scheduled_at: input.scheduledAt,
+    p_duration_minutes: input.durationMinutes,
+    p_service_id: input.serviceId ?? undefined,
   });
 }
 
@@ -780,7 +1823,10 @@ export async function findClinicChannelByProviderAccount(
 ) {
   return createAdminClient()
     .from("clinic_channels")
-    .select("id, clinic_id, sender_identity, status")
+    // credentials_encrypted is selected so a P7D manual channel's own app
+    // secret can verify the signature of a WABA-routed callback, exactly as it
+    // does for a phone-routed one.
+    .select("id, clinic_id, sender_identity, status, credentials_encrypted")
     .eq("channel", "whatsapp")
     .eq("provider", provider)
     .eq("provider_account_id", providerAccountId)
@@ -1046,7 +2092,7 @@ export async function getWhatsAppChannelStateRow(
   return createClinicScopedAdminClient(clinicId)
     .from("clinic_channels")
     .select(
-      "id, provider, provider_account_id, status, credentials_encrypted, connection_state, business_verification_status, account_review_status, phone_status, quality_rating, messaging_limit_tier, webhook_subscribed, last_synced_at, last_signal_at, last_state_reason, connected_at, updated_at",
+      "id, provider, provider_account_id, status, credentials_encrypted, connection_state, business_verification_status, account_review_status, phone_status, quality_rating, messaging_limit_tier, webhook_subscribed, last_synced_at, last_signal_at, last_state_reason, connected_at, updated_at, onboarding_flow, history_sync_requested_at",
     )
     .eq("channel", "whatsapp")
     .eq("provider", provider)
@@ -1355,9 +2401,13 @@ export async function loadOperatorAiUsageReport(input: {
  */
 export async function loadOperatorAiProviderHealthSource() {
   const db = createAdminClient();
-  const [clinics, subscriptions, policies, connections] = await Promise.all([
+  const [clinics, subscriptions, policies, connections, terms, overrides] = await Promise.all([
     db.from("clinics").select("id, name").order("name"),
-    db.from("subscriptions").select("clinic_id, plans(slug)"),
+    db
+      .from("subscriptions")
+      .select(
+        "clinic_id, status, trial_ends_at, current_period_end, plans(is_active, features)",
+      ),
     db
       .from("ai_clinic_provider_policies")
       .select("clinic_id, credential_mode, updated_at"),
@@ -1365,21 +2415,55 @@ export async function loadOperatorAiProviderHealthSource() {
       .from("ai_provider_connections")
       .select("clinic_id, provider, health_status, last_error_code, tested_at, rotated_at")
       .eq("lifecycle_status", "active"),
+    db.from("ai_commercial_terms").select("clinic_id, accepted_at"),
+    db
+      .from("clinic_feature_overrides")
+      .select("clinic_id, enabled")
+      .eq("feature_key", "ai_assistant"),
   ]);
-  const error = clinics.error ?? subscriptions.error ?? policies.error ?? connections.error;
+  const error = clinics.error
+    ?? subscriptions.error
+    ?? policies.error
+    ?? connections.error
+    ?? terms.error
+    ?? overrides.error;
   if (error) return { data: null, error };
   const policyByClinic = new Map((policies.data ?? []).map((row) => [row.clinic_id, row]));
   const connectionByClinic = new Map((connections.data ?? []).map((row) => [row.clinic_id, row]));
-  const proAiClinicIds = new Set(
+  const acceptedTermsClinics = new Set(
+    (terms.data ?? [])
+      .filter((row) => row.accepted_at != null)
+      .map((row) => row.clinic_id),
+  );
+  const umbrellaOverrideByClinic = new Map(
+    (overrides.data ?? []).map((row) => [row.clinic_id, row.enabled]),
+  );
+  const entitledClinicIds = new Set(
     (subscriptions.data ?? [])
-      .filter((subscription) => subscription.plans?.slug === "pro_ai")
+      .filter((subscription) => {
+        const planFeatures = subscription.plans?.features;
+        const planUmbrella = Boolean(planFeatures
+          && typeof planFeatures === "object"
+          && !Array.isArray(planFeatures)
+          && planFeatures.ai_assistant === true);
+        return subscription.plans?.is_active === true
+          && resolveEffectiveAiFeature({
+            subscriptionAllowed: resolveSubscriptionAccess(subscription).allowed,
+            termsAccepted: acceptedTermsClinics.has(subscription.clinic_id),
+            features: {
+              ai_assistant:
+                umbrellaOverrideByClinic.get(subscription.clinic_id) ?? planUmbrella,
+            },
+            featureKey: "ai_assistant",
+          });
+      })
       .map((subscription) => subscription.clinic_id),
   );
   return {
     data: (clinics.data ?? [])
       .filter(
         (clinic) =>
-          proAiClinicIds.has(clinic.id) ||
+          entitledClinicIds.has(clinic.id) ||
           policyByClinic.has(clinic.id) ||
           connectionByClinic.has(clinic.id),
       )
@@ -1575,6 +2659,11 @@ const SAFE_OPERATOR_CLINIC_AUDIT_ACTIONS = [
   "invitation.email_sent",
   "coupon.redeemed",
   "ai_commercial_terms.updated",
+  "subscription.extended",
+  "subscription.paused",
+  "subscription.reactivated",
+  "ai_allowance_override.set",
+  "ai_allowance_override.removed",
 ] as const;
 const OPERATOR_CLINIC_AUDIT_SOURCE_LIMIT = 10_000;
 
@@ -1636,6 +2725,35 @@ export function safeAuditSummary(row: {
         id: row.id,
         title: "Coupon redeemed",
         detail: typeof payload.kind === "string" ? `Kind: ${payload.kind.replaceAll("_", " ")}` : null,
+        createdAt: row.created_at,
+      };
+    case "subscription.extended": {
+      const days = typeof payload.days === "number" ? payload.days : null;
+      return {
+        id: row.id,
+        title: "Subscription extended",
+        detail: days === null ? null : `Added ${days} days`,
+        createdAt: row.created_at,
+      };
+    }
+    case "subscription.paused":
+      return { id: row.id, title: "Clinic access paused", detail: null, createdAt: row.created_at };
+    case "subscription.reactivated":
+      return { id: row.id, title: "Clinic access reactivated", detail: null, createdAt: row.created_at };
+    case "ai_allowance_override.set": {
+      const micros = typeof payload.includedBudgetMicros === "number" ? payload.includedBudgetMicros : null;
+      return {
+        id: row.id,
+        title: "AI allowance override set",
+        detail: micros === null ? null : `Included allowance: $${(micros / 1_000_000).toFixed(2)}`,
+        createdAt: row.created_at,
+      };
+    }
+    case "ai_allowance_override.removed":
+      return {
+        id: row.id,
+        title: "AI allowance override removed",
+        detail: "Plan default restored",
         createdAt: row.created_at,
       };
     case "ai_commercial_terms.updated": {
@@ -1702,7 +2820,7 @@ export async function getOperatorClinicHistory(
   }
 
   const currentPeriodStart = `${new Date().getUTCFullYear()}-${String(new Date().getUTCMonth() + 1).padStart(2, "0")}-01`;
-  const [clinic, subscription, workingHours, invitations, redemptions, overrides, usageRows, plans, aiTerms, aiBudget] =
+  const [clinic, subscription, workingHours, invitations, redemptions, overrides, usageRows, plans, aiTerms, aiBudget, effectiveAiAssistant] =
     await Promise.all([
       db
         .from("clinics")
@@ -1743,7 +2861,7 @@ export async function getOperatorClinicHistory(
       db.from("plans").select("slug, name_en").eq("is_active", true).order("slug"),
       db
         .from("ai_commercial_terms")
-        .select("included_budget_override_micros, addon_budget_micros, overage_mode, overage_budget_micros, change_reason, updated_at")
+        .select("included_budget_override_micros, addon_budget_micros, overage_mode, overage_budget_micros, change_reason, accepted_at, updated_at")
         .eq("clinic_id", clinicId)
         .maybeSingle(),
       db
@@ -1752,11 +2870,15 @@ export async function getOperatorClinicHistory(
         .eq("clinic_id", clinicId)
         .eq("period_start", currentPeriodStart)
         .maybeSingle(),
+      db.rpc("effective_ai_feature", {
+        p_clinic_id: clinicId,
+        p_feature_key: "ai_assistant",
+      }),
     ]);
 
   if (clinic.error) return { data: null, error: clinic.error };
   if (!clinic.data) return { data: null, error: null };
-  const firstError = [subscription, workingHours, invitations, redemptions, overrides, usageRows, plans, aiTerms, aiBudget]
+  const firstError = [subscription, workingHours, invitations, redemptions, overrides, usageRows, plans, aiTerms, aiBudget, effectiveAiAssistant]
     .map((result) => result.error)
     .find(Boolean);
   if (firstError) return { data: null, error: firstError };
@@ -1805,6 +2927,7 @@ export async function getOperatorClinicHistory(
       plans: plans.data ?? [],
       aiTerms: aiTerms.data,
       aiBudget: aiBudget.data,
+      effectiveAiAssistant: effectiveAiAssistant.data === true,
       auditEvents: [...safeAudit.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
       auditTruncated: clinicAudit.truncated || invitationAudit.truncated,
     },
@@ -1860,6 +2983,11 @@ export async function listOrphanedSignupUsers(): Promise<
 
 const CLINIC_SCOPED_TABLES = new Set([
   "ai_suggested_replies",
+  // P11Q: both carry clinic_id and are written only through the bulk-send
+  // server path, so the scoped client's automatic clinic filter is the correct
+  // and sufficient boundary for them.
+  "bulk_message_jobs",
+  "bulk_message_recipients",
   "ai_usage_events",
   "ai_workflow_runs",
   "ai_budget_periods",
@@ -1896,12 +3024,38 @@ const CLINIC_SCOPED_TABLES = new Set([
   "profiles",
   "services",
   "staff_invitations",
+  "staff_shift_templates",
   "subscriptions",
   "usage_counters",
   "user_ai_permissions",
   "user_customizations",
   "user_page_permissions",
   "user_report_permissions",
+  // P7E: the linked-device pairing. The worker owns the happy path; the app
+  // reads the status projection and, when the worker is unreachable, still has
+  // to be able to tear its own clinic's pairing down.
+  "whatsapp_linked_device_auth",
+  "whatsapp_linked_device_sessions",
+  // The durable per-clinic ledger of WhatsApp accounts this clinic has proved.
+  // Read (never written) here by `resolveWhatsAppAccountBoundary`, which needs
+  // the boundary to survive a disconnect that has already removed the channel
+  // row and rebuilt the session row. `clinic_id` scopes it like every other
+  // entry above; the worker remains the only writer.
+  "whatsapp_linked_accounts",
+  // P8B §5: prepared and sent outbound files. Written by the reviewed inbox
+  // actions on this client — the MIME sniff, the size cap and the document
+  // authorization all run there — and never by a browser: the table has no
+  // authenticated write policy at all.
+  "outbound_message_media",
+  // P8: files a patient sent on WhatsApp. Written by the verified linked-device
+  // callback and read by the Inbox, both strictly within one clinic.
+  "inbound_message_attachments",
+  // P8C: verified linked-device callbacks hold unresolved history here until a
+  // WhatsApp-asserted LID mapping arrives. No authenticated client can write or
+  // read these service-only rows.
+  "whatsapp_lid_mappings",
+  "whatsapp_pending_history_chats",
+  "whatsapp_pending_history_messages",
 ]);
 
 // These tables may be read through the tenant-scoped service client, but their
@@ -1909,6 +3063,7 @@ const CLINIC_SCOPED_TABLES = new Set([
 // the authenticated primary admin's JWT, supervision writes use the atomic
 // replacement RPC, and activity events remain append-only.
 const READ_ONLY_CLINIC_SCOPED_TABLES = new Set([
+  "ai_action_receipts",
   "activity_events",
   "assistant_doctor_assignments",
   "assistant_launcher_settings",
@@ -1916,6 +3071,28 @@ const READ_ONLY_CLINIC_SCOPED_TABLES = new Set([
   "document_events",
   "document_settings",
   "documents",
+  // P8B §3: the linked device's observed contact directory. Read-only here —
+  // the only writer is the verified worker callback, through
+  // `upsert_whatsapp_contacts`. Staff pick from it; nothing here edits it.
+  "whatsapp_contacts",
+  // P9C: the staged intake this conversation is working on. Read-only, and
+  // deliberately so — every write to it goes through
+  // `stage_patient_intake_from_conversation`, which is where the identity rules
+  // live. The read exists to answer one question the booking path cannot answer
+  // any other way: is this appointment for the sender, or for the person they
+  // staged? Getting that wrong files an appointment under the wrong patient, so
+  // it is read from the row rather than inferred. Without the allow-list entry
+  // `assertKnownTable` throws, and a throw on the booking path is exactly the
+  // bare technical error this whole change exists to remove.
+  "ai_patient_intakes",
+  // Doctor leave and blocked ranges. `computeAvailability` is shared by the
+  // staff appointment form (an RLS client) and by the WhatsApp patient booking
+  // path (this client), and the second one could not read the table at all:
+  // every patient availability call threw "unclassified table" out of
+  // `assertKnownTable` and reached the patient as a bare technical error.
+  // Read-only is the correct boundary — leave is created and edited by staff
+  // through their own authenticated client, never by the assistant.
+  "doctor_unavailability",
 ]);
 
 const JOIN_SCOPED_TABLES = new Set([
@@ -2097,4 +3274,357 @@ export function createClinicScopedAdminClient(clinicId: string): AdminClient {
       };
     },
   });
+}
+
+/**
+ * Aggregate-only operational counts for one clinic, for the owner clinic page.
+ *
+ * Platform-admin authorization is re-checked here and the query layer is
+ * `lib/analytics/clinic-metrics`, whose every query is a `head: true` count —
+ * so this boundary returns numbers and cannot return a patient, appointment,
+ * document, invoice, or message row even if a future caller asks it to.
+ */
+export async function getOperatorClinicMetrics(clinicId: string, now = new Date()) {
+  await requirePlatformAdmin();
+  const { getClinicMetrics } = await import("@/lib/analytics/clinic-metrics");
+  return getClinicMetrics(createAdminClient(), clinicId, now);
+}
+
+/**
+ * Reviewed source rows for the owner AI-allowance console fallback.
+ *
+ * This exists because `createAdminClient` is deliberately restricted to this
+ * module: the fallback needs a cross-clinic read of plan, commercial-terms and
+ * monthly-aggregate rows, which is exactly the sort of query that has to be
+ * reviewed here rather than assembled in a feature module.
+ *
+ * Every column below is a plan limit, an operator-entered commercial figure, a
+ * monthly aggregate, or a provider-mode flag. No patient, appointment, message,
+ * document, credential ciphertext, fingerprint, or actor identity is selected.
+ * `requirePlatformAdmin()` is re-checked here; the caller has already checked it
+ * and the RPC checks it again inside the database.
+ */
+export async function loadOperatorAiAllowanceFallbackSources(input: {
+  periodStart: string;
+  clinicId?: string;
+}) {
+  await requirePlatformAdmin();
+  const db = createAdminClient();
+
+  let subscriptionQuery = db
+    .from("subscriptions")
+    .select("clinic_id, clinics(name), plans(slug, features, limits)");
+  if (input.clinicId) subscriptionQuery = subscriptionQuery.eq("clinic_id", input.clinicId);
+  const subscriptions = await subscriptionQuery;
+  if (subscriptions.error) throw subscriptions.error;
+
+  const clinicIds = (subscriptions.data ?? []).map((row) => row.clinic_id);
+  if (clinicIds.length === 0) {
+    return {
+      subscriptions: subscriptions.data ?? [],
+      terms: [],
+      periods: [],
+      counters: [],
+      policies: [],
+      byokClinicIds: [] as string[],
+      byokSpend: [] as { clinic_id: string; byok_spent_micros: number | null }[],
+      autoFallback: [] as { clinic_id: string; auto_byok_fallback_enabled: boolean | null }[],
+    };
+  }
+
+  const [terms, periods, counters, policies, connections] = await Promise.all([
+    db
+      .from("ai_commercial_terms")
+      .select("clinic_id, included_budget_override_micros, addon_budget_micros, overage_mode, overage_budget_micros")
+      .in("clinic_id", clinicIds),
+    db
+      .from("ai_budget_periods")
+      .select("clinic_id, spent_micros, reserved_micros")
+      .in("clinic_id", clinicIds)
+      .eq("period_start", input.periodStart),
+    db
+      .from("usage_counters")
+      .select("clinic_id, used, limit_snapshot")
+      .in("clinic_id", clinicIds)
+      .eq("period_start", input.periodStart)
+      .eq("metric", "ai_messages"),
+    db.from("ai_clinic_provider_policies").select("clinic_id, credential_mode").in("clinic_id", clinicIds),
+    db
+      .from("ai_provider_connections")
+      .select("clinic_id")
+      .in("clinic_id", clinicIds)
+      .eq("lifecycle_status", "active")
+      .eq("health_status", "valid"),
+  ]);
+  for (const result of [terms, periods, counters, policies, connections]) {
+    if (result.error) throw result.error;
+  }
+
+  // These two columns ship in the same migration as the RPC the fallback stands
+  // in for, so they may not exist here. Read them opportunistically and let the
+  // caller apply the documented defaults rather than failing the whole report.
+  const [byokSpend, autoFallback] = await Promise.all([
+    db
+      .from("ai_budget_periods")
+      .select("clinic_id, byok_spent_micros")
+      .in("clinic_id", clinicIds)
+      .eq("period_start", input.periodStart),
+    db
+      .from("ai_clinic_provider_policies")
+      .select("clinic_id, auto_byok_fallback_enabled")
+      .in("clinic_id", clinicIds),
+  ]);
+
+  return {
+    subscriptions: subscriptions.data ?? [],
+    terms: terms.data ?? [],
+    periods: periods.data ?? [],
+    counters: counters.data ?? [],
+    policies: policies.data ?? [],
+    byokClinicIds: (connections.data ?? []).map((row) => row.clinic_id),
+    byokSpend: byokSpend.error ? [] : byokSpend.data ?? [],
+    autoFallback: autoFallback.error ? [] : autoFallback.data ?? [],
+  };
+}
+
+/**
+ * P15 — the per-conversation exception to the clinic-wide AI setting.
+ *
+ * `override` is a tri-state on purpose: `null` puts the thread back under the
+ * clinic setting, which is a different decision from "never here" and must not
+ * collapse into it. Decided inside the RPC under a row lock, so two staff
+ * members clicking at once produce one transition.
+ */
+export async function setConversationAiOverride(input: {
+  clinicId: string;
+  conversationId: string;
+  override: boolean | null;
+  actorId: string;
+}) {
+  return createAdminClient().rpc("set_conversation_ai_override", {
+    p_clinic_id: input.clinicId,
+    p_conversation_id: input.conversationId,
+    p_override: input.override as boolean,
+    p_actor_id: input.actorId,
+  });
+}
+
+/**
+ * P15 (§2F) — record that the assistant hit a genuine technical fault on a
+ * live turn, and end the episode.
+ *
+ * Returns `latched: true` only for the call that actually recorded the fault.
+ * That return value is the whole idempotency mechanism for the patient-facing
+ * fallback message: the caller sends the one apology when and only when it is
+ * told it latched, so retries cannot apologise twice.
+ */
+export async function latchConversationAiTechnicalFailure(input: {
+  clinicId: string;
+  conversationId: string;
+  reason: "provider_failure" | "orchestration_failure" | "backend_failure" | "send_failure";
+}) {
+  return createAdminClient().rpc("latch_conversation_ai_technical_failure", {
+    p_clinic_id: input.clinicId,
+    p_conversation_id: input.conversationId,
+    p_reason: input.reason,
+  });
+}
+
+/** P15 — clear the technical-failure latch so the Problem badge self-heals. */
+export async function clearConversationAiTechnicalFailure(input: {
+  clinicId: string;
+  conversationId: string;
+}) {
+  return createAdminClient().rpc("clear_conversation_ai_technical_failure", {
+    p_clinic_id: input.clinicId,
+    p_conversation_id: input.conversationId,
+  });
+}
+
+/**
+ * P15 (§5) — a person at the clinic answered this thread from their own
+ * handset, live.
+ *
+ * Only disarms the assistant's idle close. It deliberately does not pause the
+ * AI: one reply is evidence somebody answered, not a declaration that they are
+ * taking the thread over, and only a person may make that declaration through
+ * the Pause AI control.
+ */
+export async function markConversationHumanReply(input: {
+  clinicId: string;
+  conversationId: string;
+  occurredAt: string;
+}) {
+  return createAdminClient().rpc("mark_conversation_human_reply", {
+    p_clinic_id: input.clinicId,
+    p_conversation_id: input.conversationId,
+    p_occurred_at: input.occurredAt,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// V2 patient assistant
+//
+// The RPC wrappers for the new engine live here with every other one, so
+// "which functions does the service role call?" keeps a single answer and the
+// tenant-scoping rule has a single place to be enforced.
+//
+// The `as never` casts below exist because `types/database.ts` is generated
+// from the *applied* schema and the migration these belong to is authored but
+// deliberately not applied. `flowStateAvailable` proves the objects exist
+// before any of them is used, and regenerating the types after the migration
+// is applied removes every cast.
+// ---------------------------------------------------------------------------
+
+type UnappliedRpc = (
+  name: string,
+  args: Record<string, unknown>,
+) => PromiseLike<{ data: unknown; error: { code?: string; message?: string } | null }>;
+
+function unappliedRpc(): UnappliedRpc {
+  return createAdminClient().rpc as unknown as UnappliedRpc;
+}
+
+/** Replaces the V2 flow stack under a row lock. See `lib/ai/v2/store.ts`. */
+export async function setConversationFlowState(input: {
+  clinicId: string;
+  conversationId: string;
+  flowState: Record<string, unknown> | null;
+}) {
+  return unappliedRpc()("set_conversation_flow_state", {
+    p_clinic_id: input.clinicId,
+    p_conversation_id: input.conversationId,
+    p_flow_state: input.flowState,
+  });
+}
+
+/** Clears the V2 flow stack at an episode boundary. */
+export async function resetConversationFlowState(input: {
+  clinicId: string;
+  conversationId: string;
+}) {
+  return unappliedRpc()("reset_conversation_flow_state", {
+    p_clinic_id: input.clinicId,
+    p_conversation_id: input.conversationId,
+  });
+}
+
+/** The clinic's package offering, as a member of the public may ask about it. */
+export async function listClinicPublicPackages(input: {
+  clinicId: string;
+  departmentId?: string | null;
+}) {
+  return unappliedRpc()("list_clinic_public_packages", {
+    p_clinic_id: input.clinicId,
+    p_department_id: input.departmentId ?? null,
+  });
+}
+
+/**
+ * One patient's usable packages, resolved from the conversation's own linkage.
+ * Takes no patient id, so no caller can ask for somebody else's.
+ */
+export async function listPatientAiPackages(input: {
+  clinicId: string;
+  conversationId: string;
+  departmentId?: string | null;
+  serviceId?: string | null;
+}) {
+  return unappliedRpc()("list_patient_ai_packages", {
+    p_clinic_id: input.clinicId,
+    p_conversation_id: input.conversationId,
+    p_department_id: input.departmentId ?? null,
+    p_service_id: input.serviceId ?? null,
+  });
+}
+
+/**
+ * Documents already issued to this conversation's patient.
+ *
+ * Retrieval only: the function selects `status = 'issued'` rows with a
+ * non-null issuer, and there is no companion that creates one.
+ */
+export async function listPatientAiDocuments(input: {
+  clinicId: string;
+  conversationId: string;
+  docType?: string | null;
+  limit?: number;
+}) {
+  return unappliedRpc()("list_patient_ai_documents", {
+    p_clinic_id: input.clinicId,
+    p_conversation_id: input.conversationId,
+    p_doc_type: input.docType ?? null,
+    p_limit: input.limit ?? 10,
+  });
+}
+
+/** A short-lived signed URL for one issued document's stored PDF. */
+export async function signClinicDocumentUrl(input: {
+  storagePath: string;
+  expiresInSeconds?: number;
+}) {
+  return createAdminClient()
+    .storage.from("documents")
+    .createSignedUrl(input.storagePath, input.expiresInSeconds ?? 15 * 60);
+}
+
+/** `create_patient_preliminary_booking`, with an optional package session. */
+export async function createPatientPreliminaryBookingWithPackage(input: {
+  clinicId: string;
+  conversationId: string;
+  doctorId: string;
+  scheduledAt: string;
+  durationMinutes: number;
+  serviceId?: string | null;
+  packageId: string;
+}) {
+  return unappliedRpc()("create_patient_preliminary_booking_v2", {
+    p_clinic_id: input.clinicId,
+    p_conversation_id: input.conversationId,
+    p_doctor_id: input.doctorId,
+    p_scheduled_at: input.scheduledAt,
+    p_duration_minutes: input.durationMinutes,
+    p_service_id: input.serviceId ?? null,
+    p_package_id: input.packageId,
+  });
+}
+
+/** Probes whether the V2 flow-state column exists. Tenant-scoped. */
+export async function probeConversationFlowStateColumn(clinicId: string) {
+  return (
+    createClinicScopedAdminClient(clinicId).from("conversations") as unknown as {
+      select: (columns: string) => {
+        limit: (n: number) => PromiseLike<{ error: { code?: string } | null }>;
+      };
+    }
+  )
+    .select("ai_flow_state")
+    .limit(1);
+}
+
+/** Reads one conversation's V2 flow stack. Tenant-scoped. */
+export async function getConversationFlowState(input: {
+  clinicId: string;
+  conversationId: string;
+}) {
+  return (
+    createClinicScopedAdminClient(input.clinicId).from(
+      "conversations",
+    ) as unknown as {
+      select: (columns: string) => {
+        eq: (
+          column: string,
+          value: string,
+        ) => {
+          maybeSingle: () => PromiseLike<{
+            data: { ai_flow_state: unknown } | null;
+            error: unknown;
+          }>;
+        };
+      };
+    }
+  )
+    .select("ai_flow_state")
+    .eq("id", input.conversationId)
+    .maybeSingle();
 }

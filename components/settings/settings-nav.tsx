@@ -24,6 +24,7 @@ const NAV = [
     adminOnly: true,
   },
   { href: "/settings/customize", labelKey: "navCustomize", adminOnly: true },
+  { href: "/settings/audit-log", labelKey: "navAuditLog" },
 ] as const;
 
 export function SettingsNav({

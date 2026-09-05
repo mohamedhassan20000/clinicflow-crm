@@ -6,6 +6,25 @@ import { createServerActionMocks } from "../helpers/server-action-mocks";
 // with deterministic fixtures and assert on inputs, side effects, RLS scoping,
 // redaction, and audit. Cross-boundary attempts (wrong role, out-of-scope
 // patient) are asserted to leak nothing.
+//
+// Phase 7 scope change. `get_patient_summary`, `search_patient_visits` and
+// `list_doctor_appointments` were unmounted and deleted once
+// `tests/unit/ai/phase7-superset-coverage.test.ts` proved the resource layer
+// covers them, so their behavior blocks are gone with their subjects. The
+// properties they asserted did not go with them — they moved to the surface that
+// now carries the capability:
+//   • clinic tenant predicate on every read → phase1-resource-registry
+//     ("always injects the caller-owned tenant predicate")
+//   • out-of-scope reads leak no existence signal → phase1-resource-registry
+//     ("uses the same unauthorized_scope denial for missing and inaccessible ids")
+//   • ilike metacharacter escaping → phase1-resource-registry
+//     ("keeps ilike wildcard shape server-owned")
+//   • entitlement re-checked inside execute → phase1-resource-tools /
+//     phase2-clinical-parity ("shows clinical resources only when
+//     ai.read_clinical is entitled")
+//   • doctor/assistant row scope → phase1/phase2 RLS integration suites
+// What remains here is the mount matrix and the two tools Phase 7 deliberately
+// retained.
 
 type MockUser = {
   id: string;
@@ -55,7 +74,10 @@ async function loadTools(
     getEntitlements: vi.fn(async () => ({
       clinicId: user.clinicId,
       planSlug: "pro_ai",
-      features: { ai_assistant: entitlement.aiFeature ?? true },
+      features: {
+        ai_assistant: entitlement.aiFeature ?? true,
+        "ai.read_clinical": true,
+      },
       limits: {},
       subscriptionAllowed: entitlement.subscriptionAllowed ?? true,
     })),
@@ -77,19 +99,7 @@ async function loadTools(
   const tools = await buildDoctorTools(context);
   const staffTools = await buildStaffTools(context);
 
-  // P4.6A: the registry no longer mounts a tool the caller may not use, which
-  // is the primary defense. These tests exercise the *second* line — each
-  // tool's own re-check inside execute() — so they build the tool directly,
-  // bypassing registration exactly as a future mis-wiring would.
-  const [{ getPatientSummaryTool }, { searchPatientVisitsTool }] = await Promise.all([
-    import("@/lib/ai/tools/get-patient-summary"),
-    import("@/lib/ai/tools/search-patient-visits"),
-  ]);
-  const unmountedTools = {
-    get_patient_summary: getPatientSummaryTool(context),
-    search_patient_visits: searchPatientVisitsTool(context),
-  };
-  return { tools, staffTools, unmountedTools, mocks, logAgentToolCall };
+  return { tools, staffTools, mocks, logAgentToolCall };
 }
 
 // The AI SDK tool.execute takes (input, options). Options are unused by our
@@ -97,13 +107,19 @@ async function loadTools(
 const opts = {} as never;
 
 describe("role-specific Assistant tool registration", () => {
-  it("mounts clinical tools only for doctors and assistants", async () => {
+  it("mounts clinical reads for every RLS-admitted staff role", async () => {
     const doctor = await loadTools(DOCTOR);
     expect(Object.keys(doctor.staffTools)).toEqual([
+      "query_resource",
+      "get_record",
+      "aggregate_resource",
+      "describe_capabilities",
+      // Final review B-2: the action tools are infrastructure, mounted for
+      // every role the action registry authorizes at least one action for. All
+      // five staff roles now share one mount list.
+      "execute_action",
+      "describe_action",
       "search_authorized_patients",
-      "get_patient_summary",
-      "search_patient_visits",
-      "list_doctor_appointments",
       "check_availability",
       // P4.7A help/navigation mount for every staff role under ai_assistant;
       // P4.7B adds list_my_capabilities on the same footing.
@@ -119,6 +135,12 @@ describe("role-specific Assistant tool registration", () => {
     for (const role of ["admin", "manager", "receptionist"] as const) {
       const staff = await loadTools({ ...DOCTOR, role });
       expect(Object.keys(staff.staffTools)).toEqual([
+        "query_resource",
+        "get_record",
+        "aggregate_resource",
+        "describe_capabilities",
+        "execute_action",
+        "describe_action",
         "search_authorized_patients",
         "check_availability",
         "search_help",
@@ -166,189 +188,6 @@ describe("role-specific Assistant tool registration", () => {
       );
       expect(mocks.state.queryLog.some((entry) => entry.table === "medical_notes")).toBe(false);
     }
-  });
-});
-
-describe("P4A get_patient_summary", () => {
-  it("returns a redacted summary and scopes every read to the clinic", async () => {
-    const { tools, mocks, logAgentToolCall } = await loadTools();
-    mocks.state.tableResults["patients"] = {
-      data: {
-        id: PATIENT_ID,
-        full_name: "Jane Roe",
-        date_of_birth: "1990-06-15",
-        blood_type: "O+",
-        clinic_id: DOCTOR.clinicId,
-      },
-      error: null,
-    };
-    mocks.state.tableResults["appointments"] = {
-      data: [{ id: "a1", scheduled_at: "2026-07-10T09:00:00Z", status: "completed", duration_minutes: 30 }],
-      error: null,
-    };
-    mocks.state.tableResults["medical_notes"] = {
-      data: [{ id: "n1", note: "BP 120/80. Contact 0501234567.", doctor_id: DOCTOR.id, created_at: "2026-07-10T09:30:00Z" }],
-      error: null,
-    };
-    mocks.state.tableResults["follow_ups"] = { data: [], error: null };
-    mocks.state.tableResults["patient_packages"] = { data: [], error: null };
-
-    const result = (await tools.get_patient_summary.execute!({ patient_id: PATIENT_ID }, opts)) as {
-      found: boolean;
-      patient: { full_name: string; age: number | null; blood_type: string | null };
-      notes: { excerpt: string }[];
-    };
-
-    expect(result.found).toBe(true);
-    expect(result.patient.full_name).toBe("Jane Roe");
-    expect(result.patient.age).toBeGreaterThan(30);
-    expect(result.patient.blood_type).toBe("O+");
-    // No raw DOB / identifiers cross the boundary.
-    expect(result.patient).not.toHaveProperty("date_of_birth");
-    expect(result.patient).not.toHaveProperty("national_id");
-    // Contact number inside a note is redacted.
-    expect(result.notes[0].excerpt).not.toContain("0501234567");
-    expect(result.notes[0].excerpt).toContain("[redacted-number]");
-
-    // Every read filtered by the session clinic id.
-    const clinicFilters = mocks.state.queryLog.filter(
-      (q) => q.args[0] === "eq" && q.args[1] === "clinic_id",
-    );
-    expect(clinicFilters.length).toBeGreaterThan(0);
-    expect(clinicFilters.every((q) => q.args[2] === DOCTOR.clinicId)).toBe(true);
-
-    // Tool call was audited.
-    expect(logAgentToolCall).toHaveBeenCalledTimes(1);
-    expect(logAgentToolCall.mock.calls[0][0]).toMatchObject({
-      tool: "get_patient_summary",
-      clinicId: DOCTOR.clinicId,
-      actorId: DOCTOR.id,
-    });
-  });
-
-  it("leaks nothing when the patient is out of the doctor's RLS scope", async () => {
-    const { tools, mocks, logAgentToolCall } = await loadTools();
-    // RLS returns no row for an out-of-scope patient.
-    mocks.state.tableResults["patients"] = { data: null, error: null };
-
-    const result = (await tools.get_patient_summary.execute!({ patient_id: PATIENT_ID }, opts)) as {
-      found: boolean;
-    };
-    expect(result.found).toBe(false);
-    expect(result).not.toHaveProperty("patient");
-    // The denied attempt is still audited.
-    expect(logAgentToolCall).toHaveBeenCalledTimes(1);
-    expect(logAgentToolCall.mock.calls[0][0]).toMatchObject({ tool: "get_patient_summary" });
-  });
-
-  it("refuses a non-doctor role before any data access", async () => {
-    const { unmountedTools: tools, mocks, logAgentToolCall } = await loadTools({ ...DOCTOR, role: "receptionist" });
-    await expect(
-      tools.get_patient_summary.execute!({ patient_id: PATIENT_ID }, opts),
-    ).rejects.toMatchObject({ code: "AI_TOOL_FORBIDDEN", reason: "role_forbidden" });
-    expect(mocks.state.queryLog.length).toBe(0);
-    expect(logAgentToolCall).not.toHaveBeenCalled();
-  });
-
-  it("refuses the manager role too", async () => {
-    const { unmountedTools: tools } = await loadTools({ ...DOCTOR, role: "manager" });
-    await expect(
-      tools.get_patient_summary.execute!({ patient_id: PATIENT_ID }, opts),
-    ).rejects.toMatchObject({ reason: "role_forbidden" });
-  });
-
-  it("re-asserts the AI entitlement before creating an RLS data client", async () => {
-    const { unmountedTools: tools, mocks, logAgentToolCall } = await loadTools(DOCTOR, {
-      aiFeature: false,
-    });
-    await expect(
-      tools.get_patient_summary.execute!({ patient_id: PATIENT_ID }, opts),
-    ).rejects.toMatchObject({ reason: "feature_not_entitled" });
-    expect(mocks.state.queryLog).toEqual([]);
-    expect(logAgentToolCall).not.toHaveBeenCalled();
-  });
-});
-
-describe("P4A search_patient_visits", () => {
-  it("returns empty results for an out-of-scope patient without an existence signal", async () => {
-    const { tools, mocks } = await loadTools();
-    mocks.state.tableResults["patients"] = { data: null, error: null };
-
-    const result = (await tools.search_patient_visits.execute!(
-      { patient_id: PATIENT_ID, query: "fever" },
-      opts,
-    )) as { found: boolean; notes: unknown[]; appointments: unknown[] };
-    expect(result.found).toBe(false);
-    expect(result.notes).toEqual([]);
-    expect(result.appointments).toEqual([]);
-  });
-
-  it("redacts note excerpts and scopes by clinic", async () => {
-    const { tools, mocks } = await loadTools();
-    mocks.state.tableResults["patients"] = { data: { id: PATIENT_ID }, error: null };
-    mocks.state.tableResults["medical_notes"] = {
-      data: [{ id: "n1", note: "Follow-up, patient email jane@example.com", doctor_id: DOCTOR.id, created_at: "2026-07-10T09:30:00Z" }],
-      error: null,
-    };
-    mocks.state.tableResults["appointments"] = { data: [], error: null };
-
-    const result = (await tools.search_patient_visits.execute!(
-      { patient_id: PATIENT_ID, query: "follow" },
-      opts,
-    )) as { notes: { excerpt: string }[] };
-    expect(result.notes[0].excerpt).toContain("[redacted-email]");
-    expect(result.notes[0].excerpt).not.toContain("jane@example.com");
-  });
-
-  it("escapes ilike wildcard characters and uses clinic-local date bounds", async () => {
-    const { tools, mocks } = await loadTools();
-    mocks.state.tableResults["patients"] = { data: { id: PATIENT_ID }, error: null };
-    mocks.state.tableResults["clinics"] = { data: { timezone: "Asia/Kuwait" }, error: null };
-    mocks.state.tableResults["medical_notes"] = { data: [], error: null };
-    mocks.state.tableResults["appointments"] = { data: [], error: null };
-
-    await tools.search_patient_visits.execute!(
-      {
-        patient_id: PATIENT_ID,
-        query: "100%_match\\literal",
-        from: "2026-07-18",
-        to: "2026-07-18",
-      },
-      opts,
-    );
-
-    const ilike = mocks.state.queryLog.find((q) => q.args[0] === "ilike");
-    expect(ilike?.args[2]).toBe("%100\\%\\_match\\\\literal%");
-    const lowerBounds = mocks.state.queryLog.filter((q) => q.args[0] === "gte");
-    const upperBounds = mocks.state.queryLog.filter((q) => q.args[0] === "lte");
-    expect(lowerBounds.every((q) => q.args[2] === "2026-07-17T21:00:00.000Z")).toBe(true);
-    expect(upperBounds.every((q) => q.args[2] === "2026-07-18T20:59:59.999Z")).toBe(true);
-  });
-});
-
-describe("P4A list_doctor_appointments", () => {
-  it("filters by the session doctor id, never a parameter", async () => {
-    const { tools, mocks } = await loadTools();
-    mocks.state.tableResults["clinics"] = { data: { timezone: "Asia/Kuwait" }, error: null };
-    mocks.state.tableResults["appointments"] = {
-      data: [{ id: "a1", scheduled_at: "2026-07-18T09:00:00Z", status: "confirmed", duration_minutes: 30, patients: { full_name: "Jane Roe" } }],
-      error: null,
-    };
-
-    const result = (await tools.list_doctor_appointments.execute!(
-      { from: "2026-07-18", to: "2026-07-19" },
-      opts,
-    )) as { appointments: { patient_name: string | null }[] };
-
-    expect(result.appointments[0].patient_name).toBe("Jane Roe");
-    const doctorFilter = mocks.state.queryLog.find(
-      (q) => q.args[0] === "eq" && q.args[1] === "doctor_id",
-    );
-    expect(doctorFilter?.args[2]).toBe(DOCTOR.id);
-    const lowerBound = mocks.state.queryLog.find((q) => q.args[0] === "gte");
-    const upperBound = mocks.state.queryLog.find((q) => q.args[0] === "lte");
-    expect(lowerBound?.args[2]).toBe("2026-07-17T21:00:00.000Z");
-    expect(upperBound?.args[2]).toBe("2026-07-19T20:59:59.999Z");
   });
 });
 

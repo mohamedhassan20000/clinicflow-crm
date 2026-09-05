@@ -4,7 +4,6 @@ import { getLocale } from "next-intl/server";
 import { z } from "zod";
 import {
   AI_STAFF_ANALYTICS_FEATURE,
-  AI_WORKFLOWS_FEATURE,
   authorizeStaffAssistant,
 } from "@/lib/ai/authorization";
 import { getEntitlements, hasFeature } from "@/lib/entitlements";
@@ -12,6 +11,7 @@ import {
   createAiRequestId,
   prepareAiExecution,
   staffTaskForRole,
+  AiPolicyInputLimitError,
   type AiExecutionHandle,
   type AiExecutionOutcome,
 } from "@/lib/ai/client";
@@ -21,7 +21,16 @@ import {
   persistDoctorTurn,
 } from "@/lib/ai/conversations";
 import { createStaffAgent } from "@/lib/ai/staff-agent";
-import { ConversationContextRecorder } from "@/lib/ai/conversation-context";
+import {
+  applyProposals,
+  ConversationContextRecorder,
+  hasActiveEntitySlot,
+} from "@/lib/ai/conversation-context";
+import { resolvePageContextSeed } from "@/lib/ai/page-context-seed";
+import {
+  modelSafeHistory,
+  persistedAssistantState,
+} from "@/lib/ai/conversation-parts";
 import {
   AiToolAuthorizationError,
   type AssistantErrorCode,
@@ -113,30 +122,17 @@ export async function POST(request: Request) {
     }
     const pageContext = parseAssistantPageContext(parsed.data.context);
 
-    // P4.6A: an administrative turn runs on the cheaper, tighter operational
-    // task class only when the turn actually *is* an operational query — the
-    // entitlement decides whether those tools exist, the turn's intent decides
-    // the budget. Entitlements are cached per clinic, so this adds no
-    // per-request database round-trip.
-    const entitlements = await getEntitlements(user.clinicId);
-    const { task, persona } = staffTaskForRole(user.role, {
-      analyticsEntitled: hasFeature(entitlements, AI_STAFF_ANALYTICS_FEATURE),
-      workflowsEntitled: hasFeature(entitlements, AI_WORKFLOWS_FEATURE),
-      messageText: userText,
-    });
-    execution = await prepareAiExecution({
-      user,
-      requestId: createAiRequestId({
-        clinicId: user.clinicId,
-        actorId: user.id,
-        conversationId: parsed.data.id,
-        messageId: parsed.data.message.id,
-      }),
-      task,
-      persona,
-      surface: "staff_assistant",
-    });
-
+    // The conversation is loaded *before* routing (action-routing fix).
+    //
+    // The class used to be computed from the current user message alone, so the
+    // final turn of a multi-turn booking — "how do I book him for that slot?",
+    // whose only operands are the patient and slot resolved in earlier turns —
+    // read as a bare documentation question and lost the write surface. The
+    // router now takes the conversation's live active-context slots as an
+    // operand signal, which requires reading them first. `ensureDoctorConversation`
+    // is a pure read (a first turn stays virtual until it is persisted), so
+    // nothing is created for a turn that later fails the entitlement or budget
+    // checks in `prepareAiExecution`.
     const locale = (await getLocale()) === "ar" ? "ar" : "en";
     const supabase = await createClient();
     const [{ data: clinic, error: clinicError }, conversation] = await Promise.all([
@@ -154,6 +150,36 @@ export async function POST(request: Request) {
       }),
     ]);
     if (clinicError || !clinic) throw new AiConversationError("conversation_unavailable");
+
+    // P4.6A: an administrative turn runs on the cheaper, tighter operational
+    // task class only when the turn actually *is* an operational query — the
+    // entitlement decides whether those tools exist, the turn's intent decides
+    // the budget. Entitlements are cached per clinic, so this adds no
+    // per-request database round-trip.
+    const entitlements = await getEntitlements(user.clinicId);
+    const { task, persona } = staffTaskForRole(user.role, {
+      analyticsEntitled: hasFeature(entitlements, AI_STAFF_ANALYTICS_FEATURE),
+      messageText: userText,
+      // A launcher-opened conversation has no persisted slot yet on its first
+      // turn — the page-context seed runs below — so the page the assistant was
+      // opened on counts as a live entity for operand purposes. Presence only:
+      // the seed itself is still re-read server-side through the caller's RLS
+      // client, and this flag decides a budget, never an access.
+      hasActiveEntityContext:
+        hasActiveEntitySlot(conversation.activeContext) || pageContext !== null,
+    });
+    execution = await prepareAiExecution({
+      user,
+      requestId: createAiRequestId({
+        clinicId: user.clinicId,
+        actorId: user.id,
+        conversationId: parsed.data.id,
+        messageId: parsed.data.message.id,
+      }),
+      task,
+      persona,
+      surface: "staff_assistant",
+    });
 
     const currentMessage: UIMessage = {
       id: parsed.data.message.id,
@@ -175,6 +201,31 @@ export async function POST(request: Request) {
     // patient resolution) produced by a tool during this turn; applied when the
     // turn is persisted so the next turn resolves the same entity.
     const contextRecorder = new ConversationContextRecorder();
+    // Post-plan completion: a conversation opened from a contextual launcher
+    // arrives empty with a page context. Seeding here — before the agent runs,
+    // and through the recorder so a tool resolution later in the same turn still
+    // wins — is what makes the launcher's first question about the record the
+    // user was looking at, and what persists that binding for the next turn.
+    // Every slot is re-read server-side through the caller's RLS client.
+    if (conversation.messages.length === 0 && authorizedPageContext) {
+      for (const proposal of await resolvePageContextSeed({
+        supabase,
+        user,
+        context: authorizedPageContext,
+        locale,
+      })) {
+        contextRecorder.propose(
+          proposal.entityType,
+          proposal.entityId,
+          proposal.displayLabel,
+          proposal.setBy,
+        );
+      }
+    }
+    const activeContext = applyProposals(
+      conversation.activeContext,
+      contextRecorder.takeAll(),
+    );
     const agent = await createStaffAgent({
       user,
       locale,
@@ -182,14 +233,20 @@ export async function POST(request: Request) {
       pageContext: authorizedPageContext,
       execution,
       conversationId: conversation.id,
-      activeContext: conversation.activeContext,
+      activeContext,
       contextRecorder,
+      // The *unfiltered* history. `modelSafeHistory` below still strips every
+      // non-text part from the messages themselves; the agent derives the
+      // bounded, allow-listed tool memory from this copy, gated on the tool
+      // mount it resolves for this turn.
+      history: uiMessages,
     });
     const result = await agent.stream({
-      messages: await convertToModelMessages(uiMessages),
+      messages: await convertToModelMessages(modelSafeHistory(uiMessages)),
       abortSignal: request.signal,
     });
     let streamFailed = false;
+    let inputLimitReached = false;
 
     return result.toUIMessageStreamResponse({
       originalMessages: uiMessages,
@@ -207,11 +264,15 @@ export async function POST(request: Request) {
       // client maps the code to copy in the user's locale instead.
       onError(error) {
         streamFailed = true;
+        inputLimitReached ||= error instanceof AiPolicyInputLimitError;
         Sentry.captureException(error, {
           tags: { area: "staff-assistant-stream" },
           extra: { clinicId: user.clinicId, conversationId: conversation.id },
         });
         if (error instanceof AiToolAuthorizationError) return error.reason;
+        if (error instanceof AiPolicyInputLimitError) {
+          return "input_limit_reached" satisfies ErrorCode;
+        }
         return "temporarily_unavailable" satisfies ErrorCode;
       },
       async onFinish({ responseMessage, isAborted, finishReason }) {
@@ -236,11 +297,37 @@ export async function POST(request: Request) {
         // "error"`, and one that died before producing anything has no
         // assistant text. `streamFailed` is kept only as the Sentry-side record
         // that something was raised at all.
-        if (isAborted || finishReason === "error" || !assistantText) {
+        const persisted = persistedAssistantState(responseMessage.parts);
+        const hasPendingConfirmation = persisted.pendingConfirmations.length > 0;
+        if (isAborted || finishReason === "error" || (!assistantText && !hasPendingConfirmation)) {
           await finalizeExecution(
             isAborted ? "aborted" : "failed",
-            isAborted ? "client_aborted" : "stream_failed",
+            isAborted
+              ? "client_aborted"
+              : inputLimitReached
+                ? "input_limit_reached"
+                : "stream_failed",
           );
+          if (inputLimitReached && !isAborted) {
+            try {
+              await persistDoctorTurn({
+                supabase,
+                user,
+                conversationId: conversation.id,
+                locale,
+                patientId: conversation.patientId,
+                userText,
+                assistantText: "",
+                assistantParts: [],
+                contextProposals: contextRecorder.takeAll(),
+              });
+            } catch (error) {
+              Sentry.captureException(error, {
+                tags: { area: "staff-assistant-persistence" },
+                extra: { clinicId: user.clinicId, conversationId: conversation.id },
+              });
+            }
+          }
           return;
         }
         // Successful, but recorded as having recovered from something. The
@@ -259,6 +346,8 @@ export async function POST(request: Request) {
             patientId: conversation.patientId,
             userText,
             assistantText,
+            assistantParts: persisted.parts,
+            pendingConfirmations: persisted.pendingConfirmations,
             contextProposals: contextRecorder.takeAll(),
           });
         } catch (error) {

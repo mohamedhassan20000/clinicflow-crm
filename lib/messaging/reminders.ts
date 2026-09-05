@@ -17,7 +17,8 @@ import {
   anyChannelFailed,
   type AutomatedTemplateRow,
 } from "@/lib/messaging/automated-send";
-import { hasActiveWhatsAppChannel } from "@/lib/messaging/channel-management";
+import { getActiveWhatsAppProvider } from "@/lib/messaging/channel-management";
+import { AUTOMATED_TEMPLATE_APPROVAL_STATES } from "@/lib/messaging/automated-send";
 import { emitClinicNotification } from "@/lib/notifications/emit";
 
 /**
@@ -76,7 +77,7 @@ async function loadClinicContext(
       .from("message_templates")
       .select("id, name, language, variables, approval_status, channel")
       .eq("channel", "whatsapp")
-      .eq("approval_status", "approved")
+      .in("approval_status", AUTOMATED_TEMPLATE_APPROVAL_STATES)
       .eq("name", REMINDER_TEMPLATE_NAME),
     client
       .from("patients")
@@ -146,7 +147,8 @@ export async function runAppointmentReminders(
       summary.skipped += appointments.length;
       continue;
     }
-    const whatsappActive = await hasActiveWhatsAppChannel(clinicId);
+    const whatsappProvider = await getActiveWhatsAppProvider(clinicId);
+    const whatsappActive = whatsappProvider !== null;
 
     for (const appointment of appointments) {
       summary.appointments += 1;
@@ -176,6 +178,7 @@ export async function runAppointmentReminders(
         recipient: { phone: patient.phone, email: patient.email },
         locale,
         whatsappActive,
+        whatsappProvider,
         whatsappTemplates: context.templates,
         templateValues: {
           patient_name: patient.full_name,

@@ -34,7 +34,9 @@ vi.mock("@/actions/settings", () => ({
     works: false,
     start_time: null,
     end_time: null,
+    intervals: [],
   }))),
+  getStaffShiftTemplates: vi.fn(async () => []),
   updateStaffProfileSection: mocks.updateStaffProfileSection,
   upsertStaffSchedule: mocks.upsertStaffSchedule,
 }));

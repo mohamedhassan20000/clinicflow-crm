@@ -27,6 +27,7 @@ const OPERATOR_ICONS: Record<OperatorIconKey, LucideIcon> = {
   clinics: Building2,
   invitations: Mail,
   reports: BarChart3,
+  "ai-allowance": BrainCircuit,
   coupons: Gift,
   settings: Settings,
 };
@@ -36,6 +37,7 @@ function resolveIcon(item: ShellNavItem): LucideIcon {
     "clinics" === item.icon ||
     "invitations" === item.icon ||
     "coupons" === item.icon ||
+    "ai-allowance" === item.icon ||
     "reports" === item.icon
     ? OPERATOR_ICONS[item.icon]
     : TENANT_ICONS[item.icon];

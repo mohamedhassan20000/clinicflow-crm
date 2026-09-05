@@ -11,7 +11,7 @@ import {
   type PublicActionResult,
 } from "@/actions/early-access";
 import { manualBillingProvider } from "@/lib/billing/manual";
-import { couponExpiryFromInput, manualGrantPeriod } from "@/lib/operator";
+import { couponExpiryFromInput, extendedSubscriptionPeriod, manualGrantPeriod } from "@/lib/operator";
 import { requirePlatformAdmin } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
 import { logOperatorAction } from "@/lib/platform-audit";
@@ -180,16 +180,6 @@ export async function upsertFeatureOverride(
     if (!isKnownAiFeature(parsed.data.featureKey)) {
       return { error: await actionError("operator.aiFeatureOverrideInvalid") };
     }
-    if (parsed.data.enabled) {
-      const subscription = await supabase
-        .from("subscriptions")
-        .select("plans(slug)")
-        .eq("clinic_id", parsed.data.clinicId)
-        .maybeSingle();
-      if (subscription.error || subscription.data?.plans?.slug !== "pro_ai") {
-        return { error: await actionError("operator.aiRequiresProAi") };
-      }
-    }
   }
   const { error } = await supabase.from("clinic_feature_overrides").upsert(
     {
@@ -260,15 +250,6 @@ export async function updateAiCommercialTerms(
   if (!parsed.success) return { fieldErrors: await localizeZodFieldErrors(parsed.error) };
 
   const supabase = await createClient();
-  const subscription = await supabase
-    .from("subscriptions")
-    .select("plans(slug)")
-    .eq("clinic_id", parsed.data.clinicId)
-    .maybeSingle();
-  if (subscription.error || subscription.data?.plans?.slug !== "pro_ai") {
-    return { error: await actionError("operator.aiRequiresProAi") };
-  }
-
   const includedBudgetMicros = usdToMicros(parsed.data.includedBudgetUsd);
   const addonBudgetMicros = usdToMicros(parsed.data.addonBudgetUsd)!;
   const overageBudgetMicros = usdToMicros(parsed.data.overageBudgetUsd)!;
@@ -302,6 +283,58 @@ export async function updateAiCommercialTerms(
   revalidatePath(`/operator/clinics/${parsed.data.clinicId}`);
   revalidatePath("/operator/reports", "layout");
   return { ok: true };
+}
+
+async function setAiCommercialTermsAcceptance(
+  formData: FormData,
+  accepted: boolean,
+): Promise<OperatorActionResult> {
+  const admin = await requirePlatformAdmin();
+  const clinicId = z.string().uuid().safeParse(formData.get("clinicId"));
+  if (!clinicId.success) return { error: await actionError("operator.invalidClinic") };
+
+  const supabase = await createClient();
+  const updatedAt = new Date().toISOString();
+  const result = await supabase
+    .from("ai_commercial_terms")
+    .update({
+      accepted_at: accepted ? updatedAt : null,
+      updated_by: admin.id,
+      updated_at: updatedAt,
+    })
+    .eq("clinic_id", clinicId.data)
+    .select("clinic_id")
+    .maybeSingle();
+  if (result.error || !result.data) {
+    return { error: await actionError("operator.aiCommercialTermsCouldNotBeSaved") };
+  }
+
+  await logOperatorAction({
+    action: accepted
+      ? "ai_commercial_terms.accepted"
+      : "ai_commercial_terms.revoked",
+    targetType: "ai_commercial_terms",
+    targetId: clinicId.data,
+    clinicId: clinicId.data,
+  });
+  invalidateEntitlements(clinicId.data);
+  revalidatePath(`/operator/clinics/${clinicId.data}`);
+  revalidatePath("/operator/reports", "layout");
+  return { ok: true };
+}
+
+export async function acceptAiCommercialTerms(
+  _previous: OperatorActionResult | null,
+  formData: FormData,
+): Promise<OperatorActionResult> {
+  return setAiCommercialTermsAcceptance(formData, true);
+}
+
+export async function revokeAiCommercialTerms(
+  _previous: OperatorActionResult | null,
+  formData: FormData,
+): Promise<OperatorActionResult> {
+  return setAiCommercialTermsAcceptance(formData, false);
 }
 
 export async function removeFeatureOverride(
@@ -500,4 +533,230 @@ export async function setCouponActive(
   await logOperatorAction({ action: "coupon.active_changed", targetType: "coupon", targetId: parsed.data.couponId, payload: { isActive: parsed.data.isActive === "true" } });
   revalidatePath("/operator/coupons");
   return { ok: true };
+}
+
+// ── Per-clinic AI allowance override (owner console, §P13) ─────────────────
+//
+// The allowance model is "plan default + optional per-clinic override". These
+// two actions are the whole of the override lifecycle, and they exist so the
+// owner never has to reason about add-ons, overage mode, or micros to raise or
+// reset one clinic's included allowance. Every other commercial column is
+// carried forward untouched; removing the override restores the plan default by
+// nulling the column, not by writing the plan number into it (which would
+// silently freeze that clinic at today's plan value).
+
+const allowanceOverrideSchema = z.object({
+  clinicId: z.string().uuid(),
+  includedAllowanceUsd: z.coerce.number().positive().max(1_000_000),
+  reason: z.enum(["pilot", "prepaid_addon", "contracted_overage", "support_adjustment"]),
+});
+
+/** Loads the row we must preserve, so an upsert cannot reset unrelated terms. */
+async function existingAiCommercialTerms(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  clinicId: string,
+) {
+  return supabase
+    .from("ai_commercial_terms")
+    .select("included_budget_override_micros, addon_budget_micros, overage_mode, overage_budget_micros, change_reason, accepted_at")
+    .eq("clinic_id", clinicId)
+    .maybeSingle();
+}
+
+export async function setClinicAiAllowanceOverride(
+  _previous: OperatorActionResult | null,
+  formData: FormData,
+): Promise<OperatorActionResult> {
+  const admin = await requirePlatformAdmin();
+  const parsed = allowanceOverrideSchema.safeParse({
+    clinicId: formData.get("clinicId"),
+    includedAllowanceUsd: formData.get("includedAllowanceUsd"),
+    reason: formData.get("reason") ?? "support_adjustment",
+  });
+  if (!parsed.success) return { fieldErrors: await localizeZodFieldErrors(parsed.error) };
+
+  const supabase = await createClient();
+  const current = await existingAiCommercialTerms(supabase, parsed.data.clinicId);
+  if (current.error) return { error: await actionError("operator.aiAllowanceOverrideCouldNotBeSaved") };
+
+  const overrideMicros = usdToMicros(parsed.data.includedAllowanceUsd)!;
+  const updatedAt = new Date().toISOString();
+  const { error } = await supabase.from("ai_commercial_terms").upsert({
+    clinic_id: parsed.data.clinicId,
+    included_budget_override_micros: overrideMicros,
+    addon_budget_micros: current.data?.addon_budget_micros ?? 0,
+    overage_mode: current.data?.overage_mode ?? "hard_cap",
+    overage_budget_micros: current.data?.overage_budget_micros ?? 0,
+    accepted_at: current.data?.accepted_at ?? null,
+    change_reason: parsed.data.reason,
+    updated_by: admin.id,
+    updated_at: updatedAt,
+  });
+  if (error) return { error: await actionError("operator.aiAllowanceOverrideCouldNotBeSaved") };
+
+  await logOperatorAction({
+    action: "ai_allowance_override.set",
+    targetType: "ai_commercial_terms",
+    targetId: parsed.data.clinicId,
+    clinicId: parsed.data.clinicId,
+    payload: {
+      includedBudgetMicros: overrideMicros,
+      previousIncludedBudgetMicros: current.data?.included_budget_override_micros ?? null,
+      reason: parsed.data.reason,
+    },
+  });
+  invalidateEntitlements(parsed.data.clinicId);
+  revalidatePath(`/operator/clinics/${parsed.data.clinicId}`);
+  revalidatePath("/operator/ai-allowance");
+  return { ok: true };
+}
+
+export async function removeClinicAiAllowanceOverride(
+  _previous: OperatorActionResult | null,
+  formData: FormData,
+): Promise<OperatorActionResult> {
+  const admin = await requirePlatformAdmin();
+  const clinicId = z.string().uuid().safeParse(formData.get("clinicId"));
+  if (!clinicId.success) return { error: await actionError("operator.invalidClinic") };
+
+  const supabase = await createClient();
+  const result = await supabase
+    .from("ai_commercial_terms")
+    .update({ included_budget_override_micros: null, updated_by: admin.id, updated_at: new Date().toISOString() })
+    .eq("clinic_id", clinicId.data)
+    .select("clinic_id")
+    .maybeSingle();
+  if (result.error) return { error: await actionError("operator.aiAllowanceOverrideCouldNotBeRemoved") };
+  // No row at all already means "plan default applies"; report success rather
+  // than an error the owner cannot act on.
+  await logOperatorAction({
+    action: "ai_allowance_override.removed",
+    targetType: "ai_commercial_terms",
+    targetId: clinicId.data,
+    clinicId: clinicId.data,
+  });
+  invalidateEntitlements(clinicId.data);
+  revalidatePath(`/operator/clinics/${clinicId.data}`);
+  revalidatePath("/operator/ai-allowance");
+  return { ok: true };
+}
+
+// ── Subscription lifecycle: extend, pause, reactivate (§P13) ───────────────
+//
+// Deliberately non-destructive. "Pause" moves the subscription to `past_due`,
+// which `resolveSubscriptionAccess` already treats as no-access, and leaves the
+// plan, the period and the trial dates exactly where they were — so
+// "reactivate" is a pure inverse. Nothing here deletes a row.
+
+const extendDaysSchema = z.object({
+  clinicId: z.string().uuid(),
+  days: z.coerce.number().int().min(1).max(3650),
+});
+
+export async function extendSubscriptionDays(
+  _previous: OperatorActionResult | null,
+  formData: FormData,
+): Promise<OperatorActionResult> {
+  await requirePlatformAdmin();
+  const parsed = extendDaysSchema.safeParse({
+    clinicId: formData.get("clinicId"),
+    days: formData.get("days"),
+  });
+  if (!parsed.success) return { fieldErrors: await localizeZodFieldErrors(parsed.error) };
+
+  const supabase = await createClient();
+  const { data: subscription, error: lookupError } = await supabase
+    .from("subscriptions")
+    .select("id, status, current_period_start, current_period_end")
+    .eq("clinic_id", parsed.data.clinicId)
+    .maybeSingle();
+  if (lookupError || !subscription) {
+    return { error: await actionError("operator.theClinicHasNoSubscriptionRow") };
+  }
+  if (subscription.current_period_end === null && subscription.status === "active") {
+    // An unbounded grant has no end date to push out; extending it is a no-op
+    // that would read as a change, so it is refused rather than faked.
+    return { error: await actionError("operator.subscriptionIsAlreadyUnbounded") };
+  }
+
+  const period = extendedSubscriptionPeriod(
+    parsed.data.days,
+    subscription.current_period_end,
+    subscription.current_period_start,
+  );
+  const { error } = await supabase
+    .from("subscriptions")
+    .update({
+      ...period,
+      status: "active",
+      trial_ends_at: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", subscription.id);
+  if (error) return { error: await actionError("operator.subscriptionCouldNotBeExtended") };
+
+  await logOperatorAction({
+    action: "subscription.extended",
+    targetType: "subscription",
+    targetId: subscription.id,
+    clinicId: parsed.data.clinicId,
+    payload: {
+      days: parsed.data.days,
+      previousPeriodEnd: subscription.current_period_end,
+      newPeriodEnd: period.current_period_end,
+    },
+  });
+  invalidateEntitlements(parsed.data.clinicId);
+  revalidatePath("/operator", "layout");
+  return { ok: true };
+}
+
+async function setClinicAccessState(
+  formData: FormData,
+  next: "past_due" | "active",
+): Promise<OperatorActionResult> {
+  await requirePlatformAdmin();
+  const clinicId = z.string().uuid().safeParse(formData.get("clinicId"));
+  if (!clinicId.success) return { error: await actionError("operator.invalidClinic") };
+
+  const supabase = await createClient();
+  const { data: subscription, error: lookupError } = await supabase
+    .from("subscriptions")
+    .select("id, status")
+    .eq("clinic_id", clinicId.data)
+    .maybeSingle();
+  if (lookupError || !subscription) {
+    return { error: await actionError("operator.theClinicHasNoSubscriptionRow") };
+  }
+
+  const { error } = await supabase
+    .from("subscriptions")
+    .update({ status: next, updated_at: new Date().toISOString() })
+    .eq("id", subscription.id);
+  if (error) return { error: await actionError("operator.clinicAccessCouldNotBeChanged") };
+
+  await logOperatorAction({
+    action: next === "past_due" ? "subscription.paused" : "subscription.reactivated",
+    targetType: "subscription",
+    targetId: subscription.id,
+    clinicId: clinicId.data,
+    payload: { previousStatus: subscription.status, newStatus: next },
+  });
+  invalidateEntitlements(clinicId.data);
+  revalidatePath("/operator", "layout");
+  return { ok: true };
+}
+
+export async function pauseClinicAccess(
+  _previous: OperatorActionResult | null,
+  formData: FormData,
+): Promise<OperatorActionResult> {
+  return setClinicAccessState(formData, "past_due");
+}
+
+export async function reactivateClinicAccess(
+  _previous: OperatorActionResult | null,
+  formData: FormData,
+): Promise<OperatorActionResult> {
+  return setClinicAccessState(formData, "active");
 }

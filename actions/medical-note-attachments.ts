@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireMutationRole, requireRole } from "@/lib/rbac";
+import { MEDICAL_NOTE_READ_ROLES } from "@/lib/patients/read-permissions";
 
 const BUCKET = "patient-assets";
 const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
@@ -207,7 +208,7 @@ export async function listMedicalNoteAttachments(
   patientId: string,
   noteId: string,
 ): Promise<MedicalNoteAttachmentResult<MedicalNoteAttachmentItem[]>> {
-  const user = await requireRole(["admin", "doctor", "receptionist"]);
+  const user = await requireRole(MEDICAL_NOTE_READ_ROLES);
   const supabase = await createClient();
   const note = await getAccessibleNote(supabase, noteId, patientId);
   if (!note) return { error: await actionError("medical-note-attachments.medicalNoteNotFound") };
@@ -297,7 +298,7 @@ export async function getMedicalNoteAttachmentSignedUrl(
   noteId: string,
   attachmentId: string,
 ): Promise<MedicalNoteAttachmentResult<{ url: string }>> {
-  const user = await requireRole(["admin", "doctor", "receptionist"]);
+  const user = await requireRole(MEDICAL_NOTE_READ_ROLES);
   const supabase = await createClient();
 
   const note = await getAccessibleNote(supabase, noteId, patientId);

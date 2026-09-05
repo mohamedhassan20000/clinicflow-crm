@@ -16,6 +16,7 @@ function proAi(features: Record<string, boolean>): Entitlements {
     planSlug: "pro_ai",
     planFeatures: { ai_assistant: true, ...features },
     subscriptionAllowed: true,
+    aiTermsAccepted: true,
   });
 }
 
@@ -94,6 +95,7 @@ describe("P5B — effective reply-mode resolution (§6.2 safety gate)", () => {
       planSlug: "pro",
       planFeatures: {},
       subscriptionAllowed: true,
+      aiTermsAccepted: false,
     });
     expect(resolveEffectiveAiReplyMode({ clinicMode: "auto", entitlements })).toBe("off");
   });

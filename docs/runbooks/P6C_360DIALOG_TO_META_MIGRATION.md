@@ -27,7 +27,7 @@ Complete Meta Business verification → Tech Provider → Embedded Signup approv
 | `META_SYSTEM_USER_ID` | server | system user assigned to the clinic WABA |
 | `META_SYSTEM_USER_ACCESS_TOKEN` | server | debug/management/Cloud API token stored through the encrypted channel boundary |
 | `META_PHONE_REGISTRATION_PIN` | server | six-digit PIN used for the required phone registration call |
-| `META_GRAPH_API_VERSION` | server (optional) | pins the Graph version (default `v21.0`) |
+| `META_GRAPH_API_VERSION` | server (optional) | pins the Graph version (default `v23.0`) |
 
 Register the webhook callback URL `https://<domain>/api/webhooks/whatsapp` in the
 Meta app with the verify token above; confirm the GET handshake returns the

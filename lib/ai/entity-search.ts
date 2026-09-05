@@ -113,6 +113,19 @@ const NAME_MAP: Record<string, string[]> = {
   "زينب": ["zainab", "zeinab", "zaynab"],
 };
 
+/**
+ * The curated Latin readings of one Arabic name part, conventional spelling
+ * first, or null when the table does not know it.
+ *
+ * Exported for `name-transliteration.ts`, which needs exactly this distinction:
+ * a name part the table knows can be transliterated onto a patient file without
+ * asking, and one it does not know can only ever be *proposed*.
+ */
+export function arabicNameVariants(part: string): readonly string[] | null {
+  const key = normalizeSearchText(part);
+  return NAME_MAP[key] ?? null;
+}
+
 const LATIN_TO_ARABIC_TOKEN: Record<string, string> = Object.fromEntries(
   Object.entries(NAME_MAP).flatMap(([arabic, variants]) =>
     variants.map((variant) => [variant, arabic]),

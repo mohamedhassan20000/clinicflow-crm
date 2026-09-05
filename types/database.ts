@@ -9,6 +9,90 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      admin_audit_events: {
+        Row: {
+          action: string
+          actor_display: string | null
+          actor_role: Database["public"]["Enums"]["user_role"] | null
+          actor_type: string
+          actor_user_id: string | null
+          after: Json | null
+          before: Json | null
+          changed_fields: string[]
+          clinic_id: string
+          correlation_id: string | null
+          entity_id: string | null
+          entity_ref: string | null
+          entity_type: string
+          failure_code: string | null
+          id: string
+          metadata: Json
+          module: string
+          occurred_at: string
+          outcome: string
+          source: string
+        }
+        Insert: {
+          action: string
+          actor_display?: string | null
+          actor_role?: Database["public"]["Enums"]["user_role"] | null
+          actor_type: string
+          actor_user_id?: string | null
+          after?: Json | null
+          before?: Json | null
+          changed_fields?: string[]
+          clinic_id: string
+          correlation_id?: string | null
+          entity_id?: string | null
+          entity_ref?: string | null
+          entity_type: string
+          failure_code?: string | null
+          id?: string
+          metadata?: Json
+          module: string
+          occurred_at?: string
+          outcome?: string
+          source: string
+        }
+        Update: {
+          action?: string
+          actor_display?: string | null
+          actor_role?: Database["public"]["Enums"]["user_role"] | null
+          actor_type?: string
+          actor_user_id?: string | null
+          after?: Json | null
+          before?: Json | null
+          changed_fields?: string[]
+          clinic_id?: string
+          correlation_id?: string | null
+          entity_id?: string | null
+          entity_ref?: string | null
+          entity_type?: string
+          failure_code?: string | null
+          id?: string
+          metadata?: Json
+          module?: string
+          occurred_at?: string
+          outcome?: string
+          source?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_audit_events_actor_user_id_fkey"
+            columns: ["actor_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "admin_audit_events_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       activity_events: {
         Row: {
           action: string
@@ -146,7 +230,9 @@ export type Database = {
           conversation_id: string
           created_at: string
           id: string
+          parts: Json | null
           role: Database["public"]["Enums"]["agent_message_role"]
+          sequence: number
           tool_name: string | null
         }
         Insert: {
@@ -155,7 +241,9 @@ export type Database = {
           conversation_id: string
           created_at?: string
           id?: string
+          parts?: Json | null
           role: Database["public"]["Enums"]["agent_message_role"]
+          sequence?: never
           tool_name?: string | null
         }
         Update: {
@@ -164,7 +252,9 @@ export type Database = {
           conversation_id?: string
           created_at?: string
           id?: string
+          parts?: Json | null
           role?: Database["public"]["Enums"]["agent_message_role"]
+          sequence?: never
           tool_name?: string | null
         }
         Relationships: [
@@ -184,10 +274,276 @@ export type Database = {
           },
         ]
       }
+      ai_action_confirmations: {
+        Row: {
+          action_id: string
+          actor_id: string
+          after_digest: string | null
+          before_digest: string | null
+          clinic_id: string
+          consumed_at: string | null
+          conversation_id: string
+          created_at: string
+          expires_at: string
+          id: string
+          input_digest: string
+          reauth_nonce_hash: string | null
+          risk_class: string
+          step_up_verified_at: string | null
+          target_user_id: string | null
+          token_hash: string
+        }
+        Insert: {
+          action_id: string
+          actor_id: string
+          after_digest?: string | null
+          before_digest?: string | null
+          clinic_id: string
+          consumed_at?: string | null
+          conversation_id: string
+          created_at?: string
+          expires_at: string
+          id?: string
+          input_digest: string
+          reauth_nonce_hash?: string | null
+          risk_class?: string
+          step_up_verified_at?: string | null
+          target_user_id?: string | null
+          token_hash: string
+        }
+        Update: {
+          action_id?: string
+          actor_id?: string
+          after_digest?: string | null
+          before_digest?: string | null
+          clinic_id?: string
+          consumed_at?: string | null
+          conversation_id?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          input_digest?: string
+          reauth_nonce_hash?: string | null
+          risk_class?: string
+          step_up_verified_at?: string | null
+          target_user_id?: string | null
+          token_hash?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_action_confirmations_actor_clinic_fkey"
+            columns: ["actor_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id", "clinic_id"]
+          },
+          {
+            foreignKeyName: "ai_action_confirmations_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_action_confirmations_conversation_clinic_fkey"
+            columns: ["conversation_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "agent_conversations"
+            referencedColumns: ["id", "clinic_id"]
+          },
+          {
+            foreignKeyName: "ai_action_confirmations_target_clinic_fkey"
+            columns: ["target_user_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id", "clinic_id"]
+          },
+        ]
+      }
+      ai_action_receipts: {
+        Row: {
+          action_id: string
+          actor_id: string
+          after_digest: string | null
+          ai_request_id: string | null
+          authorization_outcome: string
+          before_digest: string | null
+          clinic_id: string
+          conversation_id: string
+          created_at: string
+          denial_reason: string | null
+          error_code: string | null
+          id: string
+          input_digest: string
+          outcome: string
+          phase: string
+          risk_class: string
+          target_record_ids: string[]
+          target_table: string | null
+        }
+        Insert: {
+          action_id: string
+          actor_id: string
+          after_digest?: string | null
+          ai_request_id?: string | null
+          authorization_outcome: string
+          before_digest?: string | null
+          clinic_id: string
+          conversation_id: string
+          created_at?: string
+          denial_reason?: string | null
+          error_code?: string | null
+          id?: string
+          input_digest: string
+          outcome: string
+          phase: string
+          risk_class: string
+          target_record_ids?: string[]
+          target_table?: string | null
+        }
+        Update: {
+          action_id?: string
+          actor_id?: string
+          after_digest?: string | null
+          ai_request_id?: string | null
+          authorization_outcome?: string
+          before_digest?: string | null
+          clinic_id?: string
+          conversation_id?: string
+          created_at?: string
+          denial_reason?: string | null
+          error_code?: string | null
+          id?: string
+          input_digest?: string
+          outcome?: string
+          phase?: string
+          risk_class?: string
+          target_record_ids?: string[]
+          target_table?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_action_receipts_actor_clinic_fkey"
+            columns: ["actor_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id", "clinic_id"]
+          },
+          {
+            foreignKeyName: "ai_action_receipts_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_action_receipts_conversation_clinic_fkey"
+            columns: ["conversation_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "agent_conversations"
+            referencedColumns: ["id", "clinic_id"]
+          },
+        ]
+      }
+      ai_appointment_requests: {
+        Row: {
+          appointment_id: string | null
+          clinic_id: string
+          conversation_id: string
+          created_at: string
+          department_id: string | null
+          doctor_id: string
+          duration_minutes: number
+          expires_at: string
+          id: string
+          intake_id: string
+          scheduled_at: string
+          service_id: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          appointment_id?: string | null
+          clinic_id: string
+          conversation_id: string
+          created_at?: string
+          department_id: string
+          doctor_id: string
+          duration_minutes?: number
+          expires_at: string
+          id?: string
+          intake_id: string
+          scheduled_at: string
+          service_id?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          appointment_id?: string | null
+          clinic_id?: string
+          conversation_id?: string
+          created_at?: string
+          department_id?: string
+          doctor_id?: string
+          duration_minutes?: number
+          expires_at?: string
+          id?: string
+          intake_id?: string
+          scheduled_at?: string
+          service_id?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_appointment_requests_appointment_clinic_fkey"
+            columns: ["appointment_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "appointments"
+            referencedColumns: ["id", "clinic_id"]
+          },
+          {
+            foreignKeyName: "ai_appointment_requests_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_appointment_requests_conversation_clinic_fkey"
+            columns: ["conversation_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id", "clinic_id"]
+          },
+          {
+            foreignKeyName: "ai_appointment_requests_department_clinic_fkey"
+            columns: ["department_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id", "clinic_id"]
+          },
+          {
+            foreignKeyName: "ai_appointment_requests_doctor_clinic_fkey"
+            columns: ["doctor_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id", "clinic_id"]
+          },
+          {
+            foreignKeyName: "ai_appointment_requests_intake_clinic_fkey"
+            columns: ["intake_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "ai_patient_intakes"
+            referencedColumns: ["id", "clinic_id"]
+          },
+        ]
+      }
       ai_budget_periods: {
         Row: {
           addon_limit_micros: number
           budget_limit_micros: number
+          byok_spent_micros: number
           clinic_id: string
           created_at: string
           included_limit_micros: number
@@ -200,6 +556,7 @@ export type Database = {
         Insert: {
           addon_limit_micros?: number
           budget_limit_micros: number
+          byok_spent_micros?: number
           clinic_id: string
           created_at?: string
           included_limit_micros?: number
@@ -212,6 +569,7 @@ export type Database = {
         Update: {
           addon_limit_micros?: number
           budget_limit_micros?: number
+          byok_spent_micros?: number
           clinic_id?: string
           created_at?: string
           included_limit_micros?: number
@@ -237,6 +595,7 @@ export type Database = {
           actual_cost_micros: number | null
           certification_version: string
           clinic_id: string
+          consumes_managed_budget: boolean
           created_at: string
           credential_mode: string
           error_class: string | null
@@ -258,6 +617,7 @@ export type Database = {
           request_id: string
           reserved_at: string
           reserved_cost_micros: number
+          resolution_reason: string
           status: string
           surface: string
           task: string
@@ -268,6 +628,7 @@ export type Database = {
           actual_cost_micros?: number | null
           certification_version: string
           clinic_id: string
+          consumes_managed_budget?: boolean
           created_at?: string
           credential_mode?: string
           error_class?: string | null
@@ -289,6 +650,7 @@ export type Database = {
           request_id: string
           reserved_at?: string
           reserved_cost_micros: number
+          resolution_reason?: string
           status?: string
           surface: string
           task: string
@@ -299,6 +661,7 @@ export type Database = {
           actual_cost_micros?: number | null
           certification_version?: string
           clinic_id?: string
+          consumes_managed_budget?: boolean
           created_at?: string
           credential_mode?: string
           error_class?: string | null
@@ -320,6 +683,7 @@ export type Database = {
           request_id?: string
           reserved_at?: string
           reserved_cost_micros?: number
+          resolution_reason?: string
           status?: string
           surface?: string
           task?: string
@@ -337,6 +701,7 @@ export type Database = {
       }
       ai_clinic_provider_policies: {
         Row: {
+          auto_byok_fallback_enabled: boolean
           clinic_id: string
           created_at: string
           credential_mode: string
@@ -348,6 +713,7 @@ export type Database = {
           updated_by: string | null
         }
         Insert: {
+          auto_byok_fallback_enabled?: boolean
           clinic_id: string
           created_at?: string
           credential_mode?: string
@@ -359,6 +725,7 @@ export type Database = {
           updated_by?: string | null
         }
         Update: {
+          auto_byok_fallback_enabled?: boolean
           clinic_id?: string
           created_at?: string
           credential_mode?: string
@@ -395,6 +762,7 @@ export type Database = {
       }
       ai_commercial_terms: {
         Row: {
+          accepted_at: string | null
           addon_budget_micros: number
           change_reason: string
           clinic_id: string
@@ -406,6 +774,7 @@ export type Database = {
           updated_by: string
         }
         Insert: {
+          accepted_at?: string | null
           addon_budget_micros?: number
           change_reason: string
           clinic_id: string
@@ -417,6 +786,7 @@ export type Database = {
           updated_by: string
         }
         Update: {
+          accepted_at?: string | null
           addon_budget_micros?: number
           change_reason?: string
           clinic_id?: string
@@ -434,6 +804,199 @@ export type Database = {
             isOneToOne: true
             referencedRelation: "clinics"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_patient_intakes: {
+        Row: {
+          approved_patient_id: string | null
+          blood_type: Database["public"]["Enums"]["blood_type"] | null
+          clinic_id: string
+          conversation_id: string
+          created_at: string
+          date_of_birth: string
+          department_id: string
+          doctor_id: string
+          email: string
+          full_name: string
+          full_name_original: string | null
+          id: string
+          is_third_party: boolean
+          matched_patient_id: string | null
+          national_id: string
+          national_id_folded: string | null
+          phone: string
+          requested_by_patient_id: string | null
+          review_reason: string | null
+          review_status: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          source: string
+          updated_at: string
+        }
+        Insert: {
+          approved_patient_id?: string | null
+          blood_type?: Database["public"]["Enums"]["blood_type"] | null
+          clinic_id: string
+          conversation_id: string
+          created_at?: string
+          date_of_birth: string
+          department_id: string
+          doctor_id: string
+          email: string
+          full_name: string
+          full_name_original?: string | null
+          id?: string
+          is_third_party?: boolean
+          matched_patient_id?: string | null
+          national_id: string
+          national_id_folded?: string | null
+          phone: string
+          requested_by_patient_id?: string | null
+          review_reason?: string | null
+          review_status?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          source?: string
+          updated_at?: string
+        }
+        Update: {
+          approved_patient_id?: string | null
+          blood_type?: Database["public"]["Enums"]["blood_type"] | null
+          clinic_id?: string
+          conversation_id?: string
+          created_at?: string
+          date_of_birth?: string
+          department_id?: string
+          doctor_id?: string
+          email?: string
+          full_name?: string
+          full_name_original?: string | null
+          id?: string
+          is_third_party?: boolean
+          matched_patient_id?: string | null
+          national_id?: string
+          national_id_folded?: string | null
+          phone?: string
+          requested_by_patient_id?: string | null
+          review_reason?: string | null
+          review_status?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          source?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_patient_intakes_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_patient_intakes_conversation_clinic_fkey"
+            columns: ["conversation_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id", "clinic_id"]
+          },
+          {
+            foreignKeyName: "ai_patient_intakes_department_clinic_fkey"
+            columns: ["department_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id", "clinic_id"]
+          },
+          {
+            foreignKeyName: "ai_patient_intakes_doctor_clinic_fkey"
+            columns: ["doctor_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id", "clinic_id"]
+          },
+          {
+            foreignKeyName: "ai_patient_intakes_matched_patient_clinic_fkey"
+            columns: ["matched_patient_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id", "clinic_id"]
+          },
+          {
+            foreignKeyName: "ai_patient_intakes_patient_clinic_fkey"
+            columns: ["approved_patient_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id", "clinic_id"]
+          },
+          {
+            foreignKeyName: "ai_patient_intakes_requested_by_patient_id_fkey"
+            columns: ["requested_by_patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_patient_intakes_reviewer_clinic_fkey"
+            columns: ["reviewed_by", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id", "clinic_id"]
+          },
+        ]
+      }
+      ai_privileged_action_rate_limits: {
+        Row: {
+          action_date: string
+          actor_id: string
+          clinic_id: string
+          conversation_id: string
+          execute_count: number
+          id: string
+          preview_count: number
+          updated_at: string
+        }
+        Insert: {
+          action_date: string
+          actor_id: string
+          clinic_id: string
+          conversation_id: string
+          execute_count?: number
+          id?: string
+          preview_count?: number
+          updated_at?: string
+        }
+        Update: {
+          action_date?: string
+          actor_id?: string
+          clinic_id?: string
+          conversation_id?: string
+          execute_count?: number
+          id?: string
+          preview_count?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_privileged_action_rate_limits_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_privileged_rate_actor_clinic_fkey"
+            columns: ["actor_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id", "clinic_id"]
+          },
+          {
+            foreignKeyName: "ai_privileged_rate_conversation_clinic_fkey"
+            columns: ["conversation_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "agent_conversations"
+            referencedColumns: ["id", "clinic_id"]
           },
         ]
       }
@@ -698,6 +1261,38 @@ export type Database = {
           },
         ]
       }
+      ai_usage_threshold_notifications: {
+        Row: {
+          clinic_id: string
+          notified_at: string
+          period_start: string
+          threshold: number
+          used_percent: number
+        }
+        Insert: {
+          clinic_id: string
+          notified_at?: string
+          period_start: string
+          threshold: number
+          used_percent: number
+        }
+        Update: {
+          clinic_id?: string
+          notified_at?: string
+          period_start?: string
+          threshold?: number
+          used_percent?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_usage_threshold_notifications_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_workflow_runs: {
         Row: {
           ai_request_id: string | null
@@ -843,6 +1438,7 @@ export type Database = {
       }
       appointments: {
         Row: {
+          ai_action_receipt_id: string | null
           ai_patient_conversation_id: string | null
           ai_workflow_run_id: string | null
           ai_workflow_step_id: string | null
@@ -895,6 +1491,7 @@ export type Database = {
           updated_by: string | null
         }
         Insert: {
+          ai_action_receipt_id?: string | null
           ai_patient_conversation_id?: string | null
           ai_workflow_run_id?: string | null
           ai_workflow_step_id?: string | null
@@ -947,6 +1544,7 @@ export type Database = {
           updated_by?: string | null
         }
         Update: {
+          ai_action_receipt_id?: string | null
           ai_patient_conversation_id?: string | null
           ai_workflow_run_id?: string | null
           ai_workflow_step_id?: string | null
@@ -999,6 +1597,13 @@ export type Database = {
           updated_by?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "appointments_ai_action_receipt_fkey"
+            columns: ["ai_action_receipt_id"]
+            isOneToOne: false
+            referencedRelation: "ai_action_receipts"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "appointments_ai_patient_conversation_clinic_fkey"
             columns: ["ai_patient_conversation_id", "clinic_id"]
@@ -1255,6 +1860,7 @@ export type Database = {
         Row: {
           action: string
           actor_id: string | null
+          actor_type: string | null
           clinic_id: string | null
           created_at: string
           id: string
@@ -1262,11 +1868,13 @@ export type Database = {
           new_data: Json | null
           old_data: Json | null
           record_id: string | null
+          source: string | null
           table_name: string
         }
         Insert: {
           action: string
           actor_id?: string | null
+          actor_type?: string | null
           clinic_id?: string | null
           created_at?: string
           id?: string
@@ -1274,11 +1882,13 @@ export type Database = {
           new_data?: Json | null
           old_data?: Json | null
           record_id?: string | null
+          source?: string | null
           table_name: string
         }
         Update: {
           action?: string
           actor_id?: string | null
+          actor_type?: string | null
           clinic_id?: string | null
           created_at?: string
           id?: string
@@ -1286,6 +1896,7 @@ export type Database = {
           new_data?: Json | null
           old_data?: Json | null
           record_id?: string | null
+          source?: string | null
           table_name?: string
         }
         Relationships: [
@@ -1305,6 +1916,127 @@ export type Database = {
           },
         ]
       }
+      bulk_message_jobs: {
+        Row: {
+          body: string
+          clinic_id: string
+          created_at: string
+          created_by: string
+          finished_at: string | null
+          id: string
+          started_at: string | null
+          status: string
+          total_recipients: number
+          updated_at: string
+        }
+        Insert: {
+          body: string
+          clinic_id: string
+          created_at?: string
+          created_by: string
+          finished_at?: string | null
+          id?: string
+          started_at?: string | null
+          status?: string
+          total_recipients: number
+          updated_at?: string
+        }
+        Update: {
+          body?: string
+          clinic_id?: string
+          created_at?: string
+          created_by?: string
+          finished_at?: string | null
+          id?: string
+          started_at?: string | null
+          status?: string
+          total_recipients?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bulk_message_jobs_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bulk_message_jobs_created_by_clinic_fkey"
+            columns: ["created_by", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id", "clinic_id"]
+          },
+        ]
+      }
+      bulk_message_recipients: {
+        Row: {
+          attempts: number
+          claimed_at: string | null
+          clinic_id: string
+          conversation_id: string
+          created_at: string
+          failure_code: string | null
+          id: string
+          job_id: string
+          outbound_message_id: string | null
+          sent_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          attempts?: number
+          claimed_at?: string | null
+          clinic_id: string
+          conversation_id: string
+          created_at?: string
+          failure_code?: string | null
+          id?: string
+          job_id: string
+          outbound_message_id?: string | null
+          sent_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          attempts?: number
+          claimed_at?: string | null
+          clinic_id?: string
+          conversation_id?: string
+          created_at?: string
+          failure_code?: string | null
+          id?: string
+          job_id?: string
+          outbound_message_id?: string | null
+          sent_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bulk_message_recipients_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bulk_message_recipients_conversation_clinic_fkey"
+            columns: ["conversation_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id", "clinic_id"]
+          },
+          {
+            foreignKeyName: "bulk_message_recipients_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "bulk_message_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clinic_channels: {
         Row: {
           account_review_status: string | null
@@ -1315,6 +2047,7 @@ export type Database = {
           connection_state: string | null
           created_at: string
           credentials_encrypted: string | null
+          history_sync_requested_at: string | null
           id: string
           last_signal_at: string | null
           last_state_reason: string | null
@@ -1323,6 +2056,7 @@ export type Database = {
           last_verified_webhook_at: string | null
           last_webhook_check_at: string | null
           messaging_limit_tier: string | null
+          onboarding_flow: string | null
           phone_status: string | null
           provider: Database["public"]["Enums"]["messaging_provider"]
           provider_account_id: string | null
@@ -1343,6 +2077,7 @@ export type Database = {
           connection_state?: string | null
           created_at?: string
           credentials_encrypted?: string | null
+          history_sync_requested_at?: string | null
           id?: string
           last_signal_at?: string | null
           last_state_reason?: string | null
@@ -1351,6 +2086,7 @@ export type Database = {
           last_verified_webhook_at?: string | null
           last_webhook_check_at?: string | null
           messaging_limit_tier?: string | null
+          onboarding_flow?: string | null
           phone_status?: string | null
           provider: Database["public"]["Enums"]["messaging_provider"]
           provider_account_id?: string | null
@@ -1371,6 +2107,7 @@ export type Database = {
           connection_state?: string | null
           created_at?: string
           credentials_encrypted?: string | null
+          history_sync_requested_at?: string | null
           id?: string
           last_signal_at?: string | null
           last_state_reason?: string | null
@@ -1379,6 +2116,7 @@ export type Database = {
           last_verified_webhook_at?: string | null
           last_webhook_check_at?: string | null
           messaging_limit_tier?: string | null
+          onboarding_flow?: string | null
           phone_status?: string | null
           provider?: Database["public"]["Enums"]["messaging_provider"]
           provider_account_id?: string | null
@@ -1585,9 +2323,13 @@ export type Database = {
       clinics: {
         Row: {
           address: string | null
+          ai_arabic_style: string
+          ai_language_mode: string
           ai_pending_booking_ttl_minutes: number
           ai_pending_slot_cap: number
           ai_reply_mode: string
+          ai_style_instruction: string | null
+          ai_tone: string
           branding_metadata: Json
           country: string
           created_at: string
@@ -1623,9 +2365,13 @@ export type Database = {
         }
         Insert: {
           address?: string | null
+          ai_arabic_style?: string
+          ai_language_mode?: string
           ai_pending_booking_ttl_minutes?: number
           ai_pending_slot_cap?: number
           ai_reply_mode?: string
+          ai_style_instruction?: string | null
+          ai_tone?: string
           branding_metadata?: Json
           country?: string
           created_at?: string
@@ -1661,9 +2407,13 @@ export type Database = {
         }
         Update: {
           address?: string | null
+          ai_arabic_style?: string
+          ai_language_mode?: string
           ai_pending_booking_ttl_minutes?: number
           ai_pending_slot_cap?: number
           ai_reply_mode?: string
+          ai_style_instruction?: string | null
+          ai_tone?: string
           branding_metadata?: Json
           country?: string
           created_at?: string
@@ -1699,15 +2449,63 @@ export type Database = {
         }
         Relationships: []
       }
+      conversation_episodes: {
+        Row: {
+          id: string
+          clinic_id: string
+          conversation_id: string
+          started_at: string
+          ended_at: string | null
+          status: string
+          end_reason: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          clinic_id: string
+          conversation_id: string
+          started_at?: string
+          ended_at?: string | null
+          status?: string
+          end_reason?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          clinic_id?: string
+          conversation_id?: string
+          started_at?: string
+          ended_at?: string | null
+          status?: string
+          end_reason?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
       conversations: {
         Row: {
+          ai_enabled_override?: boolean | null
+          ai_technical_failure_at?: string | null
+          ai_technical_failure_reason?: string | null
+          ai_booking_stage: Json | null
+          ai_collected_data: Json
+          ai_auto_close_after: string | null
+          ai_auto_close_armed_at: string | null
+          ai_context_reset_at: string | null
+          current_episode_id?: string | null
           ai_escalated_at: string | null
           ai_escalation_reason: string | null
           ai_last_replied_at: string | null
+          ai_pause_reason: string | null
+          ai_paused_at: string | null
+          ai_paused_by: string | null
+          ai_pending_clarification: Json | null
           assigned_to: string | null
+          booking_identity_confirmed_at: string | null
           channel: Database["public"]["Enums"]["message_channel"]
           clinic_id: string
           created_at: string
+          display_name: string | null
           id: string
           identity_verification_failures: number
           identity_verification_locked_until: string | null
@@ -1716,19 +2514,34 @@ export type Database = {
           participant_address: string | null
           patient_id: string | null
           patient_link_status: string
+          whatsapp_account_id: string | null
           status: Database["public"]["Enums"]["conversation_status"]
           status_updated_at: string
           updated_at: string
           window_expires_at: string | null
         }
         Insert: {
+          ai_enabled_override?: boolean | null
+          ai_technical_failure_at?: string | null
+          ai_technical_failure_reason?: string | null
+          ai_booking_stage?: Json | null
+          ai_collected_data?: Json
+          ai_auto_close_after?: string | null
+          ai_auto_close_armed_at?: string | null
+          ai_context_reset_at?: string | null
           ai_escalated_at?: string | null
           ai_escalation_reason?: string | null
           ai_last_replied_at?: string | null
+          ai_pause_reason?: string | null
+          ai_paused_at?: string | null
+          ai_paused_by?: string | null
+          ai_pending_clarification?: Json | null
           assigned_to?: string | null
+          booking_identity_confirmed_at?: string | null
           channel: Database["public"]["Enums"]["message_channel"]
           clinic_id: string
           created_at?: string
+          display_name?: string | null
           id?: string
           identity_verification_failures?: number
           identity_verification_locked_until?: string | null
@@ -1737,19 +2550,34 @@ export type Database = {
           participant_address?: string | null
           patient_id?: string | null
           patient_link_status?: string
+          whatsapp_account_id?: string | null
           status?: Database["public"]["Enums"]["conversation_status"]
           status_updated_at?: string
           updated_at?: string
           window_expires_at?: string | null
         }
         Update: {
+          ai_enabled_override?: boolean | null
+          ai_technical_failure_at?: string | null
+          ai_technical_failure_reason?: string | null
+          ai_booking_stage?: Json | null
+          ai_collected_data?: Json
+          ai_auto_close_after?: string | null
+          ai_auto_close_armed_at?: string | null
+          ai_context_reset_at?: string | null
           ai_escalated_at?: string | null
           ai_escalation_reason?: string | null
           ai_last_replied_at?: string | null
+          ai_pause_reason?: string | null
+          ai_paused_at?: string | null
+          ai_paused_by?: string | null
+          ai_pending_clarification?: Json | null
           assigned_to?: string | null
+          booking_identity_confirmed_at?: string | null
           channel?: Database["public"]["Enums"]["message_channel"]
           clinic_id?: string
           created_at?: string
+          display_name?: string | null
           id?: string
           identity_verification_failures?: number
           identity_verification_locked_until?: string | null
@@ -1758,12 +2586,20 @@ export type Database = {
           participant_address?: string | null
           patient_id?: string | null
           patient_link_status?: string
+          whatsapp_account_id?: string | null
           status?: Database["public"]["Enums"]["conversation_status"]
           status_updated_at?: string
           updated_at?: string
           window_expires_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "conversations_ai_paused_by_clinic_fkey"
+            columns: ["ai_paused_by", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id", "clinic_id"]
+          },
           {
             foreignKeyName: "conversations_assigned_to_fkey"
             columns: ["assigned_to"]
@@ -2108,61 +2944,6 @@ export type Database = {
           },
         ]
       }
-      document_events: {
-        Row: {
-          actor_id: string | null
-          clinic_id: string
-          document_id: string
-          event: string
-          id: string
-          is_system: boolean
-          metadata: Json
-          occurred_at: string
-        }
-        Insert: {
-          actor_id?: string | null
-          clinic_id: string
-          document_id: string
-          event: string
-          id?: string
-          is_system?: boolean
-          metadata?: Json
-          occurred_at?: string
-        }
-        Update: {
-          actor_id?: string | null
-          clinic_id?: string
-          document_id?: string
-          event?: string
-          id?: string
-          is_system?: boolean
-          metadata?: Json
-          occurred_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "document_events_actor_id_fkey"
-            columns: ["actor_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "document_events_clinic_id_fkey"
-            columns: ["clinic_id"]
-            isOneToOne: false
-            referencedRelation: "clinics"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "document_events_document_id_fkey"
-            columns: ["document_id"]
-            isOneToOne: false
-            referencedRelation: "documents"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       document_drafts: {
         Row: {
           appointment_id: string | null
@@ -2276,6 +3057,61 @@ export type Database = {
             columns: ["updated_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      document_events: {
+        Row: {
+          actor_id: string | null
+          clinic_id: string
+          document_id: string
+          event: string
+          id: string
+          is_system: boolean
+          metadata: Json
+          occurred_at: string
+        }
+        Insert: {
+          actor_id?: string | null
+          clinic_id: string
+          document_id: string
+          event: string
+          id?: string
+          is_system?: boolean
+          metadata?: Json
+          occurred_at?: string
+        }
+        Update: {
+          actor_id?: string | null
+          clinic_id?: string
+          document_id?: string
+          event?: string
+          id?: string
+          is_system?: boolean
+          metadata?: Json
+          occurred_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_events_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "document_events_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "document_events_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
             referencedColumns: ["id"]
           },
         ]
@@ -2769,14 +3605,95 @@ export type Database = {
         }
         Relationships: []
       }
+      inbound_message_attachments: {
+        Row: {
+          byte_size: number
+          clinic_id: string
+          conversation_id: string
+          created_at: string
+          duration_seconds: number | null
+          failure_reason: string | null
+          id: string
+          inbound_message_id: string | null
+          media_kind: string
+          mime_type: string
+          original_filename: string | null
+          patient_id: string | null
+          sha256: string | null
+          status: string
+          storage_path: string | null
+          voice_note: boolean
+        }
+        Insert: {
+          byte_size: number
+          clinic_id: string
+          conversation_id: string
+          created_at?: string
+          duration_seconds?: number | null
+          failure_reason?: string | null
+          id?: string
+          inbound_message_id?: string | null
+          media_kind: string
+          mime_type: string
+          original_filename?: string | null
+          patient_id?: string | null
+          sha256?: string | null
+          status?: string
+          storage_path?: string | null
+          voice_note?: boolean
+        }
+        Update: {
+          byte_size?: number
+          clinic_id?: string
+          conversation_id?: string
+          created_at?: string
+          duration_seconds?: number | null
+          failure_reason?: string | null
+          id?: string
+          inbound_message_id?: string | null
+          media_kind?: string
+          mime_type?: string
+          original_filename?: string | null
+          patient_id?: string | null
+          sha256?: string | null
+          status?: string
+          storage_path?: string | null
+          voice_note?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inbound_message_attachments_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inbound_message_attachments_conversation_clinic_fkey"
+            columns: ["conversation_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id", "clinic_id"]
+          },
+          {
+            foreignKeyName: "inbound_message_attachments_patient_clinic_fkey"
+            columns: ["patient_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id", "clinic_id"]
+          },
+        ]
+      }
       inbound_messages: {
         Row: {
           body: string
           channel: Database["public"]["Enums"]["message_channel"]
           clinic_id: string
+          episode_id?: string | null
           conversation_id: string
           created_at: string
           id: string
+          ingestion_origin: string
           patient_id: string | null
           provider_message_id: string | null
           received_at: string
@@ -2786,9 +3703,11 @@ export type Database = {
           body: string
           channel: Database["public"]["Enums"]["message_channel"]
           clinic_id: string
+          episode_id?: string | null
           conversation_id: string
           created_at?: string
           id?: string
+          ingestion_origin?: string
           patient_id?: string | null
           provider_message_id?: string | null
           received_at?: string
@@ -2798,9 +3717,11 @@ export type Database = {
           body?: string
           channel?: Database["public"]["Enums"]["message_channel"]
           clinic_id?: string
+          episode_id?: string | null
           conversation_id?: string
           created_at?: string
           id?: string
+          ingestion_origin?: string
           patient_id?: string | null
           provider_message_id?: string | null
           received_at?: string
@@ -3448,11 +4369,109 @@ export type Database = {
           },
         ]
       }
+      outbound_message_media: {
+        Row: {
+          bucket: string
+          byte_size: number
+          caption: string | null
+          clinic_id: string
+          conversation_id: string
+          created_at: string
+          created_by: string | null
+          failure_reason: string | null
+          file_name: string | null
+          id: string
+          media_kind: string
+          mime_type: string
+          outbound_message_id: string | null
+          sha256: string | null
+          source: string
+          source_record_id: string | null
+          status: string
+          storage_path: string
+          updated_at: string
+        }
+        Insert: {
+          bucket: string
+          byte_size: number
+          caption?: string | null
+          clinic_id: string
+          conversation_id: string
+          created_at?: string
+          created_by?: string | null
+          failure_reason?: string | null
+          file_name?: string | null
+          id?: string
+          media_kind: string
+          mime_type: string
+          outbound_message_id?: string | null
+          sha256?: string | null
+          source: string
+          source_record_id?: string | null
+          status?: string
+          storage_path: string
+          updated_at?: string
+        }
+        Update: {
+          bucket?: string
+          byte_size?: number
+          caption?: string | null
+          clinic_id?: string
+          conversation_id?: string
+          created_at?: string
+          created_by?: string | null
+          failure_reason?: string | null
+          file_name?: string | null
+          id?: string
+          media_kind?: string
+          mime_type?: string
+          outbound_message_id?: string | null
+          sha256?: string | null
+          source?: string
+          source_record_id?: string | null
+          status?: string
+          storage_path?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "outbound_message_media_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "outbound_message_media_conversation_clinic_fkey"
+            columns: ["conversation_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id", "clinic_id"]
+          },
+          {
+            foreignKeyName: "outbound_message_media_creator_clinic_fkey"
+            columns: ["created_by", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id", "clinic_id"]
+          },
+          {
+            foreignKeyName: "outbound_message_media_outbound_clinic_fkey"
+            columns: ["outbound_message_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "outbound_messages"
+            referencedColumns: ["id", "clinic_id"]
+          },
+        ]
+      }
       outbound_messages: {
         Row: {
+          ingestion_origin?: string | null
+          body: string | null
           body_preview: string | null
           channel: Database["public"]["Enums"]["message_channel"]
           clinic_id: string
+          episode_id?: string | null
           cost_micro: number | null
           created_at: string
           error: string | null
@@ -3467,9 +4486,12 @@ export type Database = {
           template_id: string | null
         }
         Insert: {
+          ingestion_origin?: string | null
+          body?: string | null
           body_preview?: string | null
           channel: Database["public"]["Enums"]["message_channel"]
           clinic_id: string
+          episode_id?: string | null
           cost_micro?: number | null
           created_at?: string
           error?: string | null
@@ -3484,9 +4506,12 @@ export type Database = {
           template_id?: string | null
         }
         Update: {
+          ingestion_origin?: string | null
+          body?: string | null
           body_preview?: string | null
           channel?: Database["public"]["Enums"]["message_channel"]
           clinic_id?: string
+          episode_id?: string | null
           cost_micro?: number | null
           created_at?: string
           error?: string | null
@@ -4602,6 +5627,50 @@ export type Database = {
           },
         ]
       }
+      staff_shift_templates: {
+        Row: {
+          clinic_id: string
+          created_at: string
+          end_time: string
+          id: string
+          is_enabled: boolean
+          name: string
+          sort_order: number
+          start_time: string
+          updated_at: string
+        }
+        Insert: {
+          clinic_id: string
+          created_at?: string
+          end_time: string
+          id?: string
+          is_enabled?: boolean
+          name: string
+          sort_order?: number
+          start_time: string
+          updated_at?: string
+        }
+        Update: {
+          clinic_id?: string
+          created_at?: string
+          end_time?: string
+          id?: string
+          is_enabled?: boolean
+          name?: string
+          sort_order?: number
+          start_time?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_shift_templates_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       subscriptions: {
         Row: {
           clinic_id: string
@@ -4922,19 +5991,449 @@ export type Database = {
         }
         Relationships: []
       }
+      whatsapp_contacts: {
+        Row: {
+          authenticated_account_id: string | null
+          clinic_id: string
+          created_at: string
+          display_name: string | null
+          id: string
+          participant_address: string
+          updated_at: string
+        }
+        Insert: {
+          authenticated_account_id?: string | null
+          clinic_id: string
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          participant_address: string
+          updated_at?: string
+        }
+        Update: {
+          authenticated_account_id?: string | null
+          clinic_id?: string
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          participant_address?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_contacts_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_history_delivery_batches: {
+        Row: {
+          attempts: number
+          batch_key: string
+          claimed_at: string | null
+          claimed_by: string | null
+          clinic_id: string
+          created_at: string
+          event_count: number
+          id: string
+          last_error: string | null
+          metrics_recorded: boolean
+          payload: Json
+          session_phone: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          attempts?: number
+          batch_key: string
+          claimed_at?: string | null
+          claimed_by?: string | null
+          clinic_id: string
+          created_at?: string
+          event_count: number
+          id?: string
+          last_error?: string | null
+          metrics_recorded?: boolean
+          payload: Json
+          session_phone: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          attempts?: number
+          batch_key?: string
+          claimed_at?: string | null
+          claimed_by?: string | null
+          clinic_id?: string
+          created_at?: string
+          event_count?: number
+          id?: string
+          last_error?: string | null
+          metrics_recorded?: boolean
+          payload?: Json
+          session_phone?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_history_delivery_batches_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_lid_mappings: {
+        Row: {
+          authenticated_account_id: string | null
+          clinic_id: string
+          first_asserted_at: string
+          id: string
+          last_asserted_at: string
+          lid_jid: string
+          participant_address: string
+        }
+        Insert: {
+          authenticated_account_id?: string | null
+          clinic_id: string
+          first_asserted_at?: string
+          id?: string
+          last_asserted_at?: string
+          lid_jid: string
+          participant_address: string
+        }
+        Update: {
+          authenticated_account_id?: string | null
+          clinic_id?: string
+          first_asserted_at?: string
+          id?: string
+          last_asserted_at?: string
+          lid_jid?: string
+          participant_address?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_lid_mappings_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_linked_accounts: {
+        Row: {
+          authenticated_account_id: string
+          authenticated_account_lid: string | null
+          clinic_id: string
+          first_linked_at: string
+          inbound_active_from: string
+          last_seen_at: string
+        }
+        Insert: {
+          authenticated_account_id: string
+          authenticated_account_lid?: string | null
+          clinic_id: string
+          first_linked_at?: string
+          inbound_active_from: string
+          last_seen_at?: string
+        }
+        Update: {
+          authenticated_account_id?: string
+          authenticated_account_lid?: string | null
+          clinic_id?: string
+          first_linked_at?: string
+          inbound_active_from?: string
+          last_seen_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_linked_accounts_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_linked_device_auth: {
+        Row: {
+          clinic_id: string
+          created_at: string
+          key_id: string
+          key_type: string
+          updated_at: string
+          value_encrypted: string
+        }
+        Insert: {
+          clinic_id: string
+          created_at?: string
+          key_id: string
+          key_type: string
+          updated_at?: string
+          value_encrypted: string
+        }
+        Update: {
+          clinic_id?: string
+          created_at?: string
+          key_id?: string
+          key_type?: string
+          updated_at?: string
+          value_encrypted?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_linked_device_auth_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_linked_device_sessions: {
+        Row: {
+          authenticated_account_id: string | null
+          authenticated_account_lid: string | null
+          clinic_id: string
+          connected_at: string | null
+          created_at: string
+          desired_state: string
+          handoff_requested_at: string | null
+          handoff_to: string | null
+          history_chats_imported: number
+          history_chats_received: number
+          history_completed_at: string | null
+          history_final_batch_seen: boolean
+          history_last_error: string | null
+          history_messages_deduplicated: number
+          history_messages_imported: number
+          history_messages_pending: number
+          history_messages_received: number
+          history_messages_unsupported: number
+          history_started_at: string | null
+          history_status: string
+          id: string
+          inbound_active_from: string | null
+          last_error: string | null
+          last_heartbeat_at: string | null
+          phone_number: string | null
+          qr_expires_at: string | null
+          qr_payload: string | null
+          status: string
+          updated_at: string
+          worker_id: string | null
+        }
+        Insert: {
+          authenticated_account_id?: string | null
+          authenticated_account_lid?: string | null
+          clinic_id: string
+          connected_at?: string | null
+          created_at?: string
+          desired_state?: string
+          handoff_requested_at?: string | null
+          handoff_to?: string | null
+          history_chats_imported?: number
+          history_chats_received?: number
+          history_completed_at?: string | null
+          history_final_batch_seen?: boolean
+          history_last_error?: string | null
+          history_messages_deduplicated?: number
+          history_messages_imported?: number
+          history_messages_pending?: number
+          history_messages_received?: number
+          history_messages_unsupported?: number
+          history_started_at?: string | null
+          history_status?: string
+          id?: string
+          inbound_active_from?: string | null
+          last_error?: string | null
+          last_heartbeat_at?: string | null
+          phone_number?: string | null
+          qr_expires_at?: string | null
+          qr_payload?: string | null
+          status?: string
+          updated_at?: string
+          worker_id?: string | null
+        }
+        Update: {
+          authenticated_account_id?: string | null
+          authenticated_account_lid?: string | null
+          clinic_id?: string
+          connected_at?: string | null
+          created_at?: string
+          desired_state?: string
+          handoff_requested_at?: string | null
+          handoff_to?: string | null
+          history_chats_imported?: number
+          history_chats_received?: number
+          history_completed_at?: string | null
+          history_final_batch_seen?: boolean
+          history_last_error?: string | null
+          history_messages_deduplicated?: number
+          history_messages_imported?: number
+          history_messages_pending?: number
+          history_messages_received?: number
+          history_messages_unsupported?: number
+          history_started_at?: string | null
+          history_status?: string
+          id?: string
+          inbound_active_from?: string | null
+          last_error?: string | null
+          last_heartbeat_at?: string | null
+          phone_number?: string | null
+          qr_expires_at?: string | null
+          qr_payload?: string | null
+          status?: string
+          updated_at?: string
+          worker_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_linked_device_sessions_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: true
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_pending_history_chats: {
+        Row: {
+          authenticated_account_id: string | null
+          clinic_id: string
+          conversation_id: string | null
+          created_at: string
+          display_name: string | null
+          id: string
+          last_message_at: string | null
+          lid_jid: string
+          resolved_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          authenticated_account_id?: string | null
+          clinic_id: string
+          conversation_id?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          last_message_at?: string | null
+          lid_jid: string
+          resolved_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          authenticated_account_id?: string | null
+          clinic_id?: string
+          conversation_id?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          last_message_at?: string | null
+          lid_jid?: string
+          resolved_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_pending_history_chats_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_pending_history_chats_conversation_fkey"
+            columns: ["conversation_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id", "clinic_id"]
+          },
+        ]
+      }
+      whatsapp_pending_history_messages: {
+        Row: {
+          authenticated_account_id: string | null
+          attachments: Json
+          body: string | null
+          clinic_id: string
+          conversation_id: string | null
+          created_at: string
+          direction: string
+          display_name: string | null
+          id: string
+          lid_jid: string
+          occurred_at: string
+          provider_message_id: string
+          resolved_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          authenticated_account_id?: string | null
+          attachments?: Json
+          body?: string | null
+          clinic_id: string
+          conversation_id?: string | null
+          created_at?: string
+          direction: string
+          display_name?: string | null
+          id?: string
+          lid_jid: string
+          occurred_at: string
+          provider_message_id: string
+          resolved_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          authenticated_account_id?: string | null
+          attachments?: Json
+          body?: string | null
+          clinic_id?: string
+          conversation_id?: string | null
+          created_at?: string
+          direction?: string
+          display_name?: string | null
+          id?: string
+          lid_jid?: string
+          occurred_at?: string
+          provider_message_id?: string
+          resolved_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_pending_history_messages_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_pending_history_messages_conversation_fkey"
+            columns: ["conversation_id", "clinic_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id", "clinic_id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      cancel_issued_document: {
-        Args: { p_document_id: string }
-        Returns: {
-          cancelled_at: string
-          document_id: string
-          document_status: string
-        }[]
-      }
       activate_ai_provider_connection: {
         Args: {
           p_actor_id: string
@@ -4995,10 +6494,23 @@ export type Database = {
         Args: { p_end: string; p_start: string }
         Returns: Json
       }
+      ai_intake_approval_context_matches: {
+        Args: { p_clinic_id: string; p_conversation_id: string }
+        Returns: boolean
+      }
       ai_permission_is_grantable: {
         Args: {
           p_permission_key: string
           p_role: Database["public"]["Enums"]["user_role"]
+        }
+        Returns: boolean
+      }
+      ai_requested_slot_is_available: {
+        Args: {
+          p_clinic_id: string
+          p_doctor_id: string
+          p_duration_minutes: number
+          p_scheduled_at: string
         }
         Returns: boolean
       }
@@ -5069,6 +6581,14 @@ export type Database = {
           transitioned: boolean
         }[]
       }
+      approve_ai_patient_intake: {
+        Args: { p_actor_id: string; p_intake_id: string }
+        Returns: {
+          already_processed: boolean
+          appointment_id: string
+          patient_id: string
+        }[]
+      }
       assert_primary_ai_provider_admin: {
         Args: { p_actor_id: string; p_clinic_id: string }
         Returns: undefined
@@ -5088,6 +6608,19 @@ export type Database = {
         Returns: Database["public"]["Enums"]["user_role"]
       }
       auth_supervised_doctor_ids: { Args: never; Returns: string[] }
+      begin_ai_action_receipt: {
+        Args: {
+          p_action_id: string
+          p_actor_id: string
+          p_ai_request_id: string | null
+          p_clinic_id: string
+          p_conversation_id: string
+          p_input_digest: string
+          p_phase: string
+          p_risk_class: string
+        }
+        Returns: string
+      }
       can_access_clinical_record: {
         Args: {
           p_clinic_id: string
@@ -5095,6 +6628,14 @@ export type Database = {
           p_responsible_doctor_id: string
         }
         Returns: boolean
+      }
+      cancel_issued_document: {
+        Args: { p_document_id: string }
+        Returns: {
+          cancelled_at: string
+          document_id: string
+          document_status: string
+        }[]
       }
       cancel_patient_ai_appointment: {
         Args: {
@@ -5107,6 +6648,74 @@ export type Database = {
           reason: string
         }[]
       }
+      prepare_patient_ai_reschedule: {
+        Args: {
+          p_appointment_id: string
+          p_clinic_id: string
+          p_conversation_id: string
+        }
+        Returns: {
+          appointment_id: string
+          department_id: string | null
+          doctor_id: string
+          doctor_name: string
+          duration_minutes: number
+          scheduled_at: string
+          service_id: string | null
+        }[]
+      }
+      reschedule_patient_ai_appointment: {
+        Args: {
+          p_appointment_id: string
+          p_clinic_id: string
+          p_conversation_id: string
+          p_scheduled_at: string
+        }
+        Returns: {
+          new_appointment_id: string | null
+          reason: string
+          rescheduled: boolean
+          scheduled_at: string | null
+        }[]
+      }
+      claim_ai_action_confirmation:
+        | {
+            Args: {
+              p_action_id: string
+              p_actor_id: string
+              p_clinic_id: string
+              p_consumed_at: string
+              p_conversation_id: string
+              p_input_digest: string
+              p_token_hash: string
+            }
+            Returns: string
+          }
+        | {
+            Args: {
+              p_action_id: string
+              p_actor_id: string
+              p_after_digest: string | null
+              p_before_digest: string | null
+              p_clinic_id: string
+              p_consumed_at: string
+              p_conversation_id: string
+              p_input_digest: string
+              p_reauth_nonce_hash: string | null
+              p_target_user_id: string | null
+              p_token_hash: string
+            }
+            Returns: string
+          }
+      claim_ai_usage_threshold_notice: {
+        Args: {
+          p_clinic_id: string
+          p_period_start: string
+          p_threshold: number
+          p_used_percent: number
+        }
+        Returns: boolean
+      }
       claim_appointment_reminder: {
         Args: {
           p_appointment_id: string
@@ -5115,6 +6724,55 @@ export type Database = {
           p_offset_hours: number
         }
         Returns: boolean
+      }
+      bind_whatsapp_linked_account: {
+        Args: {
+          p_authenticated_account_id: string
+          p_authenticated_account_lid?: string
+          p_clinic_id: string
+          p_proposed_boundary?: string
+        }
+        Returns: {
+          account_changed: boolean
+          inbound_active_from: string
+        }[]
+      }
+      current_whatsapp_linked_account_id: { Args: never; Returns: string }
+      close_idle_patient_ai_episodes: {
+        Args: { p_now?: string | null }
+        Returns: number
+      }
+      resolve_conversation_episode: {
+        Args: {
+          p_clinic_id: string
+          p_conversation_id: string
+          p_started_at?: string | null
+        }
+        Returns: {
+          episode_id: string
+          started_at: string
+          opened: boolean
+        }[]
+      }
+      close_conversation_episode: {
+        Args: {
+          p_clinic_id: string
+          p_conversation_id: string
+          p_end_reason: string
+          p_ended_at?: string | null
+        }
+        Returns: {
+          episode_id: string | null
+          closed: boolean
+        }[]
+      }
+      claim_bulk_message_recipient: {
+        Args: { p_clinic_id: string; p_recipient_id: string }
+        Returns: {
+          attempts: number
+          conversation_id: string
+          id: string
+        }[]
       }
       claim_message_dispatch: {
         Args: {
@@ -5132,12 +6790,46 @@ export type Database = {
           id: string
         }[]
       }
+      claim_outbound_media: {
+        Args: {
+          p_clinic_id: string
+          p_conversation_id: string
+          p_media_id: string
+        }
+        Returns: {
+          bucket: string
+          byte_size: number
+          caption: string
+          file_name: string
+          media_id: string
+          media_kind: string
+          mime_type: string
+          source: string
+          source_record_id: string
+          storage_path: string
+        }[]
+      }
       claim_whatsapp_channels_for_health_check: {
         Args: { p_limit?: number }
         Returns: {
           clinic_id: string
           id: string
           provider: Database["public"]["Enums"]["messaging_provider"]
+        }[]
+      }
+      claim_whatsapp_history_batches: {
+        Args: {
+          p_clinic_id: string
+          p_exclude_ids?: string[]
+          p_limit?: number
+          p_stale_seconds?: number
+          p_worker_id: string
+        }
+        Returns: {
+          attempts: number
+          id: string
+          payload: Json
+          session_phone: string
         }[]
       }
       clear_own_must_change_password: { Args: never; Returns: undefined }
@@ -5244,6 +6936,23 @@ export type Database = {
         }[]
       }
       complete_own_onboarding: { Args: never; Returns: string }
+      confirm_patient_booking_identity: {
+        Args: { p_clinic_id: string; p_conversation_id: string }
+        Returns: {
+          patient_name: string
+          status: string
+        }[]
+      }
+      consume_ai_privileged_action_rate_limit: {
+        Args: {
+          p_actor_id: string
+          p_clinic_id: string
+          p_conversation_id: string
+          p_occurred_at: string
+          p_phase: string
+        }
+        Returns: boolean
+      }
       create_clinic_with_owner: {
         Args: {
           p_clinic_name: string
@@ -5271,6 +6980,20 @@ export type Database = {
           expires_at: string
         }[]
       }
+      create_provisional_ai_appointment_request: {
+        Args: {
+          p_clinic_id: string
+          p_conversation_id: string
+          p_doctor_id: string
+          p_duration_minutes: number
+          p_scheduled_at: string
+          p_service_id?: string
+        }
+        Returns: {
+          expires_at: string
+          request_id: string
+        }[]
+      }
       effective_ai_feature: {
         Args: { p_clinic_id: string; p_feature_key: string }
         Returns: boolean
@@ -5286,6 +7009,12 @@ export type Database = {
         }
         Returns: number
       }
+      expire_ai_appointment_requests: {
+        Args: { p_limit?: number; p_now?: string }
+        Returns: {
+          expired_count: number
+        }[]
+      }
       expire_ai_pending_bookings: {
         Args: { p_limit?: number; p_now?: string }
         Returns: {
@@ -5298,6 +7027,22 @@ export type Database = {
           p_clinic_id: string
           p_document_id: string
           p_failure_code: string
+        }
+        Returns: boolean
+      }
+      finalize_ai_action_receipt: {
+        Args: {
+          p_actor_id: string
+          p_after_digest: string | null
+          p_authorization_outcome: string
+          p_before_digest: string | null
+          p_clinic_id: string
+          p_denial_reason: string | null
+          p_error_code: string | null
+          p_outcome: string
+          p_receipt_id: string
+          p_target_record_ids: string[]
+          p_target_table: string | null
         }
         Returns: boolean
       }
@@ -5320,6 +7065,15 @@ export type Database = {
         }
         Returns: boolean
       }
+      finalize_outbound_media: {
+        Args: {
+          p_clinic_id: string
+          p_failure_reason?: string
+          p_media_id: string
+          p_outbound_message_id?: string
+        }
+        Returns: boolean
+      }
       finalize_outbound_message: {
         Args: {
           p_clinic_id: string
@@ -5332,6 +7086,18 @@ export type Database = {
         }
         Returns: boolean
       }
+      find_clinic_patient_by_identity: {
+        Args: { p_clinic_id: string; p_full_name: string; p_national_id: string }
+        Returns: {
+          department_id: string
+          department_name: string
+          doctor_id: string | null
+          doctor_name: string | null
+          full_name: string
+          is_primary: boolean
+          patient_id: string
+        }[]
+      }
       find_resumable_clinic_owner: {
         Args: { p_email: string }
         Returns: {
@@ -5339,6 +7105,15 @@ export type Database = {
           user_id: string
         }[]
       }
+      flag_stalled_bulk_recipients: {
+        Args: { p_clinic_id: string; p_job_id: string; p_stale_seconds: number }
+        Returns: {
+          conversation_id: string
+          id: string
+        }[]
+      }
+      fold_national_id: { Args: { p_value: string }; Returns: string }
+      fold_patient_name: { Args: { p_name: string }; Returns: string }
       get_appointment_replacement_chain: {
         Args: { p_appointment_id: string }
         Returns: {
@@ -5383,7 +7158,11 @@ export type Database = {
         Returns: Json
       }
       get_inbox_conversation_summaries: {
-        Args: { p_limit?: number; p_requested_conversation_id?: string | null }
+        Args: {
+          p_limit?: number
+          p_requested_conversation_id?: string | null
+          p_search?: string
+        }
         Returns: {
           assigned_to: string
           channel: Database["public"]["Enums"]["message_channel"]
@@ -5436,6 +7215,19 @@ export type Database = {
         }
         Returns: Json
       }
+      identify_patient_for_booking: {
+        Args: {
+          p_clinic_id: string
+          p_conversation_id: string
+          p_full_name: string
+          p_national_id: string
+        }
+        Returns: {
+          attempts_remaining: number
+          patient_name: string
+          status: string
+        }[]
+      }
       increment_usage: {
         Args: {
           p_amount?: number
@@ -5450,6 +7242,35 @@ export type Database = {
         Args: { p_clinic_id: string; p_user_id: string }
         Returns: boolean
       }
+      issue_ai_action_confirmation:
+        | {
+            Args: {
+              p_action_id: string
+              p_actor_id: string
+              p_clinic_id: string
+              p_conversation_id: string
+              p_expires_at: string
+              p_input_digest: string
+              p_token_hash: string
+            }
+            Returns: string
+          }
+        | {
+            Args: {
+              p_action_id: string
+              p_actor_id: string
+              p_after_digest: string | null
+              p_before_digest: string | null
+              p_clinic_id: string
+              p_conversation_id: string
+              p_expires_at: string
+              p_input_digest: string
+              p_risk_class: string
+              p_target_user_id: string | null
+              p_token_hash: string
+            }
+            Returns: string
+          }
       list_daily_reminder_candidates: {
         Args: { p_horizon: string; p_limit?: number; p_now: string }
         Returns: {
@@ -5525,12 +7346,93 @@ export type Database = {
         }
         Returns: string
       }
+      lookup_patient_appointments_by_identity: {
+        Args: {
+          p_clinic_id: string
+          p_conversation_id: string
+          p_full_name: string
+          p_national_id: string
+        }
+        Returns: {
+          appointment_id: string
+          appointment_status: Database["public"]["Enums"]["appointment_status"]
+          attempts_remaining: number
+          department_name: string
+          doctor_name: string
+          duration_minutes: number
+          patient_name: string
+          scheduled_at: string
+          service_name: string
+          status: string
+        }[]
+      }
       normalize_legacy_phone_e164: {
         Args: { default_country: string; value: string }
         Returns: string
       }
       normalize_phone: { Args: { p_value: string }; Returns: string }
       normalize_search_text: { Args: { p_value: string }; Returns: string }
+      normalize_stale_patient_conversation_episode: {
+        Args: { p_clinic_id: string; p_conversation_id: string }
+        Returns: {
+          context_reset_at: string
+          reset_performed: boolean
+        }[]
+      }
+      open_whatsapp_conversation: {
+        Args: {
+          p_actor_id?: string
+          p_clinic_id: string
+          p_display_name?: string
+          p_participant: string
+        }
+        Returns: {
+          conversation_id: string
+          created: boolean
+          patient_id: string
+        }[]
+      }
+      open_linked_device_conversation: {
+        Args: {
+          p_actor_id?: string
+          p_authenticated_account_id: string
+          p_clinic_id: string
+          p_display_name?: string
+          p_participant: string
+        }
+        Returns: {
+          conversation_id: string
+          created: boolean
+          patient_id: string
+        }[]
+      }
+      operator_ai_allowance_report: {
+        Args: { p_clinic_id?: string; p_period_start: string }
+        Returns: {
+          addon_micros: number
+          auto_byok_fallback_enabled: boolean
+          byok_configured: boolean
+          byok_spent_micros: number
+          clinic_id: string
+          clinic_name: string
+          credential_mode: string
+          effective_included_micros: number
+          managed_reserved_micros: number
+          managed_spent_micros: number
+          overage_micros: number
+          override_included_micros: number
+          period_reset_at: string
+          period_start: string
+          plan_included_micros: number
+          plan_slug: string
+          remaining_micros: number
+          request_limit: number
+          request_used: number
+          status: string
+          total_allowance_micros: number
+          used_percent: number
+        }[]
+      }
       operator_ai_usage_report: {
         Args: {
           p_clinic_id?: string
@@ -5577,16 +7479,51 @@ export type Database = {
         Args: {
           p_body: string
           p_clinic_id: string
+          p_display_name?: string
+          p_historical?: boolean
           p_provider_message_id: string
           p_received_at: string
           p_sender: string
         }
         Returns: {
           conversation_id: string
+          inbound_message_id: string
+          inserted: boolean
+        }[]
+      }
+      persist_linked_device_inbound: {
+        Args: {
+          p_authenticated_account_id: string
+          p_body: string
+          p_clinic_id: string
+          p_display_name?: string
+          p_historical?: boolean
+          p_provider_message_id: string
+          p_received_at: string
+          p_sender: string
+        }
+        Returns: {
+          conversation_id: string
+          inbound_message_id: string
           inserted: boolean
         }[]
       }
       platform_week_start: { Args: { p_at?: string }; Returns: string }
+      purge_ai_retention_data: {
+        Args: {
+          p_batch_limit?: number
+          p_confirmation_retention_days: number
+          p_message_retention_days: number
+          p_now?: string
+          p_receipt_retention_days: number
+        }
+        Returns: {
+          deleted_confirmations: number
+          deleted_messages: number
+          deleted_receipts: number
+          scrubbed_conversations: number
+        }[]
+      }
       reconcile_ai_budget:
         | {
             Args: {
@@ -5611,6 +7548,20 @@ export type Database = {
             }
             Returns: boolean
           }
+      record_admin_audit_event: {
+        Args: {
+          p_action: string
+          p_after?: Json
+          p_before?: Json
+          p_changed_fields?: string[]
+          p_entity_id?: string
+          p_entity_ref?: string
+          p_entity_type: string
+          p_metadata?: Json
+          p_module: string
+        }
+        Returns: string
+      }
       record_ai_provider_connection_test: {
         Args: {
           p_actor_id: string
@@ -5678,9 +7629,44 @@ export type Database = {
           print_count: number
         }[]
       }
+      record_whatsapp_history_delivery: {
+        Args: {
+          p_batch_id?: string
+          p_chats?: number
+          p_clinic_id: string
+          p_delivered?: boolean
+          p_error?: string
+          p_final_batch_seen?: boolean
+          p_max_attempts?: number
+          p_messages?: number
+        }
+        Returns: {
+          failed_batches: number
+          history_status: string
+          pending_batches: number
+        }[]
+      }
+      record_whatsapp_history_metrics: {
+        Args: {
+          p_batch_id: string
+          p_chats_received?: number
+          p_clinic_id: string
+          p_deduplicated?: number
+          p_messages_received?: number
+          p_unsupported?: number
+        }
+        Returns: {
+          history_status: string
+          messages_pending: number
+        }[]
+      }
       redeem_coupon: {
         Args: { p_clinic_id: string; p_code: string; p_invitation_id?: string }
         Returns: Json
+      }
+      reject_ai_patient_intake: {
+        Args: { p_actor_id: string; p_intake_id: string; p_reason?: string }
+        Returns: boolean
       }
       release_appointment_reminder: {
         Args: {
@@ -5689,6 +7675,12 @@ export type Database = {
           p_offset_hours: number
         }
         Returns: boolean
+      }
+      release_bulk_recipient_for_retry: {
+        Args: { p_clinic_id: string; p_recipient_id: string }
+        Returns: {
+          id: string
+        }[]
       }
       release_message_dispatch: {
         Args: {
@@ -5839,6 +7831,42 @@ export type Database = {
           returned_lease_token: string
         }[]
       }
+      reserve_ai_budget_v2_internal: {
+        Args: {
+          p_actor_id: string
+          p_certification_version: string
+          p_clinic_id: string
+          p_consumes_managed_budget: boolean
+          p_credential_mode: string
+          p_expected_model: string
+          p_expected_provider: string
+          p_fallback_model_aliases: string[]
+          p_lease_seconds: number
+          p_lease_token: string
+          p_model_alias: string
+          p_period_start: string
+          p_persona: string
+          p_policy_version: string
+          p_privacy_policy_version: string
+          p_request_id: string
+          p_reserved_cost_micros: number
+          p_resolution_reason: string
+          p_surface: string
+          p_task: string
+          p_transport: string
+        }
+        Returns: {
+          acquired: boolean
+          budget_limit_micros: number
+          expires_at: string
+          legacy_limit: number
+          legacy_used: number
+          reservation_id: string
+          reservation_status: string
+          reserved_cost_micros: number
+          returned_lease_token: string
+        }[]
+      }
       reserve_document_issue: {
         Args: {
           p_actor_id: string
@@ -5883,18 +7911,47 @@ export type Database = {
           total_limit_micros: number
         }[]
       }
+      resolve_ai_commercial_limits_v2: {
+        Args: {
+          p_clinic_id: string
+          p_period_start: string
+          p_require_managed_budget: boolean
+        }
+        Returns: {
+          addon_limit_micros: number
+          byok_request_limit: number
+          concurrency_limit: number
+          included_limit_micros: number
+          overage_limit_micros: number
+          request_limit: number
+          total_limit_micros: number
+        }[]
+      }
       resolve_patient_ai_context: {
         Args: { p_clinic_id: string; p_conversation_id: string }
         Returns: {
+          ai_arabic_style: string
+          ai_language_mode: string
+          ai_paused: boolean
+          ai_style_instruction: string
+          ai_tone: string
+          booking_identity_confirmed_at: string
+          booking_stage: Json
+          clinic_country: string
           clinic_id: string
           clinic_locale: string
           clinic_name: string
           clinic_timezone: string
+          collected_data: Json
           conversation_id: string
           identity_locked_until: string
           identity_verified_at: string
           linked: boolean
+          participant_address: string
+          patient_display_name: string
           patient_id: string
+          patient_national_id_suffix: string
+          pending_clarification: Json
         }[]
       }
       restore_medical_note_attachment: {
@@ -5980,6 +8037,10 @@ export type Database = {
           score: number
         }[]
       }
+      set_ai_auto_byok_fallback: {
+        Args: { p_actor_id: string; p_clinic_id: string; p_enabled: boolean }
+        Returns: boolean
+      }
       set_ai_provider_policy: {
         Args: {
           p_actor_id: string
@@ -5988,6 +8049,83 @@ export type Database = {
           p_hybrid_disclosure_version: string | null
         }
         Returns: boolean
+      }
+      set_clinic_ai_communication_style: {
+        Args: {
+          p_arabic_style: string
+          p_clinic_id: string
+          p_language_mode: string
+          p_style_instruction: string
+          p_tone: string
+        }
+        Returns: undefined
+      }
+      clear_conversation_ai_technical_failure: {
+        Args: {
+          p_clinic_id: string
+          p_conversation_id: string
+        }
+        Returns: boolean
+      }
+      latch_conversation_ai_technical_failure: {
+        Args: {
+          p_clinic_id: string
+          p_conversation_id: string
+          p_reason: string
+        }
+        Returns: {
+          latched: boolean
+          failed_at: string
+        }[]
+      }
+      mark_conversation_human_reply: {
+        Args: {
+          p_clinic_id: string
+          p_conversation_id: string
+          p_occurred_at: string
+        }
+        Returns: boolean
+      }
+      set_conversation_ai_override: {
+        Args: {
+          p_actor_id: string
+          p_clinic_id: string
+          p_conversation_id: string
+          p_override: boolean
+        }
+        Returns: {
+          changed: boolean
+          override: boolean
+        }[]
+      }
+      set_conversation_ai_pause: {
+        Args: {
+          p_actor_id: string
+          p_clinic_id: string
+          p_conversation_id: string
+          p_paused: boolean
+          p_reason?: string
+        }
+        Returns: {
+          changed: boolean
+          paused: boolean
+          paused_at: string
+        }[]
+      }
+      set_conversation_ai_state: {
+        Args: {
+          p_clear_pending?: boolean
+          p_clinic_id: string
+          p_collected?: Json
+          p_conversation_id: string
+          p_pending?: Json
+          p_stage?: Json
+        }
+        Returns: {
+          collected: Json
+          pending: Json
+          stage: Json
+        }[]
       }
       set_conversation_patient: {
         Args: {
@@ -6024,6 +8162,43 @@ export type Database = {
         Args: { p_document_id: string; p_patient_id: string }
         Returns: boolean
       }
+      stage_matched_third_party_intake: {
+        Args: {
+          p_clinic_id: string
+          p_conversation_id: string
+          p_department_id: string
+          p_doctor_id: string
+          p_full_name: string
+          p_national_id: string
+          p_phone: string | null
+        }
+        Returns: {
+          intake_id: string | null
+          matched_patient_id: string | null
+          status: string
+        }[]
+      }
+      stage_patient_intake_from_conversation: {
+        Args: {
+          p_blood_type?: string
+          p_clinic_id: string
+          p_conversation_id: string
+          p_date_of_birth: string
+          p_department_id: string
+          p_doctor_id: string
+          p_email: string
+          p_for_third_party?: boolean
+          p_full_name: string
+          p_full_name_original?: string
+          p_national_id: string
+          p_phone?: string
+        }
+        Returns: {
+          attempts_remaining: number
+          intake_id: string
+          status: string
+        }[]
+      }
       start_appointment_session: {
         Args: { p_appointment_id: string }
         Returns: {
@@ -6046,6 +8221,59 @@ export type Database = {
         Args: { p_appointment_id: string; p_target_status: string }
         Returns: undefined
       }
+      supersede_whatsapp_history_batches: {
+        Args: { p_active_session_phone: string; p_clinic_id: string }
+        Returns: number
+      }
+      upsert_linked_device_contacts: {
+        Args: {
+          p_authenticated_account_id: string
+          p_clinic_id: string
+          p_contacts: Json
+        }
+        Returns: number
+      }
+      upsert_linked_device_history_chat: {
+        Args: {
+          p_authenticated_account_id: string
+          p_clinic_id: string
+          p_display_name?: string
+          p_last_message_at?: string
+          p_participant: string
+        }
+        Returns: {
+          conversation_id: string
+          created: boolean
+        }[]
+      }
+      upsert_linked_device_lid_mappings: {
+        Args: {
+          p_authenticated_account_id: string
+          p_clinic_id: string
+          p_mappings: Json
+        }
+        Returns: number
+      }
+      upsert_whatsapp_contacts: {
+        Args: { p_clinic_id: string; p_contacts: Json }
+        Returns: number
+      }
+      upsert_whatsapp_history_chat: {
+        Args: {
+          p_clinic_id: string
+          p_display_name?: string
+          p_last_message_at?: string
+          p_participant: string
+        }
+        Returns: {
+          conversation_id: string
+          created: boolean
+        }[]
+      }
+      upsert_whatsapp_lid_mappings: {
+        Args: { p_clinic_id: string; p_mappings: Json }
+        Returns: number
+      }
       valid_reminder_offsets: {
         Args: { p_offsets: number[] }
         Returns: boolean
@@ -6060,6 +8288,16 @@ export type Database = {
           owner_name: string
           reason: string
         }[]
+      }
+      verify_ai_action_step_up: {
+        Args: {
+          p_actor_id: string
+          p_clinic_id: string
+          p_reauth_nonce_hash: string
+          p_token_hash: string
+          p_verified_at: string
+        }
+        Returns: boolean
       }
       verify_document_token: {
         Args: { p_token: string }
@@ -6104,7 +8342,7 @@ export type Database = {
       coupon_kind: "lifetime_free" | "months_free" | "percent_discount"
       follow_up_outcome: "all_fine" | "has_problem" | "no_response"
       message_channel: "whatsapp" | "email"
-      messaging_provider: "dialog360" | "meta" | "resend"
+      messaging_provider: "dialog360" | "meta" | "resend" | "linked_device"
       outbound_message_status:
         | "queued"
         | "sent"
@@ -6270,7 +8508,7 @@ export const Constants = {
       coupon_kind: ["lifetime_free", "months_free", "percent_discount"],
       follow_up_outcome: ["all_fine", "has_problem", "no_response"],
       message_channel: ["whatsapp", "email"],
-      messaging_provider: ["dialog360", "meta", "resend"],
+      messaging_provider: ["dialog360", "meta", "resend", "linked_device"],
       outbound_message_status: [
         "queued",
         "sent",

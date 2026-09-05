@@ -19,7 +19,6 @@ async function loadAuth(opts: {
   user: typeof DOCTOR | null;
   subscriptionAllowed?: boolean;
   aiFeature?: boolean;
-  workflowFeature?: boolean;
   visibility?: "visible" | "hidden" | "lookup_failed";
 }) {
   vi.resetModules();
@@ -33,7 +32,7 @@ async function loadAuth(opts: {
       planSlug: "pro_ai",
       features: {
         ai_assistant: opts.aiFeature ?? true,
-        "ai.workflows": opts.workflowFeature ?? true,
+        "ai.read_clinical": true,
       },
       limits: {},
       subscriptionAllowed: opts.subscriptionAllowed ?? true,
@@ -45,6 +44,42 @@ async function loadAuth(opts: {
     getPageVisibilityState: vi.fn(async () => opts.visibility ?? "visible"),
   }));
   return import("@/lib/ai/authorization");
+}
+
+/**
+ * P7-05. Loads the path that actually gates clinical reads now that
+ * `assertClinicalToolAccess` is gone: `assertResourceAccess` over a clinical
+ * resource, which checks `ai.read_clinical` from the resource's own
+ * `requiredFeatures` alongside its role list.
+ */
+async function loadClinicalResource(opts: { clinicalRead?: boolean } = {}) {
+  vi.resetModules();
+  vi.doMock("server-only", () => ({}));
+  vi.doMock("@/lib/rbac", () => ({ getAuthedUser: vi.fn(async () => DOCTOR) }));
+  vi.doMock("@/lib/entitlements", () => ({
+    getEntitlements: vi.fn(async () => ({
+      clinicId: DOCTOR.clinicId,
+      planSlug: "pro_ai",
+      features: {
+        ai_assistant: true,
+        "ai.read_clinical": opts.clinicalRead ?? true,
+      },
+      limits: {},
+      subscriptionAllowed: true,
+    })),
+    hasFeature: (
+      ents: { subscriptionAllowed: boolean; features: Record<string, boolean> },
+      key: string,
+    ) => ents.subscriptionAllowed && ents.features[key] === true,
+  }));
+  vi.doMock("@/lib/server-page-permissions", () => ({
+    getPageVisibilityState: vi.fn(async () => "visible"),
+  }));
+  const [{ assertResourceAccess }, { medicalNotesResource }] = await Promise.all([
+    import("@/lib/ai/resources/registry"),
+    import("@/lib/ai/resources/definitions/medical-notes"),
+  ]);
+  return { assertResourceAccess, medicalNotesResource };
 }
 
 describe("authorizeStaffAssistant", () => {
@@ -96,29 +131,33 @@ describe("authorizeStaffAssistant", () => {
     await expect(authorizeStaffAssistant()).rejects.toMatchObject({ reason: "lookup_failed" });
   });
 
-  it("keeps clinical tool authorization doctor-only", async () => {
-    const { assertClinicalToolAccess } = await loadAuth({
-      user: { ...DOCTOR, role: "admin" as never },
-    });
+  // P7-05 re-point. This drove `assertClinicalToolAccess`, whose last production
+  // callers were the clinical tools Phase 7 deleted. The authoritative gate is
+  // now `assertResourceAccess` over a clinical resource, which checks the same
+  // `ai.read_clinical` entitlement plus the resource's own role list — so the
+  // property is asserted against the path a request actually takes.
+  it("allows authorized administrative roles through the clinical boundary", async () => {
+    const { assertResourceAccess, medicalNotesResource } = await loadClinicalResource();
     await expect(
-      assertClinicalToolAccess({ ...DOCTOR, role: "admin" as never }),
-    ).rejects.toMatchObject({ reason: "role_forbidden" });
+      assertResourceAccess(
+        { ...DOCTOR, role: "admin" as never },
+        medicalNotesResource,
+      ),
+    ).resolves.toBeUndefined();
   });
 
-  it("requires ai.workflows in addition to the complete staff-assistant spine", async () => {
-    const denied = await loadAuth({
-      user: DOCTOR,
-      workflowFeature: false,
+  it("refuses the clinical boundary when the plan lacks ai.read_clinical", async () => {
+    // The negative control the removed assert used to carry: without this, a
+    // gate that admitted everyone would pass the test above.
+    const { assertResourceAccess, medicalNotesResource } = await loadClinicalResource({
+      clinicalRead: false,
     });
-    await expect(denied.assertWorkflowAccess(DOCTOR)).rejects.toMatchObject({
-      reason: "feature_not_entitled",
-    });
-
-    const allowed = await loadAuth({
-      user: DOCTOR,
-      workflowFeature: true,
-    });
-    await expect(allowed.assertWorkflowAccess(DOCTOR)).resolves.toBeUndefined();
+    await expect(
+      assertResourceAccess(
+        { ...DOCTOR, role: "admin" as never },
+        medicalNotesResource,
+      ),
+    ).rejects.toMatchObject({ reason: "feature_not_entitled" });
   });
 });
 

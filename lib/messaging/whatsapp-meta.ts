@@ -26,7 +26,14 @@ import type {
  */
 
 const DEFAULT_GRAPH_BASE = "https://graph.facebook.com";
-const DEFAULT_GRAPH_VERSION = "v21.0";
+/**
+ * P7C: raised from v21.0. Coexistence provisioning reads `is_on_biz_app`, posts
+ * to `/smb_app_data`, and subscribes the `history` / `smb_app_state_sync` /
+ * `smb_message_echoes` webhook fields — none of which exist before v23.0, where
+ * they fail as unknown fields rather than degrading. Keep in step with
+ * META_SDK_VERSION.
+ */
+const DEFAULT_GRAPH_VERSION = "v23.0";
 
 function graphBase(): string {
   return (process.env.META_GRAPH_API_BASE_URL ?? DEFAULT_GRAPH_BASE).replace(/\/$/, "");
@@ -40,9 +47,24 @@ function graphUrl(path: string): string {
   return `${graphBase()}/${graphVersion()}/${path.replace(/^\//, "")}`;
 }
 
-/** The platform app secret Meta signs every webhook with. */
+/**
+ * The app secret Meta signs a webhook with. Platform-brokered channels
+ * (Embedded Signup / Coexistence) carry none and fall back to the single
+ * platform secret; a P7D manual channel stores the clinic's *own* app secret in
+ * its envelope, because Meta signs that clinic's traffic with their app.
+ */
 function appSecret(credentials?: ChannelCredentials): string | null {
   return (credentials?.appSecret || process.env.META_APP_SECRET) ?? null;
+}
+
+/**
+ * Which Meta app a subscription check must look for. Platform channels expect
+ * our app; a P7D manual channel expects the clinic's own app, whose id lives in
+ * the channel envelope. Never falls through to "any app" when an id is known —
+ * that would report someone else's subscription as ours.
+ */
+function expectedAppId(credentials?: ChannelCredentials): string | null {
+  return (credentials?.appId || process.env.META_APP_ID) ?? null;
 }
 
 function asObject(value: unknown): Record<string, unknown> | null {
@@ -286,6 +308,20 @@ export const metaWhatsAppProvider: MessagingProvider = {
         const change = asObject(changeValue);
         const field = text(change?.field);
         const value = asObject(change?.value);
+
+        // P7C Coexistence backfill/mirror fields. These carry the clinic's own
+        // Business-app traffic (echoes of messages *they* sent, historical
+        // threads, contact-book state) — not new inbound patient messages. They
+        // are recognized and skipped here so a future payload shape can never be
+        // mistaken for an inbound message or a delivery status.
+        if (
+          field === "history" ||
+          field === "smb_app_state_sync" ||
+          field === "smb_message_echoes"
+        ) {
+          continue;
+        }
+
         const metadata = asObject(value?.metadata);
         const phoneNumberId =
           text(metadata?.phone_number_id) ?? text(value?.phone_number_id);
@@ -455,11 +491,34 @@ export async function exchangeMetaSignupCode(
 }
 
 /**
+ * P7C: the extra webhook fields a Coexistence WABA must subscribe to. A number
+ * that stays live in the WhatsApp Business app delivers its own traffic through
+ * these three fields rather than the plain `messages` field, so a Coexistence
+ * subscription that omits them silently loses the clinic's real conversations.
+ */
+export const META_COEXISTENCE_WEBHOOK_FIELDS = [
+  "messages",
+  "message_template_status_update",
+  "account_update",
+  "account_review_update",
+  "phone_number_quality_update",
+  "phone_number_name_update",
+  "history",
+  "smb_app_state_sync",
+  "smb_message_echoes",
+] as const;
+
+/**
  * Subscribes our app to the clinic's WABA so their inbound + status traffic
  * reaches our single webhook (plan line 1309, step 4). Idempotent at Meta.
+ *
+ * `fields` is omitted for the standard Embedded Signup flow — Meta then applies
+ * the app's configured default field set, which is the P6C behaviour. The
+ * Coexistence flow passes the explicit superset above.
  */
 export async function subscribeMetaWabaWebhook(
   credentials: ChannelCredentials,
+  options?: { fields?: readonly string[] },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const accessToken = credentials.accessToken;
   const wabaId = credentials.wabaId;
@@ -467,7 +526,11 @@ export async function subscribeMetaWabaWebhook(
     return { ok: false, error: "WhatsApp channel credentials are unavailable." };
   }
   try {
-    const response = await fetch(graphUrl(`${wabaId}/subscribed_apps`), {
+    const url = new URL(graphUrl(`${wabaId}/subscribed_apps`));
+    if (options?.fields?.length) {
+      url.searchParams.set("subscribed_fields", options.fields.join(","));
+    }
+    const response = await fetch(url, {
       method: "POST",
       headers: { authorization: `Bearer ${accessToken}` },
       cache: "no-store",
@@ -508,12 +571,12 @@ export async function getMetaWabaSubscription(
     const data = Array.isArray(asObject(payload)?.data)
       ? (asObject(payload)!.data as unknown[])
       : [];
-    const expectedAppId = process.env.META_APP_ID;
+    const appId = expectedAppId(credentials);
     return {
       ok: true,
       subscribed: data.some((item) => {
         const app = asObject(asObject(item)?.whatsapp_business_api_data);
-        return expectedAppId ? text(app?.id) === expectedAppId : Boolean(app);
+        return appId ? text(app?.id) === appId : Boolean(app);
       }),
     };
   } catch (error) {
@@ -528,27 +591,157 @@ type MetaProvisionedChannel = {
   displayPhoneNumber: string;
 };
 
-function metaProvisioningConfig():
+/**
+ * How a Meta channel was onboarded.
+ *
+ * `embedded_signup` — P6C, platform-brokered Cloud API (we register the number
+ *   with a PIN and store the platform system-user token).
+ * `coexistence`     — P7C, the clinic's WhatsApp Business app number mirrored
+ *   into Cloud API; it stays live in the app, so registration is skipped.
+ * `manual_api`      — P7D, the clinic's *own* Meta app / WABA / permanent token
+ *   entered by hand; nothing platform-owned is stored on the channel at all.
+ */
+export type MetaOnboardingFlow = "embedded_signup" | "coexistence" | "manual_api";
+
+/** What a clinic hands us for a P7D manual Cloud API connection. */
+export type ManualMetaCredentialsInput = {
+  /** The clinic's own Meta app id. */
+  appId: string;
+  /** The clinic's own Meta app secret — used to verify *their* webhooks. */
+  appSecret: string;
+  /** A permanent system-user access token issued by the clinic's own app. */
+  accessToken: string;
+  phoneNumberId: string;
+  wabaId: string;
+};
+
+export type ManualMetaVerification = {
+  displayPhoneNumber: string;
+  /** Meta's `code_verification_status` for the number, when reported. */
+  phoneStatus: string | null;
+  webhookSubscribed: boolean;
+};
+
+/**
+ * P7D — verifies a clinic-supplied Cloud API credential set against Meta before
+ * anything is stored, and subscribes the clinic's own app to their own WABA so
+ * their traffic reaches our webhook.
+ *
+ * Every value the clinic typed is treated as a claim:
+ *   1. `debug_token` under the clinic's own app credentials proves, in one call,
+ *      that the app id + app secret pair is real *and* that the access token was
+ *      issued by that very app — so a token pasted from a different (or our)
+ *      app cannot be stored against their app secret.
+ *   2. The phone node read proves the token can actually act on that number and
+ *      yields the display number we show back.
+ *   3. The WABA phone list proves the number really belongs to the claimed WABA
+ *      rather than to some other account the token can also see.
+ *   4. The subscription is created and then read back, so "connected" is only
+ *      ever claimed on a subscription Meta confirms.
+ *
+ * No credential is logged, and every provider failure is returned sanitized.
+ */
+export async function verifyManualMetaCredentials(
+  input: ManualMetaCredentialsInput,
+): Promise<
+  | { ok: true; verification: ManualMetaVerification }
+  | { ok: false; error: string }
+> {
+  const credentials: ChannelCredentials = {
+    accessToken: input.accessToken,
+    phoneNumberId: input.phoneNumberId,
+    wabaId: input.wabaId,
+    appId: input.appId,
+  };
+
+  // 1. App credentials + token provenance, in one call. The app access token
+  //    (`<app-id>|<app-secret>`) is the documented inspector credential; it is
+  //    built here and never persisted.
+  const debugParams = new URLSearchParams({ input_token: input.accessToken });
+  const debug = await graphJson(`debug_token?${debugParams.toString()}`, {
+    method: "GET",
+    accessToken: `${input.appId}|${input.appSecret}`,
+  });
+  if (!debug.ok) {
+    return { ok: false, error: "Meta rejected the supplied app credentials." };
+  }
+  const debugData = asObject(debug.payload.data);
+  if (debugData?.is_valid !== true || text(debugData?.app_id) !== input.appId) {
+    return {
+      ok: false,
+      error: "The access token does not belong to the supplied Meta app.",
+    };
+  }
+
+  // 2. The number itself, read with the clinic's own token.
+  const phone = await graphJson(
+    `${input.phoneNumberId}?fields=id,display_phone_number,code_verification_status,platform_type`,
+    { method: "GET", accessToken: input.accessToken },
+  );
+  if (!phone.ok) return phone;
+  const displayPhoneNumber = text(phone.payload.display_phone_number);
+  if (text(phone.payload.id) !== input.phoneNumberId || !displayPhoneNumber) {
+    return { ok: false, error: "The supplied phone number id could not be read." };
+  }
+
+  // 3. Ownership: the number must be listed under the claimed WABA.
+  const phones = await graphJson(`${input.wabaId}/phone_numbers?fields=id`, {
+    method: "GET",
+    accessToken: input.accessToken,
+  });
+  if (!phones.ok) return phones;
+  if (!payloadIds(phones.payload).includes(input.phoneNumberId)) {
+    return {
+      ok: false,
+      error: "The phone number does not belong to the supplied WhatsApp Business account.",
+    };
+  }
+
+  // 4. Subscribe the clinic's own app to their WABA, then read it back.
+  const subscribed = await subscribeMetaWabaWebhook(credentials);
+  if (!subscribed.ok) return subscribed;
+  const subscription = await getMetaWabaSubscription(credentials);
+  if (!subscription.ok) return subscription;
+  if (!subscription.subscribed) {
+    return { ok: false, error: "Meta webhook subscription could not be verified." };
+  }
+
+  return {
+    ok: true,
+    verification: {
+      displayPhoneNumber,
+      phoneStatus: text(phone.payload.code_verification_status),
+      webhookSubscribed: true,
+    },
+  };
+}
+
+/**
+ * `requirePin` is false for the Coexistence flow: that number is already
+ * registered with WhatsApp, so we never call `/register` and a missing
+ * META_PHONE_REGISTRATION_PIN must not block the connection.
+ */
+function metaProvisioningConfig(requirePin = true):
   | {
       appId: string;
       businessId: string;
       systemUserId: string;
       systemUserAccessToken: string;
-      registrationPin: string;
+      registrationPin: string | null;
     }
   | null {
   const appId = process.env.META_APP_ID;
   const businessId = process.env.META_BUSINESS_ID;
   const systemUserId = process.env.META_SYSTEM_USER_ID;
   const systemUserAccessToken = process.env.META_SYSTEM_USER_ACCESS_TOKEN;
-  const registrationPin = process.env.META_PHONE_REGISTRATION_PIN;
+  const rawPin = process.env.META_PHONE_REGISTRATION_PIN;
+  const registrationPin = rawPin && /^\d{6}$/.test(rawPin) ? rawPin : null;
   if (
     !appId ||
     !businessId ||
     !systemUserId ||
     !systemUserAccessToken ||
-    !registrationPin ||
-    !/^\d{6}$/.test(registrationPin)
+    (requirePin && !registrationPin)
   ) {
     return null;
   }
@@ -613,11 +806,14 @@ export async function provisionMetaEmbeddedSignup(input: {
   oauthAccessToken: string;
   phoneNumberId: string;
   wabaId: string;
+  /** Defaults to the P6C Cloud-API-only flow. */
+  flow?: MetaOnboardingFlow;
 }): Promise<
   | { ok: true; channel: MetaProvisionedChannel }
   | { ok: false; error: string }
 > {
-  const config = metaProvisioningConfig();
+  const flow: MetaOnboardingFlow = input.flow ?? "embedded_signup";
+  const config = metaProvisioningConfig(flow === "embedded_signup");
   if (!config) {
     return { ok: false, error: "Meta provisioning credentials are not configured." };
   }
@@ -682,7 +878,7 @@ export async function provisionMetaEmbeddedSignup(input: {
   }
 
   const phones = await graphJson(
-    `${input.wabaId}/phone_numbers?fields=id,display_phone_number,verified_name,code_verification_status,quality_rating`,
+    `${input.wabaId}/phone_numbers?fields=id,display_phone_number,verified_name,code_verification_status,quality_rating,platform_type,is_on_biz_app`,
     { method: "GET", accessToken: config.systemUserAccessToken },
   );
   if (!phones.ok) return phones;
@@ -695,22 +891,39 @@ export async function provisionMetaEmbeddedSignup(input: {
     return { ok: false, error: "The selected phone number does not belong to the selected WABA." };
   }
 
-  const registered = await graphJson(`${input.phoneNumberId}/register`, {
-    method: "POST",
-    accessToken: config.systemUserAccessToken,
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      messaging_product: "whatsapp",
-      pin: config.registrationPin,
-    }),
-  });
-  if (!registered.ok) return registered;
+  if (flow === "embedded_signup") {
+    // Coexistence numbers are already registered with WhatsApp through the
+    // Business app; calling /register on one would fail or unlink it.
+    if (!config.registrationPin) {
+      return { ok: false, error: "Meta provisioning credentials are not configured." };
+    }
+    const registered = await graphJson(`${input.phoneNumberId}/register`, {
+      method: "POST",
+      accessToken: config.systemUserAccessToken,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        pin: config.registrationPin,
+      }),
+    });
+    if (!registered.ok) return registered;
+  } else if (phone.is_on_biz_app === false) {
+    // The popup claimed a Coexistence onboarding but Meta does not report the
+    // number as living on the Business app — refuse rather than mislabel it.
+    return {
+      ok: false,
+      error: "The selected phone number is not connected to the WhatsApp Business app.",
+    };
+  }
 
-  const subscribed = await subscribeMetaWabaWebhook({
-    accessToken: config.systemUserAccessToken,
-    wabaId: input.wabaId,
-    phoneNumberId: input.phoneNumberId,
-  });
+  const subscribed = await subscribeMetaWabaWebhook(
+    {
+      accessToken: config.systemUserAccessToken,
+      wabaId: input.wabaId,
+      phoneNumberId: input.phoneNumberId,
+    },
+    flow === "coexistence" ? { fields: META_COEXISTENCE_WEBHOOK_FIELDS } : undefined,
+  );
   if (!subscribed.ok) return subscribed;
   const subscription = await getMetaWabaSubscription({
     accessToken: config.systemUserAccessToken,
@@ -731,6 +944,40 @@ export async function provisionMetaEmbeddedSignup(input: {
       displayPhoneNumber,
     },
   };
+}
+
+/**
+ * P7C post-onboarding synchronization for a Coexistence number. Meta allows a
+ * 24-hour window after onboarding to pull the clinic's Business-app contacts and
+ * message history; missing it means the clinic must offboard and reconnect.
+ *
+ * Both requests are best-effort and reported independently: the channel is
+ * usable for new conversations even when the historical backfill is refused, so
+ * a failure here must never fail the connection. Meta answers asynchronously
+ * over the `smb_app_state_sync` / `history` webhook fields.
+ */
+export async function requestMetaSmbDataSync(
+  credentials: ChannelCredentials,
+): Promise<{ contacts: boolean; history: boolean }> {
+  const accessToken = credentials.accessToken;
+  const phoneNumberId = credentials.phoneNumberId;
+  if (!accessToken || !phoneNumberId) return { contacts: false, history: false };
+
+  const request = async (syncType: "smb_app_state_sync" | "history") => {
+    const result = await graphJson(`${phoneNumberId}/smb_app_data`, {
+      method: "POST",
+      accessToken,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ messaging_product: "whatsapp", sync_type: syncType }),
+    });
+    return result.ok;
+  };
+
+  const [contacts, history] = await Promise.all([
+    request("smb_app_state_sync"),
+    request("history"),
+  ]);
+  return { contacts, history };
 }
 
 export async function submitMetaTemplate(
@@ -815,6 +1062,12 @@ export type MetaChannelStateSnapshot = {
   messagingLimitTier: string | null;
   accountReviewStatus: string | null;
   webhookSubscribed: boolean;
+  /**
+   * P7C: whether Meta reports the number as live on the WhatsApp Business app.
+   * `null` when Meta omitted the field — the state machine then falls back to
+   * `code_verification_status` rather than assuming either way.
+   */
+  phoneOnBusinessApp: boolean | null;
 };
 
 /**
@@ -844,7 +1097,7 @@ export async function fetchMetaChannelState(
         { method: "GET", headers: authHeader, cache: "no-store", signal: AbortSignal.timeout(10_000) },
       ),
       fetch(
-        `${graphUrl(phoneNumberId)}?fields=verified_name,display_phone_number,code_verification_status,quality_rating`,
+        `${graphUrl(phoneNumberId)}?fields=verified_name,display_phone_number,code_verification_status,quality_rating,platform_type,is_on_biz_app`,
         { method: "GET", headers: authHeader, cache: "no-store", signal: AbortSignal.timeout(10_000) },
       ),
       fetch(graphUrl(`${wabaId}/subscribed_apps`), {
@@ -870,10 +1123,10 @@ export async function fetchMetaChannelState(
     const subscriptions = Array.isArray(subscriptionPayload?.data)
       ? subscriptionPayload.data
       : [];
-    const expectedAppId = process.env.META_APP_ID;
+    const appId = expectedAppId(credentials);
     const webhookSubscribed = subscriptions.some((item) => {
       const data = asObject(asObject(item)?.whatsapp_business_api_data);
-      return expectedAppId ? text(data?.id) === expectedAppId : Boolean(data);
+      return appId ? text(data?.id) === appId : Boolean(data);
     });
     return {
       ok: true,
@@ -886,6 +1139,10 @@ export async function fetchMetaChannelState(
         // A real webhook signal may populate this later; the poll never guesses it.
         messagingLimitTier: null,
         webhookSubscribed,
+        phoneOnBusinessApp:
+          typeof phonePayload?.is_on_biz_app === "boolean"
+            ? phonePayload.is_on_biz_app
+            : null,
       },
     };
   } catch (error) {

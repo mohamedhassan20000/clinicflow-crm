@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireMutationRole, requireRole } from "@/lib/rbac";
+import { PATIENT_DOCUMENT_READ_ROLES } from "@/lib/patients/read-permissions";
 import type { Database } from "@/types/database";
 
 const BUCKET = "patient-assets";
@@ -247,7 +248,7 @@ async function listActiveDocuments(
 export async function listPatientDocuments(
   patientId: string,
 ): Promise<PatientDocumentResult<PatientDocumentsData>> {
-  const user = await requireRole(["admin", "receptionist"]);
+  const user = await requireRole(PATIENT_DOCUMENT_READ_ROLES);
   const supabase = await createClient();
 
   const patient = await getPatientForDocuments(supabase, patientId, user.clinicId);
@@ -264,7 +265,7 @@ export async function uploadPatientDocument(
   category: PatientDocumentCategory,
   formData: FormData,
 ): Promise<PatientDocumentResult<PatientDocumentsData>> {
-  const user = await requireMutationRole(["admin", "receptionist"]);
+  const user = await requireMutationRole(PATIENT_DOCUMENT_READ_ROLES);
   if (!isPatientDocumentCategory(category)) {
     return { error: await actionError("patient-documents.selectAValidDocumentCategory") };
   }
@@ -354,7 +355,7 @@ export async function deletePatientDocument(
   patientId: string,
   documentId: string,
 ): Promise<PatientDocumentResult<PatientDocumentsData>> {
-  const user = await requireMutationRole(["admin", "receptionist"]);
+  const user = await requireMutationRole(PATIENT_DOCUMENT_READ_ROLES);
   const supabase = await createClient();
 
   const patient = await getPatientForDocuments(supabase, patientId, user.clinicId);
@@ -413,7 +414,7 @@ export async function restorePatientDocument(
   patientId: string,
   documentId: string,
 ): Promise<PatientDocumentResult<PatientDocumentsData>> {
-  const user = await requireMutationRole(["admin", "receptionist"]);
+  const user = await requireMutationRole(PATIENT_DOCUMENT_READ_ROLES);
   const supabase = await createClient();
 
   const patient = await getPatientForDocuments(supabase, patientId, user.clinicId);
@@ -443,7 +444,7 @@ export async function getPatientDocumentSignedUrl(
   patientId: string,
   documentId: string,
 ): Promise<PatientDocumentResult<{ url: string }>> {
-  const user = await requireRole(["admin", "receptionist"]);
+  const user = await requireRole(PATIENT_DOCUMENT_READ_ROLES);
   const supabase = await createClient();
 
   const patient = await getPatientForDocuments(supabase, patientId, user.clinicId);

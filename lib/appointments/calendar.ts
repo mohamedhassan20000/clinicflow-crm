@@ -24,7 +24,7 @@ export const CALENDAR_APPOINTMENT_STATUSES: CalendarAppointmentStatus[] = [
 ];
 
 export const CALENDAR_APPOINTMENT_SELECT =
-  "id, patient_id, doctor_id, scheduled_at, status, insurance_provider_id, notes, duration_minutes, package_id, package_session_number, replaces_appointment_id, replaced_by_appointment_id, patients(full_name, phone, file_number), profiles!doctor_id(full_name), departments(name, color), patient_packages(name, total_sessions, used_sessions, price_per_session)";
+  "id, patient_id, doctor_id, scheduled_at, status, insurance_provider_id, notes, duration_minutes, package_id, package_session_number, replaces_appointment_id, replaced_by_appointment_id, ai_patient_conversation_id, patients(full_name, phone, file_number), profiles!doctor_id(full_name), departments(name, color), patient_packages(name, total_sessions, used_sessions, price_per_session)";
 
 export const CALENDAR_APPOINTMENT_FINANCIAL_SELECT =
   "id, total_amount, insurance_amount, insurance_calculation_mode, insurance_percentage, patient_responsibility, paid_amount, secondary_amount, deposit_amount, outstanding_amount";

@@ -20,10 +20,10 @@ export type AiTaskClass =
    */
   | "staff_help"
   /**
-   * P4.11A: server-authoritative planning and execution of a bounded,
-   * read-only workflow over the caller's resolved typed-tool mount.
+   * Multi-step staff work. Unlike the retired workflow class this is a normal
+   * agent loop over the caller's full authorized mount.
    */
-  | "staff_workflow"
+  | "staff_composite"
   | "patient_booking"
   | "patient_faq";
 
@@ -31,6 +31,59 @@ export type AiSurface = "staff_assistant" | "patient_messaging";
 export type AiPersona = "doctor" | "administrative_staff" | "patient";
 export type AiCredentialMode = "managed" | "byok_strict" | "hybrid";
 export type AiTransport = "vercel_ai_gateway" | "anthropic_direct" | "anthropic_direct_hybrid";
+
+/**
+ * Why a turn ran on the credential it ran on.
+ *
+ *  * `policy` — the clinic's configured mode, unchanged.
+ *  * `auto_byok_fallback` — the clinic is configured for ClinicFlow-managed AI,
+ *    the managed allowance was exhausted, and a healthy clinic-owned Anthropic
+ *    key carried the turn instead of it being denied.
+ *  * `hybrid_degraded_to_byok` — a hybrid clinic ran direct-only, because the
+ *    managed leg it would otherwise fall back to has no allowance left.
+ *
+ * Recorded on the reservation so an operator can answer "whose key paid for
+ * this month?" from the ledger rather than by inference.
+ */
+export type AiProviderResolutionReason =
+  | "policy"
+  | "auto_byok_fallback"
+  | "hybrid_degraded_to_byok";
+
+/**
+ * Privacy posture of a certified route, split by what is actually enforceable.
+ *
+ * The two halves are deliberately NOT interchangeable, and the split exists
+ * because conflating them was a real defect: the pre-P12 route carried a single
+ * `zeroDataRetentionRequired: true` flag, and the only thing that flag ever did
+ * was set Vercel AI Gateway's `zeroDataRetention` request option. On any direct
+ * Anthropic call it was inert — a claim with no mechanism behind it.
+ *
+ *  * `gatewayZeroDataRetention` is a TRANSPORT option. It is sent to, and
+ *    honored by, Vercel AI Gateway. It says nothing whatsoever about a direct
+ *    Anthropic call and is ignored on the direct transport.
+ *  * `directProviderRetention` records that on `anthropic_direct` the provider's
+ *    retention behavior is governed by the ClinicFlow↔Anthropic commercial
+ *    agreement and Anthropic account configuration. Neither is expressible in a
+ *    request parameter, so ClinicFlow does not pretend to set it per call.
+ *
+ * What ClinicFlow *does* enforce in code on every transport is its own data
+ * minimization: no prompt, completion, tool payload, patient identifier, or
+ * message body is ever written to the usage/audit ledgers
+ * (`ai_usage_events` is content-free by database constraint), and the
+ * conversation retention job in `lib/ai/retention.ts` bounds what is stored.
+ * See `docs/reviews/AI_PROVIDER_DIRECT_ANTHROPIC.md`.
+ */
+export type AiRoutePrivacy = {
+  /** Vercel AI Gateway request flag. Meaningful on the gateway transport only. */
+  gatewayZeroDataRetention: boolean;
+  /**
+   * Not enforceable per request on the direct transport. Documented, contractual,
+   * and verified out-of-band — never asserted to the clinic as a code-level control.
+   */
+  directProviderRetention: "contractual_only";
+  noTrainingRequired: true;
+};
 
 export type AiTokenPricing = {
   inputMicrosPerMillion: number;
@@ -41,16 +94,24 @@ export type AiTokenPricing = {
 
 export type CertifiedModelRoute = {
   alias: string;
-  transport: "vercel_ai_gateway";
+  /**
+   * The transport a MANAGED turn on this route uses by default.
+   *
+   * `anthropic_direct` since P12: ClinicFlow calls Anthropic itself with its own
+   * server-side managed key. `vercel_ai_gateway` remains a registered, non-default
+   * alternate transport (see `lib/ai/platform/transport.ts`) and is only reachable
+   * through an explicit operator opt-in.
+   */
+  transport: AiTransport;
   provider: string;
+  /** Gateway-qualified id ("anthropic/claude-haiku-4.5"). Gateway transport only. */
   modelId: string;
+  /** Native Anthropic model id ("claude-haiku-4-5"). Direct transport. */
   providerModelId: string;
+  /** Serving-provider allow-list. Gateway transport only; direct calls Anthropic. */
   allowedServingProviders: readonly string[];
   capabilities: readonly ("streaming" | "tool_calling" | "arabic" | "english")[];
-  privacy: {
-    zeroDataRetentionRequired: true;
-    noTrainingRequired: true;
-  };
+  privacy: AiRoutePrivacy;
   pricing: AiTokenPricing;
   certification: {
     status: "bootstrap_approved" | "eval_certified";
@@ -128,6 +189,9 @@ export type AiExecutionHandle = PreparedAiProvider & {
   requestId: string;
   taskPolicy: CertifiedTaskPolicy;
   route: Pick<CertifiedModelRoute, "alias">;
+  /** The credential that actually ran, after ordered resolution. */
+  credentialMode: AiCredentialMode;
+  resolutionReason: AiProviderResolutionReason;
   legacyUsage: { used: number; limit: number; remaining: number };
   beginStep(): void;
   observeStep(step: AiObservedStep): void;

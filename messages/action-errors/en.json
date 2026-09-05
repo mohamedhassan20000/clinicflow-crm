@@ -173,6 +173,11 @@
     "invalidMetaOnboardingDetails": "The WhatsApp connection could not be completed. Please restart the connect flow.",
     "metaPhoneNumberAlreadyConnected": "This WhatsApp number is already connected to another clinic.",
     "couldNotCompleteMetaOnboarding": "Could not complete the WhatsApp connection with Meta. Please try again.",
+    "couldNotConnectWhatsAppBusiness": "The WhatsApp Business connection could not be completed. Please try again.",
+    "enterValidMetaApiCredentials": "Enter valid Meta API credentials. Check the App ID, App Secret, access token, phone number ID and WhatsApp Business account ID.",
+    "couldNotVerifyMetaApiCredentials": "Meta did not accept these credentials. Check them in your Meta app and try again.",
+    "disconnectBeforeConnectingADifferentNumber": "A different WhatsApp number is already connected. Disconnect it before connecting another one.",
+    "couldNotDisconnectWhatsApp": "Could not disconnect WhatsApp. Please try again.",
     "couldNotRefreshConnectionStatus": "Could not refresh the connection status. Please try again.",
     "invalidWhatsAppHealthAction": "That WhatsApp diagnostic action is not available.",
     "whatsAppHealthChannelUnavailable": "Connect a WhatsApp channel before running diagnostics.",
@@ -184,9 +189,14 @@
     "whatsAppChannelCredentialsUnavailable": "The WhatsApp channel credentials are unavailable.",
     "couldNotSubmitWhatsAppTemplate": "Could not submit the template to WhatsApp.",
     "couldNotSaveTemplateSubmission": "The template was submitted, but its provider status could not be saved.",
+    "invalidBulkSend": "Select at least one conversation and enter a message to send.",
+    "bulkWhatsAppOffline": "WhatsApp is not connected right now. Reconnect the clinic's WhatsApp, then start the send again.",
+    "couldNotStartBulkSend": "The bulk send could not be started. Please try again.",
     "invalidInboxReply": "Enter a valid reply or complete every template value.",
     "invalidConversationUpdate": "The conversation update is invalid.",
     "conversationNotFound": "Conversation not found.",
+    "conversationNotLinked": "This conversation is not linked to a patient file yet.",
+    "patientHistoryUnavailable": "This history could not be loaded right now. Please try again.",
     "conversationClosed": "Reopen this conversation before replying.",
     "serviceWindowClosed": "The 24-hour WhatsApp service window is closed. Choose an approved template.",
     "templateUnavailable": "This template is unavailable, not approved, or has incomplete values.",
@@ -202,7 +212,17 @@
     "templateNameAlreadyExists": "A template with this name and language already exists.",
     "templateCannotBeDeletedWhileSubmitted": "A template cannot be deleted while it is under review.",
     "couldNotDeleteTemplate": "The template could not be deleted. Please try again.",
-    "suggestionUnavailable": "This suggested reply is no longer available."
+    "suggestionUnavailable": "This suggested reply is no longer available.",
+    "theWhatsAppConnectionServiceIsUnavailable": "The WhatsApp connection service is unavailable right now. Please try again in a moment.",
+    "thisClinicsWhatsAppSessionIsHeldByAnotherService": "This clinic's WhatsApp connection is being served by another instance of the connection service. Try again once that instance has released it.",
+    "disconnectTheMetaApiConnectionFirst": "This clinic is already connected with the Meta API. Disconnect it first to connect with a QR code.",
+    "whatsAppServiceUpdateRequiredBeforePairing": "WhatsApp service update required before pairing.",
+    "whatsAppHistorySyncNeedsConnectedSession": "Connect WhatsApp before syncing history.",
+    "whatsAppHistorySyncHasNoAnchorPoint": "There are no imported messages to sync older history from yet. WhatsApp can only extend a conversation it has already delivered at least one message for.",
+    "whatsAppHistorySyncAlreadyRunning": "A history sync is already running. Please wait for it to finish.",
+    "whatsAppHistorySyncTooSoon": "History was synced very recently. Please try again in a few minutes.",
+    "whatsAppHistorySyncNotSupportedByService": "This WhatsApp service build cannot request older history.",
+    "couldNotSyncWhatsAppHistory": "WhatsApp history could not be synced right now. Please try again in a moment."
   },
   "notifications": {
     "couldNotUpdateNotifications": "Notifications could not be updated. Please try again."
@@ -229,7 +249,12 @@
     "thisInvitationIsNoLongerAvailable": "This invitation is no longer available.",
     "aiFeatureOverrideInvalid": "This AI feature override is not recognized.",
     "aiRequiresProAi": "AI capabilities and commercial terms require the Pro + AI plan.",
-    "aiCommercialTermsCouldNotBeSaved": "AI commercial terms could not be saved."
+    "aiCommercialTermsCouldNotBeSaved": "AI commercial terms could not be saved.",
+    "aiAllowanceOverrideCouldNotBeSaved": "The AI allowance override could not be saved.",
+    "aiAllowanceOverrideCouldNotBeRemoved": "The AI allowance override could not be removed.",
+    "subscriptionIsAlreadyUnbounded": "This subscription has no end date, so there is nothing to extend.",
+    "subscriptionCouldNotBeExtended": "The subscription could not be extended.",
+    "clinicAccessCouldNotBeChanged": "Clinic access could not be changed."
   },
   "package-templates": {
     "failedToDeactivateTemplate": "Failed to deactivate template.",
@@ -373,10 +398,15 @@
     "patientAiNotEntitled": "Patient AI is not included in your plan.",
     "patientAiAutoNotEntitled": "Automatic replies are not available on your plan.",
     "patientAiCouldNotSaveMode": "We couldn't save the reply mode. Please try again.",
+    "patientAiInvalidStyle": "Please choose a valid communication style.",
+    "patientAiCouldNotSaveStyle": "We couldn't save the communication style. Please try again.",
     "patientAiInvalidFaq": "Please provide a valid question and answer.",
     "patientAiFaqDuplicate": "An FAQ with this question already exists.",
     "patientAiCouldNotSaveFaq": "We couldn't save this FAQ. Please try again.",
-    "patientAiFaqNotFound": "This FAQ could not be found."
+    "patientAiFaqNotFound": "This FAQ could not be found.",
+    "thePrimaryClinicAdminRoleCannotBeChanged": "The Assistant cannot change the primary clinic admin's role. Do it in Settings → Staff.",
+    "thePrimaryClinicAdminCannotBeDeactivated": "The Assistant cannot deactivate the primary clinic admin's account. Do it in Settings → Staff.",
+    "thePrimaryClinicAdminCannotBeDeleted": "The Assistant cannot delete the primary clinic admin's account. Do it in Settings → Staff."
   },
   "clinical": {
     "validationError": "Please correct the clinical record fields and try again.",
@@ -385,11 +415,11 @@
     "recordLocked": "This clinical record is finalized or no longer editable.",
     "credentialUpdateDenied": "Only the clinician or a clinic administrator can update these credentials.",
     "signatureRequired": "Choose a signature or stamp image to upload.",
-    "signatureInvalid": "The signature must be a PNG, JPEG, or WebP image no larger than 2 MB."
-    ,"invalidId": "The clinical record identifier is invalid."
-    ,"readFailed": "The clinical record could not be loaded."
-    ,"catalogReadFailed": "The clinical catalogs could not be loaded."
-    ,"signatureReadFailed": "The clinician signature could not be loaded."
+    "signatureInvalid": "The signature must be a PNG, JPEG, or WebP image no larger than 2 MB.",
+    "invalidId": "The clinical record identifier is invalid.",
+    "readFailed": "The clinical record could not be loaded.",
+    "catalogReadFailed": "The clinical catalogs could not be loaded.",
+    "signatureReadFailed": "The clinician signature could not be loaded."
   },
   "staff-files": {
     "certificateMustBePdfWordJpegOrPng": "Certificate must be PDF, Word, JPEG, or PNG.",

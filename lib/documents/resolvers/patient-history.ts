@@ -2,6 +2,10 @@ import "server-only";
 
 import { z } from "zod";
 import { inlineClinicLogo } from "@/lib/documents/assets";
+import {
+  DocumentSubjectNotFoundError,
+  isNoRowsError,
+} from "@/lib/documents/resolvers/errors";
 import { getDocumentCatalogEntry } from "@/lib/documents/catalog";
 import type { AuthedUser } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
@@ -227,12 +231,17 @@ async function loadPatientHeader(
     .eq("id", patientId)
     .eq("clinic_id", user.clinicId)
     .single();
-  if (error || !patient) throw new Error(error?.message ?? "Patient not found");
+  // P6-12: no row — absent or RLS-excluded — is a subject miss; any other
+  // PostgREST error is a genuine infrastructure failure.
+  if (error && !isNoRowsError(error)) throw new Error(error.message);
+  if (!patient) throw new DocumentSubjectNotFoundError("patient");
   if (user.role === "doctor") {
     const canAccess =
       patient.assigned_doctor_id === user.id ||
       (!!user.departmentId && patient.department_id === user.departmentId);
-    if (!canAccess) throw new Error("Patient not found");
+    // The application-level doctor gate is the same class of miss as an empty
+    // RLS result, and must stay byte-identical to it.
+    if (!canAccess) throw new DocumentSubjectNotFoundError("patient");
   }
   return {
     fullName: text(patient.full_name),
@@ -489,7 +498,6 @@ async function loadFinancialSummaryData(
 export async function resolvePatientHistoryDocumentSnapshot(
   user: AuthedUser,
   rawParams: PatientHistoryDocumentParams,
-  options: { inlineAssets?: boolean } = {},
 ): Promise<PatientHistoryDocumentSnapshot> {
   const params = patientHistoryDocumentParamsSchema.parse(rawParams);
   const supabase = await createClient();
@@ -535,9 +543,9 @@ export async function resolvePatientHistoryDocumentSnapshot(
   const globalSettings = settingRows.find((row) => row.doc_type === null);
   const effective = typeSettings ?? globalSettings;
   const catalog = getDocumentCatalogEntry(params.documentType);
-  const logoSrc = options.inlineAssets
-    ? await inlineClinicLogo(clinic.logo_url, user.clinicId)
-    : clinic.logo_url;
+  // Always inlined: the canonical PDF renderer blocks remote requests, so a
+  // snapshot holding an `https:` logo URL prints with no logo at all.
+  const logoSrc = await inlineClinicLogo(clinic.logo_url, user.clinicId);
 
   return patientHistoryDocumentSnapshotSchema.parse({
     version: 1,

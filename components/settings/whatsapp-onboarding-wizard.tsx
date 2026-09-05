@@ -27,6 +27,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import type { MetaChannelState } from "@/lib/messaging/channel-management";
+import { META_SDK_VERSION } from "@/lib/messaging/meta-sdk";
 import type {
   ConnectionFailureReason,
   ConnectionState,
@@ -142,7 +143,8 @@ export function WhatsAppOnboardingWizard({
           appId: metaConfig.appId,
           autoLogAppEvents: true,
           xfbml: false,
-          version: "v21.0",
+          // Shared with the Coexistence card — FB.init is page-global.
+          version: META_SDK_VERSION,
         });
         sdkReady.current = true;
         resolve();

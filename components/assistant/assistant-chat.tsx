@@ -12,6 +12,7 @@ import {
   CircleStop,
   FileSearch,
   HelpCircle,
+  History,
   ListChecks,
   LoaderCircle,
   Plus,
@@ -23,13 +24,14 @@ import {
   Wallet,
   X,
 } from "lucide-react";
-import { useLocale, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { formatClinicDateTime } from "@/lib/datetime";
 import type { StaffAssistantUIMessage } from "@/lib/ai/staff-agent";
 import type { AssistantCapabilities } from "@/lib/ai/capabilities";
 import type { AssistantErrorCode } from "@/lib/ai/errors";
@@ -40,6 +42,14 @@ import {
 } from "@/lib/ai/tool-presentation";
 import type { PermissionUserRole } from "@/lib/page-permissions";
 import { CapabilityPanel } from "@/components/assistant/capability-panel";
+import {
+  ConversationHistoryPanel,
+  type ConversationHistoryState,
+} from "@/components/assistant/conversation-history-panel";
+import {
+  listAssistantConversationHistory,
+  openAssistantConversation,
+} from "@/actions/assistant-conversations";
 import type { AssistantPageContext } from "@/lib/ai/page-context";
 import type {
   ActiveContext,
@@ -49,11 +59,11 @@ import {
   chooseAssistantConversationContext,
   clearAssistantConversationContext,
 } from "@/actions/assistant-context";
-import { confirmAssistantWorkflow } from "@/actions/assistant-workflows";
+import { confirmAssistantAction } from "@/actions/assistant-actions";
 import type {
-  WorkflowExecutionResult,
-  WorkflowPlan,
-} from "@/lib/ai/workflows/types";
+  ActionExecuteSuccess,
+  ActionPreviewSuccess,
+} from "@/lib/ai/actions/types";
 
 type AssistantChatProps = {
   initialConversationId: string;
@@ -79,6 +89,19 @@ type SessionState = {
   messages: StaffAssistantUIMessage[];
   historyTruncated: boolean;
   activeContext: ActiveContext;
+  /**
+   * The page context this session sends with every turn.
+   *
+   * It is the host surface's context for a fresh session, and the *resumed
+   * conversation's own binding* for one opened from history. That ordering is
+   * not cosmetic: `ensureDoctorConversation` refuses a turn whose page context
+   * disagrees with the conversation's stored `patient_id`, so continuing a
+   * patient-bound chat from the appointments sheet — or from `/assistant`, which
+   * has no page context at all — has to re-declare that binding. The server
+   * re-authorizes the patient on every turn, exactly as it does for the patient
+   * launcher, so this is a restatement of scope and never a grant.
+   */
+  pageContext: AssistantPageContext | null;
 };
 
 type PatientChatContext = { id: string; name: string } | null;
@@ -222,6 +245,8 @@ const ERROR_COPY_KEYS: Record<AssistantErrorCode, string> = {
   role_forbidden: "errorRoleForbidden",
   page_hidden: "errorPageHidden",
   lookup_failed: "errorLookupFailed",
+  unauthorized_scope: "errorUnauthorizedScope",
+  input_limit_reached: "errorInputLimitReached",
   invalid_request: "errorGeneric",
   temporarily_unavailable: "errorGeneric",
 };
@@ -292,10 +317,12 @@ function noticeText(
  */
 function ToolActivity({
   part,
+  conversationId,
   onChooseContext,
   contextMutationBusy,
 }: {
   part: StaffAssistantToolPart;
+  conversationId: string;
   onChooseContext: (choice: ContextChoice) => void;
   contextMutationBusy: boolean;
 }) {
@@ -332,9 +359,11 @@ function ToolActivity({
         name,
       )
     : [];
-  const workflowInput =
-    complete && name === "execute_read_only_workflow"
-      ? (part as { input?: { plan?: unknown } }).input
+  const registeredActionInput =
+    complete && name === "execute_action"
+      ? (part as {
+          input?: { action?: unknown; input?: unknown };
+        }).input
       : null;
 
   return (
@@ -396,10 +425,17 @@ function ToolActivity({
         </ul>
       ) : null}
 
-      {complete && workflowInput?.plan ? (
-        <WorkflowConfirmation
+      {complete &&
+      typeof registeredActionInput?.action === "string" &&
+      registeredActionInput.input &&
+      typeof registeredActionInput.input === "object" &&
+      !Array.isArray(registeredActionInput.input) ? (
+        <ActionConfirmation
+          kind="registered_action"
+          conversationId={conversationId}
+          actionId={registeredActionInput.action}
+          input={registeredActionInput.input as Record<string, unknown>}
           output={(part as { output?: unknown }).output}
-          plan={workflowInput.plan}
         />
       ) : null}
 
@@ -466,218 +502,246 @@ function ToolActivity({
   );
 }
 
-type WorkflowActionPreview = {
-  action: "send_appointment_reminders" | "send_invoice_reminders" | "create_pending_booking";
-  draft_status: string;
-  count?: number;
-  items?: Array<{
-    patient_name?: string;
-    scheduled_at?: string;
-    scheduled_at_label?: string;
-    outstanding_amount?: number;
-    channels?: string[];
-  }>;
-  booking?: {
-    patient_name?: string;
-    doctor_name?: string;
-    scheduled_at?: string;
-    scheduled_at_label?: string;
-    duration_minutes?: number;
-  };
+type ActionConfirmationProps = {
+  kind: "registered_action";
+  conversationId: string;
+  actionId: string;
+  input: Record<string, unknown>;
+  output: unknown;
 };
 
-function workflowActions(output: unknown): WorkflowActionPreview[] {
-  if (!output || typeof output !== "object" || Array.isArray(output)) return [];
-  const steps = (output as { steps?: unknown }).steps;
-  if (!Array.isArray(steps)) return [];
-  return steps.flatMap((step) => {
-    if (!step || typeof step !== "object") return [];
-    const value = (step as { output?: unknown }).output;
-    if (!value || typeof value !== "object" || Array.isArray(value)) return [];
-    const action = (value as { action?: unknown }).action;
-    return action === "send_appointment_reminders" ||
-      action === "send_invoice_reminders" ||
-      action === "create_pending_booking"
-      ? [value as WorkflowActionPreview]
-      : [];
-  });
+function ActionConfirmation(props: ActionConfirmationProps) {
+  return <RegisteredActionConfirmation {...props} />;
 }
 
-function WorkflowConfirmation({
+function isActionPreviewSuccess(value: unknown): value is ActionPreviewSuccess {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const output = value as Partial<ActionPreviewSuccess>;
+  return (
+    output.phase === "preview" &&
+    output.confirmation_required === true &&
+    typeof output.confirm_token === "string" &&
+    typeof output.expires_at === "string" &&
+    Boolean(output.preview) &&
+    typeof output.preview === "object"
+  );
+}
+
+function displayActionValue(
+  value: string | number | boolean | null,
+  empty: string,
+): string {
+  if (value === null) return empty;
+  if (typeof value === "boolean") return value ? "✓" : "—";
+  return String(value);
+}
+
+function RegisteredActionConfirmation({
+  conversationId,
+  actionId,
+  input,
   output,
-  plan,
-}: {
-  output: unknown;
-  plan: unknown;
-}) {
+}: Extract<ActionConfirmationProps, { kind: "registered_action" }>) {
   const t = useTranslations("assistant");
-  const locale = useLocale();
-  const initial =
-    output && typeof output === "object" && !Array.isArray(output)
-      ? (output as Partial<WorkflowExecutionResult>)
-      : null;
-  const [result, setResult] = useState<WorkflowExecutionResult | null>(null);
+  const initial = isActionPreviewSuccess(output) ? output : null;
+  const [result, setResult] = useState<ActionExecuteSuccess | null>(null);
+  const [currentPassword, setCurrentPassword] = useState("");
   const [state, setState] = useState<
     | "idle"
     | "working"
     | "success"
-    | "error"
-    | "stale"
+    | "invalid"
     | "expired"
-    | "internal"
+    | "replayed"
+    | "denied"
+    | "step_up"
+    | "rate_limited"
+    | "error"
   >("idle");
-  const shown = result ?? initial;
-  const resultActions = workflowActions(shown);
-  const actions =
-    resultActions.length > 0 ? resultActions : workflowActions(initial);
-  const canConfirm =
-    typeof initial?.run_id === "string" &&
-    initial.requires_confirmation === true &&
-    state !== "success";
   const descriptionId = useId();
 
-  if (actions.length === 0) return null;
-
-  function scheduledAtLabel(value?: string, serverLabel?: string): string {
-    if (serverLabel) return serverLabel;
-    if (!value) return "";
-    return formatClinicDateTime(
-      value,
-      { locale },
-      { dateStyle: "medium", timeStyle: "short" },
-    );
-  }
+  if (!initial) return null;
+  const preview = initial;
+  const privileged = preview.risk_class === "privileged";
 
   async function confirm() {
-    if (!canConfirm || state === "working") return;
+    if (state === "working" || state === "success") return;
     setState("working");
-    const response = await confirmAssistantWorkflow({
-      runId: initial!.run_id,
-      plan: plan as WorkflowPlan,
+    const response = await confirmAssistantAction({
+      conversationId,
+      actionId,
+      // P6-07: when the server canonicalised the invocation (resolving a
+      // reporting period or an entity from conversation context), the confirm
+      // token is bound to *that* object, so it is what must be resent. Falling
+      // back to the model's original arguments keeps every action that does not
+      // canonicalise working unchanged.
+      input: preview.action_input ?? input,
+      confirmToken: preview.confirm_token,
+      ...(privileged ? { currentPassword } : {}),
     });
+    if (privileged) setCurrentPassword("");
     if (response.ok) {
       setResult(response.result);
-      setState(response.result.state === "succeeded" ? "success" : "error");
+      setState("success");
       return;
     }
     setState(
-      response.reason === "preview_stale"
-        ? "stale"
-        : response.reason === "preview_expired"
-          ? "expired"
-          : response.reason === "internal_error"
-            ? "internal"
-            : "error",
+      response.reason === "confirmation_expired"
+        ? "expired"
+        : response.reason === "confirmation_replayed"
+          ? "replayed"
+          : response.reason === "confirmation_invalid" ||
+              response.reason === "invalid_request"
+            ? "invalid"
+            : response.reason === "unauthorized_role" ||
+                response.reason === "unauthorized_scope" ||
+                response.reason === "plan_not_entitled" ||
+                response.reason === "permission_not_granted"
+              ? "denied"
+              : response.reason === "step_up_required" ||
+                  response.reason === "step_up_failed"
+                ? "step_up"
+                : response.reason === "privileged_rate_limited" ||
+                    response.reason === "rate_limited"
+                  ? "rate_limited"
+              : "error",
     );
   }
 
+  const alertCopy =
+    state === "invalid"
+      ? t("actionConfirmationInvalid")
+      : state === "expired"
+        ? t("actionConfirmationExpired")
+        : state === "replayed"
+          ? t("actionConfirmationReplayed")
+          : state === "denied"
+            ? t("actionConfirmationDenied")
+            : state === "step_up"
+              ? t("privilegedStepUpFailed")
+              : state === "rate_limited"
+                ? t("privilegedRateLimited")
+            : state === "error"
+              ? t("actionConfirmationFailed")
+              : null;
+
   return (
-    <section className="mt-2 border-t border-current/15 pt-2" aria-labelledby={descriptionId}>
+    <section
+      className={cn(
+        "mt-2 border-t pt-2",
+        privileged
+          ? "rounded-lg border border-amber-500/35 bg-amber-500/8 p-3"
+          : "border-current/15",
+      )}
+      aria-labelledby={descriptionId}
+    >
       <p id={descriptionId} className="font-semibold text-foreground">
-        {result ? t("workflowResultTitle") : t("workflowPreviewTitle")}
+        {result
+          ? t("actionResultTitle")
+          : privileged
+            ? t("privilegedPreviewTitle")
+            : t("actionPreviewTitle")}
       </p>
       <p className="mt-1 leading-5">
-        {result ? t("workflowResultDescription") : t("workflowPreviewDescription")}
+        {result?.result.summary ?? preview.preview.summary}
       </p>
-      <ul className="mt-2 space-y-2">
-        {actions.map((action, actionIndex) => (
-          <li
-            key={`${action.action}-${actionIndex}`}
-            className="rounded-lg border border-border/70 bg-background/80 p-2"
-          >
-            <p className="font-medium text-foreground">
-              {t(
-                action.action === "send_appointment_reminders"
-                  ? "workflowAppointmentReminders"
-                  : action.action === "send_invoice_reminders"
-                    ? "workflowInvoiceReminders"
-                    : "workflowPendingBooking",
-                { count: action.count ?? 1 },
-              )}
-            </p>
-            {action.booking ? (
-              <p className="mt-1">
-                {action.booking.patient_name} · {action.booking.doctor_name} ·{" "}
-                <bdi>
-                  {scheduledAtLabel(
-                    action.booking.scheduled_at,
-                    action.booking.scheduled_at_label,
-                  )}
-                </bdi>
-              </p>
-            ) : null}
-            {action.items?.length ? (
-              <ul className="mt-1 space-y-1">
-                {action.items.map((item, index) => (
-                  <li key={`${item.patient_name ?? "item"}-${index}`}>
-                    {item.patient_name ?? t("workflowUnknownRecipient")}
-                    {item.scheduled_at ? (
-                      <>
-                        {" · "}
-                        <bdi>
-                          {scheduledAtLabel(
-                            item.scheduled_at,
-                            item.scheduled_at_label,
-                          )}
-                        </bdi>
-                      </>
-                    ) : null}
-                    {item.channels?.length
-                      ? ` · ${item.channels.join(" + ")}`
-                      : ` · ${t("workflowNoReachableChannel")}`}
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </li>
-        ))}
-      </ul>
+      {result?.result.data &&
+      typeof result.result.data.one_time_temporary_password === "string" ? (
+        <div className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+          <p className="font-medium text-foreground">
+            {t("actionOneTimePasswordTitle")}
+          </p>
+          <code className="mt-1 block break-all select-all text-sm text-foreground">
+            {result.result.data.one_time_temporary_password}
+          </code>
+          <p className="mt-1 text-muted-foreground">
+            {t("actionOneTimePasswordWarning")}
+          </p>
+        </div>
+      ) : null}
 
-      {state === "stale" ? (
-        <p role="alert" className="mt-2 text-amber-700 dark:text-amber-300">
-          {t("workflowPreviewStale")}
-        </p>
-      ) : state === "expired" ? (
-        <p role="alert" className="mt-2 text-amber-700 dark:text-amber-300">
-          {t("workflowPreviewExpired")}
-        </p>
-      ) : state === "internal" ? (
+      {!result && privileged ? (
+        <div className="mt-3 space-y-1.5">
+          <Label htmlFor={`${descriptionId}-current-password`}>
+            {t("privilegedCurrentPassword")}
+          </Label>
+          <Input
+            id={`${descriptionId}-current-password`}
+            type="password"
+            autoComplete="current-password"
+            value={currentPassword}
+            onChange={(event) => setCurrentPassword(event.target.value)}
+            disabled={state === "working"}
+            maxLength={1_024}
+            aria-describedby={`${descriptionId}-step-up-help`}
+          />
+          <p
+            id={`${descriptionId}-step-up-help`}
+            className="text-xs leading-5 text-muted-foreground"
+          >
+            {t("privilegedStepUpHelp")}
+          </p>
+        </div>
+      ) : null}
+      {!result && preview.preview.changes.length > 0 ? (
+        <dl className="mt-2 space-y-2">
+          {preview.preview.changes.map((change, index) => (
+            <div
+              key={`${change.label}-${index}`}
+              className="rounded-lg border border-border/70 bg-background/80 p-2"
+            >
+              <dt className="font-medium text-foreground">{change.label}</dt>
+              <dd className="mt-1 break-words">
+                <span>{displayActionValue(change.before, t("actionEmptyValue"))}</span>
+                <span aria-hidden="true"> → </span>
+                <span className="font-medium text-foreground">
+                  {displayActionValue(change.after, t("actionEmptyValue"))}
+                </span>
+              </dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
+
+      {alertCopy ? (
         <p role="alert" className="mt-2 text-destructive">
-          {t("workflowInternalError")}
-        </p>
-      ) : state === "error" ? (
-        <p role="alert" className="mt-2 text-destructive">
-          {result?.resumable
-            ? t("workflowPartialFailure")
-            : t("workflowConfirmationFailed")}
+          {alertCopy}
         </p>
       ) : state === "success" ? (
-        <p role="status" className="mt-2 font-medium text-emerald-700 dark:text-emerald-300">
-          {t("workflowCompleted")}
+        <p
+          role="status"
+          className="mt-2 font-medium text-emerald-700 dark:text-emerald-300"
+        >
+          {t("actionCompleted")}
         </p>
       ) : null}
 
-      {(canConfirm || result?.resumable) &&
-      state !== "stale" &&
-      state !== "expired" ? (
+      {!result &&
+      state !== "invalid" &&
+      state !== "expired" &&
+      state !== "replayed" &&
+      state !== "denied" &&
+      state !== "rate_limited" ? (
         <Button
           type="button"
           size="sm"
           className="mt-3 min-h-11"
-          disabled={state === "working"}
+          disabled={state === "working" || (privileged && !currentPassword)}
           aria-describedby={descriptionId}
           onClick={() => void confirm()}
         >
           {state === "working"
-            ? t("workflowConfirming")
-            : result?.resumable
-              ? t("workflowResume")
-              : t("workflowConfirm")}
+            ? t("actionConfirming")
+            : privileged
+              ? t("privilegedConfirm")
+              : t("actionConfirm")}
         </Button>
       ) : null}
       {!result ? (
         <p className="mt-2 leading-5 text-muted-foreground">
-          {t("workflowConfirmationWarning")}
+          {privileged
+            ? t("privilegedConfirmationWarning")
+            : t("actionConfirmationWarning")}
         </p>
       ) : null}
     </section>
@@ -686,10 +750,12 @@ function WorkflowConfirmation({
 
 function MessageBubble({
   message,
+  conversationId,
   onChooseContext,
   contextMutationBusy,
 }: {
   message: StaffAssistantUIMessage;
+  conversationId: string;
   onChooseContext: (choice: ContextChoice) => void;
   contextMutationBusy: boolean;
 }) {
@@ -726,6 +792,7 @@ function MessageBubble({
               <ToolActivity
                 key={part.toolCallId}
                 part={part}
+                conversationId={conversationId}
                 onChooseContext={onChooseContext}
                 contextMutationBusy={contextMutationBusy}
               />
@@ -783,7 +850,9 @@ function suggestionsFor({
       case "dashboard":
         break;
       case "appointments":
-        if (mounted.has("list_appointments") || mounted.has("list_doctor_appointments")) {
+        // Phase 7: the appointment list is served by the generic resource
+        // read; `query_resource` mounts for every role the old list tools did.
+        if (mounted.has("query_resource")) {
           contextual.push(t("suggestVisibleAppointments", pageContext.dateRange));
         }
         if (mounted.has("get_appointment_stats")) {
@@ -853,17 +922,8 @@ function suggestionsFor({
     ];
   } else {
     general = [];
-    if (mounted.has("send_appointment_reminders")) {
-      general.push(t("suggestAppointmentWorkflow"));
-    }
-    if (mounted.has("send_invoice_reminders")) {
-      general.push(t("suggestInvoiceWorkflow"));
-    }
-    if (mounted.has("create_pending_booking")) {
-      general.push(t("suggestBookingWorkflow"));
-    }
     if (mounted.has("get_clinic_summary")) general.push(t("suggestClinicSummary"));
-    if (mounted.has("list_appointments")) general.push(t("suggestTodaysAppointments"));
+    if (mounted.has("query_resource")) general.push(t("suggestTodaysAppointments"));
     if (mounted.has("count_new_patients")) general.push(t("suggestNewPatients"));
     if (mounted.has("get_appointment_stats")) general.push(t("suggestNoShowRate"));
     if (mounted.has("list_pending_followups")) general.push(t("suggestPendingFollowups"));
@@ -912,24 +972,29 @@ function FinancialNotice({
 function ChatSession({
   session,
   patient,
-  pageContext,
   remaining,
   mode,
   role,
   capabilities,
+  history,
   onNewConversation,
+  onOpenConversation,
+  onLoadHistory,
 }: {
   session: SessionState;
   patient: PatientChatContext;
-  pageContext: AssistantPageContext | null;
   remaining: number;
   mode: NonNullable<AssistantChatProps["mode"]>;
   role: PermissionUserRole;
   capabilities: AssistantCapabilities | null;
+  history: ConversationHistoryState | null;
   onNewConversation: () => void;
+  onOpenConversation: (conversationId: string) => void;
+  onLoadHistory: () => void;
 }) {
   const t = useTranslations("assistant");
   const router = useRouter();
+  const pageContext = session.pageContext;
   const [input, setInput] = useState("");
   const [announcement, setAnnouncement] = useState("");
   const [activeContext, setActiveContext] = useState<ActiveContext>(
@@ -937,20 +1002,19 @@ function ChatSession({
   );
   const [contextMutationBusy, setContextMutationBusy] = useState(false);
   const [capabilitiesOpen, setCapabilitiesOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const capabilityPanelId = useId();
+  const historyPanelId = useId();
   const capabilityToggleRef = useRef<HTMLButtonElement>(null);
+  const historyToggleRef = useRef<HTMLButtonElement>(null);
   const restoreCapabilityFocusRef = useRef(false);
+  const restoreHistoryFocusRef = useRef(false);
   const endRef = useRef<HTMLDivElement>(null);
   // The panel is offered only where there is a server-resolved capability set to
   // show — the assistant page, not the doctor patient sheet (capabilities null).
   const showCapabilityToggle = (capabilities?.items.length ?? 0) > 0;
-  const hasConfirmedActions = capabilities?.toolNames.some((name) =>
-    [
-      "send_appointment_reminders",
-      "send_invoice_reminders",
-      "create_pending_booking",
-    ].includes(name),
-  ) ?? false;
+  const hasConfirmedActions =
+    capabilities?.toolNames.includes("execute_action") ?? false;
   const transport = useMemo(
     () =>
       new DefaultChatTransport<StaffAssistantUIMessage>({
@@ -1014,6 +1078,20 @@ function ChatSession({
       capabilityToggleRef.current?.focus();
     }
   }, [capabilitiesOpen]);
+
+  useEffect(() => {
+    if (!historyOpen && restoreHistoryFocusRef.current) {
+      restoreHistoryFocusRef.current = false;
+      historyToggleRef.current?.focus();
+    }
+  }, [historyOpen]);
+
+  function toggleHistory() {
+    setHistoryOpen((open) => {
+      if (!open) onLoadHistory();
+      return !open;
+    });
+  }
 
   const errorCopy = error ? t(errorCopyKey(error.message)) : null;
 
@@ -1140,16 +1218,61 @@ function ChatSession({
             {t("capabilitiesButton")}
           </Button>
         ) : null}
+        <Button
+          ref={historyToggleRef}
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="gap-1.5"
+          onClick={toggleHistory}
+          aria-expanded={historyOpen}
+          aria-controls={historyPanelId}
+        >
+          <History className="size-3.5" aria-hidden="true" />
+          {t("historyButton")}
+        </Button>
         <Button type="button" variant="ghost" size="sm" className="gap-1.5" onClick={onNewConversation} disabled={busy}>
           <Plus className="size-3.5" aria-hidden="true" />
           {t("newChat")}
         </Button>
       </div>
 
+      {historyOpen ? (
+        <div id={historyPanelId}>
+          <ConversationHistoryPanel
+            state={history ?? { status: "loading" }}
+            currentConversationId={session.id}
+            busy={busy}
+            titleId={`${historyPanelId}-title`}
+            onSelect={(conversationId) => {
+              restoreHistoryFocusRef.current = true;
+              setHistoryOpen(false);
+              onOpenConversation(conversationId);
+            }}
+            onNewConversation={() => {
+              restoreHistoryFocusRef.current = true;
+              setHistoryOpen(false);
+              onNewConversation();
+            }}
+            onRetry={onLoadHistory}
+            onClose={() => {
+              restoreHistoryFocusRef.current = true;
+              setHistoryOpen(false);
+            }}
+          />
+        </div>
+      ) : null}
+
       {showCapabilityToggle && capabilitiesOpen ? (
         <div id={capabilityPanelId}>
           <CapabilityPanel
             items={capabilities!.items}
+            // Phase 7 (P7-01): the panel reports what the assistant can read
+            // *and* what it can change. Both arrays are the same server-side
+            // resolution the tools themselves are authorized by, so the panel
+            // cannot advertise something `execute()` would then refuse.
+            resources={capabilities!.resources}
+            actions={capabilities!.actions}
             titleId={`${capabilityPanelId}-title`}
             onClose={() => {
               restoreCapabilityFocusRef.current = true;
@@ -1219,6 +1342,7 @@ function ChatSession({
               <MessageBubble
                 key={message.id}
                 message={message}
+                conversationId={session.id}
                 onChooseContext={(choice) => void chooseContext(choice)}
                 contextMutationBusy={contextMutationBusy || busy}
               />
@@ -1295,19 +1419,68 @@ export function AssistantChat({
   role,
   capabilities = null,
 }: AssistantChatProps) {
-  const patient = pageContext?.type === "patient"
-    ? { id: pageContext.patientId, name: contextLabel ?? "" }
-    : null;
   const [session, setSession] = useState<SessionState>({
     id: initialConversationId,
     messages: initialMessages,
     historyTruncated,
     activeContext: initialActiveContext,
+    pageContext,
   });
+  const [history, setHistory] = useState<ConversationHistoryState | null>(null);
+  const [openBusy, setOpenBusy] = useState(false);
   const renderedSession =
     session.id === initialConversationId
       ? { ...session, activeContext: initialActiveContext }
       : session;
+  // The host's context label describes the host's record, so it only names the
+  // patient while this session is still the host's own. A conversation resumed
+  // from history carries its own binding and shows its stored context chip.
+  const patient =
+    renderedSession.pageContext === pageContext && pageContext?.type === "patient"
+      ? { id: pageContext.patientId, name: contextLabel ?? "" }
+      : null;
+
+  async function loadHistory() {
+    setHistory({ status: "loading" });
+    try {
+      const result = await listAssistantConversationHistory();
+      setHistory(
+        result.success
+          ? { status: "ready", conversations: result.conversations }
+          : { status: "error" },
+      );
+    } catch {
+      setHistory({ status: "error" });
+    }
+  }
+
+  async function openConversation(conversationId: string) {
+    if (openBusy) return;
+    setOpenBusy(true);
+    try {
+      const result = await openAssistantConversation({ conversationId });
+      if (!result.success) {
+        // A conversation that vanished between listing and opening (deleted,
+        // archived, or a patient binding that no longer resolves) is stale list
+        // state, not an error the user can act on: refresh the list instead.
+        void loadHistory();
+        return;
+      }
+      setSession({
+        id: result.conversation.id,
+        messages: result.conversation.messages,
+        historyTruncated: result.conversation.historyTruncated,
+        activeContext: result.conversation.activeContext,
+        pageContext: result.conversation.patientId
+          ? { type: "patient", patientId: result.conversation.patientId }
+          : null,
+      });
+    } catch {
+      void loadHistory();
+    } finally {
+      setOpenBusy(false);
+    }
+  }
   // Server refreshes after a completed turn can add/switch context. Keying the
   // session by the validated slot metadata resets only the chat shell's local
   // context state when that server snapshot changes, without an effect-driven
@@ -1322,16 +1495,23 @@ export function AssistantChat({
       key={`${renderedSession.id}:${activeContextVersion}`}
       session={renderedSession}
       patient={patient}
-      pageContext={pageContext}
       remaining={remaining}
       mode={mode}
       role={role}
       capabilities={capabilities}
+      history={history}
+      onLoadHistory={() => void loadHistory()}
+      onOpenConversation={(conversationId) => void openConversation(conversationId)}
+      // A new chat returns to the host surface's own context: on a launcher that
+      // is the record the shortcut was opened from, on /assistant it is none.
+      // Previous conversations are not lost — they are one click away in the
+      // history panel, which is the whole point of this pass.
       onNewConversation={() => setSession({
         id: createConversationId(),
         messages: [],
         historyTruncated: false,
         activeContext: {},
+        pageContext,
       })}
     />
   );

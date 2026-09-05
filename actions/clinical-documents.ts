@@ -5,9 +5,8 @@ import { z } from "zod";
 import { requireActiveSubscription } from "@/lib/billing/subscriptions";
 import { ensureClinicalRecordFinalizedForIssue } from "@/actions/clinical/_shared";
 import { getDocumentCatalogEntry } from "@/lib/documents/catalog";
-import { issueDocumentFoundation } from "@/lib/documents/issuance";
+import { issueClinicalDocumentCore } from "@/lib/documents/mutations";
 import { documentPdfHref } from "@/lib/documents/module";
-import { getDocumentPdfRenderer } from "@/lib/documents/renderers/registry";
 import { clinicalDocumentParamsSchema, parseClinicalDocumentSnapshot,
   resolveClinicalDocumentSnapshot, type ClinicalDocumentParams, type ClinicalDocumentSnapshot,
   type P76ClinicalDocumentCode } from "@/lib/documents/resolvers/clinical-document";
@@ -54,38 +53,34 @@ export async function issueClinicalDocument(input: ClinicalDocumentParams & { lo
   if (!parsed.success) return { errorCode: "invalidInput" };
   const user = await requireClinicalDocumentAccess(parsed.data.documentType);
   await requireActiveSubscription(user.clinicId);
-  try {
-    const draftSnapshot = await resolveClinicalDocumentSnapshot(user, parsed.data, { allowDraft: true });
-    if (draftSnapshot.data.kind === "prescription" && draftSnapshot.data.medications.some((item) => item.isControlled)) {
-      return { errorCode: "controlledMedicineBlocked" };
-    }
-    const table = parsed.data.documentType === "PRESCRIPTION" ? "prescriptions"
-      : parsed.data.documentType === "LAB_REQUEST" ? "lab_requests" : "sick_leaves";
-    const finalized = await ensureClinicalRecordFinalizedForIssue(table, parsed.data.recordId);
-    if (!finalized.success) throw new Error("Clinical record could not be finalized for issuance");
-    const snapshot = await resolveClinicalDocumentSnapshot(user, parsed.data);
-    const result = await issueDocumentFoundation({
-      clinicId: user.clinicId, actorId: user.id, draftId: parsed.data.draftId,
-      documentType: parsed.data.documentType,
-      idempotencyKey: `clinical:${parsed.data.documentType.toLowerCase()}:${parsed.data.recordId}:${parsed.data.locale}`,
-      locale: parsed.data.locale, numberingPrefix: snapshot.settings.numberingPrefix,
-      periodKey: snapshot.settings.numberingYearlyReset
-        ? new Date(snapshot.generatedAt).getFullYear().toString() : "",
-      sequencePadding: snapshot.settings.sequencePadding,
-      params: { version: 1, documentType: parsed.data.documentType,
-        recordId: parsed.data.recordId } as unknown as Json,
-      snapshot: snapshot as unknown as Json, watermark: snapshot.settings.watermark,
-      patientId: snapshot.subject.patientId, doctorId: snapshot.physician.id,
-      appointmentId: snapshot.data.appointmentId,
-      render: getDocumentPdfRenderer(parsed.data.documentType),
-    });
-    return { data: { documentId: result.documentId, documentNumber: result.documentNumber, reused: result.reused } };
-  } catch (error) {
-    console.error("clinical_document_issue_failed", { clinicId: user.clinicId,
-      documentType: parsed.data.documentType, stage: error && typeof error === "object" && "stage" in error ? String(error.stage) : "unknown",
-      message: error instanceof Error ? error.message : "unknown" });
-    return { errorCode: "issueFailed" };
+  // Phase 6: the issuance body lives in `lib/documents/mutations.ts` so the
+  // Assistant's `documents.issue` action runs identical code. The UI keeps its
+  // own session-scoped finalizer, which enforces the mutation-role guard.
+  const result = await issueClinicalDocumentCore(
+    user,
+    { ...parsed.data, draftId: parsed.data.draftId ?? null },
+    async (table, recordId) => ({
+      success:
+        (await ensureClinicalRecordFinalizedForIssue(table, recordId)).success === true,
+    }),
+  );
+  if (!result.ok) {
+    return {
+      errorCode:
+        result.code === "controlledMedicineBlocked"
+          ? "controlledMedicineBlocked"
+          : result.code === "invalidInput"
+            ? "invalidInput"
+            : "issueFailed",
+    };
   }
+  return {
+    data: {
+      documentId: result.data.documentId,
+      documentNumber: result.data.documentNumber,
+      reused: result.data.reused,
+    },
+  };
 }
 
 export async function getIssuedClinicalDocument(documentId: string, documentType: P76ClinicalDocumentCode): Promise<

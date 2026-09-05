@@ -28,9 +28,22 @@ const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 let clinicCaller: ReturnType<typeof createClient<Database>>;
 let aiPlanId = "";
 let aiMessageLimit = 0;
-let winningReservationId = "";
-let winningLeaseToken = "";
-let winningRequestId = "";
+// Captured by the reservation race below. Null until then, never "": an empty
+// string is not a uuid, so a fixture that never ran would otherwise reach the
+// RPCs and fail every downstream case with `invalid input syntax for type uuid`
+// instead of naming the step that did not happen.
+let winningReservationId: string | null = null;
+let winningLeaseToken: string | null = null;
+let winningRequestId: string | null = null;
+
+function captured(value: string | null, label: string): string {
+  if (!value) {
+    throw new Error(
+      `${label} was never captured: the reservation race did not produce a winner.`,
+    );
+  }
+  return value;
+}
 
 function reserve(input: {
   requestId: string;
@@ -132,6 +145,12 @@ beforeAll(async () => {
     });
     if (profile.error) throw profile.error;
   }
+  const terms = await service.from("ai_commercial_terms").insert([
+    { clinic_id: clinicA, change_reason: "pilot", updated_by: actorA, accepted_at: new Date().toISOString() },
+    { clinic_id: clinicB, change_reason: "pilot", updated_by: actorB, accepted_at: new Date().toISOString() },
+    { clinic_id: clinicC, change_reason: "pilot", updated_by: actorC, accepted_at: new Date().toISOString() },
+  ]);
+  if (terms.error) throw terms.error;
   clinicCaller = createClient<Database>(url, publishableKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
@@ -154,6 +173,7 @@ describe("P4.5A atomic AI budget and immutable usage ledger", () => {
       overage_budget_micros: 0,
       change_reason: "support_adjustment",
       updated_by: actorC,
+      accepted_at: new Date().toISOString(),
     });
     if (commercialTerms.error) throw commercialTerms.error;
     const initialSpentMicros = (aiMessageLimit - 1) * 1_000;
@@ -212,8 +232,8 @@ describe("P4.5A atomic AI budget and immutable usage ledger", () => {
       final_cost_micros: 1_001,
     }];
     const result = await service.rpc("reconcile_ai_budget", {
-      p_reservation_id: winningReservationId,
-      p_lease_token: winningLeaseToken,
+      p_reservation_id: captured(winningReservationId, "winningReservationId"),
+      p_lease_token: captured(winningLeaseToken, "winningLeaseToken"),
       p_outcome: "success",
       p_attempts: attempts as Json,
       p_actual_cost_micros: 1_001,
@@ -230,7 +250,7 @@ describe("P4.5A atomic AI budget and immutable usage ledger", () => {
     });
     const reservation = await service.from("ai_budget_reservations")
       .select("actual_cost_micros, reserved_cost_micros, status")
-      .eq("id", winningReservationId).single();
+      .eq("id", captured(winningReservationId, "winningReservationId")).single();
     expect(reservation.data).toEqual({
       actual_cost_micros: 1_000,
       reserved_cost_micros: 1_000,
@@ -259,7 +279,7 @@ describe("P4.5A atomic AI budget and immutable usage ledger", () => {
 
   it("keeps a finalized request id idempotent and requires a new message id", async () => {
     const duplicate = await reserve({
-      requestId: winningRequestId,
+      requestId: captured(winningRequestId, "winningRequestId"),
       leaseToken: randomUUID(),
       clinicId: clinicC,
       actorId: actorC,
@@ -268,7 +288,7 @@ describe("P4.5A atomic AI budget and immutable usage ledger", () => {
     expect(duplicate.error).toBeNull();
     expect(duplicate.data?.[0]).toMatchObject({
       acquired: false,
-      reservation_id: winningReservationId,
+      reservation_id: captured(winningReservationId, "winningReservationId"),
       reservation_status: "reconciled",
     });
     const usage = await service.from("usage_counters")
@@ -279,10 +299,10 @@ describe("P4.5A atomic AI budget and immutable usage ledger", () => {
 
   it("rejects update and direct deletion even for service role", async () => {
     const update = await service.from("ai_usage_events")
-      .update({ final_cost_micros: 0 }).eq("reservation_id", winningReservationId);
+      .update({ final_cost_micros: 0 }).eq("reservation_id", captured(winningReservationId, "winningReservationId"));
     expect(update.error?.message).toContain("AI_USAGE_EVENTS_IMMUTABLE");
     const deletion = await service.from("ai_usage_events")
-      .delete().eq("reservation_id", winningReservationId);
+      .delete().eq("reservation_id", captured(winningReservationId, "winningReservationId"));
     expect(deletion.error?.message).toContain("AI_USAGE_EVENTS_IMMUTABLE");
   });
 
@@ -369,8 +389,8 @@ describe("P4.5A atomic AI budget and immutable usage ledger", () => {
     });
     expect(reserveDenied.error).not.toBeNull();
     const reconcileDenied = await clinicCaller.rpc("reconcile_ai_budget", {
-      p_reservation_id: winningReservationId,
-      p_lease_token: winningLeaseToken,
+      p_reservation_id: captured(winningReservationId, "winningReservationId"),
+      p_lease_token: captured(winningLeaseToken, "winningLeaseToken"),
       p_outcome: "success",
       p_attempts: [] as Json,
       p_actual_cost_micros: 0,

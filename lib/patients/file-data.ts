@@ -267,10 +267,10 @@ export function assembleAppointmentHistory<A extends { id: string }>(args: {
 // ---------------------------------------------------------------------------
 
 const APPOINTMENT_SELECT_SCOPED =
-  "id, scheduled_at, status, cancellation_reason, cancelled_at, package_id, package_session_number, profiles!doctor_id(full_name), departments(name, color), patient_packages(name, total_sessions, used_sessions)";
+  "id, doctor_id, scheduled_at, status, cancellation_reason, cancelled_at, package_id, package_session_number, profiles!doctor_id(full_name), departments(name, color), patient_packages(name, total_sessions, used_sessions)";
 
 const APPOINTMENT_SELECT_FINANCIAL =
-  "id, scheduled_at, status, payment_method, paid_at, total_amount, paid_amount, insurance_amount, insurance_calculation_mode, insurance_percentage, patient_responsibility, secondary_amount, deposit_amount, outstanding_amount, secondary_payment_method, payment_note, cancellation_reason, cancelled_at, package_id, package_session_number, profiles!doctor_id(full_name), departments(name, color), insurance_providers(name), patient_packages(name, total_sessions, used_sessions, price_per_session), appointment_services(id, name, price, quantity)";
+  "id, doctor_id, scheduled_at, status, payment_method, paid_at, total_amount, paid_amount, insurance_amount, insurance_calculation_mode, insurance_percentage, patient_responsibility, secondary_amount, deposit_amount, outstanding_amount, secondary_payment_method, payment_note, cancellation_reason, cancelled_at, package_id, package_session_number, profiles!doctor_id(full_name), departments(name, color), insurance_providers(name), patient_packages(name, total_sessions, used_sessions, price_per_session), appointment_services(id, name, price, quantity)";
 
 export type LoadAppointmentHistoryArgs = {
   clinicId: string;

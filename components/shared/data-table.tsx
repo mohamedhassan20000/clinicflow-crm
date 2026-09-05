@@ -16,6 +16,11 @@ import { cn } from "@/lib/utils";
  * Shared empty state for tables and lists (Pre-P2 WS2): icon + one-line
  * explanation + optional action, rendered inside the table region so screen
  * readers and sighted users get the same answer to "why is this empty?".
+ *
+ * `compact` renders the same content as a single horizontal row instead of a
+ * tall centred block. It exists for places that stack several possibly-empty
+ * lists together — the owner clinic History tab is the case that forced it —
+ * where three full-height empty states push the real content off the screen.
  */
 export function TableEmptyState({
   icon: Icon = Inbox,
@@ -23,13 +28,31 @@ export function TableEmptyState({
   description,
   action,
   className,
+  compact = false,
 }: {
   icon?: LucideIcon;
   title: string;
   description?: string;
   action?: React.ReactNode;
   className?: string;
+  compact?: boolean;
 }) {
+  if (compact) {
+    return (
+      <div
+        data-slot="table-empty-compact"
+        className={cn("flex flex-wrap items-center gap-3 rounded-lg border border-dashed px-4 py-3 text-start", className)}
+      >
+        <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-muted">
+          <Icon className="size-4 text-muted-foreground" aria-hidden="true" />
+        </div>
+        <p className="text-sm font-medium text-foreground">{title}</p>
+        {description ? <p className="text-sm text-muted-foreground">{description}</p> : null}
+        {action ? <div className="ms-auto">{action}</div> : null}
+      </div>
+    );
+  }
+
   return (
     <div className={cn("flex flex-col items-center justify-center gap-2 px-6 py-12 text-center", className)}>
       <div className="flex size-10 items-center justify-center rounded-full bg-muted">
@@ -92,7 +115,7 @@ export function DataTable<Row extends Record<string, unknown>>({
   rowKey?: (row: Row, index: number) => string;
   caption?: string;
   stickyHeader?: boolean;
-  empty: { title: string; description?: string; icon?: LucideIcon; action?: React.ReactNode };
+  empty: { title: string; description?: string; icon?: LucideIcon; action?: React.ReactNode; compact?: boolean };
 }) {
   if (rows.length === 0) {
     return <TableEmptyState {...empty} />;

@@ -6,7 +6,6 @@ import { AiToolAuthorizationError } from "@/lib/ai/errors";
 import { getPageVisibilityState } from "@/lib/server-page-permissions";
 import { LEGACY_AI_ASSISTANT_FEATURE } from "@/lib/ai/commercial-policy";
 import { hasAiUserPermission } from "@/lib/ai/permissions";
-import type { PageSlug } from "@/lib/page-permissions";
 
 /** Every normal clinic role may use its role-appropriate Assistant persona. */
 export const STAFF_ASSISTANT_ROLES: readonly UserRole[] = [
@@ -16,13 +15,6 @@ export const STAFF_ASSISTANT_ROLES: readonly UserRole[] = [
   "receptionist",
   "assistant",
 ];
-
-/**
- * Clinical summaries and visit search. Doctors, plus assistants acting within
- * their assigned doctors' scope (enforced by RLS + tool asserts). An assistant
- * never gains clinic-wide clinical access — the union scope still applies.
- */
-export const CLINICAL_ASSISTANT_ROLES: readonly UserRole[] = ["doctor", "assistant"];
 
 export const AI_ASSISTANT_FEATURE = LEGACY_AI_ASSISTANT_FEATURE;
 
@@ -54,15 +46,6 @@ export function assertStaffRole(user: AuthedUser): void {
     throw new AiToolAuthorizationError(
       "role_forbidden",
       `Role "${user.role}" may not use the staff assistant.`,
-    );
-  }
-}
-
-export function assertClinicalRole(user: AuthedUser): void {
-  if (!CLINICAL_ASSISTANT_ROLES.includes(user.role)) {
-    throw new AiToolAuthorizationError(
-      "role_forbidden",
-      `Role "${user.role}" may not use clinical assistant tools.`,
     );
   }
 }
@@ -114,10 +97,21 @@ export async function assertStaffToolAccess(user: AuthedUser): Promise<void> {
   }
 }
 
-export async function assertClinicalToolAccess(user: AuthedUser): Promise<void> {
-  assertClinicalRole(user);
-  await assertStaffToolAccess(user);
-}
+/*
+ * `assertClinicalToolAccess` (and its `assertDoctorToolAccess` alias,
+ * `CLINICAL_ASSISTANT_ROLES` and `AI_CLINICAL_READ_FEATURE`) lived here until
+ * Phase 7 (P7-05). Its last production callers were the four clinical tools the
+ * resource layer superseded, and a live-looking authorization assert with no
+ * caller reads as load-bearing — it suggests a gate that is in the path when it
+ * is not, which is the same reason `redactPatientIdentity` was deleted rather
+ * than left as a minimization that no longer runs.
+ *
+ * The `ai.read_clinical` entitlement is still enforced, one layer down and by
+ * the path that is actually authoritative: each clinical resource declares
+ * `requiredFeatures: clinicalResourceFeature` and `assertResourceAccess`
+ * (lib/ai/resources/registry.ts) checks it on every read, alongside the
+ * resource's own role list. `phase2-clinical-parity` asserts it there.
+ */
 
 /**
  * P4.6 analytics matrix. Doctors keep their own self-scoped P4 tools, so they
@@ -158,44 +152,10 @@ export const AI_STAFF_ANALYTICS_FEATURE = "ai.staff_analytics" as const;
 export const AI_FINANCIAL_INSIGHTS_FEATURE = "ai.financial_insights" as const;
 export const AI_ASSISTANT_CUSTOMIZATION_FEATURE =
   "ai.assistant_customization" as const;
-export const AI_WORKFLOWS_FEATURE = "ai.workflows" as const;
-
-/**
- * P4.11A workflow envelope. The workflow entitlement is additive to the full
- * staff-assistant spine; it never replaces role, subscription, visibility, or
- * tool-specific checks. Every nested tool re-runs those checks again.
- */
-export async function assertWorkflowAccess(user: AuthedUser): Promise<void> {
-  await assertStaffToolAccess(user);
-  const entitlements = await getEntitlements(user.clinicId);
-  if (!hasFeature(entitlements, AI_WORKFLOWS_FEATURE)) {
-    throw new AiToolAuthorizationError("feature_not_entitled");
-  }
-}
-
-/** Mutation-capable workflow steps are narrower than the workflow envelope. */
-export async function assertWorkflowActionAccess(
-  user: AuthedUser,
-  page: Extract<PageSlug, "appointments" | "inbox" | "reports" | "revenue">,
-  roles: readonly UserRole[],
-): Promise<void> {
-  if (!roles.includes(user.role)) {
-    throw new AiToolAuthorizationError(
-      "role_forbidden",
-      `Role "${user.role}" may not perform this workflow action.`,
-    );
-  }
-  await assertWorkflowAccess(user);
-  const visibility = await getPageVisibilityState(user, page);
-  if (visibility === "hidden") throw new AiToolAuthorizationError("page_hidden");
-  if (visibility === "lookup_failed") {
-    throw new AiToolAuthorizationError("lookup_failed");
-  }
-}
 
 /**
  * Per-tool re-check for the bounded operational list/count tools
- * (`list_appointments`, `count_new_patients`, `list_pending_followups`,
+ * (`count_new_patients`, `list_pending_followups`,
  * non-financial `run_clinic_report`): the full staff spine plus the operational
  * role matrix and the ai.staff_analytics entitlement.
  */
@@ -252,9 +212,3 @@ export async function assertFinancialInsightsAccess(user: AuthedUser): Promise<v
     throw new AiToolAuthorizationError("permission_not_granted");
   }
 }
-
-/** Backwards-compatible name for the existing clinical tools. */
-export const assertDoctorToolAccess = assertClinicalToolAccess;
-
-/** Backwards-compatible route export for callers migrating to the staff name. */
-export const authorizeDoctorAssistant = authorizeStaffAssistant;

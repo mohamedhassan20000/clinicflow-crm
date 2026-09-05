@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Phone, Stethoscope, Calendar, Clock, FileText, Hash, Trash2, Package, ShieldCheck } from "lucide-react";
+import { Phone, Stethoscope, Calendar, Clock, FileText, Hash, Trash2, Package, ShieldCheck, Bot } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -21,6 +21,7 @@ import type { Tables } from "@/types/database";
 import { formatDoctorName } from "@/lib/format-doctor";
 import { useClinicSettings } from "@/contexts/clinic-settings-context";
 import { useTranslations } from "next-intl";
+import { isOverduePending } from "@/lib/appointments/overdue-pending";
 
 export type AppointmentForDetail = Pick<
   Tables<"appointments">,
@@ -37,6 +38,7 @@ export type AppointmentForDetail = Pick<
   | "replaces_appointment_id"
   | "replaced_by_appointment_id"
 > & {
+  ai_patient_conversation_id?: string | null;
   total_amount?: number | null;
   insurance_amount?: number | null;
   insurance_calculation_mode?: string | null;
@@ -81,6 +83,7 @@ export function AppointmentDetailDialog({
   onDeleted,
 }: Props) {
   const t = useTranslations("appointments");
+  const protectedT = useTranslations("protected");
   const { formatCurrency, formatDate, formatTime } = useClinicSettings();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [isDeleting, startDelete] = useTransition();
@@ -88,6 +91,7 @@ export function AppointmentDetailDialog({
 
   if (!appt) return null;
 
+  const overduePending = isOverduePending(appt);
   const deptColor = appt.departments?.color ?? "#94a3b8";
   const patientName = appt.patients?.full_name ?? t("unknownPatient");
   const apptId = appt.id;
@@ -240,6 +244,12 @@ export function AppointmentDetailDialog({
                   )}
                   <div className="flex items-center gap-2">
                     <StatusBadge status={appt.status} />
+                    {appt.ai_patient_conversation_id && (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/5 px-2 py-0.5 text-xs font-medium text-primary">
+                        <Bot className="size-3" aria-hidden="true" />
+                        {protectedT("aiAssistant")}
+                      </span>
+                    )}
                   </div>
                 </div>
               </section>
@@ -361,6 +371,7 @@ export function AppointmentDetailDialog({
                   setBillingRevision((revision) => revision + 1)
                 }
                 showBillingUndo
+                overduePending={overduePending}
               />
             </DialogFooter>
           )}

@@ -56,10 +56,11 @@ export async function requireUser(): Promise<AuthedUser> {
 }
 
 export async function requireRole(
-  roles: UserRole[] | UserRole,
+  roles: readonly UserRole[] | UserRole,
 ): Promise<AuthedUser> {
   const user = await requireUser();
-  const allowed = Array.isArray(roles) ? roles : [roles];
+  const allowed: readonly UserRole[] =
+    typeof roles === "string" ? [roles] : roles;
   if (!allowed.includes(user.role)) redirect("/dashboard");
   return user;
 }
@@ -70,7 +71,7 @@ export async function requireRole(
  * and resolve an expired subscription.
  */
 export async function requireMutationRole(
-  roles: UserRole[] | UserRole,
+  roles: readonly UserRole[] | UserRole,
 ): Promise<AuthedUser> {
   const user = await requireRole(roles);
   await requireActiveSubscription(user.clinicId);

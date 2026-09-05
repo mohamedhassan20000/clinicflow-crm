@@ -49,7 +49,7 @@ export async function enforceWebhookRateLimit(
   );
   if (result.allowed) return null;
   await recordWebhookRouteRejection(
-    provider === "meta" ? "meta" : "dialog360",
+    provider === "meta" || provider === "linked_device" ? provider : "dialog360",
     "rate_limit",
   );
   return NextResponse.json(

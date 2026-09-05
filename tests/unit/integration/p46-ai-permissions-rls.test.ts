@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Database } from "@/types/database";
+import { readLocalPolicyQual } from "./helpers/local-policy";
 
 /**
  * `user_ai_permissions` RLS, driven over the real PostgREST boundary with real
@@ -74,6 +75,7 @@ const CLINICS = [clinic, otherClinic];
 
 async function cleanup() {
   await service.from("user_ai_permissions").delete().in("clinic_id", CLINICS);
+  await service.from("ai_commercial_terms").delete().in("clinic_id", CLINICS);
   await service.from("subscriptions").delete().in("clinic_id", CLINICS);
   await service.from("profiles").delete().in("clinic_id", CLINICS);
   await service.from("clinics").delete().in("id", CLINICS);
@@ -157,6 +159,11 @@ beforeAll(async () => {
     },
   ]);
   if (profiles.error) throw profiles.error;
+  const terms = await service.from("ai_commercial_terms").insert([
+    { clinic_id: clinic, change_reason: "pilot", updated_by: pa.id, accepted_at: new Date().toISOString() },
+    { clinic_id: otherClinic, change_reason: "pilot", updated_by: om.id, accepted_at: new Date().toISOString() },
+  ]);
+  if (terms.error) throw terms.error;
 }, 60_000);
 
 afterAll(async () => {
@@ -240,6 +247,18 @@ describe("M1 — only the primary admin may write a grant, enforced in RLS", () 
       .eq("user_id", managerId);
     expect(result.error).toBeNull();
     expect(result.data?.[0]?.granted).toBe(true);
+  });
+
+  it("M1 — keeps self-read scoped to the authenticated clinic in the policy itself", () => {
+    const policy = readLocalPolicyQual(
+      "user_ai_permissions",
+      "Users can read own ai permissions",
+    ).replace(/\s+/g, " ").toLowerCase();
+
+    expect(policy, "M1 self-read policy must identify the authenticated user")
+      .toContain("user_id = auth.uid()");
+    expect(policy, "M1 self-read policy must independently enforce tenant scope")
+      .toContain("clinic_id = auth_clinic_id()");
   });
 
   it("does not let a primary admin reach into another clinic", async () => {

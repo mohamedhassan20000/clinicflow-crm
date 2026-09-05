@@ -41,6 +41,26 @@ export type DocumentIssueResult = {
   reused: boolean;
 };
 
+export type DocumentIssueStage =
+  | "invoice-data-resolution"
+  | "reservation"
+  | "renderer-dispatch"
+  | "server-html-render"
+  | "chromium-pdf"
+  | "render"
+  | "pdf-storage"
+  | "issuance-rpc"
+  | "draft-finalization"
+  | "invoice-action";
+
+export type DocumentIssueFailure = {
+  stage: DocumentIssueStage;
+  message: string;
+  code: string | null;
+  details: string | null;
+  hint: string | null;
+};
+
 export type DocumentIssueDependencies = {
   reserve: () => Promise<DocumentIssueReservation>;
   render: DocumentIssueRenderer;
@@ -63,36 +83,104 @@ export type DocumentIssueDependencies = {
   ) => Promise<void>;
 };
 
-/** Renders any thrown value (Error / PostgrestError / unknown) to a log line. */
-function describeCause(value: unknown): string {
-  if (value instanceof Error) return value.message;
-  if (value && typeof value === "object") {
-    const row = value as Record<string, unknown>;
-    // Supabase PostgrestError shape — keep the real message/code/details.
-    const parts = ["message", "code", "details", "hint"]
-      .map((key) => (row[key] == null ? null : `${key}=${String(row[key])}`))
-      .filter(Boolean);
-    if (parts.length > 0) return parts.join(" ");
-  }
-  return value == null ? "unknown" : String(value);
+function field(value: unknown, key: "message" | "code" | "details" | "hint"): string | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = (value as Record<string, unknown>)[key];
+  return candidate == null || String(candidate).trim() === "" ? null : String(candidate);
+}
+
+function causeOf(value: unknown): unknown {
+  if (value instanceof DocumentIssueError) return value.causeValue;
+  if (value instanceof Error && value.cause != null) return value.cause;
+  return value;
+}
+
+function issueStageOf(value: unknown): DocumentIssueStage | null {
+  if (!value || typeof value !== "object" || !("stage" in value)) return null;
+  const stage = String((value as { stage: unknown }).stage);
+  return [
+    "invoice-data-resolution",
+    "reservation",
+    "renderer-dispatch",
+    "server-html-render",
+    "chromium-pdf",
+    "render",
+    "pdf-storage",
+    "issuance-rpc",
+    "draft-finalization",
+    "invoice-action",
+  ].includes(stage) ? stage as DocumentIssueStage : null;
+}
+
+/** Preserve the structured Supabase/Postgres fields that plain-object throws carry. */
+export function describeDocumentIssueFailure(
+  value: unknown,
+  fallbackStage: DocumentIssueStage = "invoice-action",
+): DocumentIssueFailure {
+  const cause = causeOf(value);
+  const stage = value instanceof DocumentIssueError
+    ? value.stage
+    : issueStageOf(value) ?? fallbackStage;
+  const message = field(cause, "message")
+    ?? (cause instanceof Error ? cause.message : null)
+    ?? field(value, "message")
+    ?? (value instanceof Error ? value.message : null)
+    ?? (value == null ? "No error value was provided" : String(value));
+  return {
+    stage,
+    message,
+    code: field(cause, "code") ?? field(value, "code"),
+    details: field(cause, "details") ?? field(value, "details"),
+    hint: field(cause, "hint") ?? field(value, "hint"),
+  };
 }
 
 export class DocumentIssueError extends Error {
   constructor(
-    public readonly stage: "render" | "store" | "complete",
+    public readonly stage: DocumentIssueStage,
     public readonly causeValue: unknown,
   ) {
-    // Carry the underlying failure into `.message` so the generic action-level
-    // logs (which print error.message) always record the real cause server-side.
-    super(`Document issuance failed during ${stage}: ${describeCause(causeValue)}`, {
+    const failure = describeDocumentIssueFailure(causeValue, stage);
+    super(`Document issuance failed during ${stage}: ${failure.message}`, {
       cause: causeValue,
     });
     this.name = "DocumentIssueError";
   }
 }
 
-function failureCode(stage: DocumentIssueError["stage"]): string {
-  return `DOCUMENT_${stage.toUpperCase()}_FAILED`;
+function failureCode(stage: DocumentIssueStage): string {
+  return `DOCUMENT_${stage.replaceAll("-", "_").toUpperCase()}_FAILED`;
+}
+
+async function recordIssueFailure(
+  deps: DocumentIssueDependencies,
+  reservation: DocumentIssueReservation,
+  stage: DocumentIssueStage,
+): Promise<boolean> {
+  try {
+    return await deps.fail(reservation, failureCode(stage));
+  } catch (error) {
+    console.error("document_issue_failure_record_failed", {
+      documentId: reservation.documentId,
+      ...describeDocumentIssueFailure(error, "issuance-rpc"),
+    });
+    return false;
+  }
+}
+
+async function cleanupIssueArtifact(
+  deps: DocumentIssueDependencies,
+  reservation: DocumentIssueReservation,
+  storagePath: string | null,
+): Promise<void> {
+  try {
+    await deps.cleanup?.(reservation, storagePath);
+  } catch (error) {
+    console.error("document_issue_cleanup_failed", {
+      documentId: reservation.documentId,
+      ...describeDocumentIssueFailure(error, "pdf-storage"),
+    });
+  }
 }
 
 /**
@@ -103,7 +191,14 @@ function failureCode(stage: DocumentIssueError["stage"]): string {
 export async function issueDocumentWithGuard(
   deps: DocumentIssueDependencies,
 ): Promise<DocumentIssueResult> {
-  const reservation = await deps.reserve();
+  let reservation: DocumentIssueReservation;
+  try {
+    reservation = await deps.reserve();
+  } catch (error) {
+    throw error instanceof DocumentIssueError
+      ? error
+      : new DocumentIssueError("reservation", error);
+  }
   if (reservation.status === "issued") {
     return {
       documentId: reservation.documentId,
@@ -121,16 +216,19 @@ export async function issueDocumentWithGuard(
       throw new Error("Rendered document page count must be positive");
     }
   } catch (error) {
-    await deps.fail(reservation, failureCode("render"));
-    throw new DocumentIssueError("render", error);
+    const failure = error instanceof DocumentIssueError
+      ? error
+      : new DocumentIssueError("render", error);
+    await recordIssueFailure(deps, reservation, failure.stage);
+    throw failure;
   }
 
   try {
     storagePath = await deps.store(reservation, artifact);
   } catch (error) {
-    await deps.cleanup?.(reservation, storagePath);
-    await deps.fail(reservation, failureCode("store"));
-    throw new DocumentIssueError("store", error);
+    await cleanupIssueArtifact(deps, reservation, storagePath);
+    await recordIssueFailure(deps, reservation, "pdf-storage");
+    throw new DocumentIssueError("pdf-storage", error);
   }
 
   try {
@@ -149,12 +247,9 @@ export async function issueDocumentWithGuard(
     // Completion may have committed even if its response was lost. Mark the
     // reservation failed first; the RPC returns false for an already-issued
     // row, in which case deleting the canonical artifact would corrupt it.
-    const markedFailed = await deps.fail(
-      reservation,
-      failureCode("complete"),
-    );
-    if (markedFailed) await deps.cleanup?.(reservation, storagePath);
-    throw new DocumentIssueError("complete", error);
+    const markedFailed = await recordIssueFailure(deps, reservation, "issuance-rpc");
+    if (markedFailed) await cleanupIssueArtifact(deps, reservation, storagePath);
+    throw new DocumentIssueError("issuance-rpc", error);
   }
 }
 
@@ -194,6 +289,37 @@ export type IssueDocumentFoundationInput = ReserveDocumentIssueInput & {
   draftId?: string | null;
   render: DocumentIssueRenderer;
 };
+
+export async function finalizeDocumentDraft(input: {
+  draftId?: string | null;
+  clinicId: string;
+  actorId: string;
+  documentId: string;
+}): Promise<void> {
+  if (!input.draftId) return;
+  try {
+    const resolved = await resolveClinicDocumentDraft({
+      draftId: input.draftId,
+      clinicId: input.clinicId,
+      actorId: input.actorId,
+      documentId: input.documentId,
+    });
+    if (!resolved.error) return;
+    console.error("document_draft_resolution_failed", {
+      clinicId: input.clinicId,
+      draftId: input.draftId,
+      documentId: input.documentId,
+      ...describeDocumentIssueFailure(resolved.error, "draft-finalization"),
+    });
+  } catch (error) {
+    console.error("document_draft_resolution_failed", {
+      clinicId: input.clinicId,
+      draftId: input.draftId,
+      documentId: input.documentId,
+      ...describeDocumentIssueFailure(error, "draft-finalization"),
+    });
+  }
+}
 
 /**
  * Concrete server-only P7-0 path. P7-3 supplies the approved template renderer;
@@ -259,25 +385,9 @@ export async function issueDocumentFoundation(
     },
   });
 
-  if (input.draftId) {
-    const resolved = await resolveClinicDocumentDraft({
-      draftId: input.draftId,
-      clinicId: input.clinicId,
-      actorId: input.actorId,
-      documentId: result.documentId,
-    });
-    if (resolved.error) {
-      // Issuance is already committed and must never be reported as failed or
-      // rolled back because draft housekeeping failed. The retry-safe issue
-      // path will return the same document and attempt resolution again.
-      console.error("document_draft_resolution_failed", {
-        clinicId: input.clinicId,
-        draftId: input.draftId,
-        documentId: result.documentId,
-        message: resolved.error.message,
-      });
-    }
-  }
+  // Issuance is already committed and must never be reported as failed or
+  // rolled back because draft housekeeping failed.
+  await finalizeDocumentDraft({ ...input, documentId: result.documentId });
 
   return result;
 }

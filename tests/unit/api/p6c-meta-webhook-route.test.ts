@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   process: vi.fn(),
   recordVerified: vi.fn(),
   recordRejection: vi.fn(),
+  decrypt: vi.fn(),
 }));
 
 vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
@@ -22,7 +23,7 @@ vi.mock("@/lib/messaging/webhook-http", () => ({
   unavailableWebhookResponse: () =>
     Response.json({ error: "Webhook temporarily unavailable" }, { status: 503 }),
 }));
-vi.mock("@/lib/messaging/crypto", () => ({ decryptChannelCredentials: vi.fn() }));
+vi.mock("@/lib/messaging/crypto", () => ({ decryptChannelCredentials: mocks.decrypt }));
 vi.mock("@/lib/messaging/webhooks", () => ({ processMessagingWebhookEvents: mocks.process }));
 vi.mock("@/lib/messaging/health", () => ({
   recordVerifiedWhatsAppWebhook: mocks.recordVerified,
@@ -90,7 +91,47 @@ describe("P6C Meta webhook route", () => {
     const response = await whatsappPost(metaRequest());
     expect(response.status).toBe(401);
     expect(mocks.process).not.toHaveBeenCalled();
-    expect(mocks.findChannel).not.toHaveBeenCalled();
+    // P7D: the channel lookup now runs *before* the signature check, because a
+    // clinic-owned (manual API) channel is signed with that clinic's own app
+    // secret and the route must read the channel to know which secret applies.
+    // The invariant that matters is unchanged: an unverified request never
+    // reaches processing, and nothing is recorded for the clinic.
+    expect(mocks.recordVerified).not.toHaveBeenCalled();
+    expect(mocks.recordRejection).toHaveBeenCalledWith("meta", "signature");
+  });
+
+  it("verifies a clinic-owned channel against that clinic's own stored app secret", async () => {
+    mocks.findChannel.mockResolvedValue({
+      data: {
+        clinic_id: "clinic-a",
+        sender_identity: "551234567890",
+        credentials_encrypted: "\\xenvelope",
+      },
+      error: null,
+    });
+    mocks.decrypt.mockReturnValue({
+      accessToken: "clinic-token",
+      appId: "clinic-app-id",
+      appSecret: "clinic-app-secret",
+    });
+
+    const response = await whatsappPost(metaRequest());
+
+    expect(response.status).toBe(200);
+    // The platform secret is not what authenticated this request: the routed
+    // channel's own credentials were handed to the verifier.
+    expect(mocks.verifyMeta).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ appSecret: "clinic-app-secret" }),
+    );
+  });
+
+  it("falls back to the platform app secret for a platform-brokered channel", async () => {
+    // Embedded Signup / Coexistence channels store no app secret of their own.
+    const response = await whatsappPost(metaRequest());
+
+    expect(response.status).toBe(200);
+    expect(mocks.verifyMeta).toHaveBeenCalledWith(expect.anything(), {});
   });
 
   it("verifies the signature, routes by phone_number_id, and processes as the meta provider", async () => {
@@ -156,6 +197,35 @@ describe("P6C Meta webhook route", () => {
       ),
     );
     expect(bad.status).toBe(403);
+    delete process.env.META_WEBHOOK_VERIFY_TOKEN;
+  });
+
+  it("answers a clinic-scoped handshake with that clinic's own derived token only", async () => {
+    // P7D: a clinic connecting its own Meta app registers `?clinic=<id>` and the
+    // token ClinicFlow derived for it. The platform token must not open that
+    // door, and neither must another clinic's token.
+    process.env.MESSAGING_CREDENTIALS_KEY = Buffer.alloc(32, 7).toString("base64");
+    process.env.META_WEBHOOK_VERIFY_TOKEN = "platform-token";
+    const { deriveWebhookVerifyToken } = await import(
+      "@/lib/messaging/webhook-verify-token"
+    );
+    const clinicA = deriveWebhookVerifyToken("clinic-a")!;
+    const clinicB = deriveWebhookVerifyToken("clinic-b")!;
+
+    const handshake = (clinic: string, token: string) =>
+      whatsappGet(
+        new Request(
+          `https://clinic.example/api/webhooks/whatsapp?clinic=${clinic}&hub.mode=subscribe&hub.verify_token=${token}&hub.challenge=echo-7`,
+        ),
+      );
+
+    const ok = handshake("clinic-a", clinicA);
+    expect(ok.status).toBe(200);
+    await expect(ok.text()).resolves.toBe("echo-7");
+
+    expect(handshake("clinic-a", clinicB).status).toBe(403);
+    expect(handshake("clinic-a", "platform-token").status).toBe(403);
+
     delete process.env.META_WEBHOOK_VERIFY_TOKEN;
   });
 });

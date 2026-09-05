@@ -40,14 +40,25 @@ import {
 import {
   getClinicWorkingHours,
   getStaffSchedule,
+  getStaffShiftTemplates,
   updateStaffProfileSection,
   upsertStaffSchedule,
 } from "@/actions/settings";
-import type { DoctorScheduleValues, ClinicWorkingHoursValues } from "@/lib/validations/settings";
+import type {
+  DoctorScheduleValues,
+  ClinicWorkingHoursValues,
+  StaffShiftTemplatesValues,
+} from "@/lib/validations/settings";
 import type { Tables } from "@/types/database";
 import { useTranslations } from "next-intl";
 import { ScopedAssistantLauncher } from "@/components/assistant/assistant-launcher-scope";
 import { ClinicianCredentialsForm } from "@/components/clinical/clinician-credentials-form";
+import {
+  canonicalClock,
+  intervalsForSelection,
+  matchTemplateSelection,
+  validateStaffInterval,
+} from "@/lib/scheduling/clock";
 
 type StaffMember = Tables<"profiles"> & {
   departments: { name: string; color?: string | null } | null;
@@ -563,6 +574,8 @@ function isClinicDayClosed(clinicHours: ClinicWorkingHoursValues, dow: number): 
   return !day?.open;
 }
 
+type DayIntervals = { start_time: string; end_time: string }[];
+
 function StaffScheduleTab({
   staffId,
   open,
@@ -575,65 +588,161 @@ function StaffScheduleTab({
   const t = useTranslations("settings");
   const [schedule, setSchedule] = useState<DoctorScheduleValues | null>(null);
   const [clinicHours, setClinicHours] = useState<ClinicWorkingHoursValues>([]);
+  const [templates, setTemplates] = useState<StaffShiftTemplatesValues>([]);
+  const [selections, setSelections] = useState<Map<number, Set<number>>>(() => new Map());
+  const [customDays, setCustomDays] = useState<Set<number>>(() => new Set());
   const [saving, startSave] = useTransition();
   const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
     let active = true;
-    queueMicrotask(() => { if (active) setSchedule(null); });
+    queueMicrotask(() => {
+      if (active) {
+        setSchedule(null);
+        setCustomDays(new Set());
+        setSelections(new Map());
+      }
+    });
     Promise.all([
       getStaffSchedule(staffId),
       getClinicWorkingHours(),
-    ]).then(([scheduleData, hoursData]) => {
+      getStaffShiftTemplates(),
+    ]).then(([scheduleData, hoursData, templateData]) => {
       if (!active) return;
+      const enabled = (templateData ?? []).filter((template) => template.is_enabled);
+      const nextSelections = new Map<number, Set<number>>();
+      const nextCustom = new Set<number>();
+      for (const day of scheduleData) {
+        if (!day.works || day.intervals.length === 0) continue;
+        const match = matchTemplateSelection(day.intervals, enabled);
+        if (match) nextSelections.set(day.day_of_week, match);
+        else nextCustom.add(day.day_of_week);
+      }
       setSchedule(scheduleData);
       setClinicHours(hoursData ?? []);
+      setTemplates(enabled);
+      setSelections(nextSelections);
+      setCustomDays(nextCustom);
     });
     return () => { active = false; };
   }, [open, staffId]);
 
-  function toggleDay(dow: number, works: boolean) {
+  function applyIntervals(dow: number, intervals: DayIntervals) {
     setSchedule((prev) =>
-      prev?.map((d) =>
-        d.day_of_week === dow
-          ? { ...d, works, start_time: works ? (d.start_time ?? "09:00") : null, end_time: works ? (d.end_time ?? "17:00") : null }
-          : d,
+      prev?.map((day) =>
+        day.day_of_week === dow
+          ? {
+              ...day,
+              works: intervals.length > 0,
+              intervals,
+              start_time: intervals[0]?.start_time ?? null,
+              end_time: intervals.at(-1)?.end_time ?? null,
+            }
+          : day,
       ) ?? null,
     );
   }
 
+  function toggleDay(dow: number, works: boolean) {
+    if (!works) {
+      setSelections((current) => {
+        const next = new Map(current);
+        next.delete(dow);
+        return next;
+      });
+      setCustomDays((current) => {
+        const next = new Set(current);
+        next.delete(dow);
+        return next;
+      });
+      applyIntervals(dow, []);
+      return;
+    }
+    const existing = schedule?.find((day) => day.day_of_week === dow)?.intervals ?? [];
+    if (existing.length > 0) {
+      applyIntervals(dow, existing);
+      return;
+    }
+    const first = templates[0];
+    if (first) {
+      setSelections((current) => new Map(current).set(dow, new Set([0])));
+      applyIntervals(dow, [{ start_time: first.start_time, end_time: first.end_time }]);
+      return;
+    }
+    setCustomDays((current) => new Set(current).add(dow));
+    applyIntervals(dow, [{ start_time: "09:00", end_time: "17:00" }]);
+  }
+
+  function toggleTemplate(dow: number, index: number) {
+    const current = customDays.has(dow) ? new Set<number>() : new Set(selections.get(dow) ?? []);
+    if (current.has(index)) current.delete(index);
+    else current.add(index);
+    setCustomDays((prev) => {
+      const next = new Set(prev);
+      next.delete(dow);
+      return next;
+    });
+    if (current.size === 0) {
+      // Nothing selected: fall back to a custom interval rather than silently
+      // turning the day off.
+      setSelections((prev) => {
+        const next = new Map(prev);
+        next.delete(dow);
+        return next;
+      });
+      setCustomDays((prev) => new Set(prev).add(dow));
+      return;
+    }
+    setSelections((prev) => new Map(prev).set(dow, current));
+    applyIntervals(dow, intervalsForSelection(current, templates));
+  }
+
+  function chooseCustom(dow: number) {
+    setSelections((prev) => {
+      const next = new Map(prev);
+      next.delete(dow);
+      return next;
+    });
+    setCustomDays((prev) => new Set(prev).add(dow));
+    const existing = schedule?.find((day) => day.day_of_week === dow)?.intervals ?? [];
+    applyIntervals(dow, existing.length > 0 ? [existing[0]!] : [{ start_time: "09:00", end_time: "17:00" }]);
+  }
+
   function updateTime(dow: number, field: "start_time" | "end_time", value: string) {
-    setSchedule((prev) =>
-      prev?.map((d) => (d.day_of_week === dow ? { ...d, [field]: value } : d)) ?? null,
-    );
+    const day = schedule?.find((item) => item.day_of_week === dow);
+    const base = day?.intervals[0] ?? { start_time: "09:00", end_time: "17:00" };
+    applyIntervals(dow, [{ ...base, [field]: value }]);
   }
 
   function onSave() {
     if (!schedule) return;
     setSaveError(null);
 
-    // Client-side pre-validation against clinic hours
+    // Client-side pre-validation against clinic hours. Staff intervals still
+    // have to sit inside the clinic's opening intervals; shift templates only
+    // changed where those intervals come from.
     if (clinicHours.some((d) => d.open)) {
       const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
       for (const day of schedule) {
-        if (!day.works || !day.start_time || !day.end_time) continue;
+        if (!day.works || day.intervals.length === 0) continue;
         const clinicDay = clinicHours.find((c) => c.day_of_week === day.day_of_week);
         if (!clinicDay?.open || clinicDay.shifts.length === 0) {
           setSaveError(t("staffScheduleOnClosedDay", { day: DAY_NAMES[day.day_of_week] }));
           return;
         }
-        const clinicOpen = clinicDay.shifts.reduce((min, s) => s.shift_start < min ? s.shift_start : min, clinicDay.shifts[0].shift_start);
-        const clinicClose = clinicDay.shifts.reduce((max, s) => s.shift_end > max ? s.shift_end : max, clinicDay.shifts[0].shift_end);
-        if (day.start_time < clinicOpen || day.end_time > clinicClose) {
-          setSaveError(t("staffHoursOutsideClinicHours", {
-            day: DAY_NAMES[day.day_of_week],
-            start: day.start_time,
-            end: day.end_time,
-            clinicOpen,
-            clinicClose,
-          }));
-          return;
+        for (const entry of day.intervals) {
+          const interval = validateStaffInterval(entry.start_time, entry.end_time, clinicDay.shifts);
+          if (!interval.ok) {
+            setSaveError(t("staffHoursOutsideClinicHours", {
+              day: DAY_NAMES[day.day_of_week],
+              start: entry.start_time,
+              end: entry.end_time,
+              clinicOpen: interval.clinicOpen ?? "—",
+              clinicClose: interval.clinicClose ?? "—",
+            }));
+            return;
+          }
         }
       }
     }
@@ -670,12 +779,21 @@ function StaffScheduleTab({
         </div>
       )}
 
+      {templates.length === 0 && (
+        <p className="rounded-lg border border-dashed border-border/50 px-4 py-3 text-xs text-muted-foreground">
+          {t("noStaffShiftTemplatesHint")}
+        </p>
+      )}
+
       <div className="space-y-2">
         {SCHEDULE_DAY_ORDER.map((dow) => {
           const day = schedule.find((d) => d.day_of_week === dow);
           if (!day) return null;
 
           const clinicClosed = isClinicDayClosed(clinicHours, dow);
+          const isCustom = customDays.has(dow);
+          const selection = selections.get(dow) ?? new Set<number>();
+          const editable = day.intervals[0];
 
           return (
             <div
@@ -705,24 +823,60 @@ function StaffScheduleTab({
               </div>
 
               {day.works && !clinicClosed && (
-                <div className="mt-3 flex items-center gap-2 ps-7">
-                  <TimePicker
-                    value={day.start_time ?? ""}
-                    disabled={!isAdmin || saving}
-                    onChange={(time) => updateTime(dow, "start_time", time)}
-                    label={t("startTime")}
-                    compact
-                    className="h-8 w-32 rounded-md px-2 text-sm"
-                  />
-                  <span className="text-xs text-muted-foreground">{t("to")}</span>
-                  <TimePicker
-                    value={day.end_time ?? ""}
-                    disabled={!isAdmin || saving}
-                    onChange={(time) => updateTime(dow, "end_time", time)}
-                    label={t("endTime")}
-                    compact
-                    className="h-8 w-32 rounded-md px-2 text-sm"
-                  />
+                <div className="mt-3 space-y-2 ps-7">
+                  <div className="flex flex-wrap gap-1.5" role="group" aria-label={t("shiftTemplateSelection")}>
+                    {templates.map((template, index) => (
+                      <Button
+                        key={template.id ?? template.name}
+                        type="button"
+                        size="xs"
+                        variant={!isCustom && selection.has(index) ? "default" : "outline"}
+                        aria-pressed={!isCustom && selection.has(index)}
+                        disabled={!isAdmin || saving}
+                        onClick={() => toggleTemplate(dow, index)}
+                      >
+                        {template.name}
+                      </Button>
+                    ))}
+                    <Button
+                      type="button"
+                      size="xs"
+                      variant={isCustom ? "default" : "outline"}
+                      aria-pressed={isCustom}
+                      disabled={!isAdmin || saving}
+                      onClick={() => chooseCustom(dow)}
+                    >
+                      {t("customHours")}
+                    </Button>
+                  </div>
+
+                  {isCustom ? (
+                    <div className="flex items-center gap-2">
+                      <TimePicker
+                        value={editable?.start_time ?? ""}
+                        disabled={!isAdmin || saving}
+                        onChange={(time) => updateTime(dow, "start_time", time)}
+                        label={t("startTime")}
+                        compact
+                        className="h-8 w-32 rounded-md px-2 text-sm"
+                      />
+                      <span className="text-xs text-muted-foreground">{t("to")}</span>
+                      <TimePicker
+                        value={editable?.end_time ?? ""}
+                        disabled={!isAdmin || saving}
+                        onChange={(time) => updateTime(dow, "end_time", time)}
+                        label={t("endTime")}
+                        compact
+                        className="h-8 w-32 rounded-md px-2 text-sm"
+                      />
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      {day.intervals
+                        .map((interval) => `${canonicalClock(interval.start_time)} – ${canonicalClock(interval.end_time)}`)
+                        .join(" · ")}
+                    </p>
+                  )}
                 </div>
               )}
             </div>

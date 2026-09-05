@@ -1324,10 +1324,26 @@ describe("P8B §§3–7 — conversation and outbound-media database boundaries"
       password: "P8Integration123!",
     });
     expect(login.error).toBeNull();
+    const path = `${clinicA}/forbidden.txt`;
+    /**
+     * The body is raw bytes rather than a `Blob` on purpose. Under the jsdom test
+     * environment `Blob` is jsdom's, which implements `arrayBuffer()` but not
+     * `stream()`; storage-js wraps such a body in multipart form data, and Node 22's
+     * fetch then produces a request body that never yields — the upload hangs instead
+     * of being refused. Bytes take the same path the only real writer to this bucket
+     * takes (`uploadOutboundMedia` sends a Buffer), so this still exercises the real
+     * storage endpoint and the real policy.
+     */
     const upload = await staff.storage
       .from("whatsapp-outbound")
-      .upload(`${clinicA}/forbidden.txt`, new Blob(["not allowed"], { type: "text/plain" }));
+      .upload(path, Buffer.from("not allowed"), { contentType: "text/plain" });
     expect(upload.error).not.toBeNull();
+    expect(upload.data).toBeNull();
+    /** Refused by policy, not by a transport hiccup, and nothing landed in the bucket. */
+    expect((upload.error as { statusCode?: string } | null)?.statusCode).toBe("403");
+    const listed = await service.storage.from("whatsapp-outbound").list(clinicA);
+    expect(listed.error).toBeNull();
+    expect(listed.data?.map((entry) => entry.name)).not.toContain("forbidden.txt");
     await staff.auth.signOut();
   });
 });

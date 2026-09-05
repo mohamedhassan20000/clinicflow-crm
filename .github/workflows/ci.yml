@@ -15,6 +15,9 @@ jobs:
     name: Lint · Typecheck · Unit tests
     runs-on: ubuntu-latest
 
+    env:
+      NODE_OPTIONS: --max-old-space-size=4096
+
     steps:
       - uses: actions/checkout@v4
 
@@ -53,8 +56,6 @@ jobs:
         run: pnpm whatsapp:worker:install
 
       - name: Typecheck
-        env:
-          NODE_OPTIONS: --max-old-space-size=4096
         run: pnpm typecheck
 
       - name: Unit tests

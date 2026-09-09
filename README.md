@@ -1,7 +1,6 @@
 # ClinicFlow CRM
 
 ![Status](https://img.shields.io/badge/status-production-success)
-![License](https://img.shields.io/badge/license-MIT-blue)
 ![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)
 ![Tests](https://img.shields.io/badge/tests-270%20passing-brightgreen)
 
@@ -100,6 +99,18 @@ Replaces paper appointment books, phone scheduling, and Excel patient records wi
 - Confirmation dialogs on all destructive actions
 - Toast notifications with Undo actions (10–15 second window)
 - Audit logging for all sensitive operations
+
+**AI Assistant**
+
+- Conversational assistant for staff and patients, reachable in-app and over WhatsApp
+- Scoped tool-based actions (booking, lookups) rather than free-form database access
+- Adversarial/injection test suite and a scored evaluation gate run in CI on every change
+
+**Multi-Clinic Operator Platform (SaaS layer)**
+
+- Operator console (`/operator`) for managing multiple clinics from one place
+- Clinic onboarding, invitations, coupons, and AI usage allowance administration
+- Operator-level reporting across clinics
 
 ---
 
@@ -482,6 +493,10 @@ Replaces paper appointment books, phone scheduling, and Excel patient records wi
 | Email          | Resend                          |
 | Testing        | Vitest v4 + Playwright 1.59     |
 | Deployment     | Vercel                          |
+| AI / LLM       | Anthropic (Claude) via Vercel AI SDK |
+| Messaging      | WhatsApp Business (Meta Graph API) via a dedicated worker service |
+| Caching        | Upstash Redis |
+| Currency / FX  | Open Exchange Rates API |
 
 ---
 
@@ -514,6 +529,8 @@ Browser
 - **Session caching** — a `cf_page_visibility` cookie (httpOnly, 1h TTL) caches accessible page slugs to avoid a DB round-trip on every navigation.
 - **Postgres-native billing** — billing RPCs are `SECURITY DEFINER` functions so they are atomic and cannot partially succeed.
 - **Audit trail** — patient deletions, billing events, and staff changes write immutable records to `audit_logs` inside the same transaction.
+- **AI assistant on a scoped tool layer** — the staff/patient AI assistant (`app/api/agent/chat`) calls a curated set of authorized tools rather than executing arbitrary database access; requests go through the same RLS-scoped clients as the rest of the app.
+- **WhatsApp handled by a separate worker** — the WhatsApp Business integration (`services/whatsapp-worker`) is deployed as its own service with its own dependency tree, communicating with the main app over an authenticated callback.
 
 ---
 
@@ -614,6 +631,7 @@ Each report has a date-range filter and report-specific filters (doctor, outcome
 - **Service role isolation** — `SUPABASE_SERVICE_ROLE_KEY` is used only in `createAdminClient()` on the server and is never exposed to the browser.
 - **Session security** — httpOnly cookies via `@supabase/ssr`; page visibility cache cookie is httpOnly, Secure, SameSite=Lax, 1h TTL.
 - **Billing deletion guard** — appointments with any billing data cannot be soft-deleted. Enforced server-side before any DB write.
+- **AI action authorization** — the AI assistant can only call a fixed, authorized set of tools; a dedicated adversarial/prompt-injection test suite and a scored eval gate run as required CI checks.
 
 ---
 

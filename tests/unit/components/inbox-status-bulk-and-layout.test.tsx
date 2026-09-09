@@ -21,8 +21,8 @@ const mocks = vi.hoisted(() => ({
     on() {
       return this;
     },
-    subscribe(callback: (status: string) => void) {
-      callback("SUBSCRIBED");
+    subscribe(callback?: (status: string) => void) {
+      callback?.("SUBSCRIBED");
       return this;
     },
   },

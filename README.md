@@ -801,6 +801,3 @@ Senior Software Engineering Student
 
 ---
 
-## License
-
-[MIT](./LICENSE)

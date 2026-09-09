@@ -7,7 +7,14 @@ type DepartmentRow = Database["public"]["Tables"]["departments"]["Row"];
 type InsuranceRow = Database["public"]["Tables"]["insurance_providers"]["Row"];
 type ServiceRow = Pick<
   Database["public"]["Tables"]["services"]["Row"],
-  "id" | "name" | "price" | "department_id" | "is_active" | "deleted_at"
+  | "id"
+  | "name"
+  | "name_ar"
+  | "name_en"
+  | "price"
+  | "department_id"
+  | "is_active"
+  | "deleted_at"
 > & {
   departments: Pick<DepartmentRow, "id" | "name" | "color"> | null;
 };
@@ -53,7 +60,12 @@ export function getCachedServices(clinicId: string): Promise<ServiceRow[]> {
       const supabase = createClinicScopedAdminClient(clinicId);
       const { data } = await supabase
         .from("services")
-        .select("id, name, price, department_id, is_active, deleted_at, departments(id, name, color)")
+        // `*` rather than a column list, deliberately: the optional bilingual
+        // display-name columns are additive and are applied on the clinic's own
+        // schedule, and naming them explicitly would make this read — and with
+        // it the whole services screen — fail on a database where that
+        // migration has not run yet.
+        .select("*, departments(id, name, color)")
         .eq("clinic_id", clinicId)
         .order("name");
       return (data ?? []) as ServiceRow[];

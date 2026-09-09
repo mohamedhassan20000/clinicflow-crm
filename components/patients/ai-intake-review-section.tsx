@@ -48,6 +48,18 @@ export type AiPatientIntakeListItem = {
   phone: string;
   email: string;
   nationalId: string;
+  /**
+   * The names as authored, in each language.
+   *
+   * Null when the patient gave only one of them, and null on every intake
+   * staged before the additive migration. Review shows what was collected and
+   * never a rendering of it — a transliteration a reviewer approves without
+   * seeing is indistinguishable, a week later, from a name a person chose.
+   */
+  fullNameAr: string | null;
+  fullNameEn: string | null;
+  /** Optional on the intake: the assistant asks, and «مش عارف» is a null. */
+  bloodType: string | null;
   departmentName: string;
   doctorName: string;
   createdAt: string;
@@ -194,6 +206,18 @@ export function AiIntakeReviewSection({ intakes }: { intakes: AiPatientIntakeLis
                           <dt className="text-muted-foreground">{t("phone")}</dt><dd dir="ltr">{intake.phone}</dd>
                           <dt className="text-muted-foreground">{t("email")}</dt><dd className="break-all" dir="ltr">{intake.email}</dd>
                           <dt className="text-muted-foreground">{t("nationalId")}</dt><dd dir="ltr">{intake.nationalId}</dd>
+                          {/* Each name in its own direction, so an Arabic name
+                              is not laid out left-to-right beside an English
+                              one. Em dash for a language the patient did not
+                              give — never a guessed spelling. */}
+                          <dt className="text-muted-foreground">{t("fullNameArabic")}</dt>
+                          <dd dir="rtl" lang="ar">{intake.fullNameAr ?? "—"}</dd>
+                          <dt className="text-muted-foreground">{t("fullNameEnglish")}</dt>
+                          <dd dir="ltr" lang="en">{intake.fullNameEn ?? "—"}</dd>
+                          {/* Optional field, so the em dash the rest of this
+                              screen uses for "nothing recorded" — never a
+                              guessed value, and never a blank beside a label. */}
+                          <dt className="text-muted-foreground">{t("bloodType")}</dt><dd dir="ltr">{intake.bloodType ?? "—"}</dd>
                           <dt className="text-muted-foreground">{t("department")}</dt><dd>{intake.departmentName}</dd>
                           <dt className="text-muted-foreground">{t("doctor")}</dt><dd>{intake.doctorName}</dd>
                           <dt className="text-muted-foreground">{t("createdBy")}</dt><dd>{t("aiAssistant")}</dd>

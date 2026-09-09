@@ -320,12 +320,17 @@ describe("P12 · the past-appointments panel follows the selected conversation",
     const { rerender } = renderInbox(inboxData("conversation-1"));
     rerenderInbox(rerender, inboxData("conversation-7"));
 
-    const trigger = screen.getByTestId("past-appointments-trigger");
-    trigger.click();
+    // P18 — the history moved into the thread's overflow menu, so the menu is
+    // opened first. Which conversation the panel asks about is unchanged, and
+    // that is what this test is about.
+    const { waitFor } = await import("@testing-library/react");
+    const userEvent = (await import("@testing-library/user-event")).default;
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId("conversation-more-actions"));
+    await user.click(await screen.findByTestId("past-appointments-trigger"));
 
     // Not conversation-1: the panel is rebuilt with the thread, so it cannot be
     // left holding the previous conversation's id.
-    const { waitFor } = await import("@testing-library/react");
     await waitFor(() =>
       expect(mocks.listConversationPatientAppointments).toHaveBeenCalledWith({
         conversationId: "conversation-7",

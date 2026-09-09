@@ -156,7 +156,12 @@ export function InsuranceActions({ provider, updateAction, toggleAction, deleteA
           </DialogHeader>
           <InsuranceForm
             action={updateAction}
-            defaultValues={{ name: provider.name, code: provider.code }}
+            defaultValues={{
+              name: provider.name,
+              code: provider.code,
+              name_ar: provider.name_ar,
+              name_en: provider.name_en,
+            }}
             submitLabel={t("saveChanges")}
             onSuccess={() => {
               setEditOpen(false);

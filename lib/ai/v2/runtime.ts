@@ -119,6 +119,13 @@ export async function runPatientTurnV2(input: {
   if (patientEngineMode(input.clinicId) !== "v2") {
     return { handled: false, reason: "disabled" };
   }
+  // Everything from here answers *or* leaves a trace saying why it did not.
+  //
+  // Two of the three fallbacks used to be silent, and that cost a whole manual
+  // QA pass: eight defects were recorded against V2 by a session that had in
+  // fact been answered end to end by the legacy engine, and the only way to
+  // know was that `audit_logs` held no V2 line at all. "Which engine answered
+  // this turn?" must be a question the audit trail answers on its own.
 
   const loaded = await loadFlowState({
     clinicId: input.clinicId,
@@ -150,6 +157,12 @@ export async function runPatientTurnV2(input: {
     });
   } catch (error) {
     Sentry.captureException(error, { tags: { area: "patient-ai-v2-context" } });
+    await logAgentTool({
+      clinicId: input.clinicId,
+      actorId: null,
+      tool: "patient_v2_unavailable",
+      params: { reason: "context_failed" },
+    }).catch(() => undefined);
     return { handled: false, reason: "context_failed" };
   }
 
@@ -176,10 +189,21 @@ export async function runPatientTurnV2(input: {
     // The stack *is* the state here, so a lost write would present the next
     // turn with a flow that had forgotten a step. Better to hand this turn to
     // the legacy engine than to answer from a state nobody recorded.
+    // `code` is a classification — `rpc_error:42501`, `client_threw:TypeError`,
+    // `column_unavailable` — and never a message. Without it the audit line
+    // said only that a write failed, which is true of a permission denial, a
+    // missing migration and a client-side TypeError alike; telling them apart
+    // from production audit logs is the difference between an hour and a week.
     Sentry.captureMessage("patient_ai_v2_state_write_failed", {
       level: "error",
-      tags: { area: "patient-ai-v2-runtime" },
+      tags: { area: "patient-ai-v2-runtime", cause: saved.code },
     });
+    await logAgentTool({
+      clinicId: input.clinicId,
+      actorId: null,
+      tool: "patient_v2_unavailable",
+      params: { reason: "state_write_failed", cause: saved.code },
+    }).catch(() => undefined);
     return { handled: false, reason: "unavailable" };
   }
 

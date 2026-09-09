@@ -145,6 +145,21 @@ export type StepOutcome =
       readonly slots: readonly SlotName[];
       /** Memo keys to drop — the flags that were *about* those slots. */
       readonly memo?: readonly string[];
+      /**
+       * Values this frame may not be offered again.
+       *
+       * The loop-breaker for a refused write. When the booking RPC says a slot
+       * is unavailable and the availability read still shows it free — a
+       * pending row somebody else holds is invisible to `computeAvailability` —
+       * dropping the slot and re-reading offers the patient the very time that
+       * was just refused, and the turn repeats for as long as they keep
+       * choosing it. Recording the refusal means the next offer is built
+       * without it, on this frame only and for this booking only.
+       *
+       * Same field the doctor step's «لا دكتور تاني» writes, used the same way:
+       * a negative constraint, never a positive one.
+       */
+      readonly reject?: readonly { readonly slot: SlotName; readonly value: string }[];
       readonly say: string;
       readonly facts?: Readonly<Record<string, unknown>>;
     }
@@ -186,9 +201,59 @@ export type FlowStep = {
    */
   readonly resolveValue?: (input: {
     spoken: string;
+    /**
+     * The slot being filled.
+     *
+     * Redundant for a step that fills exactly one, and load-bearing for a
+     * {@link FlowStep.collects} step, which validates several. Passed always so
+     * a resolver never has to infer which question it is answering.
+     */
+    slot: SlotName;
     frame: FlowFrame;
     context: TurnContext;
   }) => Promise<SlotResolution>;
+  /**
+   * Additional slots this step may accept an answer for.
+   *
+   * The intake case, and the reason it exists. A `fills: null` step that asks
+   * for a name, then a national id, then a date of birth is one step asking a
+   * sequence of questions — but `set_slot` resolves the owning step by
+   * `fills`, so an answer to any of those questions belonged to no step at all
+   * and was **dropped**. The patient's name was collected, discarded, and asked
+   * for again on the next turn, forever; nothing downstream of it could ever
+   * run, so no third-party file was ever staged and no booking was ever
+   * written for one.
+   *
+   * Declaring the slots a step collects is what makes those answers land. It is
+   * data, not a branch: the engine still validates every value through
+   * `resolveValue` and still commits nothing it cannot ground.
+   */
+  readonly collects?: readonly SlotName[];
+  /**
+   * True when this step's `resolveValue` is total over the patient's own words.
+   *
+   * Every other resolver grounds against something the clinic *has* — a
+   * roster, a calendar, a directory — so the patient's words only mean
+   * something in the presence of a live read. This one does not: `beneficiary`
+   * is a two-value canonical slot, and "who is this for?" is answered in prose
+   * that a lexicon settles on its own.
+   *
+   * The engine uses the flag for exactly one thing (see
+   * `reconcileCanonicalAnswer`): while such a step's offer is open, the
+   * deterministic reading of the turn text outranks whichever command the
+   * interpreter emitted about it. Manual QA is why. «لحد تاني» arrived as an
+   * `affirm_offer` against a two-option offer — the model's honest reading of
+   * "answer THE OPEN OFFER" — and a bare affirmation of a two-option offer is
+   * ambiguous by construction, so the engine asked which one and the patient
+   * was shown the enum. The words were unambiguous the whole time; nothing but
+   * the command shape said otherwise.
+   *
+   * Deliberately narrow. It is *not* a licence to re-read the turn text for
+   * slots that select a record: "لا مش الجلدية" contains a department name,
+   * and a rejection that resolves against the roster is how a patient gets
+   * booked into the thing they just refused.
+   */
+  readonly canonicalAnswer?: boolean;
   /**
    * Slots invalidated when this step's slot is corrected.
    *
@@ -210,7 +275,24 @@ export type SlotResolution =
         source: Candidate<unknown>["source"];
       }[];
     }
-  | { kind: "unresolved" };
+  | { kind: "unresolved" }
+  /**
+   * The words were read perfectly well and the answer is no.
+   *
+   * The distinction `unresolved` cannot make. «بكرة» is not a day the resolver
+   * failed to understand — it is a day the clinic does not sell online, and
+   * answering it with «معلش، ما قدرتش أحدد اللي تقصده» tells the patient their
+   * Arabic was unclear when the truth is that the policy is. A refusal carries
+   * its own copy key and its own facts (the clinic's phone number, for the day
+   * case), the slot stays empty, and the attempt counter is untouched — a
+   * policy answer is not a failed clarification and must not escalate into
+   * one.
+   */
+  | {
+      kind: "refused";
+      say: string;
+      facts?: Readonly<Record<string, string | number | boolean>>;
+    };
 
 export type FlowDefinition = {
   readonly name: FlowName;
@@ -244,6 +326,18 @@ export type FlowDefinition = {
  */
 export function stepDoneKey(stepId: string): string {
   return `done:${stepId}`;
+}
+
+/** The step that owns a slot for `set_slot` purposes: fills it, or collects it. */
+export function stepForSlot(
+  definition: FlowDefinition,
+  slot: SlotName,
+): FlowStep | null {
+  return (
+    definition.steps.find((step) => step.fills === slot) ??
+    definition.steps.find((step) => step.collects?.includes(slot)) ??
+    null
+  );
 }
 
 /** The step the engine should run next, or null when the flow is finished. */

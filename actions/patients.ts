@@ -41,6 +41,12 @@ function nullableFormValue(formData: FormData, key: string) {
 function patientFormInput(formData: FormData) {
   return {
     full_name: formData.get("full_name"),
+    // Optional, patient-facing, and absent unless a person typed one. The
+    // mutation drops a blank rather than storing `""` — see
+    // `stripBlankDisplayNames` — which also keeps the write working on a
+    // database where the additive migration has not been applied yet.
+    full_name_ar: formData.get("full_name_ar") || null,
+    full_name_en: formData.get("full_name_en") || null,
     national_id: formData.get("national_id"),
     date_of_birth: formData.get("date_of_birth"),
     phone: formData.get("phone"),

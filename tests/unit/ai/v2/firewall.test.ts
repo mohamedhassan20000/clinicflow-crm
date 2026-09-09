@@ -239,9 +239,32 @@ describe("the prompt and the schema cannot drift apart", () => {
     expect(INTERPRETER_SYSTEM_PROMPT).toContain("عندي استفسار");
   });
 
-  it("tells the model the patient's history is not visible to it", () => {
+  /**
+   * P12 — the rule this asserts is unchanged; the sentence carrying it is not.
+   *
+   * It used to read "the patient's history is not visible to you and is not
+   * yours to use", which was two claims joined by an "and". The second is the
+   * firewall and is load-bearing. The first was simply false — `renderView` has
+   * always printed RECENT TURNS — and as written it told the model to ignore
+   * the only conversational context it had, which is a large part of why «طيب
+   * والعنوان ورقم التليفون؟» stopped resolving.
+   *
+   * So the assertion moves to the invariant rather than the wording: a slot may
+   * never be filled from an earlier turn. The structural guarantee behind it is
+   * `interpreterView` itself, asserted above — L4 and L5 are absent from the
+   * object, so no prompt built from it can name a doctor the patient did not.
+   */
+  it("forbids filling a slot from anything but this message", () => {
+    expect(INTERPRETER_SYSTEM_PROMPT).toMatch(/Never fill a slot from RECENT TURNS/i);
     expect(INTERPRETER_SYSTEM_PROMPT).toMatch(
-      /history is not visible to you and is not yours to use/i,
+      /did not name a doctor, a department, a\s+date or a time in THIS message, do not emit a slot for it/i,
     );
+  });
+
+  it("still permits reading a follow-up reference from the transcript", () => {
+    // The other half, and the reason the sentence changed: reading what a
+    // question refers to and committing a value are different acts, and only
+    // the second is forbidden.
+    expect(INTERPRETER_SYSTEM_PROMPT).toMatch(/RECENT TURNS is there so you can read a follow-up/i);
   });
 });

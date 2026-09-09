@@ -1055,6 +1055,106 @@ async function loadEpisodeUtterances(
     .reverse();
 }
 
+/**
+ * P12 — the episode's real transcript, for the V2 interpreter.
+ *
+ * ## Why this is not `loadEpisodeUtterances`
+ *
+ * It was, and that was the defect. `episodeTurns` was built by relabelling the
+ * provenance utterances as conversation turns:
+ *
+ * ```ts
+ * episodeTurns: episodeUtterances.map((text) => ({ role: "patient", text, at }))
+ * ```
+ *
+ * `loadEpisodeUtterances` reads `inbound_messages` and nothing else — correctly,
+ * because the F-8/F-11 gates ask "did the patient *utter* this?", a question for
+ * which the assistant's own words are not merely irrelevant but wrong. So the V2
+ * interpreter was handed a monologue: every entry stamped `role: "patient"`,
+ * every entry stamped with the same timestamp, and not one assistant turn in it,
+ * ever.
+ *
+ * A conversation with no assistant turns has no antecedents. «طيب والعنوان
+ * ورقم التليفون؟» refers to the answer just given, and a model that cannot see
+ * that answer is not being asked to resolve a reference — it is being asked to
+ * guess one. The same absence takes out "you already told me that", correction
+ * readability beyond the single `WAITING FOR` slot, and any sense that the
+ * thread is a thread.
+ *
+ * ## Why it is a second read rather than a reshaped `loadHistory`
+ *
+ * `loadHistory` returns `UIMessage`s with attachment parts, sized against the
+ * per-step input budget, for a model that is *continuing* a chat. This returns
+ * labelled text for a model that is *classifying one sentence*. Deriving one
+ * from the other would couple the interpreter's context window to the legacy
+ * prompt's attachment budget, which is exactly the coupling
+ * `loadEpisodeUtterances` was split out to avoid.
+ *
+ * The two reads that must stay distinct are therefore three, and each has one
+ * job: `loadHistory` feeds the legacy agent, `loadEpisodeUtterances` feeds the
+ * provenance gates, and this feeds V2's L2. All three take the same
+ * `EpisodeContext`, so none of them can be written unscoped and none of them can
+ * see across an episode boundary.
+ */
+async function loadEpisodeTranscript(
+  clinicId: string,
+  conversationId: string,
+  episode: EpisodeContext,
+): Promise<{ role: "patient" | "assistant"; text: string; at: string }[]> {
+  const client = createClinicScopedAdminClient(clinicId);
+  // P11T — the bound belongs to the episode, not to this function, for the same
+  // reason it does in `loadHistory`: taking an `EpisodeContext` is what makes an
+  // unscoped version of this read unwritable.
+  const inboundQuery = episode.scope(
+    client
+      .from("inbound_messages")
+      .select("body, received_at")
+      .eq("conversation_id", conversationId),
+    "received_at",
+  );
+  const outboundQuery = episode.scope(
+    client
+      .from("outbound_messages")
+      .select("body, body_preview, created_at")
+      .eq("related_type", "manual")
+      .eq("related_id", conversationId),
+    "created_at",
+  );
+  const [inbound, outbound] = await Promise.all([
+    inboundQuery.order("received_at", { ascending: false }).limit(HISTORY_LIMIT),
+    outboundQuery.order("created_at", { ascending: false }).limit(HISTORY_LIMIT),
+  ]);
+  return [
+    ...(inbound.data ?? []).map((row) => ({
+      role: "patient" as const,
+      text: typeof row.body === "string" ? row.body : "",
+      at: String(row.received_at ?? ""),
+    })),
+    ...(outbound.data ?? []).map((row) => ({
+      role: "assistant" as const,
+      // The full body, falling back to the preview only when there is no body —
+      // the same choice `loadHistory` makes, and for the same reason: reading
+      // the redacted 120-character preview back makes every prior assistant
+      // turn look truncated to the reader as well as to staff.
+      text:
+        typeof row.body === "string" && row.body.length > 0
+          ? row.body
+          : typeof row.body_preview === "string"
+            ? row.body_preview
+            : "",
+      at: String(row.created_at ?? ""),
+    })),
+  ]
+    .filter((turn) => turn.text.trim().length > 0 && turn.at.length > 0)
+    // Chronological, oldest first — the order `EpisodeTranscript` documents and
+    // the order the interpreter's RECENT TURNS block is read in. Sorting after
+    // the merge is what interleaves the two tables; sorting before it would
+    // produce every patient turn followed by every assistant turn, which reads
+    // as two monologues rather than one conversation.
+    .sort((a, b) => a.at.localeCompare(b.at))
+    .slice(-HISTORY_LIMIT);
+}
+
 async function loadHistory(
   clinicId: string,
   conversationId: string,
@@ -1643,7 +1743,7 @@ export async function runPatientInboundAiReply(
 
   const task: Extract<AiTaskClass, "patient_booking" | "patient_faq"> =
     hasFeature(entitlements, AI_SCHEDULING_FEATURE) ? "patient_booking" : "patient_faq";
-  const [history, episodeUtterances] = await Promise.all([
+  const [history, episodeUtterances, episodeTranscript] = await Promise.all([
     loadHistory(
       input.clinicId,
       input.conversationId,
@@ -1656,6 +1756,13 @@ export async function runPatientInboundAiReply(
     // `prepare_booking` behaving exactly as it did before F-11.
     loadEpisodeUtterances(input.clinicId, input.conversationId, episodeContext).catch(
       () => [] as string[],
+    ),
+    // P12 — V2's L2. Failing to read it must not fail the turn: an empty
+    // transcript costs the interpreter its antecedents and nothing else, and
+    // every mutation still requires a grounded command, so the safe direction
+    // here is "less context", not "no reply".
+    loadEpisodeTranscript(input.clinicId, input.conversationId, episodeContext).catch(
+      () => [] as { role: "patient" | "assistant"; text: string; at: string }[],
     ),
   ]);
 
@@ -1680,11 +1787,11 @@ export async function runPatientInboundAiReply(
       episodeUtterances,
       timeFormat: clinic.time_format === "12h" ? "12h" : "24h",
       communicationStyle,
-      episodeTurns: episodeUtterances.map((text) => ({
-        role: "patient" as const,
-        text,
-        at: inboundReceivedAt ?? new Date().toISOString(),
-      })),
+      // P12 — the real interleaved transcript, not the provenance utterances
+      // relabelled. See `loadEpisodeTranscript`. These two values are read
+      // separately and must stay separate: one answers "what did the patient
+      // utter?" and the other "what was said, by whom, in what order?".
+      episodeTurns: episodeTranscript,
     });
   } catch (error) {
     // P15 (§2F) — two very different things used to arrive here and leave by

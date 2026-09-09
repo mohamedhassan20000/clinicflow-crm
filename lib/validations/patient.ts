@@ -4,11 +4,32 @@ import { normalizePatientPhone } from "@/lib/patient-phone";
 
 const optionalUuid = z.string().uuid().optional().nullable();
 
+/**
+ * An optional display name for the patient, in one language.
+ *
+ * Length only, and blank is normalised to *absent* at the write
+ * (`stripBlankDisplayNames`) rather than here, so the form keeps working with a
+ * plain string field and so a clinic that types neither sends byte-for-byte
+ * the payload it sent before the columns existed. A check that tried to
+ * validate "is this really Arabic?" would reject a patient's own transliterated
+ * name.
+ *
+ * Display only. `full_name` stays canonical and is what search, billing, the
+ * audit trail and every identity check read.
+ */
+const optionalDisplayName = z
+  .string()
+  .max(100, "validation.tooBig")
+  .optional()
+  .nullable();
+
 export const patientSchema = z.object({
   full_name: z
     .string()
     .min(2, "validation.tooSmall")
     .max(100, "validation.tooBig"),
+  full_name_ar: optionalDisplayName,
+  full_name_en: optionalDisplayName,
   national_id: z
     .string()
     .min(5, "validation.tooSmall")

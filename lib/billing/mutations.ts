@@ -2,6 +2,7 @@ import "server-only";
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { stripBlankDisplayNames } from "@/lib/settings/display-names";
 import {
   computeBillingUndoEligibility,
   type BillingUndoActivityEvent,
@@ -29,8 +30,11 @@ import {
 } from "@/lib/validations/patient-package";
 import {
   createPackageTemplateSchema,
+  packageItemsSessions,
+  packageItemsTotal,
   templateIdSchema,
   updatePackageTemplateSchema,
+  type PackageTemplateItemValues,
 } from "@/lib/validations/package-template";
 
 export const PATIENT_BILLING_ROLES = ["admin", "receptionist"] as const;
@@ -507,6 +511,107 @@ async function validateTemplateDepartment(
   return null;
 }
 
+/**
+ * Every service a package's lines name must be this clinic's, active, and in
+ * the department the package is filed under.
+ *
+ * The database enforces two of those absolutely — `package_template_items`'
+ * foreign keys carry both `clinic_id` and `department_id`, so a cross-clinic
+ * or cross-department line cannot be stored by any writer, this one included —
+ * and cannot express the third, because "active" and "not soft-deleted" are
+ * mutable states rather than keys. `set_package_template_items` re-checks all
+ * three server-side and raises; this runs first so a person editing a package
+ * gets a field error on the line they chose rather than a constraint name.
+ *
+ * An empty list is not an error. A department-only package is the ordinary
+ * shape and the permanent one.
+ */
+async function validateTemplateItems(
+  clinicId: string,
+  departmentId: string,
+  items: readonly PackageTemplateItemValues[],
+) {
+  if (items.length === 0) return null;
+  const supabase = await createClient();
+  const ids = [...new Set(items.map((item) => item.service_id))];
+  const services = await supabase
+    .from("services")
+    .select("id")
+    .in("id", ids)
+    .eq("clinic_id", clinicId)
+    .eq("department_id", departmentId)
+    .eq("is_active", true)
+    .is("deleted_at", null);
+  if (services.error)
+    return domainFailure("package-templates.failedToValidateService");
+  const usable = new Set((services.data ?? []).map((row) => row.id));
+  const fieldErrorCodes: Record<string, string[]> = {};
+  for (const [index, item] of items.entries()) {
+    if (usable.has(item.service_id)) continue;
+    fieldErrorCodes[`items.${index}.service_id`] = [
+      "package-templates.selectAServiceFromThisDepartment",
+    ];
+  }
+  if (Object.keys(fieldErrorCodes).length === 0) return null;
+  return domainFailure("package-templates.selectAServiceFromThisDepartment", {
+    fieldErrorCodes,
+  });
+}
+
+/**
+ * Writes a package's line set in one statement, through the RPC.
+ *
+ * The RPC exists because "these are the lines now" is a delete plus a set of
+ * inserts that are only correct together; it also re-derives the header's
+ * roll-up from the lines, in that one direction, so
+ * `package_templates.total_sessions` keeps agreeing with what booking and
+ * session consumption read off it.
+ *
+ * A database where the migration has not been applied has no RPC to call. That
+ * is not an error to show a clinic filing the department-only packages they
+ * have always filed — `callers` skip this entirely for an empty set — but it
+ * *is* an error to swallow for a clinic that just typed three priced lines,
+ * because succeeding silently would drop them.
+ */
+async function writeTemplateItems(
+  templateId: string,
+  items: readonly PackageTemplateItemValues[],
+) {
+  const supabase = await createClient();
+  const written = await supabase.rpc("set_package_template_items", {
+    p_template_id: templateId,
+    p_items: items.map((item) => ({
+      service_id: item.service_id,
+      sessions: item.sessions,
+      price_per_session: item.price_per_session,
+    })),
+  });
+  return written.error
+    ? domainFailure("package-templates.failedToSavePackageServices")
+    : null;
+}
+
+/**
+ * The header columns, without the lines.
+ *
+ * `items` is not a column on `package_templates` and never will be — it is the
+ * child table. It rides in on the same parsed payload because it comes from the
+ * same form, and it is removed here rather than at twelve call sites.
+ *
+ * When a package has lines, the three roll-up columns are *derived* from them
+ * and are written by the RPC, so the values the form sent for them are dropped
+ * here too: one writer, one direction, no cycle in which an edited total
+ * reprices a line that then recomputes the total. An item-less package keeps
+ * every number a person typed, a deliberately discounted total included.
+ */
+function templateHeader<T extends Record<string, unknown>>(
+  record: T,
+): Omit<T, "items"> {
+  const { items: _items, ...header } = record as T & { items?: unknown };
+  void _items;
+  return header as Omit<T, "items">;
+}
+
 function refreshPackageTemplates() {
   revalidatePath("/settings/packages");
 }
@@ -527,14 +632,40 @@ export async function createPackageTemplateMutation(
     parsed.data.department_id,
   );
   if (departmentError) return departmentError;
-  const next = {
-    ...parsed.data,
-    clinic_id: user.clinicId,
-    created_by: user.id,
-    is_active: true,
-  };
+  const items = parsed.data.items;
+  const itemsError = await validateTemplateItems(
+    user.clinicId,
+    parsed.data.department_id,
+    items,
+  );
+  if (itemsError) return itemsError;
+  // `stripBlankDisplayNames` drops a display-name key the clinic left empty
+  // rather than writing `""`, which also keeps this insert working on a
+  // database where the additive bilingual migration has not been applied yet.
+  const next = templateHeader(
+    stripBlankDisplayNames({
+      ...parsed.data,
+      clinic_id: user.clinicId,
+      created_by: user.id,
+      is_active: true,
+      // Derived from the lines, in that one direction. The RPC writes the same
+      // numbers server-side; seeding them here means the row is never briefly
+      // inconsistent with the lines about to be attached to it.
+      total_sessions: packageItemsSessions(items) ?? parsed.data.total_sessions,
+      total_price: packageItemsTotal(items) ?? parsed.data.total_price,
+      price_per_session:
+        items.length === 1
+          ? items[0].price_per_session
+          : items.length > 1
+            ? null
+            : parsed.data.price_per_session,
+    }),
+  );
   if (mode === "preview") {
-    return domainSuccess({}, { targetTable: "package_templates", after: next });
+    return domainSuccess(
+      {},
+      { targetTable: "package_templates", after: { ...next, items } },
+    );
   }
   const supabase = await createClient();
   const inserted = await supabase
@@ -544,13 +675,27 @@ export async function createPackageTemplateMutation(
     .single();
   if (inserted.error)
     return domainFailure("package-templates.failedToCreateTemplate");
+  if (items.length > 0) {
+    const itemsWriteError = await writeTemplateItems(inserted.data.id, items);
+    if (itemsWriteError) {
+      // The header exists and the lines do not, which is a package the clinic
+      // did not ask for. Remove it rather than leave a half-built one behind:
+      // nothing references a template created a moment ago.
+      await supabase
+        .from("package_templates")
+        .delete()
+        .eq("id", inserted.data.id)
+        .eq("clinic_id", user.clinicId);
+      return itemsWriteError;
+    }
+  }
   refreshPackageTemplates();
   return domainSuccess(
     { id: inserted.data.id },
     {
       targetTable: "package_templates",
       targetRecordIds: [inserted.data.id],
-      after: { ...next, id: inserted.data.id },
+      after: { ...next, id: inserted.data.id, items },
     },
   );
 }
@@ -580,8 +725,29 @@ export async function updatePackageTemplateMutation(
     parsed.data.department_id,
   );
   if (departmentError) return departmentError;
-  const { template_id: templateId, ...next } = parsed.data;
+  const items = parsed.data.items;
+  const itemsError = await validateTemplateItems(
+    user.clinicId,
+    parsed.data.department_id,
+    items,
+  );
+  if (itemsError) return itemsError;
+  const { template_id: templateId, items: _submitted, ...rest } = parsed.data;
   void templateId;
+  void _submitted;
+  const next = templateHeader(
+    stripBlankDisplayNames({
+      ...rest,
+      total_sessions: packageItemsSessions(items) ?? rest.total_sessions,
+      total_price: packageItemsTotal(items) ?? rest.total_price,
+      price_per_session:
+        items.length === 1
+          ? items[0].price_per_session
+          : items.length > 1
+            ? null
+            : rest.price_per_session,
+    }),
+  );
   if (mode === "preview") {
     return domainSuccess(
       { id: existing.data.id },
@@ -589,10 +755,34 @@ export async function updatePackageTemplateMutation(
         targetTable: "package_templates",
         targetRecordIds: [existing.data.id],
         before: existing.data,
-        after: { ...existing.data, ...next },
+        after: { ...existing.data, ...next, items },
       },
     );
   }
+  // How many lines this package holds right now, which decides whether the
+  // item write can be skipped at all. A read that fails because the table is
+  // not there yet is a package that cannot have lines, which is the honest
+  // answer on a database where the migration has not run.
+  const currentItems = await supabase
+    .from("package_template_items")
+    .select("id", { count: "exact", head: true })
+    .eq("package_template_id", existing.data.id)
+    .eq("clinic_id", user.clinicId);
+  const hadItems = !currentItems.error && (currentItems.count ?? 0) > 0;
+
+  // Order matters, and only in one case. `package_template_items` keys the
+  // package's department, so moving a package to another department cascades
+  // into its lines — where the services still belong to the *old* department
+  // and the service key refuses them. The header update would fail with a raw
+  // constraint violation. Clearing the lines first is the only order that
+  // works, and it is exactly right as product behaviour too: the services of
+  // the department you just left cannot be the contents of this package.
+  const departmentChanged = existing.data.department_id !== parsed.data.department_id;
+  if (departmentChanged && hadItems) {
+    const cleared = await writeTemplateItems(existing.data.id, []);
+    if (cleared) return cleared;
+  }
+
   const updated = await supabase
     .from("package_templates")
     .update(next)
@@ -602,6 +792,13 @@ export async function updatePackageTemplateMutation(
     return domainFailure(
       "package-templates.failedToUpdateTemplatePleaseTryAgain",
     );
+  // Skipped entirely for a package that has no lines and is not being given
+  // any — the department-only case, which must keep working untouched on a
+  // database where neither the table nor the RPC exists.
+  if (items.length > 0 || (hadItems && !departmentChanged)) {
+    const itemsWriteError = await writeTemplateItems(existing.data.id, items);
+    if (itemsWriteError) return itemsWriteError;
+  }
   refreshPackageTemplates();
   return domainSuccess(
     { id: existing.data.id },
@@ -609,7 +806,7 @@ export async function updatePackageTemplateMutation(
       targetTable: "package_templates",
       targetRecordIds: [existing.data.id],
       before: existing.data,
-      after: { ...existing.data, ...next },
+      after: { ...existing.data, ...next, items },
     },
   );
 }

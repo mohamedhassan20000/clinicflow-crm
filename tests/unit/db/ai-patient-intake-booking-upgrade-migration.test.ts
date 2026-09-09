@@ -132,13 +132,20 @@ describe("AI patient intake + appointment booking upgrade", () => {
     expect(prompt).toContain("طبيبك المعالج");
   });
 
-  it("enforces days-first booking and the 24-hour minimum in code and SQL", () => {
+  it("enforces days-first booking and the minimum-lead-time rule in code and SQL", () => {
     const availability = readFileSync("lib/booking/patient.ts", "utf8");
     const tools = readFileSync("lib/ai/patient-tools.ts", "utf8");
     expect(tools).toContain('"list_available_days"');
     expect(prompt).toContain("offer only the returned DAYS");
     expect(prompt).toContain("الأيام التي أعادتها فقط");
-    expect(availability).toContain("24 * 60 * 60 * 1000");
+    // The application-side rule is now a calendar-day floor rather than a
+    // rolling `now + 24h` duration, and it lives in one module rather than in
+    // three literals — see `lib/booking/lead-time.ts` for why. It is strictly
+    // stricter than the SQL below, which stays exactly as it is: the database
+    // remains the last line of defence at 24 hours and the assistant refuses
+    // well before reaching it.
+    expect(availability).toContain("earliestOnlineBookableInstant");
+    expect(availability).toContain("isOnlineBookableDate");
     expect(migration).toContain("clock_timestamp() + interval '24 hours'");
     expect(migration).toContain("AI_BOOKING_MINIMUM_NOTICE");
   });

@@ -23,7 +23,11 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { PackageTemplateForm } from "@/components/settings/packages/package-template-form";
+import {
+  PackageTemplateForm,
+  type PackageServiceOption,
+  type PackageTemplateFormItem,
+} from "@/components/settings/packages/package-template-form";
 import {
   deactivatePackageTemplate,
   deletePackageTemplate,
@@ -41,17 +45,32 @@ export interface PackageTemplateRowData {
   total_price: number | null;
   notes: string | null;
   is_active: boolean;
+  // Optional: absent on a database where the additive bilingual migration has
+  // not been applied yet.
+  name_ar?: string | null;
+  name_en?: string | null;
+  /**
+   * The package's service lines, in the clinic's own order.
+   *
+   * Optional and empty by default: absent on a database where the additive
+   * migration has not been applied, and empty for every department-only
+   * package — which is every package that exists today and a permanently
+   * supported shape.
+   */
+  items?: PackageTemplateFormItem[];
 }
 
 interface Props {
   template: PackageTemplateRowData;
   departments: { id: string; name: string; color: string }[];
+  services: PackageServiceOption[];
   canMutate: boolean;
 }
 
 export function PackageTemplateRowActions({
   template,
   departments,
+  services,
   canMutate,
 }: Props) {
   const t = useTranslations("settings");
@@ -83,14 +102,18 @@ export function PackageTemplateRowActions({
               <PackageTemplateForm
                 action={updatePackageTemplate}
                 departments={departments}
+                services={services}
                 defaults={{
                   id: template.id,
                   department_id: template.department_id,
+                  items: template.items ?? [],
                   name: template.name,
                   total_sessions: template.total_sessions,
                   price_per_session: template.price_per_session,
                   total_price: template.total_price,
                   notes: template.notes,
+                  name_ar: template.name_ar,
+                  name_en: template.name_en,
                 }}
                 submitLabel={t("saveChanges")}
                 onSuccess={() => {

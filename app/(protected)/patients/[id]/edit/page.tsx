@@ -89,6 +89,10 @@ export default async function EditPatientPage({ params, searchParams }: PageProp
           cancelHref={patientUrl}
           defaultValues={{
             full_name: patient.full_name,
+            // Absent on a database where the additive bilingual migration has
+            // not run; `?? ""` is what keeps this screen rendering there.
+            full_name_ar: patient.full_name_ar ?? "",
+            full_name_en: patient.full_name_en ?? "",
             national_id: patient.national_id,
             date_of_birth: patient.date_of_birth,
             phone: patient.phone,

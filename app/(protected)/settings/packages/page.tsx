@@ -23,28 +23,77 @@ export default async function PackagesSettingsPage() {
   const canMutate = user.role === "admin";
 
   const supabase = await createClient();
-  const [allDepartments, { data: templates }, { data: clinic }] = await Promise.all([
+  const [
+    allDepartments,
+    { data: templates },
+    { data: services },
+    packageItems,
+    { data: clinic },
+  ] = await Promise.all([
     getCachedDepartments(user.clinicId),
     supabase
       .from("package_templates")
-      .select(
-        "id, name, department_id, total_sessions, price_per_session, total_price, notes, is_active",
-      )
+      // `*` rather than a column list, deliberately: the optional bilingual
+      // display-name columns are additive and are applied on the clinic's own
+      // schedule, and naming them explicitly would make this read — and with it
+      // the whole packages screen — fail on a database where that migration has
+      // not run yet.
+      .select("*")
       .eq("clinic_id", user.clinicId)
       .order("name"),
+    // The services a template may be a package of. Active only, and scoped to
+    // this clinic — the form filters them by the chosen department, and the
+    // mutation re-checks both because a dropdown is not an authority.
+    supabase
+      .from("services")
+      .select("id, name, department_id, price")
+      .eq("clinic_id", user.clinicId)
+      .eq("is_active", true)
+      .is("deleted_at", null)
+      .order("name"),
+    // Every package's service lines, read once and grouped below rather than a
+    // query per template. An error rather than rows is what a database where
+    // the additive migration has not been applied returns, and it means the
+    // same thing an empty result does — no package has lines yet — so the
+    // screen renders exactly as it does today instead of failing.
+    supabase
+      .from("package_template_items")
+      .select("package_template_id, service_id, sessions, price_per_session, sort_order")
+      .eq("clinic_id", user.clinicId)
+      .order("sort_order"),
     supabase
       .from("clinics")
       .select("time_format, timezone, currency, locale, country, week_start, digits")
       .eq("id", user.clinicId)
       .single(),
-  ]);
+    ]);
   const clinicLocale = clinicLocaleFromRow(clinic);
   const formatMoney = await getServerMoneyFormatter(user.id, clinicLocale);
   const fmtMoney = (n: number | null | undefined) =>
     n === null || n === undefined ? "—" : formatMoney(n);
 
   const deptList = allDepartments.filter((d) => !d.deleted_at && d.is_active);
-  const rows = (templates ?? []) as PackageTemplateRowData[];
+  const serviceList = (services ?? []).map((service) => ({
+    id: service.id,
+    name: service.name,
+    department_id: service.department_id,
+    price: service.price === null ? null : Number(service.price),
+  }));
+  const serviceNameById = new Map(serviceList.map((s) => [s.id, s.name]));
+  const itemsByTemplate = new Map<string, PackageTemplateRowData["items"]>();
+  for (const item of packageItems.error ? [] : (packageItems.data ?? [])) {
+    const existing = itemsByTemplate.get(item.package_template_id) ?? [];
+    existing.push({
+      service_id: item.service_id,
+      sessions: item.sessions,
+      price_per_session: Number(item.price_per_session),
+    });
+    itemsByTemplate.set(item.package_template_id, existing);
+  }
+  const rows = ((templates ?? []) as PackageTemplateRowData[]).map((row) => ({
+    ...row,
+    items: itemsByTemplate.get(row.id) ?? [],
+  }));
   const activeRows = rows.filter((r) => r.is_active);
   const inactiveRows = rows.filter((r) => !r.is_active);
 
@@ -76,7 +125,9 @@ export default async function PackagesSettingsPage() {
             {t("activeTemplatesAcrossDepartments", { templates: activeRows.length, departments: groups.length })}
           </p>
         </div>
-        {canMutate ? <AddPackageTemplateDialog departments={deptList} /> : null}
+        {canMutate ? (
+          <AddPackageTemplateDialog departments={deptList} services={serviceList} />
+        ) : null}
       </div>
 
       {!canMutate ? (
@@ -141,6 +192,20 @@ export default async function PackagesSettingsPage() {
                     <TableRow key={t.id}>
                       <TableCell>
                         <div className="font-medium">{t.name}</div>
+                        {/* What the package contains, when it contains
+                            anything. A department-only package shows nothing
+                            here, which is what it has always shown. */}
+                        {(t.items ?? []).length > 0 ? (
+                          <div className="line-clamp-2 text-xs text-muted-foreground">
+                            {(t.items ?? [])
+                              .map(
+                                (item) =>
+                                  `${serviceNameById.get(item.service_id) ?? ""} × ${item.sessions}`,
+                              )
+                              .filter((line) => line.trim() !== "×")
+                              .join(" · ")}
+                          </div>
+                        ) : null}
                         {t.notes ? (
                           <div className="line-clamp-1 text-xs text-muted-foreground">
                             {t.notes}
@@ -166,6 +231,7 @@ export default async function PackagesSettingsPage() {
                         <PackageTemplateRowActions
                           template={t}
                           departments={deptList}
+                          services={serviceList}
                           canMutate={canMutate}
                         />
                       </TableCell>
@@ -209,8 +275,9 @@ export default async function PackagesSettingsPage() {
                       </TableCell>
                       <TableCell className="text-end">
                         <PackageTemplateRowActions
-                        template={template}
+                          template={template}
                           departments={deptList}
+                          services={serviceList}
                           canMutate={canMutate}
                         />
                       </TableCell>

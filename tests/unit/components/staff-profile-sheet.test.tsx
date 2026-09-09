@@ -154,7 +154,14 @@ describe("StaffProfileSheet", () => {
 
     await waitFor(() => expect(mocks.updateStaffProfileSection).toHaveBeenCalledWith(
       "staff-1",
-      { full_name: "Sara Updated", phone: "+90 555 000 00 00" },
+      {
+        full_name: "Sara Updated",
+        phone: "+90 555 000 00 00",
+        // The patient-facing display names travel with the profile section and
+        // are null until somebody types one. `full_name` above is untouched.
+        display_name_ar: null,
+        display_name_en: null,
+      },
     ));
   });
 

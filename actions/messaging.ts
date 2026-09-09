@@ -37,6 +37,10 @@ import {
   safeOutboundFilename,
   sniffOutboundMimeType,
 } from "@/lib/messaging/outbound-media";
+import {
+  boundaryFailsClosed,
+  resolveWhatsAppAccountBoundary,
+} from "@/lib/messaging/account-boundary";
 import { normalizePhone } from "@/lib/phone/registry";
 import {
   claimOutboundMedia,
@@ -1397,26 +1401,33 @@ export async function setConversationAiEnabled(input: {
   return { success: true };
 }
 
-export async function updateConversationStatus(input: {
+/**
+ * One conversation's Open/Closed transition, as one function.
+ *
+ * Extracted so the single-thread control and the "Close all open
+ * conversations" admin action are literally the same write, rather than two
+ * implementations that agree today. Every caller is already authorized; this
+ * performs no permission check of its own and must never be exported.
+ *
+ * Returns whether the row was actually updated, so a bulk caller can report a
+ * partial failure honestly instead of counting an error as a close.
+ */
+async function applyConversationStatus(input: {
+  clinicId: string;
   conversationId: string;
   status: "open" | "closed";
-}): Promise<MessagingActionResult> {
-  const user = await requireMutationRole(["admin", "receptionist"]);
-  const parsed = conversationStatusSchema.safeParse(input);
-  if (!parsed.success) return messagingError("messaging.invalidConversationUpdate");
-  const client = createClinicScopedAdminClient(user.clinicId);
+}): Promise<boolean> {
+  const client = createClinicScopedAdminClient(input.clinicId);
   const updated = await client
     .from("conversations")
     .update({
-      status: parsed.data.status,
+      status: input.status,
       status_updated_at: new Date().toISOString(),
     })
-    .eq("id", parsed.data.conversationId)
+    .eq("id", input.conversationId)
     .select("id")
     .maybeSingle();
-  if (updated.error || !updated.data) {
-    return messagingError("messaging.conversationNotFound");
-  }
+  if (updated.error || !updated.data) return false;
   // P11N — closing a thread ends the *conversation*, not just its row.
   //
   // Flipping `status` on its own left `ai_collected_data`, the pending
@@ -1426,15 +1437,221 @@ export async function updateConversationStatus(input: {
   // stale "I still need these details" loop staff kept closing the thread to
   // escape. Messages, the patient link and the verified identity are untouched;
   // see `conversation-reset.ts` for the full boundary.
-  if (parsed.data.status === "closed") {
+  if (input.status === "closed") {
     await resetConversationAssistantState({
-      clinicId: user.clinicId,
-      conversationId: parsed.data.conversationId,
+      clinicId: input.clinicId,
+      conversationId: input.conversationId,
       reason: "manual_close",
     });
   }
+  return true;
+}
+
+export async function updateConversationStatus(input: {
+  conversationId: string;
+  status: "open" | "closed";
+}): Promise<MessagingActionResult> {
+  const user = await requireMutationRole(["admin", "receptionist"]);
+  const parsed = conversationStatusSchema.safeParse(input);
+  if (!parsed.success) return messagingError("messaging.invalidConversationUpdate");
+  const applied = await applyConversationStatus({
+    clinicId: user.clinicId,
+    conversationId: parsed.data.conversationId,
+    status: parsed.data.status,
+  });
+  if (!applied) {
+    return messagingError("messaging.conversationNotFound");
+  }
   revalidatePath("/inbox");
   return { success: true };
+}
+
+/**
+ * "Close all open conversations" — the Inbox's one bulk lifecycle action.
+ *
+ * ## What "open" means here
+ *
+ * Exactly what it means everywhere else in this codebase and nowhere near what
+ * the badge column shows. `conversations.status` is a two-value enum,
+ * `open | closed`, and this action moves rows from the first to the second. It
+ * invents no status, and it does not consult the *visible* status registry in
+ * `lib/messaging/conversation-status.ts` at all — "Done", "Needs review",
+ * "Problem" and the rest are a derivation over several columns, and a thread
+ * showing `Needs review` is very often `status = 'open'` and squarely in
+ * scope, which is the point of closing it.
+ *
+ * The set is therefore: this clinic's WhatsApp conversations, inside the
+ * clinic's proved WhatsApp account boundary, whose `status` is `open`. A row
+ * already `closed` is never touched — it is not selected, so it is not
+ * rewritten, its `status_updated_at` does not move and its assistant state is
+ * not reset a second time.
+ *
+ * ## Why it is a server loop and not one statement
+ *
+ * Closing a thread is not a column write. It is a column write *and*
+ * `resetConversationAssistantState` — the episode ending, the flow-stack
+ * clear, the superseded drafts, the audit line. A bulk `update ... where
+ * status = 'open'` would close five hundred rows and reset none of them,
+ * leaving exactly the half-finished-intake state P11N exists to prevent. So
+ * this runs the identical per-conversation path the single Close button runs,
+ * server-side, and reports what actually happened.
+ *
+ * ## Why it is *all* of them
+ *
+ * "Close all open conversations" has to close all of them. An earlier draft
+ * read one page of 300 and stopped, which meant a clinic with 450 open threads
+ * was told everything was closed while 150 stayed open — a bulk action that
+ * silently under-delivers is worse than one that refuses. It now pages until
+ * the eligible set is genuinely empty. Closing a row removes it from that set,
+ * so the query itself is the progress: there is no offset arithmetic to drift.
+ */
+export type BulkCloseConversationsResult = {
+  /** Conversations that were open when the run started. The requested count. */
+  total?: number;
+  closed?: number;
+  /** Open conversations whose close did not land. Never folded into `closed`. */
+  failed?: number;
+  error?: string;
+};
+
+/** How many open rows are read per page. */
+const BULK_CLOSE_PAGE_SIZE = 100;
+
+/** How many writes are in flight at once inside a page. Small on purpose. */
+const BULK_CLOSE_CONCURRENCY = 4;
+
+/**
+ * The eligible set, as a query rather than as a list.
+ *
+ * One definition of "open" used by the count, by every page of the loop, and
+ * by nothing else — so the number the modal shows and the rows the action
+ * closes cannot describe different sets.
+ *
+ * Returns `null` for a fail-closed account boundary: a clinic mid-pairing has
+ * a boundary that applies but no account proved, and reading the legacy NULL
+ * scope there would close another account's imported threads.
+ */
+async function openConversationQuery(clinicId: string) {
+  const boundary = await resolveWhatsAppAccountBoundary(clinicId);
+  if (boundaryFailsClosed(boundary)) return null;
+  const client = createClinicScopedAdminClient(clinicId);
+  return (options?: { head?: boolean }) => {
+    const query = client
+      .from("conversations")
+      .select("id", options?.head ? { count: "exact", head: true } : {})
+      .eq("channel", "whatsapp")
+      .eq("status", "open");
+    return boundary.account
+      ? query.eq("whatsapp_account_id", boundary.account)
+      : query.is("whatsapp_account_id", null);
+  };
+}
+
+/**
+ * How many conversations "Close all open conversations" would affect.
+ *
+ * Read-only, exact, and unbounded — a `head` count rather than a page of ids,
+ * so the number in the confirmation modal is the number of rows that will
+ * change and not a count of whatever the browser happens to have rendered.
+ */
+export async function countOpenConversations(): Promise<BulkCloseConversationsResult> {
+  const user = await requireRole(["admin"]);
+  const eligible = await openConversationQuery(user.clinicId);
+  if (!eligible) return messagingError("messaging.couldNotReadOpenConversations");
+  const result = await eligible({ head: true });
+  if (result.error) return messagingError("messaging.couldNotReadOpenConversations");
+  return { total: result.count ?? 0 };
+}
+
+export async function closeOpenConversations(): Promise<BulkCloseConversationsResult> {
+  const user = await requireMutationRole(["admin"]);
+  const eligible = await openConversationQuery(user.clinicId);
+  if (!eligible) return messagingError("messaging.couldNotReadOpenConversations");
+
+  const requested = await eligible({ head: true });
+  if (requested.error) return messagingError("messaging.couldNotReadOpenConversations");
+  const total = requested.count ?? 0;
+  if (total === 0) return { total: 0, closed: 0, failed: 0 };
+
+  let closed = 0;
+  /**
+   * Rows this run tried and could not close.
+   *
+   * They stay `open`, so they stay in the eligible set and would be selected
+   * again forever. Remembering them is what terminates the loop, and it is
+   * also the honest thing: a row that failed once in this run is reported as
+   * failed once, not retried until it happens to succeed.
+   */
+  const failedIds = new Set<string>();
+  /**
+   * How far past the front of the eligible set to start reading.
+   *
+   * Only ever advanced past rows this run has already failed. Successes leave
+   * the set entirely, so the window does not need to move for them — which is
+   * what keeps this correct without a cursor that could drift under
+   * concurrent inbound traffic.
+   */
+  let skip = 0;
+  /**
+   * A runaway guard, not a ceiling on the work.
+   *
+   * Every iteration either closes at least one row (shrinking the set) or
+   * advances `skip` past at least one failure, so the loop is bounded by the
+   * size of the set. This bound is derived from that set rather than being a
+   * fixed number, so it cannot silently truncate a legitimate run; it exists
+   * only so a database behaving unexpectedly cannot spin a request forever.
+   */
+  const maxIterations = total + Math.ceil(total / BULK_CLOSE_PAGE_SIZE) + 10;
+
+  for (let iteration = 0; iteration < maxIterations; iteration += 1) {
+    const page = await eligible()
+      .order("last_message_at", { ascending: true, nullsFirst: true })
+      .order("id", { ascending: true })
+      .range(skip, skip + BULK_CLOSE_PAGE_SIZE - 1);
+    // A read failure mid-run is not a reason to claim the rest were closed.
+    // What did close, closed; the loop stops and the counts say so.
+    if (page.error) break;
+    const ids = (page.data ?? []).map((row) => row.id);
+    if (ids.length === 0) break;
+
+    const fresh = ids.filter((id) => !failedIds.has(id));
+    if (fresh.length === 0) {
+      // This whole window is rows this run already failed. Step past them.
+      skip += ids.length;
+      continue;
+    }
+
+    for (let index = 0; index < fresh.length; index += BULK_CLOSE_CONCURRENCY) {
+      const batch = fresh.slice(index, index + BULK_CLOSE_CONCURRENCY);
+      const outcomes = await Promise.all(
+        batch.map(async (conversationId) => ({
+          conversationId,
+          ok: await applyConversationStatus({
+            clinicId: user.clinicId,
+            conversationId,
+            status: "closed",
+          }).catch(() => false),
+        })),
+      );
+      for (const outcome of outcomes) {
+        if (outcome.ok) closed += 1;
+        else failedIds.add(outcome.conversationId);
+      }
+    }
+  }
+
+  const failed = failedIds.size;
+
+  await logMessagingEvent({
+    clinicId: user.clinicId,
+    event: "conversations_bulk_closed",
+    recordId: null,
+    // Counts and the actor. No conversation id, no address, no content.
+    summary: { actorId: user.id, total, closed, failed },
+  }).catch(() => undefined);
+
+  revalidatePath("/inbox");
+  return { total, closed, failed };
 }
 
 export async function linkConversationPatient(input: {

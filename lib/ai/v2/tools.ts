@@ -34,7 +34,7 @@
 
 import "server-only";
 
-import { formatInTimeZone } from "date-fns-tz";
+import { fromZonedTime } from "date-fns-tz";
 import { addCalendarDays } from "@/lib/appointments/calendar";
 import {
   availableDoctorsInDepartment,
@@ -49,6 +49,10 @@ import {
   createPatientPendingBooking,
 } from "@/lib/booking/patient";
 import {
+  bookableWindowStart,
+  isOnlineBookableDate,
+} from "@/lib/booking/lead-time";
+import {
   authorizePatientConversation,
   type ResolvedPatientAiContext,
 } from "@/lib/ai/patient-authorization";
@@ -56,11 +60,11 @@ import {
   cancelPatientAiAppointment,
   createPatientPreliminaryBookingWithPackage,
   findClinicPatientByIdentity,
-  listClinicPublicPackages,
   listPatientAiDocuments,
   listPatientAiPackages,
   signClinicDocumentUrl,
   getPatientClinicPublicInfo,
+  getClinicCurrency,
   createClinicScopedAdminClient,
   listPatientAiAppointments,
   preparePatientAiReschedule,
@@ -69,8 +73,32 @@ import {
   stagePatientIntakeFromConversation,
 } from "@/lib/supabase/admin";
 import { discoveryFromRelationships } from "@/lib/ai/existing-patient-discovery";
+import { resolveNamedEntity } from "@/lib/ai/entity-resolution";
+// Pure: the catalog shapes and the two name matchers. Re-exported below so
+// callers keep one import, and imported directly by `flows.ts` so a test that
+// stubs this module does not stub the matching away with it.
+import type {
+  InsuranceProvider,
+  PackageEntry,
+  PackageItemEntry,
+  PackageGroup,
+} from "@/lib/ai/v2/catalog";
 import type { Candidate } from "@/lib/ai/v2/flow-state";
 import type { TurnContext } from "@/lib/ai/v2/context";
+import {
+  doctorDisplayName,
+  formatOfferedDay,
+  formatOfferedTime,
+  localizedName,
+} from "@/lib/ai/v2/present";
+import {
+  INSURANCE_DISPLAY_COLUMNS,
+  PACKAGE_DISPLAY_COLUMNS,
+  SERVICE_DISPLAY_COLUMNS,
+  displayText,
+  PATIENT_DISPLAY_COLUMNS,
+  selectWithOptional,
+} from "@/lib/settings/display-names";
 
 /** How many days of calendar one availability read covers. Unchanged from P9B. */
 const AVAILABILITY_WINDOW_DAYS = 7;
@@ -95,13 +123,39 @@ async function identityFor(context: TurnContext): Promise<ResolvedPatientAiConte
 // Clinic-public reads. No identity, no patient, no flow requirement.
 // ---------------------------------------------------------------------------
 
+/**
+ * Every clinic-authored name for one entity, for matching.
+ *
+ * Deliberately includes the canonical stored name as well as both display
+ * names: which of the three became the visible `label` depends on the
+ * conversation's language, and all three should still resolve.
+ */
+function displayAliases(entity: {
+  name: string;
+  nameAr?: string | null;
+  nameEn?: string | null;
+}): readonly string[] {
+  return [entity.name, entity.nameAr, entity.nameEn].filter(
+    (value): value is string => typeof value === "string" && value.trim().length > 0,
+  );
+}
+
 export async function readDepartments(
   context: TurnContext,
 ): Promise<readonly Candidate<string>[]> {
   const departments = await loadClinicDepartments(context.clinicId);
+  // The label is what the patient reads, so it is localized here — at the one
+  // place a department becomes an option — rather than at each of the four
+  // steps that offer one. `localizedName` returns the canonical stored name
+  // when the clinic has authored no display name for this language, which is
+  // the honest rendering and never a generated one.
+  //
+  // The names *not* shown travel as aliases: the department stays reachable by
+  // its English name in an Arabic conversation and vice versa.
   return departments.map((department) => ({
     value: department.id,
-    label: department.name,
+    label: localizedName(department, context.turn.locale),
+    aliases: displayAliases(department),
     source: "clinic_directory" as const,
   }));
 }
@@ -118,7 +172,8 @@ export async function readDoctors(input: {
     .filter((doctor) => !excluded.has(doctor.id))
     .map((doctor) => ({
       value: doctor.id,
-      label: doctor.name,
+      label: doctorDisplayName(doctor, input.context.turn.locale),
+      aliases: displayAliases(doctor),
       source: "clinic_directory" as const,
     }));
 }
@@ -151,7 +206,7 @@ export async function resolveDoctorSpoken(input: {
     return {
       kind: "resolved",
       value: resolution.doctor.id,
-      label: resolution.doctor.name,
+      label: doctorDisplayName(resolution.doctor, input.context.turn.locale),
     };
   }
   if (resolution.status === "ambiguous") {
@@ -159,7 +214,7 @@ export async function resolveDoctorSpoken(input: {
       .filter((doctor: DirectoryDoctor) => !excluded.has(doctor.id))
       .map((doctor: DirectoryDoctor) => ({
         value: doctor.id,
-        label: doctor.name,
+        label: doctorDisplayName(doctor, input.context.turn.locale),
         source: "clinic_directory" as const,
       }));
     if (options.length === 1) {
@@ -176,6 +231,17 @@ export async function readClinicInfo(context: TurnContext) {
   return result.data;
 }
 
+/**
+ * The score below which a clinic-authored FAQ row is not an answer.
+ *
+ * The same 0.18 `answer_clinic_faq` uses (`lib/ai/tools/answer-clinic-faq.ts`).
+ * Stated here rather than imported so the V2 read does not depend on a legacy
+ * tool object, but deliberately the same number: a clinic that tuned its FAQ
+ * text against one engine must not find it matching differently under the
+ * other.
+ */
+const FAQ_MATCH_THRESHOLD = 0.18;
+
 export async function readClinicFaq(input: {
   context: TurnContext;
   question: string;
@@ -186,44 +252,441 @@ export async function readClinicFaq(input: {
     question: input.question,
     language: input.context.turn.locale,
   });
-  return result.error ? [] : (result.data ?? []);
+  if (result.error) return [];
+  return (result.data ?? []).filter(
+    (row) => Number(row.score ?? 0) >= FAQ_MATCH_THRESHOLD,
+  );
 }
 
 /**
- * The clinic's package offering, as a stranger may ask about it.
+ * The insurers this clinic actually accepts, by name.
  *
- * Takes no patient and returns none. A member of the public asking "what
- * packages do you have?" is answered from `package_templates`, which is clinic
- * configuration, and there is no branch here that can reach a patient's own
- * packages — that is a different function with a different precondition.
+ * The V2 counterpart of `list_clinic_insurance`, which had no counterpart at
+ * all: `insurance` is a valid `QUESTION_TOPIC`, the interpreter is prompted to
+ * emit it, and the flow's `default:` branch answered it from the *clinic
+ * contact row* — so a clinic with eight insurers configured in Settings
+ * answered an insurance question with its own address, and then, because
+ * `info.insurance` had no copy, with nothing at all.
+ *
+ * Read live from `insurance_providers`, active and not soft-deleted, so adding
+ * or deactivating an insurer changes the answer immediately. Names only: no
+ * coverage percentages, no co-payments, no contract terms. A patient asking
+ * "do you take X?" is asking whether to come, and the rest belongs to a staff
+ * conversation.
+ *
+ * An empty list is an answer, not a failure, and the caller says so plainly
+ * rather than hedging.
+ */
+const MAX_INSURANCE_PROVIDERS = 60;
+
+export async function readClinicInsurance(
+  context: TurnContext,
+): Promise<readonly InsuranceProvider[]> {
+  const db = createClinicScopedAdminClient(context.clinicId);
+  // `selectWithOptional` for the same reason every other localized read uses
+  // it: the bilingual columns are additive and applied on the clinic's own
+  // schedule, and an insurance question must not stop being answerable because
+  // a migration has not run yet.
+  const result = await selectWithOptional<Record<string, unknown>[]>(
+    ["id", "name"],
+    INSURANCE_DISPLAY_COLUMNS,
+    (columns) =>
+      db
+        .from("insurance_providers")
+        .select(columns)
+        .eq("is_active", true)
+        .is("deleted_at", null)
+        .order("name")
+        .limit(MAX_INSURANCE_PROVIDERS) as unknown as PromiseLike<{
+        data: Record<string, unknown>[] | null;
+        error: unknown;
+      }>,
+  );
+  if (result.error || !Array.isArray(result.data)) return [];
+  const locale = context.turn.locale;
+  return result.data
+    .map((row) => {
+      const entity = {
+        name: String(row.name ?? "").trim(),
+        nameAr: displayText(row.name_ar),
+        nameEn: displayText(row.name_en),
+      };
+      return {
+        id: String(row.id),
+        label: localizedName(entity, locale),
+        aliases: displayAliases(entity),
+      };
+    })
+    .filter((provider) => provider.label.length > 0);
+}
+
+/**
+ * The clinic's package catalog, grouped under department headings.
+ *
+ * ## Why this reads the table rather than the RPC
+ *
+ * `list_clinic_public_packages` returns exactly seven columns and none of them
+ * is a display name, so a localized answer through it would have to invent one.
+ * Rather than change an applied RPC's signature, this reads
+ * `package_templates` directly under **the same visibility rule the RPC
+ * applies** — an active template whose department is also active, scoped to
+ * this clinic — through `createClinicScopedAdminClient`, which is the same
+ * clinic-bounded client every other patient-facing catalog read uses. The RPC
+ * is untouched and every existing caller of it keeps its exact result.
+ *
+ * ## Grouping is a property of the read, for the reason services' grouping is
+ *
+ * "What packages do you have?" is one question with a dozen answers, and a flat
+ * list of them on WhatsApp gives a patient no way to tell which package belongs
+ * to which department. `package_templates.department_id` is NOT NULL, so every
+ * package has a heading to sit under and the grouping is total.
+ *
+ * Nothing here formats a price, infers a package's contents from its name, or
+ * completes an absent number. A template with no configured price is returned
+ * with `null` prices and the renderer omits them.
  */
 export async function readPublicPackages(input: {
   context: TurnContext;
   departmentId?: string | null;
+}): Promise<{
+  readonly groups: readonly PackageGroup[];
+  readonly all: readonly PackageEntry[];
+  readonly currency: string | null;
+  readonly total: number;
+}> {
+  const db = createClinicScopedAdminClient(input.context.clinicId);
+  const [departments, result, itemRows, serviceCatalog, currency] = await Promise.all([
+    loadClinicDepartments(input.context.clinicId),
+    selectWithOptional<Record<string, unknown>[]>(
+      ["id", "name", "department_id", "total_sessions", "price_per_session", "total_price", "notes"],
+      PACKAGE_DISPLAY_COLUMNS,
+      (columns) =>
+        (input.departmentId
+          ? db
+              .from("package_templates")
+              .select(columns)
+              .eq("department_id", input.departmentId)
+          : db.from("package_templates").select(columns)
+        )
+          .eq("is_active", true)
+          .order("name") as unknown as PromiseLike<{
+          data: Record<string, unknown>[] | null;
+          error: unknown;
+        }>,
+    ),
+    // Every package's service lines, read once for the whole catalog. The
+    // table is additive and applied on the clinic's own schedule, so an error
+    // here means the same thing an empty result means — no package has lines —
+    // and the catalog answers exactly as it does today rather than failing.
+    db
+      .from("package_template_items")
+      .select("package_template_id, service_id, sessions, price_per_session, sort_order")
+      .order("sort_order")
+      .then(
+        (read) => (read.error ? [] : (read.data ?? [])),
+        () => [],
+      ),
+    // The service catalog, for each line's localized name and the service's
+    // own current price. A package never takes a *price* from here: the line
+    // carries the clinic's agreed package price, and the catalogue price rides
+    // along only to be shown beside it.
+    readServices({ context: input.context }).catch(() => null),
+    getClinicCurrency(input.context.clinicId).catch(() => null),
+  ]);
+  if (result.error || !Array.isArray(result.data)) {
+    return { groups: [], all: [], currency: null, total: 0 };
+  }
+  const servicesById = new Map(
+    (serviceCatalog?.groups ?? []).flatMap((group) =>
+      group.services.map((service) => [service.id, service] as const),
+    ),
+  );
+  const locale = input.context.turn.locale;
+  // Lines grouped by their package, in `sort_order`. A line naming a service
+  // this clinic no longer lists as active is dropped rather than quoted: the
+  // package's own stored price for it is still real, but the service is not
+  // something the clinic currently sells and a patient must not be offered it.
+  const itemsByTemplate = new Map<string, PackageItemEntry[]>();
+  for (const row of itemRows as Record<string, unknown>[]) {
+    const service = servicesById.get(String(row.service_id ?? ""));
+    if (!service) continue;
+    const sessions = Number(row.sessions ?? 0);
+    const pricePerSession = Number(row.price_per_session ?? 0);
+    if (!Number.isFinite(sessions) || sessions <= 0) continue;
+    if (!Number.isFinite(pricePerSession) || pricePerSession < 0) continue;
+    const templateId = String(row.package_template_id ?? "");
+    const existing = itemsByTemplate.get(templateId) ?? [];
+    existing.push({
+      serviceId: service.id,
+      serviceName: service.name,
+      sessions,
+      pricePerSession,
+      subtotal: Math.round(sessions * pricePerSession * 100) / 100,
+      serviceRegularPrice: service.price ?? null,
+    });
+    itemsByTemplate.set(templateId, existing);
+  }
+  // The department directory is the visibility filter *and* the heading source:
+  // `loadClinicDepartments` returns this clinic's active departments, so a
+  // template whose department has been deactivated is dropped here — which is
+  // the `and d.is_active` clause of the RPC, applied in the same read that
+  // supplies the localized heading.
+  const byId = new Map(departments.map((entry) => [entry.id, entry]));
+  const grouped = new Map<string, PackageEntry[]>();
+  const all: PackageEntry[] = [];
+  for (const row of result.data) {
+    const departmentId = String(row.department_id ?? "");
+    const department = byId.get(departmentId);
+    if (!department) continue;
+    const departmentName = localizedName(department, locale);
+    const entity = {
+      name: String(row.name ?? "").trim(),
+      nameAr: displayText(row.name_ar),
+      nameEn: displayText(row.name_en),
+    };
+    if (!entity.name) continue;
+    const entry: PackageEntry = {
+      id: String(row.id),
+      name: localizedName(entity, locale),
+      aliases: displayAliases(entity),
+      departmentId,
+      departmentName,
+      totalSessions: Number(row.total_sessions ?? 0),
+      pricePerSession:
+        row.price_per_session === null || row.price_per_session === undefined
+          ? null
+          : Number(row.price_per_session),
+      totalPrice:
+        row.total_price === null || row.total_price === undefined
+          ? null
+          : Number(row.total_price),
+      // Zero lines is a department-only package and renders exactly as it does
+      // today. One line is a single-service package. Several is a basket.
+      items: itemsByTemplate.get(String(row.id)) ?? [],
+      notes: displayText(row.notes),
+    };
+    grouped.set(departmentId, [...(grouped.get(departmentId) ?? []), entry]);
+    all.push(entry);
+  }
+  // Department order comes from the clinic's own directory, so the grouping a
+  // patient reads matches the list they were offered when they chose one.
+  const groups: PackageGroup[] = [];
+  for (const department of departments) {
+    const packages = grouped.get(department.id);
+    if (!packages || packages.length === 0) continue;
+    groups.push({
+      departmentId: department.id,
+      departmentName: localizedName(department, locale),
+      packages,
+    });
+  }
+  return { groups, all, currency, total: all.length };
+}
+
+/**
+ * The clinic's configured services and their prices — the authoritative catalog.
+ *
+ * The reason this exists: the `services` and `prices` topics answered from the
+ * *department list* and nothing else, so the only thing in front of the model
+ * when a patient asked what physiotherapy costs was a list of department names.
+ * A service name and a price then had to come from somewhere, and the only
+ * somewhere left was the model. Every row below is read live from
+ * `services` — active, not deleted, scoped to this clinic — and the price is
+ * the stored number beside the clinic's stored currency code. Nothing is
+ * formatted, rounded, converted or completed here, and an empty result stays
+ * empty: "we have none configured" is an answer, and inventing one is not.
+ */
+/**
+ * The clinic's service catalog, grouped by the department that owns it.
+ *
+ * ## Why grouping is a property of the read
+ *
+ * "What services do you offer and what do they cost?" is one question with a
+ * dozen answers, and manual QA showed what a flat list of them looks like on
+ * WhatsApp: twelve service names and twelve prices in one run, with no way to
+ * tell which price belongs to which department, and nothing to reply to. The
+ * department is not decoration — it is the axis a patient actually navigates
+ * ("ok, cardiology then") — so the catalog is returned already grouped rather
+ * than flat with a department name repeated on every line.
+ *
+ * Doing it here rather than in the composer follows the rule the rest of this
+ * layer follows: the composer fills placeholders and must never have to know
+ * the shape of a domain row. It also means the *ordering* — departments in the
+ * clinic's own order, services alphabetically within each — is decided once, by
+ * the code that holds both lists.
+ *
+ * Only active, non-deleted services, only configured prices, and only names a
+ * person at the clinic authored: `localizedName` picks the Arabic or English
+ * display name when the clinic has typed one and returns the canonical stored
+ * name otherwise. Nothing here translates anything.
+ */
+export type ServiceGroup = {
+  readonly departmentId: string;
+  readonly departmentName: string;
+  readonly services: readonly {
+    readonly id: string;
+    readonly name: string;
+    readonly price: number | null;
+  }[];
+};
+
+export async function readServices(input: {
+  context: TurnContext;
+  departmentId?: string | null;
+}): Promise<{
+  readonly groups: readonly ServiceGroup[];
+  readonly currency: string | null;
+  /** Every service across every group. The count, not a presentation. */
+  readonly total: number;
+}> {
+  const db = createClinicScopedAdminClient(input.context.clinicId);
+  const [departments, result, currency] = await Promise.all([
+    loadClinicDepartments(input.context.clinicId),
+    selectWithOptional<Record<string, unknown>[]>(
+      ["id", "name", "price", "department_id"],
+      SERVICE_DISPLAY_COLUMNS,
+      (columns) =>
+        (input.departmentId
+          ? db.from("services").select(columns).eq("department_id", input.departmentId)
+          : db.from("services").select(columns)
+        )
+          .eq("is_active", true)
+          .is("deleted_at", null)
+          .order("name") as unknown as PromiseLike<{
+          data: Record<string, unknown>[] | null;
+          error: unknown;
+        }>,
+    ),
+    getClinicCurrency(input.context.clinicId).catch(() => null),
+  ]);
+  if (result.error || !Array.isArray(result.data)) {
+    return { groups: [], currency: null, total: 0 };
+  }
+  const locale = input.context.turn.locale;
+  const byDepartment = new Map<string, ServiceGroup["services"][number][]>();
+  let total = 0;
+  for (const row of result.data) {
+    const departmentId = String(row.department_id ?? "");
+    const entry = {
+      id: String(row.id),
+      name: localizedName(
+        {
+          name: String(row.name),
+          nameAr: displayText(row.name_ar),
+          nameEn: displayText(row.name_en),
+        },
+        locale,
+      ),
+      price:
+        row.price === null || row.price === undefined ? null : Number(row.price),
+    };
+    byDepartment.set(departmentId, [...(byDepartment.get(departmentId) ?? []), entry]);
+    total += 1;
+  }
+  // Department order comes from the clinic's own directory, so the grouping a
+  // patient reads matches the list they were offered when they were asked to
+  // choose one. A service whose department is inactive keeps its own row and is
+  // simply not shown under a heading it no longer has.
+  const groups: ServiceGroup[] = [];
+  for (const department of departments) {
+    const services = byDepartment.get(department.id);
+    if (!services || services.length === 0) continue;
+    groups.push({
+      departmentId: department.id,
+      departmentName: localizedName(department, locale),
+      services,
+    });
+  }
+  return { groups, currency: currency ?? null, total };
+}
+
+/**
+ * Grounds a spoken department name against the clinic's own list.
+ *
+ * Shared by the booking flow and by the services question, so "العلاج الطبيعي"
+ * selects the same department whichever way the patient arrives at it.
+ */
+/**
+ * The same grounding, with the clinic's own cross-language matcher behind it.
+ *
+ * `resolveDepartmentSpoken` is substring containment, which is right for
+ * scoping a services question and wrong for selecting a department to book in:
+ * a clinic whose departments are stored in English cannot be reached by a
+ * patient typing Arabic, because "الجلدية" is not a substring of "Dermatology".
+ * `resolveNamedEntity` is the resolver the legacy engine has always used for
+ * exactly this — literal score, transliteration and the concept lexicon, with
+ * the literal reading breaking every tie — so a department is reachable by its
+ * own stored name first and by a cross-language concept only when the letters
+ * alone could not connect them.
+ *
+ * Three answers, matching every other resolver in the system: the engine
+ * commits a `resolved`, asks which for an `ambiguous`, and asks again for an
+ * `unresolved`. Nothing here can invent a department: the candidate set is the
+ * clinic's own active rows, loaded this turn.
+ */
+export async function resolveDepartmentNamed(input: {
+  context: TurnContext;
+  spoken: string;
 }): Promise<
-  readonly {
-    id: string;
-    name: string;
-    departmentName: string;
-    totalSessions: number;
-    pricePerSession: number | null;
-    totalPrice: number | null;
-  }[]
+  | { kind: "resolved"; value: string; label: string }
+  | {
+      kind: "ambiguous";
+      options: readonly { value: string; label: string; source: "clinic_directory" }[];
+    }
+  | { kind: "unresolved" }
 > {
-  const result = await listClinicPublicPackages({
-    clinicId: input.context.clinicId,
-    departmentId: input.departmentId ?? null,
-  });
-  if (result.error || !Array.isArray(result.data)) return [];
-  return (result.data as Record<string, unknown>[]).map((row) => ({
-    id: String(row.template_id),
-    name: String(row.name),
-    departmentName: String(row.department_name ?? ""),
-    totalSessions: Number(row.total_sessions ?? 0),
-    pricePerSession:
-      row.price_per_session === null ? null : Number(row.price_per_session),
-    totalPrice: row.total_price === null ? null : Number(row.total_price),
-  }));
+  const departments = await readDepartments(input.context);
+  if (departments.length === 0) return { kind: "unresolved" };
+  const byId = new Map(departments.map((entry) => [entry.value, entry]));
+  // Scored against the label the patient was shown *and* every other name the
+  // clinic authored for the same department, so «الجلدية» and "Dermatology"
+  // reach the same row whichever language the conversation is in. The label
+  // stays the only thing that can be said back.
+  const resolution = resolveNamedEntity(
+    input.spoken,
+    departments.map((entry) => ({
+      id: entry.value,
+      name: entry.label,
+      aliases: entry.aliases,
+    })),
+  );
+  if (resolution.status === "resolved") {
+    const entry = byId.get(resolution.entity.id);
+    if (entry) return { kind: "resolved", value: entry.value, label: entry.label };
+  }
+  if (resolution.status === "ambiguous") {
+    const options = resolution.candidates
+      .map((candidate) => byId.get(candidate.id))
+      .filter((entry): entry is (typeof departments)[number] => Boolean(entry))
+      .map((entry) => ({
+        value: entry.value,
+        label: entry.label,
+        source: "clinic_directory" as const,
+      }));
+    if (options.length === 1) {
+      return { kind: "resolved", value: options[0]!.value, label: options[0]!.label };
+    }
+    if (options.length > 1) return { kind: "ambiguous", options };
+  }
+  return { kind: "unresolved" };
+}
+
+export async function resolveDepartmentSpoken(input: {
+  context: TurnContext;
+  spoken: string;
+}): Promise<readonly Candidate<string>[]> {
+  const departments = await readDepartments(input.context);
+  const wanted = input.spoken.trim().toLowerCase();
+  if (!wanted) return [];
+  const exact = departments.filter(
+    (department) => department.label.toLowerCase() === wanted,
+  );
+  if (exact.length > 0) return exact;
+  return departments.filter(
+    (department) =>
+      department.label.toLowerCase().includes(wanted) ||
+      wanted.includes(department.label.toLowerCase()),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -259,6 +722,114 @@ export async function readPatientPackages(input: {
     label: `${String(row.name)} · ${Number(row.remaining_sessions ?? 0)}`,
     source: "patient_packages" as const,
   }));
+}
+
+/**
+ * The patient's own name, in the language this conversation is being held in.
+ *
+ * ## Why this is a read and not a formatting rule
+ *
+ * A file carries up to three names: the canonical `full_name`, and the optional
+ * Arabic and English display names a person authored (the clinic on the
+ * Patients screen, or the patient themselves through the assistant's intake).
+ * Greeting «أهلًا Ali Alzanaty» in an Arabic thread is not wrong data, it is
+ * the wrong *name for this conversation* — and the right one is a column, not
+ * a transformation.
+ *
+ * ## The three properties that keep it safe
+ *
+ *   * **Gated exactly as before.** The caller
+ *     (`assembleTurnContext.durable.canonicalName`) only asks at `verified`,
+ *     which is unchanged. This function discloses nothing the canonical name
+ *     did not already disclose at that level, and it reads one row by the
+ *     patient id the *server* resolved — never by anything the model supplied.
+ *   * **Never a rendering.** A language with no authored name falls back to
+ *     `full_name`, exactly as every other display-name reader does. Nothing
+ *     transliterates, and there is no third option.
+ *   * **Never identity.** Matching a patient is `find_clinic_patient_by_identity`
+ *     folding `full_name` against an exact national id, and none of that is
+ *     here. A display name cannot select a record.
+ *
+ * `selectWithOptional` because the columns are additive: on a database where
+ * the migration has not run this returns the canonical name and nothing
+ * changes.
+ */
+export async function readPatientDisplayName(input: {
+  context: TurnContext;
+  patientId: string;
+  fallback: string | null;
+}): Promise<string | null> {
+  const db = createClinicScopedAdminClient(input.context.clinicId);
+  const result = await selectWithOptional<Record<string, unknown>>(
+    ["full_name"],
+    PATIENT_DISPLAY_COLUMNS,
+    (columns) =>
+      db
+        .from("patients")
+        .select(columns)
+        .eq("id", input.patientId)
+        .eq("clinic_id", input.context.clinicId)
+        .eq("is_deleted", false)
+        .maybeSingle() as unknown as PromiseLike<{
+        data: Record<string, unknown> | null;
+        error: unknown;
+      }>,
+  );
+  const row = result.error ? null : result.data;
+  if (!row) return input.fallback;
+  const localized =
+    input.context.turn.locale === "ar"
+      ? displayText(row.full_name_ar)
+      : displayText(row.full_name_en);
+  return localized ?? displayText(row.full_name) ?? input.fallback;
+}
+
+/**
+ * The email address this clinic already holds for the *sender's own* file.
+ *
+ * ## What it is for
+ *
+ * Exactly one sentence: «نفس إيميلي» / "use my email", answered while a
+ * third-party intake is standing on the beneficiary's email question. It is the
+ * email counterpart of `TurnContext.participantAddress`, and it exists as a
+ * read rather than as a field for the reason that address does not — the phone
+ * is the address the message physically arrived on and the server has it for an
+ * anonymous sender, whereas an email lives on a patient record and only exists
+ * once this thread selects one.
+ *
+ * ## The properties that keep it safe
+ *
+ *   * **Server-resolved subject.** `patientId` is the id
+ *     `authorizePatientConversation` derived from this conversation's own
+ *     linkage. The model never supplies it and there is no argument by which a
+ *     caller could ask for somebody else's row — the query is additionally
+ *     pinned to the clinic and to `is_deleted = false`.
+ *   * **Contact data, never identity.** An email cannot select a record here or
+ *     anywhere else: discovery is `resolveIdentity`, which folds the canonical
+ *     name against an exact national id and takes no contact argument. Writing
+ *     this address onto a beneficiary's staged file links, verifies and
+ *     confirms nobody.
+ *   * **One column.** `email` and nothing beside it, so a read that is only
+ *     ever needed for a contact field cannot become a general patient reader.
+ *   * **Total.** A missing row, a failed read or an unusable column value all
+ *     produce null, and null means the intake asks for the beneficiary's own
+ *     address. Nothing here can invent one.
+ */
+export async function readRequesterContactEmail(input: {
+  clinicId: string;
+  patientId: string;
+}): Promise<string | null> {
+  const db = createClinicScopedAdminClient(input.clinicId);
+  const { data, error } = await db
+    .from("patients")
+    .select("email")
+    .eq("id", input.patientId)
+    .eq("clinic_id", input.clinicId)
+    .eq("is_deleted", false)
+    .maybeSingle();
+  if (error || !data) return null;
+  const value = (data as { email?: unknown }).email;
+  return typeof value === "string" ? value : null;
 }
 
 /**
@@ -355,7 +926,13 @@ export async function readTreatingDoctors(
   // with your usual doctor?" is not a question worth asking about somebody who
   // cannot be booked — the same rule `existing-patient-discovery` applies.
   if (!doctor) return [];
-  return [{ value: doctor.id, label: doctor.name, source: "patient_history" }];
+  return [
+    {
+      value: doctor.id,
+      label: doctorDisplayName(doctor, context.turn.locale),
+      source: "patient_history",
+    },
+  ];
 }
 
 /**
@@ -434,13 +1011,15 @@ export async function readAvailableDays(input: {
   | { ok: false; reason: string }
 > {
   const identity = await identityFor(input.context);
-  const today = formatInTimeZone(
-    input.context.now,
-    identity.clinicTimezone,
-    "yyyy-MM-dd",
-  );
-  const windowStart =
-    input.after && input.after >= today ? addCalendarDays(input.after, 1) : today;
+  // Both bounds in one expression: the clinic's lead-time floor and whatever
+  // the patient ruled out. `bookableWindowStart` takes the later of the two, so
+  // «بعد يوم 11» genuinely moves the search forward and no refinement can ever
+  // walk it back into today or tomorrow. See `lib/booking/lead-time.ts`.
+  const windowStart = bookableWindowStart({
+    now: input.context.now,
+    timeZone: identity.clinicTimezone,
+    after: input.after ?? null,
+  });
   const windowEnd = addCalendarDays(windowStart, AVAILABILITY_WINDOW_DAYS - 1);
   const result = await getPatientAvailableDays({
     identity,
@@ -449,15 +1028,23 @@ export async function readAvailableDays(input: {
     searchDays: AVAILABILITY_WINDOW_DAYS,
     startDate: windowStart,
     serviceId: input.serviceId ?? null,
+    // The turn's own clock, not the process's. Every other read in this file
+    // passes it; this one did not, so a test clock moved the day list and left
+    // the slot list behind it.
+    now: input.context.now,
   });
   if (!result.ok) return { ok: false, reason: result.reason };
   return {
     ok: true,
     windowStart,
     windowEnd,
+    // `value` stays the canonical `YYYY-MM-DD` every downstream read and write
+    // uses; `label` is the only thing a patient sees, and it carries the
+    // weekday, which is what somebody actually plans around. A bare list of ISO
+    // dates was the manual-QA defect this fixes.
     days: result.availableDays.map((day) => ({
       value: day.date,
-      label: day.date,
+      label: formatOfferedDay(day.date, input.context.turn.locale),
       source: "clinic_directory" as const,
     })),
   };
@@ -473,6 +1060,14 @@ export async function readAvailableSlots(input: {
   { ok: true; times: readonly Candidate<string>[] } | { ok: false; reason: string }
 > {
   const identity = await identityFor(input.context);
+  // A day the rule excludes has no offerable times, whichever way the flow
+  // arrived at it. The day step cannot reach one — it matches the patient's
+  // words against the days this window returned — but a reschedule, a
+  // correction or a directly named date can, and one guard here is cheaper
+  // than trusting five callers.
+  if (!isOnlineBookableDate(input.date, input.context.now, identity.clinicTimezone)) {
+    return { ok: true, times: [] };
+  }
   const result = await getPatientAvailableSlots({
     identity,
     date: input.date,
@@ -484,9 +1079,16 @@ export async function readAvailableSlots(input: {
   if (!result.ok) return { ok: false, reason: result.reason };
   return {
     ok: true,
+    // Same split as the days above: the 24-hour `value` is what the calendar
+    // and the write speak, the label is the clinic's configured clock in the
+    // patient's language.
     times: result.availableSlots.map((slot: string) => ({
       value: slot,
-      label: slot,
+      label: formatOfferedTime(
+        slot,
+        input.context.turn.locale,
+        input.context.clinic.timeFormat,
+      ),
       source: "clinic_directory" as const,
     })),
   };
@@ -604,7 +1206,38 @@ export async function stageIntake(input: {
    * the existing P10 behaviour, unchanged.
    */
   fullNameOriginal?: string | null;
+  /**
+   * The patient's name in each language, when the intake collected both.
+   *
+   * Display names, and nothing more. `fullName` is still the canonical record
+   * and every identity check still folds it, so a bilingual name can neither
+   * match a file nor fail to — see the identity firewall note in
+   * `latinNameOutcome`.
+   */
+  fullNameAr?: string | null;
+  fullNameEn?: string | null;
 }): Promise<{ ok: boolean; reason?: string }> {
+  // The third-party phone invariant, enforced before the write rather than
+  // discovered after it.
+  //
+  // `stage_patient_intake_from_conversation` fills a missing third-party phone
+  // from `conversations.participant_address` — the WhatsApp number of the
+  // person *sending* the message. That fallback is a reasonable last resort for
+  // a clinic that has to reach somebody, and it is the wrong answer for a
+  // patient record: manual QA produced a file for a third party carrying the
+  // sender's mobile number, with nobody having been asked for the patient's
+  // own. The sender is the requester; the patient is a different person, and
+  // their contact number is theirs.
+  //
+  // So the assistant never lets that fallback be reached: a third-party intake
+  // without a phone the patient actually gave is refused here. The flow's
+  // intake step asks for it (see `INTAKE_REQUIRED_FIELDS`), so reaching this
+  // line with no phone means a step ran out of order, which is a bug to
+  // surface rather than a number to invent.
+  const phone = (input.phone ?? "").trim();
+  if (input.forThirdParty === true && phone.length === 0) {
+    return { ok: false, reason: "third_party_phone_required" };
+  }
   const result = await stagePatientIntakeFromConversation({
     clinicId: input.context.clinicId,
     conversationId: input.context.conversationId,
@@ -615,13 +1248,49 @@ export async function stageIntake(input: {
     departmentId: input.departmentId,
     doctorId: input.doctorId,
     forThirdParty: input.forThirdParty === true,
-    phone: input.phone ?? null,
+    phone: phone.length > 0 ? phone : null,
     bloodType: input.bloodType ?? null,
     fullNameOriginal: input.fullNameOriginal ?? null,
+    fullNameAr: input.fullNameAr ?? null,
+    fullNameEn: input.fullNameEn ?? null,
   });
-  return result.error
-    ? { ok: false, reason: String((result.error as { code?: string }).code ?? "failed") }
-    : { ok: true };
+  if (result.error) {
+    return { ok: false, reason: String((result.error as { code?: string }).code ?? "failed") };
+  }
+  // The absence of an error proves nothing.
+  //
+  // `stage_patient_intake_from_conversation` is a `RETURNS TABLE(status, ...)`
+  // function, and most of its outcomes are a *status row* rather than an
+  // exception: `already_reviewed`, `duplicate_review`, `identity_mismatch`,
+  // `identity_locked`, `already_linked`. This boundary read only `result.error`
+  // and returned `{ ok: true }` for every one of them.
+  //
+  // Manual QA, and the reason this is now checked: `ai_patient_intakes` carries
+  // `ai_patient_intakes_conversation_unique (clinic_id, conversation_id)`, so
+  // there is one intake row per conversation and the RPC's upsert only updates
+  // it `where review_status = 'pending_review'`. A requester whose earlier
+  // intake on the same thread had already been approved therefore staged
+  // *nothing* — the RPC returned `already_reviewed` with no error, this
+  // function said `ok`, the flow set `intake_staged` and told the patient their
+  // file was recorded, and the booking that followed was written against the
+  // requester's own record because no pending third-party intake existed to say
+  // otherwise. A file that was not staged must not read as one.
+  //
+  // The legacy `register_patient` tool has always branched on this status; only
+  // the V2 boundary dropped it. Two outcomes mean a real patient exists and
+  // nothing else does:
+  //
+  //   * `staged` — the row this call wrote, pending review;
+  //   * `linked_existing` — the RPC proved the sender's identity and linked the
+  //     conversation to their own file. Reachable only on a self-intake, and it
+  //     is a real patient, so the booking may proceed.
+  //
+  // Everything else is `ok: false`, which the intake step already answers with
+  // `intake.failed` — a handoff. `intake_staged` is never set, `hasPatient` is
+  // false at the confirm step, and no booking is written.
+  const status = String(firstRow(result.data)?.status ?? "");
+  if (status === "staged" || status === "linked_existing") return { ok: true };
+  return { ok: false, reason: status || "unknown_status" };
 }
 
 /**
@@ -645,30 +1314,164 @@ export async function stageIntake(input: {
  *
  * Nothing about "the model inferred a package applies" can reach it.
  */
+/**
+ * Why a booking write did not happen.
+ *
+ * The distinction is the whole of the availability fix. Every failure used to
+ * reach the flow as one opaque `reason` string, and the confirm step answered
+ * all of them with «الميعاد ده اتحجز» — "that slot has just been taken" —
+ * before invalidating the time and re-offering the day's free slots.
+ *
+ * For a genuinely contended slot that is right. For the two failures manual QA
+ * actually hit it is both false and unescapable:
+ *
+ *   * `already_pending` — the patient (or this very conversation, on a second
+ *     confirmation) already holds a pending AI request. The clinic's own
+ *     one-pending-per-patient policy raised `AI_PENDING_PATIENT_CAP`, nothing
+ *     was taken, and the slot the patient chose was free the whole time. The
+ *     re-offer then listed that same free slot again — `computeAvailability`
+ *     blocks on `confirmed/arrived/in_session` only, so a pending row is
+ *     invisible to it — the patient picked it again, and the turn repeated
+ *     forever.
+ *   * `lead_time` — the appointment is real and free but too soon to book
+ *     online. Offering other *times* on the same too-soon day cannot fix it.
+ *
+ * So the reason is classified here, once, at the boundary where the RPC's
+ * vocabulary is still visible, and the step branches on a small closed set
+ * rather than on a message.
+ */
+export type BookingFailureReason =
+  /** The slot is genuinely no longer bookable. Re-query and offer again. */
+  | "slot_taken"
+  /** Free, but sooner than online booking is allowed to offer. */
+  | "lead_time"
+  /** A pending request already exists — including the one this turn made. */
+  | "already_pending"
+  /** The staged file or intake the booking depends on is not there. */
+  | "not_ready"
+  /** Anything else. The clinic team takes it from here. */
+  | "failed";
+
+/**
+ * The RPC's vocabulary, mapped onto the closed set above.
+ *
+ * Both booking paths are covered: the typed `reason` union that
+ * `createPatientPendingBooking` returns, and the raw error message the package
+ * RPC surfaces, which carries the same `AI_*` tokens.
+ */
+export function classifyBookingFailure(reason: string): BookingFailureReason {
+  if (reason === "minimum_notice" || reason.includes("AI_BOOKING_MINIMUM_NOTICE")) {
+    return "lead_time";
+  }
+  if (reason === "patient_pending_cap" || reason.includes("AI_PENDING_PATIENT_CAP")) {
+    return "already_pending";
+  }
+  if (
+    reason === "slot_unavailable" ||
+    reason === "slot_pending_cap" ||
+    reason.includes("AI_BOOKING_SLOT_UNAVAILABLE") ||
+    reason.includes("AI_BOOKING_INVALID_SLOT") ||
+    reason.includes("AI_PENDING_SLOT_CAP")
+  ) {
+    return "slot_taken";
+  }
+  if (
+    reason === "intake_required" ||
+    reason.includes("PROVISIONAL_INTAKE_REQUIRED") ||
+    reason.includes("PATIENT_IDENTITY_UNLINKED")
+  ) {
+    return "not_ready";
+  }
+  return "failed";
+}
+
 export async function commitBooking(input: {
   context: TurnContext;
   doctorId: string;
-  scheduledAt: string;
+  /** The committed `day` slot, `YYYY-MM-DD` in the clinic's own calendar. */
+  date: string;
+  /** The committed `time` slot, `HH:mm`, as the clinic's calendar offered it. */
+  time: string;
   durationMinutes: number;
   serviceId?: string | null;
   packageId?: string | null;
+  /**
+   * Who this appointment is for, as the *frame* knows it.
+   *
+   * The frame is the authority on the beneficiary and it always has been: the
+   * beneficiary step asks the question outright, `normalizeBeneficiary` reads
+   * the answer, and `frame.slots.beneficiary` holds it for the rest of the
+   * booking. This argument is that fact, carried to the write.
+   *
+   * It shipped absent, and `createPatientPendingBooking` re-derived it instead
+   * — from `getPendingConversationIntake`, a database lookup for a *pending*
+   * intake row on this conversation. When that lookup came back empty the
+   * booking was taken to be the sender's own and the linked branch wrote a real
+   * appointment on the sender's file. Manual QA: a linked requester booked for
+   * his son, the staging silently did nothing (see `stageIntake`), the lookup
+   * found nothing, and the son's appointment was created for the father.
+   *
+   * So the beneficiary is passed rather than inferred. The lookup is kept as a
+   * second, independent guard — neither one alone can put a third-party booking
+   * on the sender's record.
+   */
+  forThirdParty: boolean;
 }): Promise<
   | { ok: true; appointmentId: string; packageSessionNumber: number | null }
-  | { ok: false; reason: string }
+  | { ok: false; reason: BookingFailureReason }
 > {
   const identity = await identityFor(input.context);
+  // The lead-time invariant, checked once more at the write.
+  //
+  // The day list was filtered by it and the write path re-checks it too; this
+  // is the third and it is the cheap one, because it turns a round trip into a
+  // decision the flow can act on without having to read an RPC error. See
+  // `lib/booking/lead-time.ts` for why the rule is a calendar day.
+  if (!isOnlineBookableDate(input.date, input.context.now, identity.clinicTimezone)) {
+    return { ok: false, reason: "lead_time" };
+  }
+  // The clinic's wall clock, converted to an instant here rather than joined
+  // into a naive string by the caller.
+  //
+  // This is the defect behind "the request was sent" with nothing in the
+  // database. `day` and `time` are the clinic's local calendar — 12:15 in
+  // Cairo — and `new Date("2026-09-13T12:15:00")` reads them in the *server's*
+  // zone. On any host not sitting in the clinic's timezone the instant lands
+  // hours away, the availability re-check downstream cannot find it among the
+  // free slots, and every booking fails as `slot_unavailable`. The legacy path
+  // has always used `fromZonedTime` for exactly this; V2 did not.
+  const scheduledAt = fromZonedTime(
+    `${input.date}T${input.time}:00`,
+    identity.clinicTimezone,
+  ).toISOString();
+  // `create_patient_preliminary_booking_v2` books for the *conversation's*
+  // patient — the sender — and decrements the sender's package. There is no
+  // argument on it for anybody else, so it cannot express a third-party
+  // booking and must never be reached by one. The package step offers only the
+  // sender's own packages and does not consult the beneficiary, so this is the
+  // one place the two can meet; it fails closed rather than filing the son's
+  // appointment on his father's record to spend his father's sessions.
+  //
+  // `failed` is the honest classification: the clinic team takes it from here.
+  // Making the package step itself beneficiary-aware is a separate change.
+  if (input.forThirdParty && input.packageId) {
+    return { ok: false, reason: "failed" };
+  }
   if (!input.packageId) {
     // No package: the existing path, byte for byte. Every slot, notice and
     // ownership check it has always performed still applies.
     const result = await createPatientPendingBooking({
       identity,
       doctorId: input.doctorId,
-      scheduledAt: input.scheduledAt,
+      scheduledAt,
       durationMinutes: input.durationMinutes,
       serviceId: input.serviceId ?? null,
       now: input.context.now,
+      forThirdParty: input.forThirdParty,
     });
-    if (!result.ok) return { ok: false, reason: result.reason };
+    if (!result.ok) {
+      return { ok: false, reason: classifyBookingFailure(result.reason) };
+    }
     return {
       ok: true,
       appointmentId: String(
@@ -681,18 +1484,21 @@ export async function commitBooking(input: {
     clinicId: input.context.clinicId,
     conversationId: input.context.conversationId,
     doctorId: input.doctorId,
-    scheduledAt: input.scheduledAt,
+    scheduledAt,
     durationMinutes: input.durationMinutes,
     serviceId: input.serviceId ?? null,
     packageId: input.packageId,
   });
   if (result.error) {
-    return { ok: false, reason: String(result.error.message ?? "booking_failed") };
+    return {
+      ok: false,
+      reason: classifyBookingFailure(String(result.error.message ?? "")),
+    };
   }
   const row = Array.isArray(result.data)
     ? (result.data[0] as Record<string, unknown> | undefined)
     : undefined;
-  if (!row?.appointment_id) return { ok: false, reason: "booking_failed" };
+  if (!row?.appointment_id) return { ok: false, reason: "failed" };
   return {
     ok: true,
     appointmentId: String(row.appointment_id),
@@ -781,13 +1587,24 @@ export async function readRescheduleTarget(input: {
 export async function commitReschedule(input: {
   context: TurnContext;
   appointmentId: string;
-  scheduledAt: string;
+  /** The committed `day` slot, in the clinic's own calendar. */
+  date: string;
+  /** The committed `time` slot, as the clinic's calendar offered it. */
+  time: string;
 }): Promise<{ ok: boolean; reason?: string }> {
+  // Same conversion, same reason as `commitBooking`: these two slots are the
+  // clinic's wall clock, and only `fromZonedTime` turns them into the instant
+  // the RPC stores.
+  const identity = await identityFor(input.context);
+  const scheduledAt = fromZonedTime(
+    `${input.date}T${input.time}:00`,
+    identity.clinicTimezone,
+  ).toISOString();
   const result = await reschedulePatientAiAppointment({
     clinicId: input.context.clinicId,
     conversationId: input.context.conversationId,
     appointmentId: input.appointmentId,
-    scheduledAt: input.scheduledAt,
+    scheduledAt,
   });
   if (result.error) return { ok: false, reason: "rpc_error" };
   const row = firstRow(result.data);
@@ -804,3 +1621,6 @@ function firstRow(data: unknown): Record<string, unknown> | null {
   }
   return data && typeof data === "object" ? (data as Record<string, unknown>) : null;
 }
+
+export type { InsuranceProvider, PackageEntry, PackageItemEntry, PackageGroup };
+export { resolveInsuranceProvider, resolvePackageNamed } from "@/lib/ai/v2/catalog";

@@ -117,6 +117,21 @@ export async function buildTurnContext(input: {
     identity: level,
     // Present only once linkage is proven, and never model-supplied.
     patientId: level === "anonymous" ? null : identity.patientId,
+    // The thread's own address, carried as contact data. Not gated on identity
+    // — it is the number the message physically arrived from, which the server
+    // knows for an anonymous sender too — and never used to select a record.
+    participantAddress: identity.participantAddress ?? null,
+    // The sender's *own* email, read only if a sentence asks for it. Memoized
+    // like every L4 loader, gated on this thread actually selecting a file, and
+    // total: an unlinked thread, a missing row or a failed read all produce
+    // null, which leaves the intake asking for the beneficiary's own address.
+    requesterContactEmail: once(async () => {
+      const patientId = level === "anonymous" ? null : identity.patientId;
+      if (!patientId) return null;
+      return tools
+        .readRequesterContactEmail({ clinicId: input.clinicId, patientId })
+        .catch(() => null);
+    }),
     clinic: {
       name: identity.clinicName,
       timeZone: identity.clinicTimezone,
@@ -164,12 +179,20 @@ export async function buildTurnContext(input: {
         source: "patient_appointments" as const,
       }));
     }),
-    // The canonical name ClinicFlow stores, available only once identity is
-    // established — which is exactly the brief's rule for greeting somebody by
-    // name.
-    canonicalName: once(async () =>
-      level === "verified" ? (identity.patientDisplayName ?? null) : null,
-    ),
+    // The canonical name ClinicFlow stores, in the language this conversation
+    // is being held in — the clinic's authored Arabic or English display name
+    // when there is one, and the canonical stored name when there is not. The
+    // identity gate is unchanged: nothing is returned below `verified`, and a
+    // read that fails falls back to exactly the value this returned before.
+    canonicalName: once(async () => {
+      if (level !== "verified") return null;
+      const fallback = identity.patientDisplayName ?? null;
+      const patientId = identity.patientId;
+      if (!patientId) return fallback;
+      return tools
+        .readPatientDisplayName({ context, patientId, fallback })
+        .catch(() => fallback);
+    }),
   };
 
   /**

@@ -323,6 +323,8 @@ export function PatientForm({
     resolver: zodResolver(patientSchema),
     defaultValues: {
       full_name: "",
+      full_name_ar: "",
+      full_name_en: "",
       national_id: "",
       date_of_birth: "",
       phone: "",
@@ -446,6 +448,52 @@ export function PatientForm({
                 <FormLabel>{t("fullName")}</FormLabel>
                 <FormControl>
                   <Input {...field} placeholder={t("eGJohnSmith")} disabled={isPending} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          {/* The names patients see, in each language. `full_name` above stays
+              the clinic's canonical record — it is what search, billing and
+              every identity check read — and these two are display only.
+              Nothing generates them: an empty field means "use the stored
+              name", and an older record with neither renders exactly as it
+              does today. */}
+          <FormField
+            control={form.control}
+            name="full_name_ar"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t("fullNameArabic")}</FormLabel>
+                <FormControl>
+                  <Input
+                    {...field}
+                    value={field.value ?? ""}
+                    dir="rtl"
+                    maxLength={100}
+                    disabled={isPending}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="full_name_en"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t("fullNameEnglish")}</FormLabel>
+                <FormControl>
+                  <Input
+                    {...field}
+                    value={field.value ?? ""}
+                    dir="ltr"
+                    maxLength={100}
+                    disabled={isPending}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>

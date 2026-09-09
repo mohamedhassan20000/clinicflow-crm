@@ -149,6 +149,50 @@ export type TurnContext = {
   readonly identity: IdentityLevel;
   /** Present only when identity is at least `linked`. Never model-supplied. */
   readonly patientId: string | null;
+  /**
+   * The address this conversation is being held on — the WhatsApp number of
+   * the person sending the messages.
+   *
+   * **Contact data, never identity.** It is the same column
+   * `stage_patient_intake_from_conversation` already falls back to when a
+   * third-party intake carries no phone, and it is here for exactly one
+   * purpose: so that «استخدم رقمي» has a value to resolve to when the intake
+   * asks for a third party's contact number (see `readsAsOwnNumberReference`).
+   * Nothing reads it to match, link or verify a patient — discovery is the
+   * national id plus the canonical name, and it does not take a phone
+   * argument.
+   *
+   * Deliberately optional and deliberately absent from {@link InterpreterView}:
+   * a context assembled without one resolves no such reference and asks for a
+   * number instead, and the model is never shown it.
+   */
+  readonly participantAddress?: string | null;
+  /**
+   * The email address the clinic already holds for **the sender's own** file,
+   * on request.
+   *
+   * The email counterpart of {@link participantAddress}, and deliberately a
+   * *function* where that one is a field. The phone is the address the message
+   * physically arrived on: the server has it before it knows who is writing,
+   * and it costs nothing. An email lives on a patient record, so it exists only
+   * once this thread selects one and obtaining it is a read — and a read that
+   * happens on every turn to serve one sentence is exactly what the L4 loaders
+   * exist not to be.
+   *
+   * **Contact data, never identity.** It is here for one purpose: so «استخدم
+   * إيميلي» has a value to resolve to when a third-party intake asks for the
+   * beneficiary's email (see `readsAsOwnEmailReference`). Nothing reads it to
+   * match, link or verify a patient — discovery is the national id plus the
+   * canonical name, and it takes no contact argument. Writing this address as a
+   * beneficiary's contact email leaves the beneficiary a third party, leaves
+   * the conversation the requester's, and proves nothing about either.
+   *
+   * Deliberately optional and deliberately absent from {@link InterpreterView}:
+   * a context assembled without one resolves no such reference and asks for an
+   * address instead, and the model is never shown it. Resolves to null for an
+   * unlinked thread and for a record whose column holds nothing usable.
+   */
+  readonly requesterContactEmail?: () => Promise<string | null>;
   readonly clinic: {
     readonly name: string;
     readonly timeZone: string;
@@ -224,7 +268,16 @@ export function interpreterView(
       ? {
           name: active.flow,
           filledSlots: Object.keys(active.slots),
-          awaitingSlot: offer?.slot ?? null,
+          // The offer's slot when there is one; otherwise the slot an open
+          // `ask` recorded. An `ask` mints no offer — it is a question with no
+          // menu — so before this the interpreter was told nothing at all
+          // about what the assistant had just asked for, and a bare answer to
+          // it had no referent to attach to.
+          awaitingSlot:
+            offer?.slot ??
+            (typeof active.memo.awaiting_slot === "string"
+              ? (active.memo.awaiting_slot as string)
+              : null),
         }
       : null,
     parkedFlow: parked?.flow ?? null,

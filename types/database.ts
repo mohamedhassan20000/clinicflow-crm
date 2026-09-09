@@ -819,6 +819,8 @@ export type Database = {
           doctor_id: string
           email: string
           full_name: string
+          full_name_ar: string | null
+          full_name_en: string | null
           full_name_original: string | null
           id: string
           is_third_party: boolean
@@ -845,6 +847,8 @@ export type Database = {
           doctor_id: string
           email: string
           full_name: string
+          full_name_ar?: string | null
+          full_name_en?: string | null
           full_name_original?: string | null
           id?: string
           is_third_party?: boolean
@@ -871,6 +875,8 @@ export type Database = {
           doctor_id?: string
           email?: string
           full_name?: string
+          full_name_ar?: string | null
+          full_name_en?: string | null
           full_name_original?: string | null
           id?: string
           is_third_party?: boolean
@@ -2763,6 +2769,8 @@ export type Database = {
           id: string
           is_active: boolean
           name: string
+          name_ar: string | null
+          name_en: string | null
           search_name: string | null
         }
         Insert: {
@@ -2774,6 +2782,8 @@ export type Database = {
           id?: string
           is_active?: boolean
           name: string
+          name_ar?: string | null
+          name_en?: string | null
           search_name?: string | null
         }
         Update: {
@@ -2785,6 +2795,8 @@ export type Database = {
           id?: string
           is_active?: boolean
           name?: string
+          name_ar?: string | null
+          name_en?: string | null
           search_name?: string | null
         }
         Relationships: [
@@ -3767,6 +3779,8 @@ export type Database = {
           id: string
           is_active: boolean
           name: string
+          name_ar: string | null
+          name_en: string | null
           updated_at: string
         }
         Insert: {
@@ -3777,6 +3791,8 @@ export type Database = {
           id?: string
           is_active?: boolean
           name: string
+          name_ar?: string | null
+          name_en?: string | null
           updated_at?: string
         }
         Update: {
@@ -3787,6 +3803,8 @@ export type Database = {
           id?: string
           is_active?: boolean
           name?: string
+          name_ar?: string | null
+          name_en?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -4613,6 +4631,67 @@ export type Database = {
           },
         ]
       }
+      package_template_items: {
+        Row: {
+          clinic_id: string
+          created_at: string
+          department_id: string
+          id: string
+          package_template_id: string
+          price_per_session: number
+          service_id: string
+          sessions: number
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          clinic_id: string
+          created_at?: string
+          department_id: string
+          id?: string
+          package_template_id: string
+          price_per_session: number
+          service_id: string
+          sessions: number
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          clinic_id?: string
+          created_at?: string
+          department_id?: string
+          id?: string
+          package_template_id?: string
+          price_per_session?: number
+          service_id?: string
+          sessions?: number
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "package_template_items_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "package_template_items_template_fkey"
+            columns: ["clinic_id", "department_id", "package_template_id"]
+            isOneToOne: false
+            referencedRelation: "package_templates"
+            referencedColumns: ["clinic_id", "department_id", "id"]
+          },
+          {
+            foreignKeyName: "package_template_items_service_fkey"
+            columns: ["clinic_id", "department_id", "service_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["clinic_id", "department_id", "id"]
+          },
+        ]
+      }
       package_templates: {
         Row: {
           clinic_id: string
@@ -4622,6 +4701,8 @@ export type Database = {
           id: string
           is_active: boolean
           name: string
+          name_ar: string | null
+          name_en: string | null
           notes: string | null
           price_per_session: number | null
           total_price: number | null
@@ -4636,6 +4717,8 @@ export type Database = {
           id?: string
           is_active?: boolean
           name: string
+          name_ar?: string | null
+          name_en?: string | null
           notes?: string | null
           price_per_session?: number | null
           total_price?: number | null
@@ -4650,6 +4733,8 @@ export type Database = {
           id?: string
           is_active?: boolean
           name?: string
+          name_ar?: string | null
+          name_en?: string | null
           notes?: string | null
           price_per_session?: number | null
           total_price?: number | null
@@ -4907,6 +4992,8 @@ export type Database = {
           email: string
           file_number: string
           full_name: string
+          full_name_ar: string | null
+          full_name_en: string | null
           id: string
           insurance_provider_id: string | null
           is_archived: boolean
@@ -4933,6 +5020,8 @@ export type Database = {
           email: string
           file_number: string
           full_name: string
+          full_name_ar?: string | null
+          full_name_en?: string | null
           id?: string
           insurance_provider_id?: string | null
           is_archived?: boolean
@@ -4959,6 +5048,8 @@ export type Database = {
           email?: string
           file_number?: string
           full_name?: string
+          full_name_ar?: string | null
+          full_name_en?: string | null
           id?: string
           insurance_provider_id?: string | null
           is_archived?: boolean
@@ -5315,6 +5406,8 @@ export type Database = {
           deleted_at: string | null
           department_id: string | null
           display_currency: string | null
+          display_name_ar: string | null
+          display_name_en: string | null
           full_name: string
           id: string
           is_active: boolean
@@ -5338,6 +5431,8 @@ export type Database = {
           deleted_at?: string | null
           department_id?: string | null
           display_currency?: string | null
+          display_name_ar?: string | null
+          display_name_en?: string | null
           full_name: string
           id: string
           is_active?: boolean
@@ -5361,6 +5456,8 @@ export type Database = {
           deleted_at?: string | null
           department_id?: string | null
           display_currency?: string | null
+          display_name_ar?: string | null
+          display_name_en?: string | null
           full_name?: string
           id?: string
           is_active?: boolean
@@ -5403,6 +5500,8 @@ export type Database = {
           id: string
           is_active: boolean
           name: string
+          name_ar: string | null
+          name_en: string | null
           price: number
           search_name: string | null
           updated_at: string
@@ -5415,6 +5514,8 @@ export type Database = {
           id?: string
           is_active?: boolean
           name: string
+          name_ar?: string | null
+          name_en?: string | null
           price: number
           search_name?: string | null
           updated_at?: string
@@ -5427,6 +5528,8 @@ export type Database = {
           id?: string
           is_active?: boolean
           name?: string
+          name_ar?: string | null
+          name_en?: string | null
           price?: number
           search_name?: string | null
           updated_at?: string
@@ -6477,6 +6580,14 @@ export type Database = {
           p_b_start: string
         }
         Returns: Json
+      }
+      ai_conversation_booking_beneficiary_matches: {
+        Args: {
+          p_clinic_id: string
+          p_conversation_id: string
+          p_patient_id: string
+        }
+        Returns: boolean
       }
       ai_get_appointment_stats: {
         Args: { p_end: string; p_group_by?: string; p_start: string }
@@ -8178,6 +8289,14 @@ export type Database = {
           status: string
         }[]
       }
+      set_package_template_items: {
+        Args: { p_items?: Json; p_template_id: string }
+        Returns: {
+          item_count: number
+          items_total: number
+          total_sessions: number
+        }[]
+      }
       stage_patient_intake_from_conversation: {
         Args: {
           p_blood_type?: string
@@ -8189,6 +8308,8 @@ export type Database = {
           p_email: string
           p_for_third_party?: boolean
           p_full_name: string
+          p_full_name_ar?: string
+          p_full_name_en?: string
           p_full_name_original?: string
           p_national_id: string
           p_phone?: string

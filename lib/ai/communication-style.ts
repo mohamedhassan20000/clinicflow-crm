@@ -430,6 +430,42 @@ const LABEL_LANGUAGE_EN: readonly string[] = [
  * themselves, a style note that gets ignored rather than an instruction that
  * gets followed.
  */
+/**
+ * P12 — the same configuration, for a rewrite pass rather than a full prompt.
+ *
+ * V2's composer polishes one finished sentence. It does not need the workflow,
+ * the refusals or the label rules — the sentence it is given is already correct
+ * and the grounding check discards a rewrite that changes it. What it *does*
+ * need is the part it was missing: the clinic's Arabic register and its own
+ * style note.
+ *
+ * Before this it hard-coded a single line for `egyptian` and ignored the other
+ * four, so a Kuwaiti or Saudi clinic that had set its register in Settings got
+ * whatever Arabic the model felt like — the exact inconsistency
+ * `ai_arabic_style` exists to remove. And it interpolated `styleInstruction`
+ * raw, without the fence every other use of that field carries.
+ *
+ * Built from the same tables `buildCommunicationStylePrompt` uses, so the two
+ * surfaces cannot drift: one clinic, one configured register, one meaning.
+ */
+export function buildStyleNoteForRewrite(
+  style: CommunicationStyle,
+  locale: "ar" | "en",
+): string {
+  const lines: string[] = [];
+  if (locale === "ar" && style.arabicStyle !== "auto") {
+    lines.push(
+      `- Whenever you write Arabic, write ${EN_STYLE_NAMES[style.arabicStyle]}.`,
+    );
+  }
+  lines.push(`- Keep the register ${EN_TONE_NAMES[style.tone]}. Stay brief.`);
+  // The fence, unchanged from the prompt path: introduced as data, quoted, and
+  // followed by the sentence that says it may not move a rule. An administrator
+  // is trusted; "trusted" is not "may rewrite the refusals".
+  lines.push(...styleInstructionLines(style, "en"));
+  return lines.join("\n");
+}
+
 function styleInstructionLines(
   style: CommunicationStyle,
   locale: "ar" | "en",

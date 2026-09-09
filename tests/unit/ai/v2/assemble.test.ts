@@ -26,6 +26,7 @@ const stubs = vi.hoisted(() => ({
   readPatientPackages: vi.fn(),
   readPatientDocuments: vi.fn(),
   readMyAppointments: vi.fn(),
+  readPatientDisplayName: vi.fn(),
 }));
 vi.mock("@/lib/ai/v2/tools", () => stubs);
 
@@ -83,6 +84,12 @@ beforeEach(() => {
     { value: "doc-1", label: "تقرير", source: "patient_documents" },
   ]);
   stubs.readMyAppointments.mockResolvedValue([]);
+  // The localized read falls back to the canonical name it is handed whenever
+  // the clinic has authored no display name in this language, which is the
+  // ordinary case and the one these gates are about.
+  stubs.readPatientDisplayName.mockImplementation(
+    async (input: { fallback: string | null }) => input.fallback,
+  );
 });
 
 describe("finding 5: knownDepartments is the patient's own, not the clinic's", () => {
@@ -126,6 +133,21 @@ describe("the durable loaders keep their identity gates", () => {
   it("withholds the canonical name below `verified`", async () => {
     const linked = await build({ identityVerifiedAt: null });
     expect(await linked.durable.canonicalName()).toBeNull();
+    // The gate is on the loader, not on the read: nothing is even asked for
+    // below `verified`.
+    expect(stubs.readPatientDisplayName).not.toHaveBeenCalled();
+    const verified = await build();
+    expect(await verified.durable.canonicalName()).toBe("أنس طلال");
+  });
+
+  it("prefers the display name authored in the conversation's language", async () => {
+    stubs.readPatientDisplayName.mockResolvedValue("أنس طلال الزهراني");
+    const verified = await build();
+    expect(await verified.durable.canonicalName()).toBe("أنس طلال الزهراني");
+  });
+
+  it("keeps the canonical name when the localized read fails", async () => {
+    stubs.readPatientDisplayName.mockRejectedValue(new Error("unavailable"));
     const verified = await build();
     expect(await verified.durable.canonicalName()).toBe("أنس طلال");
   });

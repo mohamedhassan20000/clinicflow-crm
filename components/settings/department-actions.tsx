@@ -158,6 +158,8 @@ export function DepartmentActions({ dept, updateAction, toggleAction, deleteActi
               name: dept.name,
               color: dept.color,
               description: dept.description,
+              name_ar: dept.name_ar,
+              name_en: dept.name_en,
             }}
             submitLabel={t("saveChanges")}
             onSuccess={() => {

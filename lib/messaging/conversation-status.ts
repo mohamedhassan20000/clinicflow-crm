@@ -139,6 +139,23 @@ export type ConversationStatusInput = {
    */
   lastAssistantReplyAt?: string | null;
   /**
+   * `conversations.status_updated_at` — when the Open/Closed column was last
+   * written. The explicit half of the status pair, and the only durable record
+   * of a staff member having *reopened* a thread.
+   *
+   * `undefined` means the caller did not read it, which keeps the pre-existing
+   * reading of {@link hasActiveEpisode} exactly as it was.
+   */
+  statusUpdatedAt?: string | null;
+  /**
+   * `conversations.ai_context_reset_at` — the boundary the last episode ending
+   * drew. Read here only to date the ending, never to bound anything.
+   *
+   * `undefined` means the caller did not read it; `null` means the thread has
+   * never had an episode boundary drawn on it at all.
+   */
+  contextResetAt?: string | null;
+  /**
    * P15 — when a *person at the clinic* last replied on this thread, live.
    *
    * Both routes count and neither is guessed: a reply sent from ClinicFlow,
@@ -165,6 +182,48 @@ export type ConversationStatusInput = {
 function effectiveAiEnabledFor(input: ConversationStatusInput): boolean {
   if (input.aiPausedAt) return false;
   return input.aiEnabled ?? true;
+}
+
+/**
+ * True when the Open/Closed column was written *after* the last episode ended.
+ *
+ * This is what stops a derived signal from overruling an explicit one. The
+ * episode pointer is an assistant fact: `current_episode_id` is only ever set
+ * by `resolve_conversation_episode`, which only ever runs inside an assistant
+ * turn. So `hasActiveEpisode === false` means two completely different things
+ * depending on the thread:
+ *
+ *   * the assistant ran an episode here and it ended — genuinely resting, and
+ *     every path that ends an episode (staff Close, the assistant's own close,
+ *     the idle sweep) also writes `status = 'closed'` in the same breath; or
+ *   * no assistant ever ran here at all — a clinic with AI replies off, a
+ *     conversation excluded per-thread, a thread staff opened themselves. The
+ *     pointer is null because nothing was ever pointing, which says nothing
+ *     whatsoever about whether the thread is finished.
+ *
+ * Reading the second case as "resting" is what made the Inbox's Open/Closed
+ * control look broken: with the assistant off, *every* thread read `Done`, and
+ * a staff member pressing Reopen flipped `status` to `open` only to have the
+ * badge, the filter and the counts keep saying `Done` — the manual value
+ * overwritten by a derivation that had no episode to derive from.
+ *
+ * So the pointer is believed only while nothing more recent contradicts it.
+ * `status_updated_at` is that contradiction, and it is exact: a close stamps
+ * the two together, so a genuinely resting thread never satisfies this, while
+ * a reopen — and a thread that never had a boundary in the first place —
+ * always does.
+ *
+ * Both columns are optional. A caller that has not read `statusUpdatedAt`
+ * keeps the pre-P11T-fix reading unchanged, and so does one whose schema is
+ * behind on `contextResetAt`.
+ */
+function openedSinceEpisodeEnded(input: ConversationStatusInput): boolean {
+  if (input.statusUpdatedAt === undefined || !input.statusUpdatedAt) return false;
+  if (input.contextResetAt === undefined) return false;
+  // No boundary was ever drawn on this thread, so no episode ever ended on it.
+  // The absent pointer is "the assistant was never here", not "it finished".
+  if (input.contextResetAt === null) return true;
+  return new Date(input.statusUpdatedAt).getTime() > new Date(input.contextResetAt).getTime();
 }
 
 /**
@@ -226,7 +285,11 @@ export function conversationBadgeState(
   // Explicitly false only. `undefined` is "not read", and treating it as "no
   // episode" would relabel every thread Done for any caller that has not been
   // updated to select the column.
-  if (input.hasActiveEpisode === false) return "done";
+  //
+  // And not while the row has been explicitly opened since that episode ended:
+  // an absent episode pointer is only evidence of resting when nothing newer
+  // says otherwise. See {@link openedSinceEpisodeEnded}.
+  if (input.hasActiveEpisode === false && !openedSinceEpisodeEnded(input)) return "done";
 
   // 4. A live thread with nobody linked to it, *before* the assistant has
   //    answered. Once it has, the thread is being handled and says so — an

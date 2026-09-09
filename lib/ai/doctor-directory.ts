@@ -2,6 +2,12 @@ import "server-only";
 
 import { resolveNamedEntity, type NamedEntity } from "@/lib/ai/entity-resolution";
 import { createClinicScopedAdminClient } from "@/lib/supabase/admin";
+import {
+  DEPARTMENT_DISPLAY_COLUMNS,
+  STAFF_DISPLAY_COLUMNS,
+  displayText,
+  selectWithOptional,
+} from "@/lib/settings/display-names";
 
 /**
  * The clinic's doctors, as the patient assistant is allowed to see them.
@@ -31,7 +37,12 @@ export type DoctorAvailabilityState = "available" | "on_leave" | "inactive";
 
 export type DirectoryDoctor = {
   id: string;
+  /** The canonical stored name. Never replaced, only accompanied. */
   name: string;
+  /** The clinic's own Arabic display name, when a person has authored one. */
+  nameAr?: string | null;
+  /** The clinic's own English display name, when a person has authored one. */
+  nameEn?: string | null;
   departmentId: string | null;
   departmentName: string | null;
   state: DoctorAvailabilityState;
@@ -39,7 +50,13 @@ export type DirectoryDoctor = {
   unavailableUntil: string | null;
 };
 
-export type DirectoryDepartment = { id: string; name: string };
+export type DirectoryDepartment = {
+  id: string;
+  /** The canonical stored name. Never replaced, only accompanied. */
+  name: string;
+  nameAr?: string | null;
+  nameEn?: string | null;
+};
 
 export type DoctorDirectory = {
   departments: DirectoryDepartment[];
@@ -62,6 +79,9 @@ export type DoctorNameResolution =
 const MAX_DOCTORS = 200;
 const DEPARTMENT_PAGE_SIZE = 100;
 
+/** One page of a department read, in either of the two shapes above. */
+type PageResult = { data: Record<string, unknown>[] | null; error: unknown };
+
 /**
  * The complete active clinic department directory.
  *
@@ -76,26 +96,46 @@ export async function loadClinicDepartments(
   const db = createClinicScopedAdminClient(clinicId);
   const departments: DirectoryDepartment[] = [];
   for (let offset = 0; ; offset += DEPARTMENT_PAGE_SIZE) {
-    const query = db
-      .from("departments")
-      .select("id, name")
-      .eq("is_active", true)
-      .is("deleted_at", null)
-      .order("name")
-      .order("id");
+    // The bilingual display names travel with the row when the clinic's schema
+    // carries them, and the read falls back to the canonical name alone when it
+    // does not. See `lib/settings/display-names.ts`.
+    const select = (columns: string) =>
+      db
+        .from("departments")
+        .select(columns)
+        .eq("is_active", true)
+        .is("deleted_at", null)
+        .order("name")
+        .order("id");
     // Older filter-faithful unit doubles predate pagination and expose
     // `.limit()` but not `.range()`. Production PostgREST always takes the
     // paginated branch; the fallback keeps those doubles faithful to the old
     // single-query contract and still covers the required 100-row fixture.
-    const range = (query as unknown as { range?: unknown }).range;
-    const result =
-      typeof range === "function"
-        ? await query.range(offset, offset + DEPARTMENT_PAGE_SIZE - 1)
-        : await query.limit(1_000);
+    let paginated = true;
+    const readPage = (columns: string) => {
+      const built = select(columns) as unknown as {
+        range?: (from: number, to: number) => PromiseLike<PageResult>;
+        limit: (count: number) => PromiseLike<PageResult>;
+      };
+      paginated = typeof built.range === "function";
+      return paginated
+        ? built.range!(offset, offset + DEPARTMENT_PAGE_SIZE - 1)
+        : built.limit(1_000);
+    };
+    const result = await selectWithOptional<Record<string, unknown>[]>(
+      ["id", "name"],
+      DEPARTMENT_DISPLAY_COLUMNS,
+      readPage,
+    );
     if (result.error) throw new Error("Could not read clinic departments.");
-    const page = (result.data ?? []).map((row) => ({ id: row.id, name: row.name }));
+    const page = (result.data ?? []).map((row) => ({
+      id: String(row.id),
+      name: String(row.name),
+      nameAr: displayText(row.name_ar),
+      nameEn: displayText(row.name_en),
+    }));
     departments.push(...page);
-    if (typeof range !== "function" || page.length < DEPARTMENT_PAGE_SIZE) break;
+    if (!paginated || page.length < DEPARTMENT_PAGE_SIZE) break;
   }
   return departments;
 }
@@ -174,12 +214,20 @@ export async function loadDoctorDirectory(
 
   const [departments, doctorsResult, leaveResult] = await Promise.all([
     loadClinicDepartments(clinicId),
-    db
-      .from("profiles")
-      .select("id, full_name, department_id, is_active, is_deleted, deleted_at")
-      .eq("role", "doctor")
-      .order("full_name")
-      .limit(MAX_DOCTORS),
+    selectWithOptional<Record<string, unknown>[]>(
+      ["id", "full_name", "department_id", "is_active", "is_deleted", "deleted_at"],
+      STAFF_DISPLAY_COLUMNS,
+      (columns) =>
+        db
+          .from("profiles")
+          .select(columns)
+          .eq("role", "doctor")
+          .order("full_name")
+          .limit(MAX_DOCTORS) as unknown as PromiseLike<{
+          data: Record<string, unknown>[] | null;
+          error: unknown;
+        }>,
+    ),
     // Only leave that is in force *now* proves a doctor is currently away. A
     // block that starts next month says nothing about today and must never be
     // reported to a patient as "on leave".
@@ -206,14 +254,21 @@ export async function loadDoctorDirectory(
   }
 
   const doctors: DirectoryDoctor[] = (doctorsResult.data ?? []).map((row) => {
-    const active = row.is_active && !row.is_deleted && row.deleted_at === null;
-    const until = leaveEndsAt.get(row.id) ?? null;
+    const active =
+      Boolean(row.is_active) && !row.is_deleted && (row.deleted_at ?? null) === null;
+    const id = String(row.id);
+    const departmentId = row.department_id === null || row.department_id === undefined
+      ? null
+      : String(row.department_id);
+    const until = leaveEndsAt.get(id) ?? null;
     return {
-      id: row.id,
-      name: row.full_name,
-      departmentId: row.department_id,
-      departmentName: row.department_id
-        ? (departmentNames.get(row.department_id) ?? null)
+      id,
+      name: String(row.full_name),
+      nameAr: displayText(row.display_name_ar),
+      nameEn: displayText(row.display_name_en),
+      departmentId,
+      departmentName: departmentId
+        ? (departmentNames.get(departmentId) ?? null)
         : null,
       state: !active ? "inactive" : until ? "on_leave" : "available",
       unavailableUntil: active && until ? until : null,
@@ -268,9 +323,23 @@ export function availableDoctorsInDepartment(
   });
 }
 
-/** The public projection of a doctor. Internal state never leaves as an id. */
+/**
+ * The public projection of a doctor. Internal state never leaves as an id.
+ *
+ * The clinic's own display names travel as `aliases`, so a doctor whose file
+ * carries a Latin-script name and whose Arabic display name the clinic has
+ * authored is reachable by either. They are alternative spellings of one
+ * person, never a second candidate — see `NamedEntity.aliases`.
+ */
 export function toDoctorOption(doctor: DirectoryDoctor): NamedEntity {
-  return { id: doctor.id, name: doctor.name };
+  const aliases = [doctor.nameAr, doctor.nameEn].filter(
+    (name): name is string => typeof name === "string" && name.trim().length > 0,
+  );
+  return {
+    id: doctor.id,
+    name: doctor.name,
+    ...(aliases.length > 0 ? { aliases } : {}),
+  };
 }
 
 /**

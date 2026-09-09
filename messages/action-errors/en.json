@@ -195,6 +195,7 @@
     "invalidInboxReply": "Enter a valid reply or complete every template value.",
     "invalidConversationUpdate": "The conversation update is invalid.",
     "conversationNotFound": "Conversation not found.",
+    "couldNotReadOpenConversations": "The open conversations could not be read.",
     "conversationNotLinked": "This conversation is not linked to a patient file yet.",
     "patientHistoryUnavailable": "This history could not be loaded right now. Please try again.",
     "conversationClosed": "Reopen this conversation before replying.",
@@ -265,7 +266,9 @@
     "failedToUpdateTemplatePleaseTryAgain": "Failed to update template. Please try again.",
     "failedToValidateDepartment": "Failed to validate department.",
     "selectADepartmentFromThisClinic": "Select a department from this clinic.",
-    "templateNotFound": "Template not found."
+    "templateNotFound": "Template not found.",
+    "failedToValidateService": "Failed to validate service.",
+    "selectAServiceFromThisDepartment": "Select an active service from the chosen department."
   },
   "page-permissions": {
     "clinicScopeMismatch": "Clinic scope mismatch.",

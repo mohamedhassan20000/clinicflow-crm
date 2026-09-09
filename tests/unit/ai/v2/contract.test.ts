@@ -154,8 +154,37 @@ describe("the store fails closed when its migration is not applied", () => {
         stack: [newFrame({ flow: "book_appointment", at: "2026-09-04T12:00:00.000Z" })],
       },
     });
-    expect(saved).toEqual({ ok: false });
+    expect(saved).toEqual({ ok: false, code: "column_unavailable" });
     expect(admin.setConversationFlowState).not.toHaveBeenCalled();
+  });
+
+  it("classifies a failed write without quoting the database message", async () => {
+    // The audit line only ever said `state_write_failed`, which is equally true
+    // of a missing migration, a permission denial and a client-side TypeError.
+    // The code separates them; the message, which can quote the failing row,
+    // stays out of `audit_logs` entirely.
+    admin.probeConversationFlowStateColumn.mockResolvedValue({ error: null });
+    admin.setConversationFlowState.mockResolvedValue({
+      error: { code: "42501", message: "permission denied for conversation 5f2c…" },
+    });
+    const denied = await saveFlowState({
+      clinicId: "c",
+      conversationId: "v",
+      state: EMPTY_FLOW_STATE,
+    });
+    expect(denied).toEqual({ ok: false, code: "rpc_error:42501" });
+
+    // A wrapper that *throws* is a client fault, not a database one — the
+    // production defect was exactly this, and it must not read as a DB error.
+    admin.setConversationFlowState.mockRejectedValue(
+      new TypeError("Cannot read properties of undefined (reading 'rest')"),
+    );
+    const threw = await saveFlowState({
+      clinicId: "c",
+      conversationId: "v",
+      state: EMPTY_FLOW_STATE,
+    });
+    expect(threw).toEqual({ ok: false, code: "client_threw:TypeError" });
   });
 
   it("never throws into the reply path", async () => {

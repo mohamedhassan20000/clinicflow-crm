@@ -513,6 +513,10 @@ function StaffProfileSection({ staff }: { staff: StaffMember }) {
   const router = useRouter();
   const [fullName, setFullName] = useState(staff.full_name);
   const [phone, setPhone] = useState(staff.phone ?? "");
+  // The names patients are shown. `full_name` above stays the clinic's record;
+  // these are display only, and an empty one means "use the stored name".
+  const [displayNameAr, setDisplayNameAr] = useState(staff.display_name_ar ?? "");
+  const [displayNameEn, setDisplayNameEn] = useState(staff.display_name_en ?? "");
   const [saving, startSave] = useTransition();
 
   function saveProfile() {
@@ -520,6 +524,8 @@ function StaffProfileSection({ staff }: { staff: StaffMember }) {
       const result = await updateStaffProfileSection(staff.id, {
         full_name: fullName,
         phone: phone || null,
+        display_name_ar: displayNameAr || null,
+        display_name_en: displayNameEn || null,
       });
       if (result.error) toast.error(result.error);
       else {
@@ -553,6 +559,35 @@ function StaffProfileSection({ staff }: { staff: StaffMember }) {
           />
         </div>
       </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label htmlFor={`staff-profile-name-ar-${staff.id}`}>
+            {t("displayNameArabic")}
+          </Label>
+          <Input
+            id={`staff-profile-name-ar-${staff.id}`}
+            dir="rtl"
+            value={displayNameAr}
+            maxLength={120}
+            disabled={saving}
+            onChange={(event) => setDisplayNameAr(event.target.value)}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor={`staff-profile-name-en-${staff.id}`}>
+            {t("displayNameEnglish")}
+          </Label>
+          <Input
+            id={`staff-profile-name-en-${staff.id}`}
+            dir="ltr"
+            value={displayNameEn}
+            maxLength={120}
+            disabled={saving}
+            onChange={(event) => setDisplayNameEn(event.target.value)}
+          />
+        </div>
+      </div>
+      <p className="text-xs text-muted-foreground">{t("displayNameHint")}</p>
       <div className="flex justify-end">
         <Button type="button" onClick={saveProfile} disabled={saving} className="gap-2">
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}

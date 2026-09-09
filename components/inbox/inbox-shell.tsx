@@ -12,6 +12,9 @@ import {
   Loader2,
   LockKeyhole,
   MessageCircleMore,
+  MoreHorizontal,
+  PanelLeftClose,
+  PanelLeftOpen,
   Plus,
   Search,
   Send,
@@ -46,8 +49,10 @@ import {
   type ConversationBadgeState,
 } from "@/lib/messaging/conversation-status";
 import { InboxComposer } from "@/components/inbox/inbox-composer";
+import { BulkCloseDialog } from "@/components/inbox/bulk-close-dialog";
 import { BulkSendDialog } from "@/components/inbox/bulk-send-dialog";
 import { MAX_BULK_RECIPIENTS } from "@/lib/messaging/bulk-send-plan";
+import { buildBulkRecipients } from "@/lib/messaging/bulk-recipients";
 import { Checkbox } from "@/components/ui/checkbox";
 import { InboxAiRepliesControl } from "@/components/inbox/inbox-ai-replies-control";
 import { NewConversationDialog } from "@/components/inbox/new-conversation-dialog";
@@ -60,8 +65,13 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -124,6 +134,27 @@ function seenStorageKey(viewerId: string) {
 
 const SEEN_EVENT = "clinicflow:inbox-seen-change";
 
+/** Where the conversation-list collapse is remembered, for this tab only. */
+const LIST_COLLAPSED_KEY = "clinicflow:inbox-list-collapsed";
+const LIST_COLLAPSED_EVENT = "clinicflow:inbox-list-collapsed-change";
+
+function readListCollapsed(): boolean {
+  try {
+    return sessionStorage.getItem(LIST_COLLAPSED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function subscribeListCollapsed(callback: () => void) {
+  window.addEventListener(LIST_COLLAPSED_EVENT, callback);
+  window.addEventListener("storage", callback);
+  return () => {
+    window.removeEventListener(LIST_COLLAPSED_EVENT, callback);
+    window.removeEventListener("storage", callback);
+  };
+}
+
 function readSeenSnapshot(viewerId: string): string | null {
   try {
     return localStorage.getItem(seenStorageKey(viewerId));
@@ -161,6 +192,10 @@ function ConversationStatusBadge({
     | "hasOutstandingReview"
     | "lastAssistantReplyAt"
     | "lastHumanReplyAt"
+    // The pair that dates the explicit Open/Closed decision, so a reopened
+    // thread is not overruled by an episode pointer that ended before it.
+    | "statusUpdatedAt"
+    | "contextResetAt"
   >;
   t: ReturnType<typeof useTranslations>;
 }) {
@@ -290,6 +325,40 @@ export function InboxShell({
   const [patientQuery, setPatientQuery] = useState("");
   const [patientDialogOpen, setPatientDialogOpen] = useState(false);
   const [pastAppointmentsOpen, setPastAppointmentsOpen] = useState(false);
+  /**
+   * P18 — whether the conversation list is hidden, giving the thread the whole
+   * width.
+   *
+   * At 1280 and below the two-pane Inbox leaves the chat around 700 px, which
+   * is where the composer, the attachment strip and long Arabic messages all
+   * start fighting each other. Collapsing the list is the honest fix: the
+   * reader is looking at one conversation, and the list is one click away.
+   *
+   * Remembered for the session in `sessionStorage` and nowhere else. It is a
+   * view preference, not a setting: no column, no server round trip, no
+   * migration, and a browser that refuses storage simply starts expanded.
+   */
+  const listCollapsed = useSyncExternalStore(
+    subscribeListCollapsed,
+    readListCollapsed,
+    // The server has no session, so it always renders the list. React then
+    // reconciles the stored preference after hydration without a mismatch —
+    // the same pattern the unread-seen store above uses.
+    () => false,
+  );
+  const setListCollapsed = useCallback(
+    (next: boolean | ((current: boolean) => boolean)) => {
+      const value = typeof next === "function" ? next(readListCollapsed()) : next;
+      try {
+        sessionStorage.setItem(LIST_COLLAPSED_KEY, value ? "1" : "0");
+      } catch {
+        // A view preference is never load-bearing: the toggle still works for
+        // this render, it simply is not remembered.
+      }
+      window.dispatchEvent(new Event(LIST_COLLAPSED_EVENT));
+    },
+    [],
+  );
   const [now, setNow] = useState(() => new Date(data.loadedAt).valueOf());
   const [realtimeStatus, setRealtimeStatus] = useState<"connecting" | "subscribed" | "error">("connecting");
   const [pending, startTransition] = useTransition();
@@ -555,6 +624,54 @@ export function InboxShell({
     );
   }, [data.conversations, query, statusFilter]);
 
+  /**
+   * Everyone this Inbox can bulk-send to, in one deduplicated list.
+   *
+   * Built here rather than in the dialog because all three sources are already
+   * in the page payload — the conversation summaries, the WhatsApp contact
+   * directory the New Conversation dialog reads, and the clinic's patient
+   * files — so the picker costs no additional fetch. The merge and the
+   * dedupe-by-number rule live in `lib/messaging/bulk-recipients.ts`, which is
+   * pure and tested on its own.
+   */
+  const bulkRecipients = useMemo(
+    () =>
+      buildBulkRecipients({
+        conversations: data.conversations,
+        contacts: data.contacts,
+        patients: data.patients.map((patient) => ({
+          id: patient.id,
+          name: patient.name,
+          phone: patient.phone,
+          fileNumber: patient.fileNumber,
+        })),
+        fallbackName: t("unknownSender"),
+      }),
+    [data.contacts, data.conversations, data.patients, t],
+  );
+
+  /**
+   * The rows ticked in the Inbox list, as picker keys.
+   *
+   * A ticked thread whose number also appears in the contact directory
+   * deduplicated onto the *conversation* row, so its key is the conversation's
+   * one; a thread with no usable address never made it into the list at all
+   * and is dropped here rather than seeding a selection that cannot be sent.
+   */
+  const initialBulkKeys = useMemo(() => {
+    const available = new Set(bulkRecipients.map((recipient) => recipient.key));
+    return selectedIds
+      .map((id) => `conversation:${id}`)
+      .filter((key) => available.has(key));
+  }, [bulkRecipients, selectedIds]);
+
+  /**
+   * The list can only be hidden while a conversation is open to hide it *for*.
+   * Collapsing it with nothing selected would leave an empty pane and no way
+   * back, so the toggle simply does not apply there.
+   */
+  const listPaneVisible = !listCollapsed || !data.selectedConversationId;
+
   const statusFilterLabels: Record<ConversationBadgeState, string> = {
     aiHandling: t("statusBadge.aiHandling"),
     done: t("statusBadge.done"),
@@ -692,6 +809,9 @@ export function InboxShell({
               i18n-allow: implementation note inside a JSX comment, never rendered.
               Per-conversation overrides and Pause AI are unchanged and still win
               where they apply. */}
+          {/* Admin only, and the server action re-checks the same role. A
+              receptionist never sees a control that would refuse them. */}
+          {viewerRole === "admin" ? <BulkCloseDialog /> : null}
           <InboxAiRepliesControl
             mode={data.clinicAi?.mode ?? "off"}
             overrideCount={data.clinicAi?.overrideCount ?? 0}
@@ -731,7 +851,20 @@ export function InboxShell({
           </div>
         </div>
       ) : (
-        <div className="grid min-h-[36rem] overflow-hidden rounded-xl border bg-card lg:h-[calc(100dvh-13rem)] lg:grid-cols-[22rem_minmax(0,1fr)]">
+        <div
+          className={cn(
+            "grid min-h-[36rem] overflow-hidden rounded-xl border bg-card lg:h-[calc(100dvh-13rem)]",
+            // The list column is a fixed 22rem at ≥1024 and a slimmer 18rem
+            // between 1024 and 1280, where the chat needs the difference more
+            // than the list does. Collapsed, the chat takes the whole grid —
+            // never by scrolling the page sideways.
+            listPaneVisible
+              ? "lg:grid-cols-[18rem_minmax(0,1fr)] xl:grid-cols-[22rem_minmax(0,1fr)]"
+              : "lg:grid-cols-[minmax(0,1fr)]",
+          )}
+          data-list-collapsed={listPaneVisible ? "false" : "true"}
+        >
+          {listPaneVisible ? (
           <aside className="flex min-h-72 flex-col border-b lg:min-h-0 lg:border-b-0 lg:border-e">
             <div className="space-y-2 border-b p-3">
               <form
@@ -877,6 +1010,7 @@ export function InboxShell({
               )}
             </div>
           </aside>
+          ) : null}
 
           {selected ? (
             /*
@@ -894,13 +1028,59 @@ export function InboxShell({
              * keeps the reader where they were in a long list.
              */
             <section key={selected.id} className="flex min-h-[36rem] min-w-0 flex-col">
-              <div className="flex flex-wrap items-center gap-3 border-b px-4 py-3">
-                <span className="flex size-10 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
+              {/*
+                P18 — the conversation header, laid out so it cannot collide
+                with itself.
+
+                The old header was one `flex-wrap` row holding the avatar, the
+                name, four badges, the phone number, the WhatsApp name and six
+                controls. At full width it fit; at 1440 and below the identity
+                text and the buttons competed for the same line and overlapped,
+                and the usual reflex — shrink the text — would only have made a
+                phone number harder to read.
+
+                Two structural changes instead:
+
+                  * **The identity block has a ceiling.** It is its own column
+                    with a `max-w` and truncation on every line, so a long
+                    patient name, a long WhatsApp display name and a badge row
+                    cannot grow into the actions beside them.
+                  * **The actions have a hierarchy.** Pause/Resume AI, the
+                    assignment and Close/Reopen stay on the bar because they are
+                    what a receptionist reaches for mid-conversation. Everything
+                    else moves into one overflow menu — rendered exactly once,
+                    never a second copy hidden by a media query, so there is no
+                    width at which the same action appears twice.
+              */}
+              <div className="flex flex-wrap items-start gap-x-3 gap-y-2 border-b px-4 py-3">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="shrink-0"
+                  aria-pressed={listCollapsed}
+                  onClick={() => setListCollapsed((current) => !current)}
+                  title={listCollapsed ? t("layout.showConversations") : t("layout.hideConversations")}
+                  data-testid="conversation-list-toggle"
+                >
+                  {/* The panel glyphs point at the pane they act on, so they
+                      flip with the writing direction like every other
+                      directional icon in this Inbox. */}
+                  {listCollapsed ? (
+                    <PanelLeftOpen className="size-4 rtl:-scale-x-100" aria-hidden />
+                  ) : (
+                    <PanelLeftClose className="size-4 rtl:-scale-x-100" aria-hidden />
+                  )}
+                  <span className="sr-only">
+                    {listCollapsed ? t("layout.showConversations") : t("layout.hideConversations")}
+                  </span>
+                </Button>
+                <span className="hidden size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary sm:flex">
                   {initials(conversationTitle(selected, t("unknownSender")))}
                 </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="truncate font-semibold" dir="auto">
+                <div className="min-w-0 flex-1 basis-64 xl:max-w-md" data-testid="conversation-identity">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <h2 className="max-w-full truncate font-semibold" dir="auto">
                       {conversationTitle(selected, t("unknownSender"))}
                     </h2>
                     <ConversationStatusBadge conversation={selected} t={t} />
@@ -935,108 +1115,156 @@ export function InboxShell({
                   ) : null}
                 </div>
 
-                <Button
-                  variant={selected.aiPausedAt ? "secondary" : "outline"}
-                  size="sm"
-                  disabled={pending}
-                  aria-pressed={Boolean(selected.aiPausedAt)}
-                  title={selected.aiPausedAt ? t("ai.resumeAiHint") : t("ai.pauseAiHint")}
-                  onClick={() =>
-                    runAction(
-                      () =>
-                        setConversationHumanTakeover({
-                          conversationId: selected.id,
-                          paused: !selected.aiPausedAt,
-                        }),
-                      selected.aiPausedAt ? t("ai.resumed") : t("ai.paused"),
-                    )
-                  }
+                <div
+                  className="ms-auto flex min-w-0 flex-wrap items-center justify-end gap-2"
+                  data-testid="conversation-actions"
                 >
-                  <BotOff className="size-4" aria-hidden />
-                  {selected.aiPausedAt ? t("ai.resumeAi") : t("ai.pauseAi")}
-                </Button>
+                  <Button
+                    variant={selected.aiPausedAt ? "secondary" : "outline"}
+                    size="sm"
+                    disabled={pending}
+                    aria-pressed={Boolean(selected.aiPausedAt)}
+                    title={selected.aiPausedAt ? t("ai.resumeAiHint") : t("ai.pauseAiHint")}
+                    onClick={() =>
+                      runAction(
+                        () =>
+                          setConversationHumanTakeover({
+                            conversationId: selected.id,
+                            paused: !selected.aiPausedAt,
+                          }),
+                        selected.aiPausedAt ? t("ai.resumed") : t("ai.paused"),
+                      )
+                    }
+                  >
+                    <BotOff className="size-4" aria-hidden />
+                    {selected.aiPausedAt ? t("ai.resumeAi") : t("ai.pauseAi")}
+                  </Button>
 
-                {/* P15 (§3): per-conversation exception. See ai-enablement.ts */}
-                {selected.aiEnabledOverride !== undefined ? (
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={pending}
-                      aria-pressed={selected.aiEnabledOverride !== null}
-                      title={
-                        selected.aiEnabledOverride === true
-                          ? t("ai.aiAllowedHere")
-                          : selected.aiEnabledOverride === false
-                            ? t("ai.aiExcludedHere")
-                            : t("ai.aiEnabledHereHint")
-                      }
-                      onClick={() =>
-                        runAction(
-                          () =>
-                            setConversationAiEnabled({
-                              conversationId: selected.id,
-                              // One click cycles between "the clinic decides"
-                              // and the opposite of whatever the clinic is
-                              // currently doing. Two buttons for three states
-                              // would be a menu; this is the only exception a
-                              // staff member ever wants to make.
-                              override:
-                                selected.aiEnabledOverride !== null
-                                  ? null
-                                  : !selected.aiEnabled,
-                            }),
-                          t("ai.aiOverrideUpdated"),
-                        )
-                      }
-                    >
-                      {selected.aiEnabledOverride !== null
-                        ? t("ai.followClinicSetting")
-                        : selected.aiEnabled
-                          ? t("ai.excludeAiHere")
-                          : t("ai.allowAiHere")}
-                    </Button>
-                    {selected.aiEnabledOverride !== null ? (
-                      <span
-                        className="text-xs text-muted-foreground"
-                        data-testid="conversation-ai-override-note"
+                  <Select
+                    value={selected.assignedTo ?? "__unassigned__"}
+                    disabled={pending}
+                    onValueChange={(value) =>
+                      runAction(
+                        () => updateConversationAssignment({ conversationId: selected.id, assignedTo: value === "__unassigned__" ? null : value }),
+                        t("assignmentUpdated"),
+                      )
+                    }
+                  >
+                    <SelectTrigger size="sm" aria-label={t("assignConversation")} className="w-36 min-w-0">
+                      <SelectValue placeholder={t("unassigned")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__unassigned__">{t("unassigned")}</SelectItem>
+                      {data.assignees.map((assignee) => (
+                        <SelectItem key={assignee.id} value={assignee.id}>{assignee.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={pending}
+                    onClick={() => runAction(
+                      () => updateConversationStatus({ conversationId: selected.id, status: selected.status === "open" ? "closed" : "open" }),
+                      selected.status === "open" ? t("conversationClosed") : t("conversationReopened"),
+                    )}
+                  >
+                    {selected.status === "open" ? t("close") : t("reopen")}
+                  </Button>
+
+                  {/* The secondary controls, in one place at every width. A
+                      second copy shown only on wide screens would be the same
+                      action twice in the accessibility tree and twice in every
+                      test that counts it. */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        aria-label={t("layout.moreActions")}
+                        data-testid="conversation-more-actions"
                       >
-                        {selected.aiEnabledOverride
-                          ? t("ai.aiAllowedHere")
-                          : t("ai.aiExcludedHere")}
-                      </span>
-                    ) : null}
-                  </div>
-                ) : null}
+                        <MoreHorizontal className="size-4" aria-hidden />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onSelect={() => setPatientDialogOpen(true)}>
+                        <CircleUserRound className="size-4" aria-hidden />
+                        {selected.patientId ? t("changePatient") : t("linkPatient")}
+                      </DropdownMenuItem>
+                      {/*
+                        P12 — the patient's visits, one click from the thread.
 
-                <Select
-                  value={selected.assignedTo ?? "__unassigned__"}
-                  disabled={pending}
-                  onValueChange={(value) =>
-                    runAction(
-                      () => updateConversationAssignment({ conversationId: selected.id, assignedTo: value === "__unassigned__" ? null : value }),
-                      t("assignmentUpdated"),
-                    )
-                  }
-                >
-                  <SelectTrigger aria-label={t("assignConversation")} className="max-w-48">
-                    <SelectValue placeholder={t("unassigned")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__unassigned__">{t("unassigned")}</SelectItem>
-                    {data.assignees.map((assignee) => (
-                      <SelectItem key={assignee.id} value={assignee.id}>{assignee.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                        Offered only when `patient_id` is actually set on the
+                        conversation. An unlinked thread (NEW_CONTACT) has no
+                        authoritative history: the control is disabled and says
+                        why, rather than disappearing and leaving staff
+                        wondering where it went on the one row where they most
+                        expect it.
+                      */}
+                      <DropdownMenuItem
+                        disabled={!selected.patientId}
+                        data-testid="past-appointments-trigger"
+                        onSelect={() => setPastAppointmentsOpen(true)}
+                      >
+                        <CalendarClock className="size-4" aria-hidden />
+                        {selected.patientId
+                          ? t("pastAppointments.title")
+                          : t("pastAppointments.linkPatientFirst")}
+                      </DropdownMenuItem>
+                      {/* P15 (§3): per-conversation exception. See ai-enablement.ts */}
+                      {selected.aiEnabledOverride !== undefined ? (
+                        <DropdownMenuItem
+                          disabled={pending}
+                          data-testid="conversation-ai-override-action"
+                          onSelect={() =>
+                            runAction(
+                              () =>
+                                setConversationAiEnabled({
+                                  conversationId: selected.id,
+                                  // One click cycles between "the clinic decides"
+                                  // and the opposite of whatever the clinic is
+                                  // currently doing. Two buttons for three states
+                                  // would be a menu; this is the only exception a
+                                  // staff member ever wants to make.
+                                  override:
+                                    selected.aiEnabledOverride !== null
+                                      ? null
+                                      : !selected.aiEnabled,
+                                }),
+                              t("ai.aiOverrideUpdated"),
+                            )
+                          }
+                        >
+                          <Sparkles className="size-4" aria-hidden />
+                          {selected.aiEnabledOverride !== null
+                            ? t("ai.followClinicSetting")
+                            : selected.aiEnabled
+                              ? t("ai.excludeAiHere")
+                              : t("ai.allowAiHere")}
+                        </DropdownMenuItem>
+                      ) : null}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+
+                  {/* The exception the override writes, stated on the bar
+                      itself: a thread the clinic-wide setting no longer governs
+                      must say so where staff read the thread, not only inside a
+                      menu they have to open. */}
+                  {selected.aiEnabledOverride !== undefined && selected.aiEnabledOverride !== null ? (
+                    <span
+                      className="text-xs text-muted-foreground"
+                      data-testid="conversation-ai-override-note"
+                    >
+                      {selected.aiEnabledOverride
+                        ? t("ai.aiAllowedHere")
+                        : t("ai.aiExcludedHere")}
+                    </span>
+                  ) : null}
+                </div>
 
                 <Dialog open={patientDialogOpen} onOpenChange={setPatientDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button variant="outline" size="sm">
-                      <CircleUserRound className="size-4" aria-hidden />
-                      {selected.patientId ? t("changePatient") : t("linkPatient")}
-                    </Button>
-                  </DialogTrigger>
                   <DialogContent>
                     <DialogHeader>
                       <DialogTitle>{t("linkPatientTitle")}</DialogTitle>
@@ -1085,31 +1313,6 @@ export function InboxShell({
                   </DialogContent>
                 </Dialog>
 
-                {/*
-                  P12 — the patient's visits, one click from the thread.
-
-                  Offered only when `patient_id` is actually set on the
-                  conversation. An unlinked thread (NEW_CONTACT) has no
-                  authoritative history: the control is disabled and says why,
-                  rather than disappearing and leaving staff wondering where it
-                  went on the one row where they most expect it.
-                */}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={!selected.patientId}
-                  data-testid="past-appointments-trigger"
-                  title={
-                    selected.patientId
-                      ? t("pastAppointments.title")
-                      : t("pastAppointments.linkPatientFirst")
-                  }
-                  onClick={() => setPastAppointmentsOpen(true)}
-                >
-                  <CalendarClock className="size-4" aria-hidden />
-                  {t("pastAppointments.title")}
-                </Button>
-
                 <PatientAppointmentsDialog
                   conversationId={selected.id}
                   patientId={selected.patientId}
@@ -1117,18 +1320,6 @@ export function InboxShell({
                   open={pastAppointmentsOpen}
                   onOpenChange={setPastAppointmentsOpen}
                 />
-
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={pending}
-                  onClick={() => runAction(
-                    () => updateConversationStatus({ conversationId: selected.id, status: selected.status === "open" ? "closed" : "open" }),
-                    selected.status === "open" ? t("conversationClosed") : t("conversationReopened"),
-                  )}
-                >
-                  {selected.status === "open" ? t("close") : t("reopen")}
-                </Button>
               </div>
 
               <div className="relative flex flex-1 flex-col overflow-hidden">
@@ -1346,13 +1537,8 @@ export function InboxShell({
             setSelectedIds([]);
           }
         }}
-        conversationIds={selectedIds}
-        labels={data.conversations
-          .filter((conversation) => selectedIds.includes(conversation.id))
-          .map((conversation) => ({
-            conversationId: conversation.id,
-            name: conversationTitle(conversation, t("unknownSender")),
-          }))}
+        recipients={bulkRecipients}
+        initialSelectedKeys={initialBulkKeys}
         onSent={() => router.refresh()}
       />
     </div>

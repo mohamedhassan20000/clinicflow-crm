@@ -651,7 +651,11 @@ describe("corrections, rejections and interruptions", () => {
       context({ flows: state }),
       calls,
     );
-    expect(calls).toEqual(["answer:prices"]);
+    // P12B — the price answer, and then the booking's own step re-reading its
+    // calendar so the patient is asked the day again in the same message. The
+    // second call is the resume: before it, a side question answered the
+    // question and left the booking silent, which reads as abandoned.
+    expect(calls).toEqual(["answer:prices", "list_available_days"]);
     // The question flow completed, so the booking is active again — at exactly
     // the step it was on, with its slots intact.
     const booking = result.state.stack.find((frame) => frame.flow === "book_appointment");

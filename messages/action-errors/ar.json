@@ -195,6 +195,7 @@
     "invalidInboxReply": "أدخل ردًا صالحًا أو أكمل جميع قيم القالب.",
     "invalidConversationUpdate": "تحديث المحادثة غير صالح.",
     "conversationNotFound": "لم يتم العثور على المحادثة.",
+    "couldNotReadOpenConversations": "تعذّر قراءة المحادثات المفتوحة.",
     "conversationNotLinked": "هذه المحادثة غير مرتبطة بملف مريض بعد.",
     "patientHistoryUnavailable": "تعذّر تحميل هذا السجل الآن. يُرجى المحاولة مرة أخرى.",
     "conversationClosed": "أعد فتح هذه المحادثة قبل الرد.",
@@ -265,7 +266,9 @@
     "failedToUpdateTemplatePleaseTryAgain": "تعذر إكمال الطلب. يُرجى المحاولة مرة أخرى.",
     "failedToValidateDepartment": "تعذر التحقق من القسم.",
     "selectADepartmentFromThisClinic": "تعذر إكمال الطلب. يُرجى المحاولة مرة أخرى.",
-    "templateNotFound": "لم يتم العثور على القالب."
+    "templateNotFound": "لم يتم العثور على القالب.",
+    "failedToValidateService": "تعذر التحقق من الخدمة.",
+    "selectAServiceFromThisDepartment": "اختر خدمة مفعّلة من القسم المحدد."
   },
   "page-permissions": {
     "clinicScopeMismatch": "لا يطابق الطلب نطاق العيادة المسموح به.",

@@ -124,6 +124,13 @@ const ARABIC_HUMAN_REQUEST_PATTERNS: readonly RegExp[] = [
   // "someone answer me / put a person on this" — a person as the *subject* of a
   // contact verb, which no booking sentence ever produces.
   /(حد|أحد|احد|موظف|شخص|انسان|إنسان)\s*(يرد|يكلمني|يكلمنى|يتواصل|يساعدني|يساعدنى|يتكلم)/,
+  // P12B — "I want to *speak to* a person", with the person as the object of a
+  // speaking verb. Previously this shape reached only the weak class, so
+  // «عايز أكلم موظف» was an escalation *by default* rather than by rule and
+  // any suppression added to the weak class would have taken it with it. As a
+  // strong pattern it is unconditional, which is what makes it safe to teach
+  // the weak class about beneficiaries below.
+  /(?:أكلم|اكلم|اتكلم|أتكلم|احكي|أحكي|اتواصل|أتواصل)\s*(?:مع\s*)?(?:ال)?(?:موظف|موظفة|شخص|حد|أحد|احد|انسان|إنسان|بشري|استقبال|ريسبشن)/u,
 ];
 
 const HUMAN_REQUEST_PATTERNS: readonly RegExp[] = [
@@ -155,6 +162,52 @@ const HUMAN_REQUEST_PATTERNS: readonly RegExp[] = [
  */
 const HUMAN_REQUEST_WEAK_PATTERNS: readonly RegExp[] = [
   /(أريد|اريد|ابغى|أبغى|بدي|عايز|عاوز|ممكن)\s*.{0,20}(موظف|شخص|إنسان|انسان|بشري|أحد|احد|حد)/,
+];
+
+/**
+ * P12B — the beneficiary frame, and the second reason a generic person-noun is
+ * not an ask.
+ *
+ * The weak pattern above defers to {@link LOGISTICS_FRAME_PATTERNS}, and that
+ * was enough while every third-party sentence carried a booking word. Manual QA
+ * produced the sentences that do not: «ممكن لشخص تاني» and «عايز لحد تاني» are
+ * *answers to the assistant's own question* — «الحجز ده ليك إنت ولا لحد تاني؟»
+ * — and a two-word answer carries no logistics word at all. «عايز أعمل ملف
+ * لشخص تاني» and «عايز اسجل بيانات شخص تاني» are the same shape one step
+ * further on. Every one of them matched `عايز` + `شخص|حد` with nothing to
+ * suppress it, so a patient answering a question the assistant had just asked
+ * was escalated to a human before the engine ever saw the turn.
+ *
+ * The fix is the same rule applied a third time rather than a keyword
+ * exception: a generic person-noun is not an ask when the sentence supplies a
+ * frame that explains it. `لـ` + a person is the *beneficiary* frame — a person
+ * something is being done **for**, not a person to be talked **to** — and it is
+ * exactly the preposition that separates «احجز **لـ**شخص تاني» from «كلمني
+ * **مع** شخص». Kinship terms are here for the same reason and with no
+ * preposition required: «أخويا» names who the appointment is for and can never
+ * name a receptionist.
+ *
+ * This suppresses only the weak class. `HUMAN_REQUEST_PATTERNS` — «وصلني بحد»,
+ * «عايز حد يرد عليا», «مع موظف», "speak to a human" — is matched first, is
+ * unguarded, and is untouched: a person as the object of a transfer verb or the
+ * subject of a contact verb stays an escalation whatever else is in the
+ * sentence.
+ */
+const BENEFICIARY_FRAME_PATTERNS: readonly RegExp[] = [
+  // "for <a person>" — the preposition is the whole signal, in either spelling
+  // of the noun, with or without the definite article.
+  // `\b` is ASCII-only in JavaScript and never matches beside an Arabic letter,
+  // so the boundary is written out: start of string or a space/punctuation.
+  /(?:^|[\s،,.!؟?])ل\s?(?:ال)?(?:حد|أحد|احد|شخص|إنسان|انسان|واحد|واحدة|مريض|مريضة)/u,
+  // "another person" / "someone else" as a bare noun phrase — the answer to
+  // «الحجز ده ليك إنت ولا لحد تاني؟» written without the preposition. Safe to
+  // suppress because a person somebody wants to *talk to* now reaches the
+  // strong class through the speaking-verb pattern above.
+  /(?:^|[\s،,.!؟?])(?:ال)?(?:حد|أحد|احد|شخص|واحد|واحدة|مريض|مريضة)\s+(?:تاني|تانية|تانى|آخر|اخر|أخرى|اخرى)/u,
+  // Kinship and relation nouns. Whoever this is, it is not clinic staff.
+  /(أخويا|اخويا|أختي|اختي|ابني|إبني|بنتي|مراتي|زوجتي|جوزي|زوجي|والدي|والدتي|أبويا|ابويا|أمي|امي|صاحبي|صاحبتي|قريبي|حماتي|جدي|جدتي)/u,
+  // English equivalents of both.
+  /\bfor\s+(?:someone|somebody|another\s+person|a\s+friend|my\s+(?:son|daughter|wife|husband|mother|father|brother|sister|friend|relative))\b/i,
 ];
 
 // ---------------------------------------------------------------------------
@@ -214,6 +267,11 @@ const ADVICE_FRAME_PATTERNS: readonly RegExp[] = [
 const LOGISTICS_FRAME_PATTERNS: readonly RegExp[] = [
   /\b(book|booking|appointment|appointments|schedule|rescheduling|reschedule|reserve|reservation|slot|slots|availab(le|ility)|price|prices|cost|costs|fee|fees|how\s*much|open|opening|hours)\b/i,
   /(احجز|أحجز|اححز|حجز|حجزت|نحجز|يحجز|موعد|مواعيد|ميعاد|معاد|سعر|أسعار|اسعار|تكلفة|بكام|كام|متاح|متاحين|المتاحين|مفتوح|مواعيدكم|نكمل|أكمل|اكمل)/,
+  // P12B — opening a file is arranging a visit. «عايز اسجل بيانات شخص تاني» is
+  // the intake step of a third-party booking and carries no booking word of its
+  // own, so without this it read as a request for a person.
+  /\b(register|registration|sign\s*up|new\s*(patient\s*)?file|open\s*a\s*file|details)\b/i,
+  /(اسجل|أسجل|تسجيل|التسجيل|بياناته|بياناتها|بيانات|ملف|الملف|استمارة)/,
 ];
 
 // Dissatisfaction / complaints — routed to a human for a considered response.
@@ -289,7 +347,10 @@ export function detectPatientEscalation(
   }
   if (
     matchesAny(value, HUMAN_REQUEST_WEAK_PATTERNS) &&
-    !matchesAny(value, LOGISTICS_FRAME_PATTERNS)
+    !matchesAny(value, LOGISTICS_FRAME_PATTERNS) &&
+    // A person something is being done *for* is a beneficiary, not a
+    // switchboard request. See `BENEFICIARY_FRAME_PATTERNS`.
+    !matchesAny(value, BENEFICIARY_FRAME_PATTERNS)
   ) {
     return { escalate: true, reason: "human_requested", emergency: false };
   }

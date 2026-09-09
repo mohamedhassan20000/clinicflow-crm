@@ -986,6 +986,17 @@
         "failed": "Failed",
         "skipped": "Skipped",
         "review": "Needs review"
+      },
+      "searchRecipients": "Search by name, file number or phone",
+      "selectedRecipients": "{count, plural, =0 {No recipients selected} one {# recipient selected} other {# recipients selected}}",
+      "selectVisible": "Select these {count}",
+      "clearSelection": "Clear",
+      "noRecipients": "No matching people.",
+      "moreResults": "{count} more match your search. Narrow it to see them.",
+      "source": {
+        "conversation": "Conversation",
+        "contact": "Contact",
+        "patient": "Patient"
       }
     },
     "statusBadge": {
@@ -1125,6 +1136,25 @@
       "location": "Location",
       "audio": "Audio",
       "voiceMessage": "Voice message"
+    },
+    "bulkClose": {
+      "trigger": "Close all open",
+      "title": "Close all open conversations",
+      "description": "Closing a conversation ends it: the assistant forgets what it was in the middle of, and any draft reply it had prepared is discarded. Messages, patient links and verified identities are untouched. Conversations that are already closed are not affected.",
+      "counting": "Counting open conversations…",
+      "countLabel": "{count, plural, =0 {No conversations are open} one {# conversation is open and will be closed} other {# conversations are open and will be closed}}",
+      "cancel": "Cancel",
+      "confirm": "Close {count, plural, one {# conversation} other {# conversations}}",
+      "closing": "Closing…",
+      "closed": "{count, plural, one {# conversation closed} other {# conversations closed}}",
+      "partial": "{closed} closed, {failed} could not be closed.",
+      "countFailed": "The open conversations could not be counted.",
+      "incomplete": "{closed} of {total} closed. {remaining} are still open — run it again."
+    },
+    "layout": {
+      "hideConversations": "Hide conversations",
+      "showConversations": "Show conversations",
+      "moreActions": "More actions"
     }
   },
   "settings": {
@@ -1940,7 +1970,28 @@
     "whatsappAiRepliesExceptions": "{count, plural, one {# conversation has its own setting and ignores this switch.} other {# conversations have their own setting and ignore this switch.}}",
     "whatsappAiRepliesOnToast": "The assistant will reply on WhatsApp.",
     "whatsappAiRepliesOffToast": "The assistant will not reply on WhatsApp.",
-    "navAuditLog": "Audit log"
+    "navAuditLog": "Audit log",
+    "displayNameArabic": "Arabic display name (optional)",
+    "displayNameEnglish": "English display name (optional)",
+    "displayNameHint": "Shown to patients in that language. Leave blank to use the stored name.",
+    "serviceOptional": "Service (optional)",
+    "selectService": "Select a service",
+    "noServiceSelected": "No specific service",
+    "noActiveServicesInDepartment": "This department has no active services.",
+    "packageServiceHint": "Picking a service fills in its current price per session. You can change it — the service’s own price is never touched.",
+    "serviceRegularPrice": "Service price / session",
+    "packageServices": "Services in this package",
+    "packageServicesHint": "Add the services this package covers. Picking one fills in its current price per session — change it freely, the service’s own price is never touched. A package with no services is filed under its department only.",
+    "removeService": "Remove service",
+    "itemSubtotal": "Subtotal",
+    "packageTotal": "Package total",
+    "packageTotalDerived": "Summed from the service subtotals above.",
+    "sessionsShort": "Sessions",
+    "packagePricePerSession": "Package price / session",
+    "totalSessionsDerived": "Summed from the services above.",
+    "selectServiceFirst": "Select a service",
+    "pickDepartmentFirst": "Choose a department first.",
+    "addPackageService": "Add service"
   },
   "profile": {
     "myProfile": "My profile",
@@ -3165,6 +3216,8 @@
     "preview": "Preview",
     "optionalSuffix": "(optional)",
     "fullName": "Full name",
+    "fullNameArabic": "Arabic name (optional)",
+    "fullNameEnglish": "English name (optional)",
     "eGJohnSmith": "e.g. John Smith",
     "11Digits": "11 digits",
     "fileNumber": "File number",
@@ -3371,6 +3424,9 @@
     "profile": "Profile",
     "fileNumber": "File number",
     "nationalId": "National ID",
+    "fullNameArabic": "Arabic name",
+    "fullNameEnglish": "English name",
+    "bloodType": "Blood type",
     "birthDate": "Birth date",
     "phone": "Phone",
     "email": "Email",

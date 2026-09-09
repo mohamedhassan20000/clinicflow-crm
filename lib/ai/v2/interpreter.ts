@@ -85,7 +85,7 @@ COMMANDS
 {"kind":"correct_slot","slot":S,"value":"..."} they changed a value they gave earlier
 {"kind":"affirm_offer","offerId":"..."}    they accepted the open offer
 {"kind":"reject_offer","offerId":"..."}    they declined it
-{"kind":"answer_question","topic":T}       a read-only question
+{"kind":"answer_question","topic":T,"scope":"..."} a read-only question; scope is optional
 {"kind":"suspend_flow"}                    park the running flow for a side question
 {"kind":"resume_flow","flow":F}            they asked to carry on with a flow
 {"kind":"cancel_flow"}                     they abandoned it
@@ -100,9 +100,9 @@ S: department doctor day time beneficiary beneficiary_name date_lower_bound part
    full_name full_name_latin national_id date_of_birth email gender phone blood_type
    service package document appointment
 T: departments doctors services prices packages address phone website email
-   opening_hours insurance clinic_other my_appointments my_packages my_documents privacy
+   opening_hours insurance clinic_other capabilities my_appointments my_packages my_documents privacy
 R (clarification): unspecified_request ambiguous_intent ambiguous_value missing_reference
-   conflicting_information out_of_scope
+   conflicting_information out_of_scope unspecified_correction
 R (handoff): patient_requested_human clinical_question complaint payment_dispute unsupported_request
 K: greeting thanks acknowledgement farewell chitchat
 
@@ -111,11 +111,68 @@ RULES
 - A side question during a flow is suspend_flow then answer_question. Never cancel the flow for it.
 - "اه", "تمام", "ايوه", "yes" answer THE OPEN OFFER. Emit affirm_offer with that offer's id.
   With no open offer, a bare yes is ask_clarification.
+- affirm_offer is for a bare yes and nothing else. A message that names or describes one of
+  the options — "لحد تاني", "لشخص تاني", "مش ليا", "someone else", or one of the option labels
+  itself — is set_slot for that offer's slot, with the patient's own words as the value.
+  Say what they said; never an option id and never a label you were shown.
 - "لا", "no" with an open offer is reject_offer. "لا دكتور تاني" is reject_offer.
 - Use offerId values exactly as given to you. Never invent one.
 - set_slot values are the patient's own words. Never an id, never a name they did not say.
-- The patient's history is not visible to you and is not yours to use. If they did not name a
-  doctor, a department or a date in this message, do not emit a slot for it.
+- WAITING FOR names the slot the assistant just asked for. A message that supplies a value
+  answers THAT slot: emit set_slot with that slot name and the patient's words. "12:15",
+  "12 وربع", "احمد محمد", "15/3/1990" are values, not questions. Only use ask_clarification
+  when the message supplies no value at all.
+- A message that NARROWS the question the assistant just asked is not a new subject and not a
+  clarification. While WAITING FOR is day, "ايه الايام المتاحة بعد يوم 11", "في بعد يوم 15؟",
+  "طب الاسبوع الجاي", "after the 15th" are set_slot with slot date_lower_bound and the
+  patient's own words. Never answer one of these with answer_question: asking what days are
+  free is the step you are already on, not a question about the patient's own records.
+- While a flow is active, a follow-up that belongs to the current step stays in that step.
+  "في غيرهم؟", "دكتور تاني", "مين فيهم يوسف؟", "الثاني" during the doctor step are about the
+  doctor step. The patient never has to repeat "أنا عايز أكمل الحجز".
+- A bare number — "1", "2", "٣" — answers the OPEN OFFER by position. Emit set_slot for that
+  offer's slot with the digits as the value.
+- RECENT TURNS is there so you can read a follow-up. "طيب والعنوان؟", "و رقم التليفون؟",
+  "وايه كمان؟" continue what was just said, and the assistant's own last message is what
+  they continue. Use it to work out what the patient is referring to — and for nothing else.
+- Never fill a slot from RECENT TURNS. If the patient did not name a doctor, a department, a
+  date or a time in THIS message, do not emit a slot for it, however clearly an earlier turn
+  did. Reading a reference and committing a value are different things.
+- answer_question takes an optional "scope": the thing the patient narrowed the question to,
+  in their own words. "ايه باكيدجات الجلدية؟" is topic packages with scope "الجلدية".
+  "باكيدج التأهيل بكام؟" is topic packages with scope "باكيدج التأهيل". "بتقبلوا AXA؟" is
+  topic insurance with scope "AXA". "بكام الكشف في الجلدية؟" is topic prices with scope
+  "الجلدية". Leave scope out when they asked in general. Never put a scope they did not say.
+- A compound question is one answer_question per topic, in the order the patient asked them.
+  "قولي باكيدجات الجلدية وشركات التأمين اللي بتتعاملوا معاها" is answer_question(packages,
+  scope "الجلدية") then answer_question(insurance).
+- Asking for a PERSON is request_handoff only when a person is what they want to talk to:
+  "عايز أكلم موظف", "وصلني بحد", "ممكن حد من العيادة يكلمني", "human agent". Booking or
+  registering FOR another person is not: "عايز أحجز لحد تاني", "لشخص تاني", "لأخويا",
+  "عايز أعمل ملف لشخص تاني" are about the beneficiary, and while the assistant is asking who
+  the appointment is for they are set_slot for beneficiary. When you genuinely cannot tell
+  which one they mean, emit ask_clarification with ambiguous_intent — never request_handoff.
+- Wanting to change something already said is correct_slot when they said WHAT changes, and
+  ask_clarification with ambiguous_intent when they did not. "عايز أغير الدكتور" is
+  correct_slot(doctor); "عايز أغير", "لا مش كده", "كنت أقصد كدا", "عايز أرجع في كلامي",
+  "قصدي حاجة تانية" name no field and are ask_clarification with unspecified_correction.
+  Never guess which field, and never cancel the flow for one of these.
+- Asking what YOU can do — "تقدر تساعدني في ايه؟", "ممكن تساعدني بإيه؟", "بتعمل ايه؟",
+  "ايه اللي اقدر اسأل عنه؟", "what can you help me with?", "what can I ask you?" — is
+  answer_question with topic capabilities. It is not a booking, not a handoff, and not a
+  clarification. Never emit start_flow for it, even though booking is one of the things
+  you can help with.
+- Correcting PART of a name is still one command about the name slot. While WAITING FOR
+  full_name or full_name_latin, «اسمه Soad اما Ibrahim انت كاتبها صح», «Ahmed غلط، هو Ahmad
+  والباقي صح», "the first part is wrong, it's Soad" are correct_slot for that slot with the
+  patient's WHOLE sentence as the value. Do not rebuild the name yourself, do not drop the
+  parts they said were right, and never emit a name they did not type. The server works out
+  which part changed.
+- While WAITING FOR phone, a message that names the patient's OWN number instead of typing
+  one — «استخدم رقمي», «خليها نفس رقمي», «خلي رقمها رقمي لأنها مراتي», «نفس الرقم اللي بكلمك
+  منه», "use my number" — is set_slot for phone with the patient's own words. It is a value,
+  not a clarification. A message that names somebody else's number («رقمها»، «رقم جوزها») or
+  no particular number («استخدم الرقم») is not: leave those to ask_clarification.
 - Asking to be issued a NEW invoice or document is request_handoff with unsupported_request.
   Asking for one they already have is answer_question with my_documents.
 - Maximum ${MAX_COMMANDS_PER_TURN} commands.`;
@@ -139,6 +196,13 @@ function renderView(view: InterpreterView): string {
           ? ` (already answered: ${view.activeFlow.filledSlots.join(", ")})`
           : ""),
     );
+    if (view.activeFlow.awaitingSlot) {
+      // The referent that makes a bare answer readable. The assistant asked
+      // for one specific thing; a message that supplies a value is answering
+      // *that*, and saying so is the difference between `set_slot(time)` and
+      // an endless "could you say that again?".
+      lines.push(`WAITING FOR: ${view.activeFlow.awaitingSlot}`);
+    }
   } else {
     // Said explicitly rather than by omission. "Nothing is happening" is the
     // fact the old engine could not represent, and it is the fact that decides

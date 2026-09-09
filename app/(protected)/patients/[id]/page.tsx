@@ -10,6 +10,10 @@ import { AlertCircle, Archive, CalendarPlus, FileText, Package, Pencil, Receipt,
 import { requireUser } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
 import { createClinicScopedAdminClient } from "@/lib/supabase/admin";
+import {
+  PATIENT_DISPLAY_COLUMNS,
+  selectWithOptional,
+} from "@/lib/settings/display-names";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DeletePatientButton } from "@/components/patients/delete-patient-button";
@@ -98,6 +102,11 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
   type PatientData = {
     id: string;
     full_name: string;
+    // Optional in the type as well as in the schema: absent both on a database
+    // where the additive migration has not run and on every row nobody has
+    // authored a display name for.
+    full_name_ar?: string | null;
+    full_name_en?: string | null;
     file_number: string | null;
     national_id: string | null;
     phone: string;
@@ -121,13 +130,24 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
   let patientError: { code: string } | null = null;
 
   {
-    const result = await supabase
-      .from("patients")
-      .select(PATIENT_SELECT_BASE)
-      .eq("id", id)
-      .eq("clinic_id", user.clinicId)
-      .single();
-    patient = result.data as PatientData | null;
+    // The bilingual display names are additive and applied on the clinic's own
+    // schedule, so they are asked for once and dropped on any error rather
+    // than being allowed to fail the whole patient file.
+    const result = await selectWithOptional<PatientData>(
+      [PATIENT_SELECT_BASE],
+      PATIENT_DISPLAY_COLUMNS,
+      (columns) =>
+        supabase
+          .from("patients")
+          .select(columns)
+          .eq("id", id)
+          .eq("clinic_id", user.clinicId)
+          .single() as unknown as PromiseLike<{
+          data: PatientData | null;
+          error: unknown;
+        }>,
+    );
+    patient = result.data;
     patientError = result.error as { code: string } | null;
   }
 
@@ -136,13 +156,21 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
     (user.role === "admin" || user.role === "receptionist")
   ) {
     const adminClient = createClinicScopedAdminClient(user.clinicId);
-    const { data: adminPatient } = await adminClient
-      .from("patients")
-      .select(PATIENT_SELECT_FULL)
-      .eq("id", id)
-      .eq("clinic_id", user.clinicId)
-      .single();
-    patient = adminPatient as PatientData | null;
+    const admin = await selectWithOptional<PatientData>(
+      [PATIENT_SELECT_FULL],
+      PATIENT_DISPLAY_COLUMNS,
+      (columns) =>
+        adminClient
+          .from("patients")
+          .select(columns)
+          .eq("id", id)
+          .eq("clinic_id", user.clinicId)
+          .single() as unknown as PromiseLike<{
+          data: PatientData | null;
+          error: unknown;
+        }>,
+    );
+    patient = admin.data;
   }
 
   if (!patient) notFound();
@@ -377,6 +405,27 @@ export default async function PatientDetailPage({ params, searchParams }: PagePr
         }
         description={
           <div className="space-y-1">
+            {/* The names in each language, when the clinic or the assistant's
+                intake recorded them. Absent on an older record and on a
+                database where the additive migration has not run, and the
+                header then reads exactly as it does today. Each is rendered in
+                its own direction so an Arabic name is not laid out
+                left-to-right beside an English one. */}
+            {patient.full_name_ar || patient.full_name_en ? (
+              <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+                {patient.full_name_ar ? (
+                  <span dir="rtl" lang="ar">
+                    {patient.full_name_ar}
+                  </span>
+                ) : null}
+                {patient.full_name_ar && patient.full_name_en ? <span aria-hidden>·</span> : null}
+                {patient.full_name_en ? (
+                  <span dir="ltr" lang="en">
+                    {patient.full_name_en}
+                  </span>
+                ) : null}
+              </p>
+            ) : null}
             <p>
           {age} {t("yearsOld")}{formatClinicDate(patient.date_of_birth, clinicLocale)}
               {patient.blood_type && ` · ${patient.blood_type}`}

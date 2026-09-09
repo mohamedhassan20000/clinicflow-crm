@@ -141,7 +141,12 @@ export const emptyStaffTrash = legacy.emptyStaffTrash;
 
 export async function updateStaffProfileSection(
   staffId: string,
-  input: { full_name: string; phone: string | null },
+  input: {
+    full_name: string;
+    phone: string | null;
+    display_name_ar?: string | null;
+    display_name_en?: string | null;
+  },
 ): Promise<ActionResult> {
   const user = await requireMutationRole(["admin", "manager"]);
   const result = await updateStaffProfileMutation(user, {
@@ -156,6 +161,11 @@ function departmentInput(fd: FormData) {
     name: fd.get("name"),
     color: fd.get("color"),
     description: fd.get("description") || null,
+    // Optional, patient-facing, and absent unless a person typed one. The
+    // mutation drops a blank rather than storing `""` — see
+    // `normalizeDisplayNames`.
+    name_ar: fd.get("name_ar") || null,
+    name_en: fd.get("name_en") || null,
   };
 }
 
@@ -213,7 +223,15 @@ export async function permanentDeleteDepartment(deptId: string) {
 export const emptyDepartmentsTrash = legacy.emptyDepartmentsTrash;
 
 function insuranceInput(fd: FormData) {
-  return { name: fd.get("name"), code: fd.get("code") || null };
+  return {
+    name: fd.get("name"),
+    code: fd.get("code") || null,
+    // Optional, patient-facing, and absent unless a person typed one. The
+    // mutation drops a blank rather than storing `""` — see
+    // `stripBlankDisplayNames`.
+    name_ar: fd.get("name_ar") || null,
+    name_en: fd.get("name_en") || null,
+  };
 }
 
 export async function createInsurance(
@@ -315,6 +333,8 @@ function serviceInput(fd: FormData) {
     department_id: fd.get("department_id"),
     name: fd.get("name"),
     price: Number(fd.get("price")),
+    name_ar: fd.get("name_ar") || null,
+    name_en: fd.get("name_en") || null,
   };
 }
 

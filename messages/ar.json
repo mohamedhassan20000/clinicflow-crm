@@ -982,6 +982,17 @@
         "failed": "فشلت",
         "skipped": "تم تخطيها",
         "review": "تحتاج مراجعة"
+      },
+      "searchRecipients": "ابحث بالاسم أو رقم الملف أو الهاتف",
+      "selectedRecipients": "{count, plural, =0 {لم يتم اختيار مستلمين} one {تم اختيار مستلم واحد} two {تم اختيار مستلمين} few {تم اختيار # مستلمين} other {تم اختيار # مستلماً}}",
+      "selectVisible": "اختر هؤلاء ({count})",
+      "clearSelection": "مسح",
+      "noRecipients": "لا يوجد أشخاص مطابقون.",
+      "moreResults": "هناك {count} نتيجة أخرى مطابقة. ضيّق البحث لعرضها.",
+      "source": {
+        "conversation": "محادثة",
+        "contact": "جهة اتصال",
+        "patient": "مريض"
       }
     },
     "statusBadge": {
@@ -1121,6 +1132,25 @@
       "location": "موقع",
       "audio": "ملف صوتي",
       "voiceMessage": "رسالة صوتية"
+    },
+    "bulkClose": {
+      "trigger": "إغلاق كل المفتوح",
+      "title": "إغلاق كل المحادثات المفتوحة",
+      "description": "إغلاق المحادثة ينهيها: ينسى المساعد ما كان بصدده، ويُلغى أي رد جاهز لم يُرسل. الرسائل وربط المرضى والهويات المُوثّقة لا تتأثر. المحادثات المغلقة بالفعل لن تتغير.",
+      "counting": "جارٍ حساب المحادثات المفتوحة…",
+      "countLabel": "{count, plural, =0 {لا توجد محادثات مفتوحة} one {محادثة واحدة مفتوحة وسيتم إغلاقها} two {محادثتان مفتوحتان وسيتم إغلاقهما} few {# محادثات مفتوحة وسيتم إغلاقها} other {# محادثة مفتوحة وسيتم إغلاقها}}",
+      "cancel": "إلغاء",
+      "confirm": "إغلاق {count, plural, one {محادثة واحدة} two {محادثتين} few {# محادثات} other {# محادثة}}",
+      "closing": "جارٍ الإغلاق…",
+      "closed": "{count, plural, one {تم إغلاق محادثة واحدة} two {تم إغلاق محادثتين} few {تم إغلاق # محادثات} other {تم إغلاق # محادثة}}",
+      "partial": "تم إغلاق {closed}، وتعذّر إغلاق {failed}.",
+      "countFailed": "تعذّر حساب المحادثات المفتوحة.",
+      "incomplete": "تم إغلاق {closed} من {total}. لا تزال {remaining} مفتوحة — أعد المحاولة."
+    },
+    "layout": {
+      "hideConversations": "إخفاء المحادثات",
+      "showConversations": "إظهار المحادثات",
+      "moreActions": "إجراءات أخرى"
     }
   },
   "settings": {
@@ -1936,7 +1966,28 @@
     "whatsappAiRepliesExceptions": "{count, plural, zero {} one {محادثة واحدة لها إعداد خاص ولا تتبع هذا المفتاح.} two {محادثتان لهما إعداد خاص ولا تتبعان هذا المفتاح.} few {# محادثات لها إعداد خاص ولا تتبع هذا المفتاح.} many {# محادثة لها إعداد خاص ولا تتبع هذا المفتاح.} other {# محادثة لها إعداد خاص ولا تتبع هذا المفتاح.}}",
     "whatsappAiRepliesOnToast": "سيرد المساعد على واتساب.",
     "whatsappAiRepliesOffToast": "لن يرد المساعد على واتساب.",
-    "navAuditLog": "سجل التدقيق"
+    "navAuditLog": "سجل التدقيق",
+    "displayNameArabic": "الاسم المعروض بالعربية (اختياري)",
+    "displayNameEnglish": "الاسم المعروض بالإنجليزية (اختياري)",
+    "displayNameHint": "يظهر للمرضى بهذه اللغة. اتركه فارغًا لاستخدام الاسم المسجّل.",
+    "serviceOptional": "الخدمة (اختياري)",
+    "selectService": "اختر خدمة",
+    "noServiceSelected": "بدون خدمة محددة",
+    "noActiveServicesInDepartment": "لا توجد خدمات مفعّلة في هذا القسم.",
+    "packageServiceHint": "اختيار خدمة يملأ سعر الجلسة الحالي الخاص بها. تقدر تغيّره، وسعر الخدمة نفسه لا يتغير أبدًا.",
+    "serviceRegularPrice": "سعر الخدمة / الجلسة",
+    "packageServices": "الخدمات داخل الباكيدج",
+    "packageServicesHint": "أضف الخدمات التي يغطيها هذا الباكيدج. اختيار خدمة يعبّئ سعرها الحالي للجلسة — يمكنك تغييره بحرية، ولن يتأثر سعر الخدمة نفسها. الباكيدج بدون خدمات يُدرج على مستوى القسم فقط.",
+    "removeService": "حذف الخدمة",
+    "itemSubtotal": "الإجمالي الفرعي",
+    "packageTotal": "إجمالي الباكيدج",
+    "packageTotalDerived": "محسوب من الإجماليات الفرعية للخدمات أعلاه.",
+    "sessionsShort": "الجلسات",
+    "packagePricePerSession": "سعر الجلسة في الباكيدج",
+    "totalSessionsDerived": "محسوب من عدد جلسات الخدمات أعلاه.",
+    "selectServiceFirst": "اختر خدمة",
+    "pickDepartmentFirst": "اختر القسم أولاً.",
+    "addPackageService": "إضافة خدمة للباكيدج"
   },
   "profile": {
     "myProfile": "ملفي الشخصي",
@@ -3151,6 +3202,8 @@
     "uploadOtherDocument": "تحميل وثيقة أخرى",
     "deleteThisDocumentBeforeUploadingA": "احذف هذا المستند قبل تحميل بديل.",
     "fullName": "الاسم الكامل",
+    "fullNameArabic": "الاسم بالعربية (اختياري)",
+    "fullNameEnglish": "الاسم بالإنجليزية (اختياري)",
     "eGJohnSmith": "على سبيل المثال جون سميث",
     "fileNumber": "رقم الملف",
     "optionallyUploadFilesBelowThenOpen": "يمكنك اختياريًا تحميل الملفات أدناه، ثم فتح ملف تعريف المريض.",
@@ -3349,6 +3402,9 @@
     "archive": "أرشيف",
     "fileNumber": "رقم الملف",
     "nationalId": "الهوية الوطنية",
+    "fullNameArabic": "الاسم بالعربية",
+    "fullNameEnglish": "الاسم بالإنجليزية",
+    "bloodType": "فصيلة الدم",
     "trash": "نفاية",
     "medicalNotesReport": "تقرير الملاحظات الطبية",
     "noMedicalNotes": "لا توجد ملاحظات طبية.",

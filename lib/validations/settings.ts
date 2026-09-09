@@ -54,9 +54,29 @@ export const updateStaffSchema = z.object({
   is_active: z.boolean(),
 }).superRefine(requireAssistantSupervisorIds);
 
+/**
+ * An optional clinic-authored display name, in one language.
+ *
+ * Length only. A check that tried to validate "is this really Arabic?" would
+ * reject a clinic's own transliterated brand name.
+ *
+ * Blank is normalised to null at the write rather than here, so the resolver's
+ * input and output types stay identical and the settings forms keep working
+ * with a plain `Control` — and because an empty string and an unset name mean
+ * the same thing to the reader either way (see
+ * `lib/settings/display-names.ts`).
+ */
+const optionalDisplayName = (max: number) =>
+  z.string().max(max).optional().nullable();
+
 export const staffProfileSectionSchema = z.object({
   full_name: staffFields.full_name,
   phone: optionalPhone,
+  // The name patients are shown, which is not always the legal full name above
+  // — and, for an Arabic conversation about a doctor stored under a Latin-script
+  // name, is the only way to show one without inventing it.
+  display_name_ar: optionalDisplayName(120),
+  display_name_en: optionalDisplayName(120),
 });
 
 export type CreateStaffValues = z.infer<typeof createStaffSchema>;
@@ -71,6 +91,11 @@ export const departmentSchema = z.object({
     .string()
     .regex(/^#([0-9a-fA-F]{6})$/, "validation.invalidFormat"),
   description: z.string().max(500).optional().nullable(),
+  // Patient-facing display names. `name` stays canonical and required; these
+  // are what an Arabic or English conversation shows when the clinic has
+  // authored one. Never generated — see the migration's own note.
+  name_ar: optionalDisplayName(120),
+  name_en: optionalDisplayName(120),
 });
 
 export type DepartmentValues = z.infer<typeof departmentSchema>;
@@ -80,6 +105,13 @@ export type DepartmentValues = z.infer<typeof departmentSchema>;
 export const insuranceSchema = z.object({
   name: z.string().min(2, "validation.tooSmall").max(100),
   code: z.string().max(20).optional().nullable(),
+  // The insurer's name as patients read it, in each language. `name` above
+  // stays the canonical record every claim, allocation and report speaks; these
+  // are display only, are typed by a person at the clinic, and are never
+  // generated — «أكسا» is a name somebody wrote, not a transliteration of AXA
+  // this system produced.
+  name_ar: optionalDisplayName(100),
+  name_en: optionalDisplayName(100),
 });
 
 export type InsuranceValues = z.infer<typeof insuranceSchema>;
@@ -150,6 +182,8 @@ export const serviceSchema = z.object({
   price: z
     .number({ message: "validation.invalidFormat" })
     .min(0, "validation.tooSmall"),
+  name_ar: optionalDisplayName(160),
+  name_en: optionalDisplayName(160),
 });
 
 export type ServiceValues = z.infer<typeof serviceSchema>;

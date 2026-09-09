@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { AlertTriangle, Check, Loader2, SendHorizonal, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
@@ -22,7 +22,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { bulkFailureLabelKey } from "@/lib/messaging/bulk-send-plan";
+import { BulkRecipientPicker } from "@/components/inbox/bulk-recipient-picker";
+import { MAX_BULK_RECIPIENTS, bulkFailureLabelKey } from "@/lib/messaging/bulk-send-plan";
+import type { BulkRecipient } from "@/lib/messaging/bulk-recipients";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
@@ -42,25 +44,41 @@ import { cn } from "@/lib/utils";
 
 type Step = "compose" | "review" | "progress";
 
-export type BulkRecipientLabel = { conversationId: string; name: string };
-
 export function BulkSendDialog({
   open,
   onOpenChange,
-  conversationIds,
-  labels,
+  recipients,
+  initialSelectedKeys,
   onSent,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  conversationIds: string[];
-  /** Names come from the list the staff member just selected from. */
-  labels: BulkRecipientLabel[];
+  /**
+   * Everyone this clinic can send to, already merged and deduplicated across
+   * Inbox threads, the WhatsApp contact directory and the patient files. See
+   * `lib/messaging/bulk-recipients.ts`.
+   */
+  recipients: BulkRecipient[];
+  /** Rows the staff member ticked in the Inbox list before opening this. */
+  initialSelectedKeys: string[];
   onSent: () => void;
 }) {
   const t = useTranslations("inbox.bulk");
   const [step, setStep] = useState<Step>("compose");
   const [body, setBody] = useState("");
+  const [selectedKeys, setSelectedKeys] = useState<string[]>(initialSelectedKeys);
+  // The picker is seeded from the Inbox selection each time the dialog is
+  // opened with a different one. Adjusting state during render (guarded) rather
+  // than in an effect, which is the pattern the rest of this Inbox uses.
+  const [seededFrom, setSeededFrom] = useState(initialSelectedKeys);
+  if (seededFrom !== initialSelectedKeys) {
+    setSeededFrom(initialSelectedKeys);
+    setSelectedKeys(initialSelectedKeys);
+  }
+  const chosen = useMemo(
+    () => recipients.filter((recipient) => selectedKeys.includes(recipient.key)),
+    [recipients, selectedKeys],
+  );
   const [job, setJob] = useState<BulkJobView | null>(null);
   const [pending, startTransition] = useTransition();
   // Guards the window between a click and the transition starting, which is
@@ -115,10 +133,17 @@ export function BulkSendDialog({
     [t],
   );
 
+  /**
+   * The results list names a recipient from what the *server* returned for it.
+   *
+   * A recipient chosen from the contact directory has its thread opened during
+   * the send, so the browser has never seen that conversation and cannot label
+   * it from anything it holds. `readBulkSendJob` reads the name off the
+   * conversation row instead, which is correct for every source.
+   */
   const nameFor = useCallback(
-    (conversationId: string) =>
-      labels.find((label) => label.conversationId === conversationId)?.name ?? t("unknownRecipient"),
-    [labels, t],
+    (recipient: { name: string | null }) => recipient.name ?? t("unknownRecipient"),
+    [t],
   );
 
   /**
@@ -135,11 +160,12 @@ export function BulkSendDialog({
         setStep("compose");
         setBody("");
         setJob(null);
+        setSelectedKeys(initialSelectedKeys);
         submitting.current = false;
       }
       onOpenChange(next);
     },
-    [onOpenChange],
+    [initialSelectedKeys, onOpenChange],
   );
 
   const refreshJob = useCallback(async (jobId: string) => {
@@ -201,7 +227,7 @@ export function BulkSendDialog({
   );
 
   function handleReview() {
-    if (!body.trim()) return;
+    if (!body.trim() || chosen.length === 0) return;
     setStep("review");
   }
 
@@ -210,7 +236,18 @@ export function BulkSendDialog({
     submitting.current = true;
     startTransition(async () => {
       try {
-        const created = await createBulkSend({ body: body.trim(), conversationIds });
+        // Threads go as ids; contacts and patient files go as addresses, which
+        // the server resolves to conversations through the same path the New
+        // Conversation dialog uses. Both arrive at the identical plan.
+        const created = await createBulkSend({
+          body: body.trim(),
+          conversationIds: chosen
+            .map((recipient) => recipient.conversationId)
+            .filter((id): id is string => Boolean(id)),
+          addresses: chosen
+            .filter((recipient) => !recipient.conversationId)
+            .map((recipient) => recipient.address),
+        });
         if (created.error || !created.jobId) {
           toast.error(created.error ?? t("startFailed"));
           return;
@@ -263,9 +300,12 @@ export function BulkSendDialog({
 
         {step === "compose" ? (
           <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              {t("selectedCount", { count: conversationIds.length })}
-            </p>
+            <BulkRecipientPicker
+              recipients={recipients}
+              selectedKeys={selectedKeys}
+              onChange={setSelectedKeys}
+              max={MAX_BULK_RECIPIENTS}
+            />
             <Textarea
               value={body}
               onChange={(event) => setBody(event.target.value)}
@@ -286,12 +326,21 @@ export function BulkSendDialog({
               {body}
             </p>
             <p className="text-sm font-medium">
-              {t("reviewHeading", { count: conversationIds.length })}
+              {t("reviewHeading", { count: chosen.length })}
             </p>
             <ul className="max-h-48 space-y-1 overflow-y-auto text-sm" data-testid="bulk-review-list">
-              {conversationIds.map((id) => (
-                <li key={id} className="truncate rounded px-2 py-1 odd:bg-muted/40" dir="auto">
-                  {nameFor(id)}
+              {chosen.map((recipient) => (
+                <li
+                  key={recipient.key}
+                  className="flex items-center gap-2 rounded px-2 py-1 odd:bg-muted/40"
+                  data-source={recipient.source}
+                >
+                  <span className="min-w-0 flex-1 truncate" dir="auto">
+                    {recipient.name}
+                  </span>
+                  <span className="shrink-0 text-xs text-muted-foreground" dir="ltr">
+                    {recipient.address}
+                  </span>
                 </li>
               ))}
             </ul>
@@ -330,7 +379,7 @@ export function BulkSendDialog({
                   data-status={recipient.status}
                 >
                   <span className="min-w-0 flex-1 truncate" dir="auto">
-                    {nameFor(recipient.conversationId)}
+                    {nameFor(recipient)}
                   </span>
                   <span
                     className={cn(
@@ -363,7 +412,7 @@ export function BulkSendDialog({
                   .filter((r) => r.failureCode)
                   .map((r) => (
                     <li key={`reason-${r.id}`} dir="auto">
-                      {nameFor(r.conversationId)} — {reasonFor(r.failureCode)}
+                      {nameFor(r)} — {reasonFor(r.failureCode)}
                     </li>
                   ))}
               </ul>
@@ -390,7 +439,7 @@ export function BulkSendDialog({
                       data-testid="bulk-review-row"
                     >
                       <span className="min-w-0 flex-1 truncate" dir="auto">
-                        {nameFor(r.conversationId)}
+                        {nameFor(r)}
                       </span>
                       <Button
                         size="sm"
@@ -419,7 +468,11 @@ export function BulkSendDialog({
 
         <DialogFooter className="gap-2">
           {step === "compose" ? (
-            <Button onClick={handleReview} disabled={!body.trim()} data-testid="bulk-continue">
+            <Button
+              onClick={handleReview}
+              disabled={!body.trim() || chosen.length === 0}
+              data-testid="bulk-continue"
+            >
               {t("continue")}
             </Button>
           ) : null}
@@ -436,7 +489,7 @@ export function BulkSendDialog({
                 ) : (
                   <SendHorizonal className="size-4" aria-hidden />
                 )}
-                {t("confirmSend", { count: conversationIds.length })}
+                {t("confirmSend", { count: chosen.length })}
               </Button>
             </>
           ) : null}

@@ -10,15 +10,19 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { PackageTemplateForm } from "@/components/settings/packages/package-template-form";
+import {
+  PackageTemplateForm,
+  type PackageServiceOption,
+} from "@/components/settings/packages/package-template-form";
 import { createPackageTemplate } from "@/actions/package-templates";
 import { useTranslations } from "next-intl";
 
 interface Props {
   departments: { id: string; name: string; color: string }[];
+  services: PackageServiceOption[];
 }
 
-export function AddPackageTemplateDialog({ departments }: Props) {
+export function AddPackageTemplateDialog({ departments, services }: Props) {
   const t = useTranslations("settings");
   const [open, setOpen] = useState(false);
   return (
@@ -35,6 +39,7 @@ export function AddPackageTemplateDialog({ departments }: Props) {
         <PackageTemplateForm
           action={createPackageTemplate}
           departments={departments}
+          services={services}
           submitLabel={t("createTemplate")}
           onSuccess={() => setOpen(false)}
         />

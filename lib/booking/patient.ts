@@ -3,6 +3,11 @@ import "server-only";
 import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
 import { addCalendarDays } from "@/lib/appointments/calendar";
 import { computeAvailability } from "@/lib/booking/availability";
+import {
+  earliestOnlineBookableDate,
+  earliestOnlineBookableInstant,
+  isOnlineBookableDate,
+} from "@/lib/booking/lead-time";
 import type {
   AvailabilityReason,
   WorkingWindow,
@@ -114,7 +119,15 @@ export async function getPatientAvailableSlots(input: {
     now: input.now,
   });
   const now = input.now ?? new Date();
-  const minimumBookingAt = now.getTime() + 24 * 60 * 60 * 1000;
+  // The one lead-time comparison in the system, and the reason it is a calendar
+  // instant rather than `now + 24h`: the rule the clinic actually operates is
+  // "not today, not tomorrow", and a rolling duration answers that question
+  // differently at nine in the morning than it does at eleven at night. See
+  // `lib/booking/lead-time.ts`.
+  const minimumBookingAt = earliestOnlineBookableInstant(
+    now,
+    input.identity.clinicTimezone,
+  ).getTime();
   const availableSlots = availability.slots
     .filter(
       (slot) =>
@@ -158,8 +171,12 @@ export async function getPatientAvailableDays(input: {
   now?: Date;
 }): Promise<PatientAvailableDaysResult> {
   const now = input.now ?? new Date();
-  const firstDate = input.startDate ??
-    formatInTimeZone(now, input.identity.clinicTimezone, "yyyy-MM-dd");
+  // The default window opens on the first day the rule allows, not on the
+  // clinic's today. A caller that passes `startDate` has already applied the
+  // rule (see `bookableWindowStart`); a caller that does not gets it here, so
+  // there is no entry point into the days view that can start earlier.
+  const firstDate =
+    input.startDate ?? earliestOnlineBookableDate(now, input.identity.clinicTimezone);
   const dates = Array.from(
     { length: input.searchDays ?? 21 },
     (_, index) => addCalendarDays(firstDate, index),
@@ -256,16 +273,20 @@ export async function createPatientPendingBooking(input: {
   durationMinutes: number;
   serviceId?: string | null;
   now?: Date;
+  /**
+   * Whether the caller *knows* this booking is for somebody other than the
+   * sender. See the ownership decision below — this is the authority, and the
+   * pending-intake lookup is the second guard rather than the only one.
+   *
+   * Optional so the legacy callers, which have no beneficiary of their own to
+   * carry, are unchanged: absent means "the caller is not asserting anything",
+   * which is exactly what they were doing before.
+   */
+  forThirdParty?: boolean;
 }): Promise<PatientPreliminaryBookingResult> {
   const scheduled = new Date(input.scheduledAt);
   const now = input.now ?? new Date();
-  if (
-    !Number.isFinite(scheduled.getTime()) ||
-    scheduled.getTime() < now.getTime() + 24 * 60 * 60 * 1000
-  ) {
-    if (Number.isFinite(scheduled.getTime()) && scheduled.getTime() > now.getTime()) {
-      return { ok: false, reason: "minimum_notice" };
-    }
+  if (!Number.isFinite(scheduled.getTime())) {
     return { ok: false, reason: "slot_unavailable" };
   }
   const date = formatInTimeZone(
@@ -273,6 +294,20 @@ export async function createPatientPendingBooking(input: {
     input.identity.clinicTimezone,
     "yyyy-MM-dd",
   );
+  // The final revalidation of the same rule the day list was filtered by.
+  //
+  // Not a duplicate of the filter above: minutes or hours pass between the
+  // offer and the confirmation, an appointment two days out can become an
+  // appointment one day out across a midnight, and the write is the moment the
+  // clinic is committed. A refusal here is `minimum_notice`, which the callers
+  // already answer with the clinic's phone number.
+  if (!isOnlineBookableDate(date, now, input.identity.clinicTimezone)) {
+    return {
+      ok: false,
+      reason:
+        scheduled.getTime() > now.getTime() ? "minimum_notice" : "slot_unavailable",
+    };
+  }
   const time = formatInTimeZone(
     scheduled,
     input.identity.clinicTimezone,
@@ -311,11 +346,31 @@ export async function createPatientPendingBooking(input: {
   // appointment belongs to the person they staged, and taking the linked branch
   // here would file it under the sender's record without anyone being told. The
   // staged row is the authority, not the conversation and not the model.
+  // Two independent facts, and either one is enough to keep this booking off
+  // the sender's record.
+  //
+  // The lookup shipped as the *only* one, and it is the wrong shape for the
+  // job: it asks the database whether a pending third-party intake happens to
+  // exist right now, and reads "no row" as "this booking is the sender's". Not
+  // finding a row has many causes that are not "the sender is the patient" —
+  // the staging failed, the row was already reviewed, the intake never ran —
+  // and every one of them silently became a real appointment on the sender's
+  // file. Manual QA produced exactly that: a linked requester booking for his
+  // son, an intake that staged nothing because the conversation's one intake
+  // row had already been approved, and the son's appointment created for the
+  // father with nobody told.
+  //
+  // So the caller's own knowledge comes first. The V2 flow passes
+  // `frame.slots.beneficiary === "other"`, which is the answer the patient gave
+  // to a question the assistant asked outright, and is not an inference about
+  // anything. The lookup stays, unchanged, as a second guard: a booking is the
+  // sender's only when *neither* fact says otherwise.
   const pendingIntake = await getPendingConversationIntake({
     clinicId: input.identity.clinicId,
     conversationId: input.identity.conversationId,
   });
-  const bookingForThirdParty = pendingIntake.data?.is_third_party === true;
+  const bookingForThirdParty =
+    input.forThirdParty === true || pendingIntake.data?.is_third_party === true;
 
   if (input.identity.linked && input.identity.patientId && !bookingForThirdParty) {
     const result = await createPatientPreliminaryBooking({

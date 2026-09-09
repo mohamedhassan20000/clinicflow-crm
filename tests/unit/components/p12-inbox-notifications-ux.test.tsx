@@ -373,12 +373,24 @@ describe("P12 · the badge says who is handling the thread", () => {
 // ---------------------------------------------------------------------------
 
 describe("P12 · past appointments from inside the thread", () => {
+  /**
+   * P18 moved the secondary thread controls into one overflow menu, so the
+   * history is now two clicks from the thread rather than one. The control
+   * itself, what it is offered for and what it refuses are unchanged — these
+   * tests open the menu first and assert exactly what they always did.
+   */
+  async function openPastAppointments(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByTestId("conversation-more-actions"));
+    await user.click(await screen.findByTestId("past-appointments-trigger"));
+  }
+
   it("offers the history for a conversation linked to a patient", async () => {
     const user = userEvent.setup();
     renderInbox();
 
-    const trigger = screen.getByTestId("past-appointments-trigger");
-    expect(trigger).not.toBeDisabled();
+    await user.click(screen.getByTestId("conversation-more-actions"));
+    const trigger = await screen.findByTestId("past-appointments-trigger");
+    expect(trigger.getAttribute("aria-disabled")).not.toBe("true");
     await user.click(trigger);
 
     await waitFor(() =>
@@ -390,14 +402,16 @@ describe("P12 · past appointments from inside the thread", () => {
   });
 
   it("refuses to invent a history for an unlinked new contact", async () => {
+    const user = userEvent.setup();
     const data = inboxData();
     data.conversations[0]!.patientId = null;
     data.conversations[0]!.patientName = null;
     renderInbox(data);
 
-    const trigger = screen.getByTestId("past-appointments-trigger");
-    expect(trigger).toBeDisabled();
-    expect(trigger.getAttribute("title")).toBe(
+    await user.click(screen.getByTestId("conversation-more-actions"));
+    const trigger = await screen.findByTestId("past-appointments-trigger");
+    expect(trigger.getAttribute("aria-disabled")).toBe("true");
+    expect(trigger.textContent).toContain(
       messages.inbox.pastAppointments.linkPatientFirst,
     );
     expect(mocks.listConversationPatientAppointments).not.toHaveBeenCalled();
@@ -406,7 +420,7 @@ describe("P12 · past appointments from inside the thread", () => {
   it("renders each visit with its date, doctor and status", async () => {
     const user = userEvent.setup();
     renderInbox();
-    await user.click(screen.getByTestId("past-appointments-trigger"));
+    await openPastAppointments(user);
 
     const row = await screen.findByTestId("past-appointment-row");
     expect(within(row).getByText(/Dr Salma Nabil/)).toBeTruthy();
@@ -424,7 +438,7 @@ describe("P12 · past appointments from inside the thread", () => {
     mocks.listConversationPatientAppointments.mockResolvedValue(historyResult([]));
     const user = userEvent.setup();
     renderInbox();
-    await user.click(screen.getByTestId("past-appointments-trigger"));
+    await openPastAppointments(user);
 
     expect(await screen.findByText(messages.inbox.pastAppointments.empty)).toBeTruthy();
     expect(screen.queryByText(messages.inbox.pastAppointments.error)).toBeNull();
@@ -440,7 +454,7 @@ describe("P12 · past appointments from inside the thread", () => {
     });
     const user = userEvent.setup();
     renderInbox();
-    await user.click(screen.getByTestId("past-appointments-trigger"));
+    await openPastAppointments(user);
 
     expect(await screen.findByText("Conversation not found.")).toBeTruthy();
     expect(
@@ -461,7 +475,7 @@ describe("P12 · past appointments from inside the thread", () => {
     );
     const user = userEvent.setup();
     renderInbox();
-    await user.click(screen.getByTestId("past-appointments-trigger"));
+    await openPastAppointments(user);
 
     await screen.findAllByTestId("past-appointment-row");
     expect(screen.getAllByTestId("past-appointment-add-followup")).toHaveLength(1);
@@ -483,7 +497,7 @@ describe("P12 · past appointments from inside the thread", () => {
     );
     const user = userEvent.setup();
     renderInbox();
-    await user.click(screen.getByTestId("past-appointments-trigger"));
+    await openPastAppointments(user);
 
     expect(await screen.findByTestId("past-appointment-followup-done")).toBeTruthy();
     expect(screen.queryByTestId("past-appointment-add-followup")).toBeNull();
@@ -492,7 +506,7 @@ describe("P12 · past appointments from inside the thread", () => {
   it("records the follow-up through the existing dialog and stays in the Inbox", async () => {
     const user = userEvent.setup();
     renderInbox();
-    await user.click(screen.getByTestId("past-appointments-trigger"));
+    await openPastAppointments(user);
     await user.click(await screen.findByTestId("past-appointment-add-followup"));
 
     // The Follow-ups page's own dialog, with its own outcomes.
@@ -521,7 +535,7 @@ describe("P12 · past appointments from inside the thread", () => {
     await waitFor(() => expect(mocks.refresh).toHaveBeenCalled());
     expect(mocks.push).not.toHaveBeenCalled();
     expect(mocks.replace).not.toHaveBeenCalled();
-    expect(screen.getByTestId("past-appointments-trigger")).toBeTruthy();
+    expect(screen.getByTestId("conversation-more-actions")).toBeTruthy();
     await waitFor(() =>
       expect(mocks.listConversationPatientAppointments).toHaveBeenCalledTimes(2),
     );

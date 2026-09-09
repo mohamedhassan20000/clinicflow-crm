@@ -10,6 +10,7 @@ import {
   type DomainMutationResult,
 } from "@/lib/domain-mutations";
 import type { AuthedUser } from "@/lib/rbac";
+import { stripBlankDisplayNames } from "@/lib/settings/display-names";
 import { createClinicScopedAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -76,9 +77,10 @@ export async function approveAiPatientIntakeMutation(
   const supabase = await createClient();
   const { data: intake, error: intakeError } = await supabase
     .from("ai_patient_intakes")
-    .select(
-      "id, full_name, national_id, date_of_birth, phone, email, blood_type, department_id, doctor_id, review_status",
-    )
+    // `*`, deliberately: the bilingual intake columns are additive and applied
+    // on the clinic's own schedule, and naming them would make the whole
+    // approval fail on a database where that migration has not run.
+    .select("*")
     .eq("id", parsed.data.intake_id)
     .eq("clinic_id", user.clinicId)
     .maybeSingle();
@@ -86,6 +88,11 @@ export async function approveAiPatientIntakeMutation(
 
   const patientValues = patientCreateSchema.safeParse({
     full_name: intake.full_name,
+    // Absent on a pre-migration database, and `?? null` is what keeps the
+    // preview identical there. The authoritative copy onto the patient row is
+    // the RPC's, not this — see `approve_ai_patient_intake`.
+    full_name_ar: intake.full_name_ar ?? null,
+    full_name_en: intake.full_name_en ?? null,
     national_id: intake.national_id,
     date_of_birth: intake.date_of_birth,
     phone: intake.phone,
@@ -204,10 +211,14 @@ export async function createPatientMutation(
   );
   if (insuranceError) return insuranceError;
   const fileNumber = await nextFileNumber(user.clinicId);
+  // A display name the clinic left blank is dropped from the payload entirely
+  // rather than written as `""`, which is also what lets this insert keep
+  // working on a database where the additive bilingual migration has not run.
+  const values = stripBlankDisplayNames(parsed.data);
   if (mode === "preview") {
     return domainSuccess(
       { patient_id: "00000000-0000-0000-0000-000000000000", file_number: fileNumber },
-      { targetTable: "patients", after: { ...parsed.data, file_number: fileNumber } },
+      { targetTable: "patients", after: { ...values, file_number: fileNumber } },
     );
   }
   const supabase = await createClient();
@@ -218,7 +229,7 @@ export async function createPatientMutation(
     const { data, error } = await supabase
       .from("patients")
       .insert({
-        ...parsed.data,
+        ...values,
         file_number: candidate,
         clinic_id: user.clinicId,
         created_by: user.id,
@@ -245,7 +256,7 @@ export async function createPatientMutation(
     {
       targetTable: "patients",
       targetRecordIds: [insertedId],
-      after: { ...parsed.data, id: insertedId, file_number: insertedFileNumber },
+      after: { ...values, id: insertedId, file_number: insertedFileNumber },
     },
   );
 }
@@ -261,7 +272,8 @@ export async function updatePatientMutation(
     return domainFailure("patients.failedToUpdatePatientPleaseTryAgain", {
       validationError: parsed.error,
     });
-  const { patient_id: patientId, ...values } = parsed.data;
+  const { patient_id: patientId, ...rest } = parsed.data;
+  const values = stripBlankDisplayNames(rest);
   const insuranceError = await validateInsurance(
     values.insurance_provider_id,
     user.clinicId,

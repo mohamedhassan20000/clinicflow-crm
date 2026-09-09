@@ -33,6 +33,9 @@ interface Props {
     name: string;
     price: number;
     department_id: string;
+    /** Optional patient-facing display names; absent before the migration. */
+    name_ar?: string | null;
+    name_en?: string | null;
   };
   departments: { id: string; name: string; color: string }[];
 }
@@ -69,6 +72,8 @@ export function ServiceRowActions({ service, departments }: Props) {
               department_id: service.department_id,
               name: service.name,
               price: service.price,
+              name_ar: service.name_ar,
+              name_en: service.name_en,
             }}
             submitLabel={t("saveChanges")}
             onSuccess={() => {

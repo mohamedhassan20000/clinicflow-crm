@@ -4,6 +4,7 @@ import { NextIntlClientProvider } from "next-intl";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import messages from "@/messages/en.json";
 import type { BulkJobView } from "@/actions/bulk-messaging";
+import type { BulkRecipient } from "@/lib/messaging/bulk-recipients";
 
 /**
  * P11Q — the flow a receptionist actually walks through.
@@ -34,11 +35,43 @@ vi.mock("@/lib/supabase/client", () => ({
 
 import { BulkSendDialog } from "@/components/inbox/bulk-send-dialog";
 
-const LABELS = [
-  { conversationId: "c1", name: "Fatima Ahmed" },
-  { conversationId: "c2", name: "Omar Khaled" },
-  { conversationId: "c3", name: "Mona Sayed" },
+/**
+ * P18 — the dialog now takes the merged recipient list and owns the selection,
+ * because recipients can come from the contact directory and the patient files
+ * as well as from an Inbox thread. The three below are all conversations, so
+ * every assertion about the confirmation flow is the same flow as before.
+ */
+const RECIPIENTS: BulkRecipient[] = [
+  {
+    key: "conversation:c1",
+    source: "conversation",
+    conversationId: "c1",
+    address: "+201000000001",
+    name: "Fatima Ahmed",
+    fileNumber: null,
+  },
+  {
+    key: "conversation:c2",
+    source: "conversation",
+    conversationId: "c2",
+    address: "+201000000002",
+    name: "Omar Khaled",
+    fileNumber: null,
+  },
+  {
+    key: "conversation:c3",
+    source: "conversation",
+    conversationId: "c3",
+    address: "+201000000003",
+    name: "Mona Sayed",
+    fileNumber: null,
+  },
 ];
+
+const LABELS = RECIPIENTS.map((recipient) => ({
+  conversationId: recipient.conversationId!,
+  name: recipient.name,
+}));
 
 function job(overrides: Partial<BulkJobView> = {}): BulkJobView {
   return {
@@ -46,9 +79,9 @@ function job(overrides: Partial<BulkJobView> = {}): BulkJobView {
     status: "completed",
     totalRecipients: 3,
     recipients: [
-      { id: "r1", conversationId: "c1", status: "sent", failureCode: null },
-      { id: "r2", conversationId: "c2", status: "sent", failureCode: null },
-      { id: "r3", conversationId: "c3", status: "sent", failureCode: null },
+      { id: "r1", conversationId: "c1", name: "Fatima Ahmed", status: "sent", failureCode: null },
+      { id: "r2", conversationId: "c2", name: "Omar Khaled", status: "sent", failureCode: null },
+      { id: "r3", conversationId: "c3", name: "Mona Sayed", status: "sent", failureCode: null },
     ],
     ...overrides,
   };
@@ -60,8 +93,8 @@ function renderDialog(onOpenChange = vi.fn()) {
       <BulkSendDialog
         open
         onOpenChange={onOpenChange}
-        conversationIds={["c1", "c2", "c3"]}
-        labels={LABELS}
+        recipients={RECIPIENTS}
+        initialSelectedKeys={RECIPIENTS.map((recipient) => recipient.key)}
         onSent={vi.fn()}
       />
     </NextIntlClientProvider>,
@@ -114,6 +147,7 @@ describe("P11Q — nothing is sent without an explicit confirmation", () => {
     expect(mocks.createBulkSend).toHaveBeenCalledWith({
       body: "Closed tomorrow.",
       conversationIds: ["c1", "c2", "c3"],
+      addresses: [],
     });
   });
 
@@ -163,9 +197,9 @@ describe("P11Q — results are reported honestly", () => {
       job: job({
         status: "completed_with_failures",
         recipients: [
-          { id: "r1", conversationId: "c1", status: "sent", failureCode: null },
-          { id: "r2", conversationId: "c2", status: "failed", failureCode: "SERVICE_WINDOW_CLOSED" },
-          { id: "r3", conversationId: "c3", status: "skipped", failureCode: "no_address" },
+          { id: "r1", conversationId: "c1", name: "Fatima Ahmed", status: "sent", failureCode: null },
+          { id: "r2", conversationId: "c2", name: "Omar Khaled", status: "failed", failureCode: "SERVICE_WINDOW_CLOSED" },
+          { id: "r3", conversationId: "c3", name: "Mona Sayed", status: "skipped", failureCode: "no_address" },
         ],
       }),
     });
@@ -185,9 +219,9 @@ describe("P11Q — results are reported honestly", () => {
       job: job({
         status: "completed_with_failures",
         recipients: [
-          { id: "r1", conversationId: "c1", status: "sent", failureCode: null },
-          { id: "r2", conversationId: "c2", status: "failed", failureCode: "SERVICE_WINDOW_CLOSED" },
-          { id: "r3", conversationId: "c3", status: "skipped", failureCode: "no_address" },
+          { id: "r1", conversationId: "c1", name: "Fatima Ahmed", status: "sent", failureCode: null },
+          { id: "r2", conversationId: "c2", name: "Omar Khaled", status: "failed", failureCode: "SERVICE_WINDOW_CLOSED" },
+          { id: "r3", conversationId: "c3", name: "Mona Sayed", status: "skipped", failureCode: "no_address" },
         ],
       }),
     });
@@ -212,9 +246,9 @@ describe("P11Q — results are reported honestly", () => {
       job: job({
         status: "completed_with_failures",
         recipients: [
-          { id: "r1", conversationId: "c1", status: "sent", failureCode: null },
-          { id: "r2", conversationId: "c2", status: "failed", failureCode: "PROVIDER_SEND_FAILED" },
-          { id: "r3", conversationId: "c3", status: "sent", failureCode: null },
+          { id: "r1", conversationId: "c1", name: "Fatima Ahmed", status: "sent", failureCode: null },
+          { id: "r2", conversationId: "c2", name: "Omar Khaled", status: "failed", failureCode: "PROVIDER_SEND_FAILED" },
+          { id: "r3", conversationId: "c3", name: "Mona Sayed", status: "sent", failureCode: null },
         ],
       }),
     });

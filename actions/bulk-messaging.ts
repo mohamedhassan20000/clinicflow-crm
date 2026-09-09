@@ -8,6 +8,7 @@ import { requireMutationRole } from "@/lib/rbac";
 import { createClinicScopedAdminClient, logMessagingEvent } from "@/lib/supabase/admin";
 import { readLinkedDeviceSession } from "@/lib/messaging/linked-device";
 import { getActiveWhatsAppProvider } from "@/lib/messaging/channel-management";
+import { openNewWhatsAppConversation } from "@/actions/messaging";
 import { runBulkSendJob } from "@/lib/messaging/bulk-send";
 import {
   BULK_STALE_AFTER_SECONDS,
@@ -38,13 +39,26 @@ export type BulkSendActionResult = {
   counts?: { sent: number; failed: number; skipped: number };
 };
 
-const createSchema = z.object({
-  body: z.string().trim().min(1).max(4096),
-  conversationIds: z
-    .array(z.string().uuid())
-    .min(1)
-    .max(MAX_BULK_RECIPIENTS),
-});
+const createSchema = z
+  .object({
+    body: z.string().trim().min(1).max(4096),
+    conversationIds: z.array(z.string().uuid()).max(MAX_BULK_RECIPIENTS).default([]),
+    /**
+     * Recipients chosen from the clinic's contacts or patient files rather than
+     * from an Inbox thread. Each one is resolved to a conversation below,
+     * through the same server path the New Conversation dialog uses, so the
+     * plan, the ceiling, the skip reasons, the runner and the results view are
+     * all unchanged — a contact recipient becomes an ordinary conversation
+     * recipient before anything about sending is decided.
+     */
+    addresses: z.array(z.string().trim().min(3).max(40)).max(MAX_BULK_RECIPIENTS).default([]),
+  })
+  .refine(
+    (value) =>
+      value.conversationIds.length + value.addresses.length >= 1 &&
+      value.conversationIds.length + value.addresses.length <= MAX_BULK_RECIPIENTS,
+    { message: "recipient_count" },
+  );
 
 async function bulkError(key: Parameters<typeof actionError>[0]): Promise<BulkSendActionResult> {
   return { error: await actionError(key) };
@@ -68,7 +82,8 @@ async function whatsappReady(clinicId: string): Promise<boolean> {
 
 export async function createBulkSend(input: {
   body: string;
-  conversationIds: string[];
+  conversationIds?: string[];
+  addresses?: string[];
 }): Promise<BulkSendActionResult> {
   const user = await requireMutationRole(["admin", "receptionist"]);
   const parsed = createSchema.safeParse(input);
@@ -81,11 +96,38 @@ export async function createBulkSend(input: {
     return bulkError("messaging.bulkWhatsAppOffline");
   }
 
+  /**
+   * Contact and patient recipients become conversation recipients here, and
+   * only here.
+   *
+   * `openNewWhatsAppConversation` is the clinic's existing, idempotent
+   * "start a WhatsApp thread with this number" boundary: it normalizes the
+   * address, re-checks the channel and the account, and returns the existing
+   * thread when there already is one. Reusing it means a bulk send can never
+   * reach a destination a staff member could not have reached one at a time,
+   * and it is why nothing below this point knows that contacts exist.
+   *
+   * An address that cannot be opened is dropped rather than failing the whole
+   * send, and the count staff confirmed is reconciled against what was
+   * actually planned — the job is written with the number of rows it really
+   * has.
+   */
+  const resolvedIds = [...parsed.data.conversationIds];
+  for (const address of parsed.data.addresses) {
+    const opened = await openNewWhatsAppConversation({ participant: address });
+    if (opened.conversationId) resolvedIds.push(opened.conversationId);
+  }
+  // The same collapse the planner performs on ids, applied one step earlier:
+  // an address whose thread is already in the selection must not become a
+  // second recipient row for the same person.
+  const conversationIds = [...new Set(resolvedIds)];
+  if (conversationIds.length === 0) return bulkError("messaging.invalidBulkSend");
+
   const client = createClinicScopedAdminClient(user.clinicId);
   const conversationResult = await client
     .from("conversations")
     .select("id, channel, status, participant_address")
-    .in("id", parsed.data.conversationIds);
+    .in("id", conversationIds);
   if (conversationResult.error) return bulkError("messaging.couldNotStartBulkSend");
 
   const plans = planBulkRecipients(
@@ -192,6 +234,21 @@ export async function runBulkSend(input: { jobId: string }): Promise<BulkSendAct
 export type BulkRecipientView = {
   id: string;
   conversationId: string;
+  /**
+   * What to call this recipient in the results list, resolved server-side from
+   * the conversation itself.
+   *
+   * It used to be looked up in the browser against the rows the staff member
+   * had ticked, which stopped working the moment a recipient could come from
+   * the contact directory instead of from a visible thread — those threads are
+   * opened during the send and the browser has never seen them. Reading the
+   * name from the row the recipient actually points at is both correct for
+   * every source and one less thing the client has to keep in step.
+   *
+   * `null` when the conversation could not be read; the dialog says so rather
+   * than inventing a name.
+   */
+  name: string | null;
   status: "pending" | "sending" | "sent" | "failed" | "skipped" | "review";
   failureCode: string | null;
 };
@@ -244,14 +301,31 @@ export async function readBulkSendJob(input: {
       .order("created_at", { ascending: true }),
   ]);
   if (job.error || !job.data) return { error: await actionError("messaging.invalidBulkSend") };
+  const recipientRows = recipients.error ? [] : recipients.data ?? [];
+  // One read for the names, over exactly the conversations this job points at.
+  // A failure here costs the list its labels, never its results.
+  const conversationIds = [...new Set(recipientRows.map((row) => row.conversation_id))];
+  const named = conversationIds.length
+    ? await client
+        .from("conversations")
+        .select("id, display_name, participant_address")
+        .in("id", conversationIds)
+    : { data: [], error: null };
+  const nameById = new Map(
+    (named.error ? [] : named.data ?? []).map((row) => [
+      row.id,
+      row.display_name ?? row.participant_address ?? null,
+    ]),
+  );
   return {
     job: {
       id: job.data.id,
       status: job.data.status as BulkJobView["status"],
       totalRecipients: job.data.total_recipients,
-      recipients: (recipients.error ? [] : recipients.data ?? []).map((row) => ({
+      recipients: recipientRows.map((row) => ({
         id: row.id,
         conversationId: row.conversation_id,
+        name: nameById.get(row.conversation_id) ?? null,
         status: row.status as BulkRecipientView["status"],
         failureCode: row.failure_code,
       })),

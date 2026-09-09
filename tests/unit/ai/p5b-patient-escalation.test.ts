@@ -147,3 +147,75 @@ describe("P5B — canned escalation copy carries no PHI", () => {
     expect(en).not.toContain("null");
   });
 });
+
+// ---------------------------------------------------------------------------
+// P12B — the beneficiary frame
+// ---------------------------------------------------------------------------
+
+/**
+ * The false handoff manual QA recorded, and the rule that fixes it.
+ *
+ * `HUMAN_REQUEST_WEAK_PATTERNS` matches a want-verb near a generic person-noun
+ * — «عايز … حد|شخص» — and deferred only to the logistics frame. That was enough
+ * while every third-party sentence carried a booking word, and manual QA
+ * produced the ones that do not: «ممكن لشخص تاني» and «عايز لحد تاني» are
+ * *answers to the assistant's own question*, «الحجز ده ليك إنت ولا لحد تاني؟»,
+ * and a two-word answer has no logistics word in it. Because
+ * `detectPatientEscalation` runs **before** the agent — in
+ * `runPatientInboundAiReply`, ahead of `runCertifiedPatientAgent` — a patient
+ * answering a question the assistant had just asked was handed to a human and
+ * the engine never saw the turn.
+ *
+ * The fix is the same rule applied a third time rather than a keyword
+ * exception: a generic person-noun is not an ask when the sentence supplies a
+ * frame that explains it, and `لـ` + a person is the beneficiary frame — a
+ * person something is done *for*, not a person to be talked *to*.
+ *
+ * The genuine asks below are unaffected because they are matched by the strong
+ * class, which is checked first and is unguarded.
+ */
+describe("P12B — a beneficiary is not a request for a human", () => {
+  const escalatesAsHuman = (text: string) => {
+    const detection = detectPatientEscalation(text);
+    return detection.escalate && detection.reason === "human_requested";
+  };
+
+  it.each([
+    "عايز أكلم موظف",
+    "عايز أكلم شخص",
+    "وصلني بحد",
+    "ممكن حد من العيادة يكلمني",
+    "عايز حد يرد عليا",
+    "I want to speak to a human",
+    "connect me to someone",
+  ])("still hands over for a genuine request: %s", (text) => {
+    expect(escalatesAsHuman(text)).toBe(true);
+  });
+
+  it.each([
+    "عايز أحجز لحد تاني",
+    "الحجز لشخص تاني",
+    "عايز أحجز لأخويا",
+    "لحد تاني",
+    "لشخص تاني",
+    "ممكن لشخص تاني",
+    "عايز لحد تاني",
+    "عايز أعمل ملف لشخص تاني",
+    "عايز اسجل بيانات شخص تاني",
+    "الموعد ده لأخويا مش ليا",
+    "I'd like to book for someone else",
+  ])("does not hand over for a beneficiary: %s", (text) => {
+    expect(escalatesAsHuman(text)).toBe(false);
+  });
+
+  it.each([
+    "عايز أغير الدكتور",
+    "عايز أغير",
+    "كنت أقصد حاجة تانية",
+    "لا مش كده",
+    "عايز أرجع في كلامي",
+    "عايز أكمل الحجز",
+  ])("does not hand over for a correction: %s", (text) => {
+    expect(detectPatientEscalation(text).escalate).toBe(false);
+  });
+});

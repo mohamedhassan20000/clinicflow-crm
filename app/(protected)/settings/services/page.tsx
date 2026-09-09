@@ -136,6 +136,8 @@ export default async function ServicesSettingsPage() {
                             name: s.name,
                             price: Number(s.price),
                             department_id: s.department_id,
+                            name_ar: s.name_ar,
+                            name_en: s.name_en,
                           }}
                           departments={deptList}
                         />

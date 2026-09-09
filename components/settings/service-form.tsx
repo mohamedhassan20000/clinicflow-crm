@@ -32,6 +32,8 @@ interface ServiceFormProps {
     department_id?: string;
     name?: string;
     price?: number;
+    name_ar?: string | null;
+    name_en?: string | null;
   };
   submitLabel: string;
   onSuccess?: () => void;
@@ -102,6 +104,39 @@ export function ServiceForm({
           maxLength={100}
         />
       </div>
+
+      {/* The names patients see, in each language. `name` above stays the
+          clinic's canonical record; blank here means "use the stored name",
+          and nothing is ever generated to fill it. */}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label htmlFor="svc-name-ar" className="text-xs">
+            {t("displayNameArabic")}
+          </Label>
+          <Input
+            id="svc-name-ar"
+            name="name_ar"
+            dir="rtl"
+            defaultValue={defaults?.name_ar ?? ""}
+            disabled={isPending}
+            maxLength={160}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="svc-name-en" className="text-xs">
+            {t("displayNameEnglish")}
+          </Label>
+          <Input
+            id="svc-name-en"
+            name="name_en"
+            dir="ltr"
+            defaultValue={defaults?.name_en ?? ""}
+            disabled={isPending}
+            maxLength={160}
+          />
+        </div>
+      </div>
+      <p className="text-xs text-muted-foreground">{t("displayNameHint")}</p>
 
       <div className="space-y-1.5">
         <Label htmlFor="svc-price" className="text-xs">

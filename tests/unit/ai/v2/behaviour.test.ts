@@ -33,6 +33,9 @@ const stubs = vi.hoisted(() => ({
   readAvailableSlots: vi.fn(),
   readPatientPackages: vi.fn(),
   readPublicPackages: vi.fn(),
+  readServices: vi.fn(),
+  resolveDepartmentSpoken: vi.fn(),
+  resolveDepartmentNamed: vi.fn(),
   readPatientDocuments: vi.fn(),
   readDocumentLink: vi.fn(),
   readMyAppointments: vi.fn(),
@@ -165,16 +168,47 @@ beforeEach(() => {
     times: [{ value: "10:00", label: "10:00", source: "clinic_directory" }],
   });
   stubs.readPatientPackages.mockResolvedValue([]);
-  stubs.readPublicPackages.mockResolvedValue([
-    {
-      id: "tpl-1",
-      name: "باقة الليزر",
-      departmentName: "الجلدية",
-      totalSessions: 6,
-      pricePerSession: 500,
-      totalPrice: 3000,
-    },
-  ]);
+  const laserPackage = {
+    id: "tpl-1",
+    name: "باقة الليزر",
+    aliases: ["باقة الليزر"],
+    departmentId: "dept-derm",
+    departmentName: "الجلدية",
+    totalSessions: 6,
+    pricePerSession: 500,
+    totalPrice: 3000,
+    notes: null,
+  };
+  stubs.readPublicPackages.mockResolvedValue({
+    groups: [
+      {
+        departmentId: "dept-derm",
+        departmentName: "الجلدية",
+        packages: [laserPackage],
+      },
+    ],
+    all: [laserPackage],
+    currency: "EGP",
+    total: 1,
+  });
+  // The authoritative service catalog. Real names and real prices, so a test
+  // asserting that nothing was invented is asserting against something.
+  stubs.readServices.mockResolvedValue({
+    groups: [
+      {
+        departmentId: "dept-pt",
+        departmentName: "Physical Therapy",
+        services: [
+          { id: "svc-1", name: "Physical Therapy Assessment", price: 1000 },
+          { id: "svc-2", name: "Rehabilitation Session", price: 1600 },
+        ],
+      },
+    ],
+    total: 2,
+    currency: "TRY",
+  });
+  stubs.resolveDepartmentSpoken.mockResolvedValue([]);
+  stubs.resolveDepartmentNamed.mockResolvedValue({ kind: "unresolved" });
   stubs.readPatientDocuments.mockResolvedValue([]);
   stubs.readDocumentLink.mockResolvedValue(null);
   stubs.readMyAppointments.mockResolvedValue([]);
@@ -394,7 +428,7 @@ describe("no booking before an explicit confirmation", () => {
       context({ flows: reviewed.state }),
     );
     expect(stubs.commitBooking).toHaveBeenCalledTimes(1);
-    expect(reply(confirmed.effects)).toContain("سجلت الطلب");
+    expect(reply(confirmed.effects)).toContain("سجلت طلب الحجز");
   });
 });
 

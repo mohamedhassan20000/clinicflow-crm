@@ -83,6 +83,17 @@ export function isCommitted(slot: Slot | undefined): slot is Slot {
 export type Candidate<T> = {
   readonly value: T;
   readonly label: string;
+  /**
+   * Other clinic-authored names for the same thing, for *matching* only.
+   *
+   * A department the clinic stored as "Dermatology" and gave the Arabic display
+   * name «الجلدية» must be reachable by both, in either language — but only one
+   * of them may be shown, and that is `label`. Aliases never reach a message,
+   * never reach an offer's options, and never become a second candidate; they
+   * widen what the resolver will accept and nothing else. See
+   * `NamedEntity.aliases`.
+   */
+  readonly aliases?: readonly string[];
   /** Where it came from, for the audit line and for the composer's wording. */
   readonly source:
     | "patient_history"

@@ -19,6 +19,9 @@ const stubs = vi.hoisted(() => ({
   readAvailableSlots: vi.fn(),
   readPatientPackages: vi.fn(),
   readPublicPackages: vi.fn(),
+  readServices: vi.fn(),
+  resolveDepartmentSpoken: vi.fn(),
+  resolveDepartmentNamed: vi.fn(),
   readPatientDocuments: vi.fn(),
   readDocumentLink: vi.fn(),
   readMyAppointments: vi.fn(),
@@ -183,7 +186,7 @@ describe("finding 1: a patient who owns no package can still finish booking", ()
     expect(offers[0]).toMatchObject({ key: "booking.review" });
     // The bug's signature: the same step reported over and over in one turn.
     expect(result.trace.filter((entry) => entry.includes("package_offer"))).toHaveLength(1);
-    expect(reply(result.effects)).toContain("أأكد الطلب؟");
+    expect(reply(result.effects)).toContain("تحب تأكد الطلب؟");
   });
 
   it("commits the booking on confirmation, with no package", async () => {
@@ -303,13 +306,45 @@ describe("finding 2: a linked patient can book without verifying identity", () =
     expect(result.trace).toContain("step_intake_ask");
   });
 
-  it("refuses the write outright once intake is behind it but identity is not", async () => {
+  // P12B — a staged file is a patient, and the write path has always known it.
+  //
+  // This asserted the opposite until manual QA showed what it cost: a stranger
+  // typed out their whole file, the intake staged it, and `confirm`'s
+  // `identity: "linked"` precondition then answered them with «لازم نتأكد من
+  // هويتك الأول. فريق العيادة هيساعدك في ده» — an identity challenge about a
+  // topic nobody had raised, and the end of the conversation. Staging cannot
+  // produce a linkage: only `approve_ai_patient_intake` sets
+  // `conversations.patient_id`, and that is a staff action on another day.
+  //
+  // The precondition was narrower than the write it guarded.
+  // `createPatientPendingBooking` takes the linked branch only for a linked,
+  // non-third-party sender and otherwise writes a *provisional* AI appointment
+  // request — the same pending-review artefact the staged file is. So the gate
+  // moved into `confirm`'s own `run` and became a stronger statement of the
+  // property that actually matters: every booking must have a patient behind
+  // it, by linkage, by discovery, or by a staging on this frame.
+  it("writes the booking once a file has been staged on this frame", async () => {
     const staged = frameWith("book_appointment", READY_TO_CONFIRM, {
       memo: { "done:intake": true, intake_staged: true, confirmed: true },
     });
     const result = await turn([], context({ flows: staged, identity: "anonymous" }));
+    expect(stubs.commitBooking).toHaveBeenCalled();
+    expect(result.trace).not.toContain("step_identity_required");
+  });
+
+  it("refuses the write when nothing on the frame names a patient", async () => {
+    // The other side of the same gate, and the one that carries I-4: a
+    // confirmed booking whose intake step neither staged nor matched a file has
+    // nobody to belong to, so it hands over rather than filing the appointment
+    // against the sender.
+    const orphaned = frameWith("book_appointment", READY_TO_CONFIRM, {
+      memo: { "done:intake": true, confirmed: true },
+    });
+    const result = await turn([], context({ flows: orphaned, identity: "anonymous" }));
     expect(stubs.commitBooking).not.toHaveBeenCalled();
-    expect(result.trace).toContain("step_identity_required");
+    expect(
+      result.effects.some((effect) => effect.kind === "handoff"),
+    ).toBe(true);
   });
 });
 
@@ -486,7 +521,7 @@ describe("finding 6: reschedule dates are server-authorized", () => {
     expect(activeFrame(result.state)?.slots.day?.value).toBe("2026-09-10");
   });
 
-  it("sends a full timestamp to the write, not a bare clock time", async () => {
+  it("sends the clinic's calendar day and time to the write, not a bare clock time", async () => {
     const ready = frameWith(
       "reschedule_appointment",
       { appointment: slotValue("appt-1"), day: slotValue("2026-09-10"), time: slotValue("10:00") },
@@ -494,7 +529,7 @@ describe("finding 6: reschedule dates are server-authorized", () => {
     );
     await turn([], context({ flows: ready, identity: "linked" }));
     expect(stubs.commitReschedule).toHaveBeenCalledWith(
-      expect.objectContaining({ scheduledAt: "2026-09-10T10:00:00" }),
+      expect.objectContaining({ date: "2026-09-10", time: "10:00" }),
     );
   });
 

@@ -46,6 +46,8 @@ export function DepartmentForm({
       name: "",
       color: "#0D9488",
       description: null,
+      name_ar: null,
+      name_en: null,
       ...defaultValues,
     },
   });
@@ -62,6 +64,10 @@ export function DepartmentForm({
     fd.set("name", values.name);
     fd.set("color", values.color);
     if (values.description) fd.set("description", values.description);
+    // Patient-facing display names, sent only when a person typed one. An
+    // empty field is not a name, and the reader treats blank and unset alike.
+    if (values.name_ar?.trim()) fd.set("name_ar", values.name_ar.trim());
+    if (values.name_en?.trim()) fd.set("name_en", values.name_en.trim());
     startTransition(() => formAction(fd));
   }
 
@@ -89,6 +95,49 @@ export function DepartmentForm({
             </FormItem>
           )}
         />
+
+        {/* The names patients see, in each language. `name` above stays the
+            clinic's canonical record; these are display only, and nothing
+            generates them — an empty field means "use the stored name". */}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FormField
+            control={form.control}
+            name="name_ar"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t("displayNameArabic")}</FormLabel>
+                <FormControl>
+                  <Input
+                    {...field}
+                    value={field.value ?? ""}
+                    dir="rtl"
+                    disabled={isPending}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="name_en"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t("displayNameEnglish")}</FormLabel>
+                <FormControl>
+                  <Input
+                    {...field}
+                    value={field.value ?? ""}
+                    dir="ltr"
+                    disabled={isPending}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+        <p className="text-xs text-muted-foreground">{t("displayNameHint")}</p>
 
         <FormField
           control={form.control}

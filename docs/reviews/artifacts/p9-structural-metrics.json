@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-04T17:51:03.616Z",
+  "generatedAt": "2026-09-08T01:21:10.788Z",
   "method": "Deterministic. A scripted non-compliant model runs every booking scenario against the flat mount and the stage-scoped mount. Model behaviour is identical in both columns, so every difference is the orchestration.",
   "scenarios": 8,
   "toolReachability": {
@@ -35,7 +35,7 @@
       "illegalTransitions": 0,
       "turnFailureRate": 0,
       "p50LatencyMs": 1,
-      "p95LatencyMs": 14,
+      "p95LatencyMs": 6,
       "totalInputTokens": 290,
       "totalOutputTokens": 292,
       "tokensPerConversation": 72.75,

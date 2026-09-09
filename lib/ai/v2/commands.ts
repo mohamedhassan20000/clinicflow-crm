@@ -97,6 +97,17 @@ export const QUESTION_TOPICS = [
   "opening_hours",
   "insurance",
   "clinic_other",
+  /**
+   * "What can you help me with?" — a question about the assistant itself.
+   *
+   * Its own topic rather than `clinic_other`, because the FAQ read behind that
+   * topic answers questions about the *clinic* and returns nothing for this
+   * one, and «تقدر تساعدني في ايه؟» then fell through to the generic opening.
+   * Answering it is a fixed, server-authored list of what this assistant
+   * actually does — no read, no model, and nothing on it that the flows do not
+   * support.
+   */
+  "capabilities",
   "my_appointments",
   "my_packages",
   "my_documents",
@@ -115,6 +126,19 @@ export const CLARIFICATION_REASONS = [
   "missing_reference",
   "conflicting_information",
   "out_of_scope",
+  /**
+   * The patient wants to change something and did not say what.
+   *
+   * «عايز أغير», «لا مش كده», «كنت أقصد كدا» name no field, and the three wrong
+   * answers to them are all worse than asking: guessing a field silently
+   * rewrites a booking, restarting loses everything the patient already
+   * supplied, and handing over sends somebody to a human for a typo. Its own
+   * reason rather than `ambiguous_intent` because the *response* differs — the
+   * engine answers this one by naming the fields on the live frame — and
+   * because the audit line should be able to tell "I could not read this" from
+   * "they asked to edit and I asked which".
+   */
+  "unspecified_correction",
 ] as const;
 
 export const SMALL_TALK_KINDS = [

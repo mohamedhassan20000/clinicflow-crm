@@ -113,8 +113,14 @@ export default async function PatientsPage({ searchParams }: PageProps) {
       canReviewAiIntakes
         ? supabase
             .from("ai_patient_intakes")
+            // `*` for the intake's own columns, deliberately: the bilingual
+            // name columns are additive and applied on the clinic's own
+            // schedule, and naming them explicitly would make this read — and
+            // with it the whole Patients screen — fail on a database where
+            // that migration has not run. The two embedded relations still
+            // have to be named.
             .select(
-              "id, conversation_id, full_name, date_of_birth, phone, email, national_id, created_at, department:departments!ai_patient_intakes_department_clinic_fkey(name), doctor:profiles!ai_patient_intakes_doctor_clinic_fkey(full_name), ai_appointment_requests(id, status)",
+              "*, department:departments!ai_patient_intakes_department_clinic_fkey(name), doctor:profiles!ai_patient_intakes_doctor_clinic_fkey(full_name), ai_appointment_requests(id, status)",
             )
             .eq("clinic_id", user.clinicId)
             .eq("review_status", "pending_review")
@@ -247,6 +253,15 @@ export default async function PatientsPage({ searchParams }: PageProps) {
             phone: intake.phone,
             email: intake.email,
             nationalId: intake.national_id,
+            // The names as authored, in each language. Absent before the
+            // additive migration and absent for an intake whose patient wrote
+            // only one of them; the review dialog shows an em dash for either.
+            fullNameAr: intake.full_name_ar ?? null,
+            fullNameEn: intake.full_name_en ?? null,
+            // Optional on the intake and optional on the record. Passed through
+            // as-is: `null` is "not provided", and the review surface says so
+            // rather than showing a blank beside a label.
+            bloodType: intake.blood_type,
             departmentName: intake.department?.name ?? "—",
             doctorName: intake.doctor?.full_name ?? "—",
             createdAt: intake.created_at,

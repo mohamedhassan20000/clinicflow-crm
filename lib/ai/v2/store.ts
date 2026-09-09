@@ -114,6 +114,16 @@ async function readFlowState(input: {
   };
 }
 
+export type FlowStateSave =
+  | { ok: true }
+  /**
+   * `code` is a *classification*, never the underlying message. A PostgREST
+   * error code (`42501`, `PGRST202`) is a fixed symbol and safe to record; the
+   * message beside it can quote the failing row, so it goes to Sentry as an
+   * exception and never into `audit_logs`.
+   */
+  | { ok: false; code: string };
+
 /**
  * Persists the stack the engine just produced.
  *
@@ -131,20 +141,37 @@ export async function saveFlowState(input: {
   clinicId: string;
   conversationId: string;
   state: FlowState;
-}): Promise<{ ok: boolean }> {
-  if (!(await flowStateAvailable(input.clinicId))) return { ok: false };
+}): Promise<FlowStateSave> {
+  if (!(await flowStateAvailable(input.clinicId))) {
+    return { ok: false, code: "column_unavailable" };
+  }
   try {
     return await writeFlowState(input);
-  } catch {
-    return { ok: false };
+  } catch (error) {
+    // A throw here is a *client* fault, not a database one — an unbound
+    // method, a missing key, a mocked module. Distinguishing it from a real
+    // Postgres rejection is the whole point of carrying a code: the two have
+    // nothing in common and one of them cost this engine a QA cycle.
+    return { ok: false, code: `client_threw:${errorName(error)}` };
   }
+}
+
+/** The constructor name only. Never `error.message`, which can quote a row. */
+function errorName(error: unknown): string {
+  const name = error instanceof Error ? error.name : typeof error;
+  return /^[A-Za-z]{1,40}$/.test(name) ? name : "unknown";
+}
+
+/** A PostgREST/Postgres code is a fixed symbol; anything else is discarded. */
+function errorCode(code: string | undefined | null): string {
+  return code && /^[A-Za-z0-9_]{1,20}$/.test(code) ? code : "unknown";
 }
 
 async function writeFlowState(input: {
   clinicId: string;
   conversationId: string;
   state: FlowState;
-}): Promise<{ ok: boolean }> {
+}): Promise<FlowStateSave> {
   const result = await setConversationFlowState({
     clinicId: input.clinicId,
     conversationId: input.conversationId,
@@ -154,7 +181,8 @@ async function writeFlowState(input: {
     flowState:
       input.state.stack.length === 0 ? null : serializeFlowState(input.state),
   });
-  return { ok: !result.error };
+  if (!result.error) return { ok: true };
+  return { ok: false, code: `rpc_error:${errorCode(result.error.code)}` };
 }
 
 /**

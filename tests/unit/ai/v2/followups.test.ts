@@ -18,6 +18,9 @@ const stubs = vi.hoisted(() => ({
   readAvailableSlots: vi.fn(),
   readPatientPackages: vi.fn(),
   readPublicPackages: vi.fn(),
+  readServices: vi.fn(),
+  resolveDepartmentSpoken: vi.fn(),
+  resolveDepartmentNamed: vi.fn(),
   readPatientDocuments: vi.fn(),
   readDocumentLink: vi.fn(),
   readMyAppointments: vi.fn(),
@@ -266,7 +269,10 @@ describe("follow-up 1: a lost slot does not end the booking", () => {
     });
     expect(stubs.commitBooking).toHaveBeenCalledTimes(1);
     expect(stubs.commitBooking).toHaveBeenCalledWith(
-      expect.objectContaining({ scheduledAt: "2026-09-10T11:00:00" }),
+      // Day and time travel as the clinic's own calendar values. The tool
+      // converts them with `fromZonedTime`; a caller that joined them into a
+      // naive timestamp is the defect this shape removes.
+      expect.objectContaining({ date: "2026-09-10", time: "11:00" }),
     );
     expect(confirmed.trace).toContain("step_confirm_complete");
   });

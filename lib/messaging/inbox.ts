@@ -57,6 +57,18 @@ export type InboxConversation = {
    * every open thread Done.
    */
   hasActiveEpisode?: boolean;
+  /**
+   * `conversations.status_updated_at` and `conversations.ai_context_reset_at`.
+   *
+   * The pair that dates the explicit Open/Closed column against the last
+   * episode ending, so an absent episode pointer cannot overrule a thread a
+   * staff member has just reopened — or a clinic whose assistant never opened
+   * an episode in the first place. `undefined` on either means the column was
+   * not readable and the pre-existing derivation stands unchanged. See
+   * `lib/messaging/conversation-status.ts`.
+   */
+  statusUpdatedAt?: string | null;
+  contextResetAt?: string | null;
   /** P8: non-null while a staff member has taken this thread over from the AI. */
   aiPausedAt: string | null;
   aiPausedByName: string | null;
@@ -381,6 +393,18 @@ async function readOptionalConversationMeta(
   // discipline: three progressively narrower column lists, each falling back
   // only on a *missing column*. A build ahead of its migration loses the newest
   // badge inputs, never the conversations.
+  // The widest tier adds the two columns that date the explicit Open/Closed
+  // decision against the last episode ending. Same discipline as every tier
+  // below it: a build ahead of its migration loses the pair and the badge falls
+  // back to reading the episode pointer alone, never to losing conversations.
+  const widest = await supabase
+    .from("conversations")
+    .select(
+      "id, display_name, ai_paused_at, ai_paused_by, current_episode_id, ai_enabled_override, ai_technical_failure_at, status_updated_at, ai_context_reset_at",
+    )
+    .eq("clinic_id", clinicId)
+    .in("id", conversationIds);
+  if (!widest.error || !isMissingColumnError(widest.error)) return widest;
   const p15 = await supabase
     .from("conversations")
     .select(
@@ -816,6 +840,14 @@ export async function loadInboxData(
       hasActiveEpisode:
         p8Meta && "current_episode_id" in p8Meta
           ? p8Meta.current_episode_id !== null
+          : undefined,
+      statusUpdatedAt:
+        p8Meta && "status_updated_at" in p8Meta
+          ? (p8Meta.status_updated_at as string | null)
+          : undefined,
+      contextResetAt:
+        p8Meta && "ai_context_reset_at" in p8Meta
+          ? (p8Meta.ai_context_reset_at as string | null)
           : undefined,
       aiPausedAt: p8Meta?.ai_paused_at ?? null,
       aiPausedByName: p8Meta?.ai_paused_by

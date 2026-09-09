@@ -828,7 +828,12 @@ export async function getPatientClinicPublicInfo(clinicId: string) {
     admin
       .from("clinics")
       .select(
-        "name, address, phone, website, timezone, locale, working_hours_start, working_hours_end",
+        // P12 — `email` joins the set the patient assistant may quote. It is
+        // clinic contact configuration exactly as `phone` and `website` are, it
+        // is already public on the clinic's own settings screen, and its
+        // absence was the reason the assistant's `email` question had no
+        // possible truthful answer.
+        "name, address, email, phone, website, timezone, locale, working_hours_start, working_hours_end",
       )
       .eq("id", clinicId)
       .eq("is_active", true)
@@ -846,6 +851,7 @@ export async function getPatientClinicPublicInfo(clinicId: string) {
     data: {
       name: clinic.data.name,
       address: clinic.data.address,
+      email: clinic.data.email,
       phone: clinic.data.phone,
       website: clinic.data.website,
       timezone: clinic.data.timezone,
@@ -1539,8 +1545,19 @@ export async function stagePatientIntakeFromConversation(input: {
    * transliteration of it. Kept beside the transliteration, never instead of it.
    */
   fullNameOriginal?: string | null;
+  /**
+   * The patient's name in each language, as authored rather than as rendered.
+   *
+   * `fullNameAr` is what the patient typed when they typed Arabic;
+   * `fullNameEn` is the spelling they confirmed. Both are optional and both
+   * are display names: `p_full_name` stays the canonical record and every
+   * identity check still folds it, so nothing here can affect who a file
+   * matches.
+   */
+  fullNameAr?: string | null;
+  fullNameEn?: string | null;
 }) {
-  return createAdminClient().rpc("stage_patient_intake_from_conversation", {
+  const base = {
     p_clinic_id: input.clinicId,
     p_conversation_id: input.conversationId,
     p_full_name: input.fullName,
@@ -1553,7 +1570,28 @@ export async function stagePatientIntakeFromConversation(input: {
     p_phone: input.phone ?? undefined,
     p_blood_type: input.bloodType ?? undefined,
     p_full_name_original: input.fullNameOriginal ?? undefined,
-  });
+  };
+  const bilingual = {
+    ...(input.fullNameAr ? { p_full_name_ar: input.fullNameAr } : {}),
+    ...(input.fullNameEn ? { p_full_name_en: input.fullNameEn } : {}),
+  };
+  const client = createAdminClient();
+  if (Object.keys(bilingual).length === 0) {
+    return client.rpc("stage_patient_intake_from_conversation", base);
+  }
+  // The bilingual arguments are additive and the migration that adds them is
+  // applied on the clinic's own schedule. PostgREST answers a call naming an
+  // argument the function does not have with `PGRST202` — "no function matches"
+  // — and losing a whole intake over a display name would be a far worse
+  // defect than the one the columns fix. So the wide call is tried once and the
+  // pre-migration shape is the fallback: the file is still staged, without the
+  // two display names.
+  const wide = await client.rpc(
+    "stage_patient_intake_from_conversation",
+    { ...base, ...bilingual } as never,
+  );
+  if (!wide.error || wide.error.code !== "PGRST202") return wide;
+  return client.rpc("stage_patient_intake_from_conversation", base);
 }
 
 /**
@@ -3085,6 +3123,14 @@ const READ_ONLY_CLINIC_SCOPED_TABLES = new Set([
   // `assertKnownTable` throws, and a throw on the booking path is exactly the
   // bare technical error this whole change exists to remove.
   "ai_patient_intakes",
+  // The services one package contains, with the clinic's own agreed price for
+  // each. Read-only, and firmly so: the only writer is
+  // `set_package_template_items`, which runs as the *invoker* precisely so that
+  // the admin-only RLS policies on the table are the authorization. The
+  // assistant reads it to answer «ايه اللي موجود في الباكيدج؟» with the clinic's
+  // stored lines rather than a description inferred from the package's name —
+  // and a patient-facing catalog read must never be able to write a price.
+  "package_template_items",
   // Doctor leave and blocked ranges. `computeAvailability` is shared by the
   // staff appointment form (an RLS client) and by the WhatsApp patient booking
   // path (this client), and the second one could not read the table at all:
@@ -3482,7 +3528,12 @@ type UnappliedRpc = (
 ) => PromiseLike<{ data: unknown; error: { code?: string; message?: string } | null }>;
 
 function unappliedRpc(): UnappliedRpc {
-  return createAdminClient().rpc as unknown as UnappliedRpc;
+  const client = createAdminClient();
+  // Bound, not detached. `SupabaseClient.prototype.rpc` reaches for `this.rest`,
+  // so handing the bare method out makes every call here throw a TypeError
+  // before a request is ever built — which reads downstream as "the RPC
+  // failed" and is indistinguishable from a database error. It is not one.
+  return client.rpc.bind(client) as unknown as UnappliedRpc;
 }
 
 /** Replaces the V2 flow stack under a row lock. See `lib/ai/v2/store.ts`. */

@@ -1,6 +1,26 @@
 import { normalizeDigits, normalizeHumanText } from "@/lib/ai/human-input";
 
-export type NamedEntity = { id: string; name: string };
+export type NamedEntity = {
+  id: string;
+  /** The canonical stored name. Always present, always scored. */
+  name: string;
+  /**
+   * Other names the clinic has authored for the same entity.
+   *
+   * The bilingual display names, in practice: a department stored as
+   * "Dermatology" whose Arabic display name is «الجلدية» is reachable by both,
+   * and a doctor is reachable by whichever script the patient types.
+   *
+   * They are **alternative spellings of one entity**, not additional entities:
+   * each alias is scored against the query and the entity keeps its best score,
+   * so an alias can make a match but can never split one entity into two
+   * candidates or shift what an ordinal («التاني») selects.
+   *
+   * Only clinic-authored text belongs here. Nothing generated, nothing
+   * transliterated, nothing inferred — see `lib/settings/display-names.ts`.
+   */
+  aliases?: readonly string[];
+};
 
 export type EntityResolution =
   | { status: "resolved"; entity: NamedEntity; score: number }
@@ -160,6 +180,42 @@ function transliterate(value: string): string {
 }
 
 /**
+ * The same table, with the three Arabic letters that are *written* as Latin
+ * vowels read as vowels.
+ *
+ * `ARABIC_LATIN` renders و as `w` and ي as `y`, which is a defensible
+ * transliteration and the wrong one for matching a name against how the clinic
+ * spelled it in Latin script. Wherever a Latin spelling writes one of those
+ * letters as a vowel — the `ou`/`u` of a great many Arabic given names — the
+ * two skeletons diverge on a consonant that is not there, and the pair never
+ * matches. Manual QA hit exactly this: a doctor addressed in Arabic could not
+ * be resolved, and the same patient writing the same name in Latin script a
+ * moment later could.
+ *
+ * Read as vowels — `u` and `i` — the skeletons agree, because `phoneticKey`
+ * strips vowels from both sides.
+ *
+ * This is a **matching variant and nothing else.** It is never displayed, never
+ * stored, and never offered; `literalVariants` takes the *best* score across
+ * variants, so it can only ever connect a pair the letters alone could not, in
+ * the same non-destructive way the concept lexicon does for departments. A
+ * genuine collision it creates degrades to one clarifying question, because
+ * `resolveNamedEntity` still refuses a contested best match.
+ */
+const ARABIC_LATIN_VOWELS: Record<string, string> = {
+  ...ARABIC_LATIN,
+  و: "u",
+  ي: "i",
+  ى: "a",
+  ؤ: "u",
+  ئ: "i",
+};
+
+function transliterateVowelled(value: string): string {
+  return [...value].map((char) => ARABIC_LATIN_VOWELS[char] ?? char).join("");
+}
+
+/**
  * The words of a text, lower-cased, punctuation- and title-stripped, digits
  * folded. No concept substitution happens here — see `CONCEPT_LEXICON`.
  */
@@ -210,11 +266,21 @@ function normalizeEntityTextBare(value: string): string {
     .trim();
 }
 
+/** The vowel-reading of a text. See {@link ARABIC_LATIN_VOWELS}. Matching only. */
+function normalizeEntityTextVowelled(value: string): string {
+  return transliterateVowelled(entityWords(value).join(" "))
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 /** Every literal reading of a text, de-duplicated. */
 function literalVariants(value: string): string[] {
-  const full = normalizeEntityText(value);
-  const bare = normalizeEntityTextBare(value);
-  return bare && bare !== full ? [full, bare] : [full];
+  const readings = [
+    normalizeEntityText(value),
+    normalizeEntityTextBare(value),
+    normalizeEntityTextVowelled(value),
+  ].filter((reading) => reading.length > 0);
+  return [...new Set(readings)];
 }
 
 /**
@@ -372,6 +438,28 @@ function scoreEntity(query: string, name: string): Scored {
   return { literal, score: Math.max(literal, conceptScore(query, name)) };
 }
 
+/**
+ * An entity's score across its canonical name and every alias, best wins.
+ *
+ * `literal` is carried from the same name that produced the winning score
+ * rather than maximised independently, because the two are used together as a
+ * pair: `literal` is the tie-breaker that keeps "General Medicine" and
+ * "Internal Medicine" apart, and mixing one name's concept score with
+ * another's literal score would compare two different things.
+ */
+function scoreNames(query: string, entity: NamedEntity): Scored {
+  let best = scoreEntity(query, entity.name);
+  for (const alias of entity.aliases ?? []) {
+    const trimmed = typeof alias === "string" ? alias.trim() : "";
+    if (!trimmed) continue;
+    const scored = scoreEntity(query, trimmed);
+    if (scored.score > best.score || (scored.score === best.score && scored.literal > best.literal)) {
+      best = scored;
+    }
+  }
+  return best;
+}
+
 function ordinalIndex(value: string): number | null {
   const raw = normalizeDigits(normalizeHumanText(value)).toLocaleLowerCase("en")
     .replace(/[^\p{L}\p{N}]+/gu, " ")
@@ -428,7 +516,7 @@ export function resolveNamedEntity(
     return { status: "resolved", entity: entities[ordinal], score: 1 };
   }
   const ranked = entities
-    .map((entity) => ({ ...entity, ...scoreEntity(query, entity.name) }))
+    .map((entity) => ({ ...entity, ...scoreNames(query, entity) }))
     // The literal score is the tie-breaker, not a decoration. Two departments
     // the lexicon collapses onto one concept — "General Medicine" beside
     // "Internal Medicine" — are separated here and nowhere else, which is what

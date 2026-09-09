@@ -39,6 +39,7 @@ import { canonicalClock, validateStaffInterval } from "@/lib/scheduling/clock";
 import type { AuthedUser } from "@/lib/rbac";
 import { createClinicScopedAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { stripBlankDisplayNames } from "@/lib/settings/display-names";
 import {
   clinicSchema,
   clinicWorkingHoursSchema,
@@ -482,12 +483,17 @@ export async function updateStaffProfileMutation(
     return domainFailure("settings.staffMemberNotFound");
   if (user.role === "manager" && existing.data.role === "admin")
     return domainFailure("settings.onlyAdminsCanManageAdminUsers");
-  const next = {
+  const next = stripBlankDisplayNames({
     full_name: parsed.data.profile.full_name,
     phone: parsed.data.profile.phone
       ? normalizePhone(parsed.data.profile.phone)
       : null,
-  };
+    // The patient-facing names, when the clinic has authored them. `full_name`
+    // above is untouched and stays what every staff screen, invoice and export
+    // reads.
+    display_name_ar: parsed.data.profile.display_name_ar ?? null,
+    display_name_en: parsed.data.profile.display_name_en ?? null,
+  });
   if (mode === "preview") {
     return domainSuccess(
       { staff_id: existing.data.id },
@@ -571,14 +577,15 @@ export async function createDirectoryMutation(
     return domainFailure("settings.validationError", {
       validationError: parsed.error,
     });
-  const data =
+  const data = stripBlankDisplayNames(
     kind === "service"
       ? {
           ...parsed.data,
           price: Number((parsed.data as { price: number }).price.toFixed(2)),
           is_active: true,
         }
-      : parsed.data;
+      : (parsed.data as Record<string, unknown>),
+  );
   if (mode === "preview") {
     return domainSuccess({}, { targetTable: config.table, after: data });
   }
@@ -643,8 +650,10 @@ export async function updateDirectoryMutation(
     });
   const record = parsed.data as Record<string, unknown>;
   const id = String(record[config.idField]);
-  const next = Object.fromEntries(
-    Object.entries(record).filter(([key]) => key !== config.idField),
+  const next = stripBlankDisplayNames(
+    Object.fromEntries(
+      Object.entries(record).filter(([key]) => key !== config.idField),
+    ),
   );
   if (kind === "service")
     next.price = Number(Number(next.price).toFixed(2));
